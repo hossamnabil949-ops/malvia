@@ -726,7 +726,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950 pb-20 lg:pb-0" dir="rtl">
       <SyncBadge />
       
-      {/* Top Header & Mobile Bottom Bar Navigation */}
+      {/* Sidebar + Top Bar + Mobile Bottom Bar (wraps the page content) */}
       <Navigation
         currentTab={currentTab}
         onTabChange={setCurrentTab}
@@ -742,10 +742,8 @@ export default function App() {
         onLogout={handleLogout}
         currentUser={currentUser}
         shopName={activeTenant.companyName}
-      />
-
-      {/* Main View Router */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6">
+      >
+        {/* Main View Router */}
         {currentTab === 'dashboard' && (
           <HomeDashboard
             parts={parts}
@@ -982,7 +980,7 @@ export default function App() {
             }}
           />
         )}
-      </main>
+      </Navigation>
 
       {/* ===================== MODALS ===================== */}
 

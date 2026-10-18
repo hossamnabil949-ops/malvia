@@ -1,25 +1,5 @@
 import React, { useState } from 'react';
-import { 
-  TrendingUp, 
-  Receipt, 
-  Boxes, 
-  AlertTriangle, 
-  Search, 
-  Plus, 
-  ShoppingCart, 
-  ArrowUpRight, 
-  Printer, 
-  Car,
-  CheckCircle2,
-  PackageCheck,
-  Calculator,
-  Bell,
-  Truck,
-  Mic,
-  Sparkles,
-  FileSpreadsheet,
-  Camera
-} from 'lucide-react';
+import { TrendingUp, Receipt, Boxes, AlertTriangle, Search, Plus, ShoppingCart, ArrowUpRight, Printer, CheckCircle2, PackageCheck, Calculator, Bell, Truck, Mic, Sparkles } from 'lucide-react';
 import { AutoPart, Invoice, UserSession } from '../types/autoParts';
 import { ActiveTab } from './Navigation';
 import { SalesCharts } from './SalesCharts';
@@ -110,50 +90,6 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               <ShoppingCart className="w-4 h-4" />
               <span>قسم البيع (الكاشير)</span>
             </button>
-
-            {onOpenCarModels && (
-              <button
-                onClick={onOpenCarModels}
-                className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-[#222A3C] hover:bg-[#2A344A] text-amber-300 border border-amber-500/30 font-bold text-xs transition-all"
-                title="إضافة أو حذف موديلات السيارات"
-              >
-                <Car className="w-4 h-4 text-amber-400" />
-                <span>موديلات السيارات</span>
-              </button>
-            )}
-
-            {onOpenInventoryErrors && (
-              <button
-                onClick={onOpenInventoryErrors}
-                className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 font-bold text-xs transition-all"
-                title="تسجيل وتصحيح أخطاء وفروقات الجرد"
-              >
-                <AlertTriangle className="w-4 h-4 text-rose-400" />
-                <span>أخطاء المخزون</span>
-              </button>
-            )}
-
-            {onOpenExcelModal && (
-              <button
-                onClick={onOpenExcelModal}
-                className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 font-bold text-xs transition-all"
-                title="استيراد وتصدير شيتات إكسيل"
-              >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                <span>إكسيل (استيراد/تصدير)</span>
-              </button>
-            )}
-
-            {onOpenPhotoSharing && (
-              <button
-                onClick={onOpenPhotoSharing}
-                className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-[#222A3C] hover:bg-[#2A344A] text-sky-300 border border-sky-500/30 font-bold text-xs transition-all"
-                title="مساحة مشاركة صور القطع على واتساب"
-              >
-                <Camera className="w-4 h-4 text-sky-400" />
-                <span>مشاركة الصور</span>
-              </button>
-            )}
           </div>
         </div>
       </div>
