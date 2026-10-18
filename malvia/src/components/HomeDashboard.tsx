@@ -58,7 +58,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   return (
     <div className="space-y-6 pb-12">
       {/* 1. Quick Navigation Action Hero */}
-      <div className="p-6 rounded-3xl bg-gradient-to-r from-[#171E2E] via-[#1A2234] to-[#141A28] border border-neutral-800 shadow-xl">
+      <div className="p-6 rounded-3xl bg-gradient-to-r from-surface-2 via-surface-3 to-surface-2 border border-neutral-800 shadow-xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider mb-1">
@@ -76,7 +76,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={onOpenVoiceAssistant}
-              className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600/30 to-indigo-600/30 hover:from-purple-600/40 text-purple-200 border border-purple-500/40 font-bold text-xs transition-all active:scale-95 shadow-md group"
+              className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-600/30 to-amber-600/30 hover:from-amber-600/40 text-amber-200 border border-amber-500/40 font-bold text-xs transition-all active:scale-95 shadow-md group"
               title="تحدث والذكاء الاصطناعي ينفذ فوراً"
             >
               <Mic className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
@@ -96,20 +96,20 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
       {/* Real-time Low Stock Alert Banner */}
       {lowStockParts.length > 0 && (
-        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-rose-950/40 via-[#1B1524] to-amber-950/30 border border-rose-500/30 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in duration-300">
+        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-rose-950/40 via-surface-2 to-amber-950/30 border border-rose-500/30 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in duration-300">
           <div className="flex items-start sm:items-center gap-3.5">
             <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 flex-shrink-0 relative">
               <Bell className="w-6 h-6 animate-bounce" />
               <span className="absolute -top-1 -right-1 flex h-4 w-4">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-4 w-4 bg-rose-500 text-[9px] font-black text-white items-center justify-center">
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-rose-500 text-[9px] font-black text-[#ffffff] items-center justify-center">
                   {lowStockParts.length}
                 </span>
               </span>
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white tracking-wider">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-[#ffffff] tracking-wider">
                   تنبيه المخزون الحرج
                 </span>
                 <h3 className="text-sm sm:text-base font-black text-white">
@@ -130,14 +130,14 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={onOpenNotifications}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md shadow-rose-600/25 transition-all active:scale-95"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-[#ffffff] font-bold text-xs shadow-md shadow-rose-600/25 transition-all active:scale-95"
             >
               <Bell className="w-4 h-4" />
               <span>عرض الإشعارات والنواقص</span>
             </button>
             <button
               onClick={onOpenNotifications}
-              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[#221F2D] hover:bg-[#2C273A] text-amber-300 border border-amber-500/30 font-bold text-xs transition-all"
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-surface-2 hover:bg-surface-3 text-amber-300 border border-amber-500/30 font-bold text-xs transition-all"
             >
               <Truck className="w-4 h-4 text-amber-400" />
               <span>طلب توريد سريع</span>
@@ -148,7 +148,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
       {/* 2. Key Performance Indicators (KPIs) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="p-4 rounded-2xl bg-[#141926] border border-neutral-800 shadow-sm flex flex-col justify-between">
+        <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-neutral-400 text-xs">
             <span>مبيعات اليوم</span>
             <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
@@ -166,10 +166,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#141926] border border-neutral-800 shadow-sm flex flex-col justify-between">
+        <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-neutral-400 text-xs">
             <span>فواتير اليوم</span>
-            <div className="w-8 h-8 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center">
               <Receipt className="w-4 h-4" />
             </div>
           </div>
@@ -184,7 +184,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#141926] border border-neutral-800 shadow-sm flex flex-col justify-between">
+        <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-neutral-400 text-xs">
             <span>إجمالي القطع بالمستودع</span>
             <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center">
@@ -204,7 +204,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
         <div 
           onClick={onOpenNotifications}
-          className="p-4 rounded-2xl bg-[#141926] border border-neutral-800 hover:border-rose-500/50 hover:bg-[#1A1828] transition-all cursor-pointer shadow-sm flex flex-col justify-between group"
+          className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 hover:border-rose-500/50 hover:bg-surface-2 transition-all cursor-pointer shadow-sm flex flex-col justify-between group"
           title="اضغط لفتح مركز إشعارات النواقص والتوريد"
         >
           <div className="flex items-center justify-between text-neutral-400 text-xs">
@@ -236,7 +236,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       )}
 
       {/* 4. Fast Part & OEM Search Bar */}
-      <div className="p-5 rounded-2xl bg-[#141926] border border-neutral-800 space-y-3">
+      <div className="p-5 rounded-2xl bg-surface-2 border border-neutral-800 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Search className="w-4 h-4 text-amber-400" />
@@ -255,7 +255,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             value={quickSearch}
             onChange={(e) => setQuickSearch(e.target.value)}
             placeholder="مثال: 04465-33470، فحمات كامري، فلتر زيت..."
-            className="w-full h-12 px-4 rounded-xl bg-[#0E121B] border border-neutral-700 text-white placeholder-neutral-500 text-sm focus:outline-none focus:border-amber-400 transition-colors"
+            className="w-full h-12 px-4 rounded-xl bg-surface-1 border border-neutral-700 text-white placeholder-neutral-500 text-sm focus:outline-none focus:border-amber-400 transition-colors"
           />
           {quickSearch && (
             <button
@@ -268,7 +268,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         </div>
 
         {quickSearch.trim() && (
-          <div className="mt-3 divide-y divide-neutral-800 bg-[#0E121B] rounded-xl border border-neutral-800 max-h-60 overflow-y-auto no-scrollbar">
+          <div className="mt-3 divide-y divide-neutral-800 bg-surface-1 rounded-xl border border-neutral-800 max-h-60 overflow-y-auto no-scrollbar">
             {searchResults.length === 0 ? (
               <div className="p-4 text-center text-xs text-neutral-400">
                 لا توجد قطعة مطابقة لبحثك في المستودع
@@ -318,7 +318,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
       {/* 5. Two Columns: Low Stock Alerts & Recent Invoices */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="p-5 rounded-2xl bg-[#141926] border border-neutral-800 space-y-4">
+        <div className="p-5 rounded-2xl bg-surface-2 border border-neutral-800 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-400" />
@@ -380,10 +380,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-[#141926] border border-neutral-800 space-y-4">
+        <div className="p-5 rounded-2xl bg-surface-2 border border-neutral-800 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-blue-400" />
+              <Receipt className="w-4 h-4 text-amber-400" />
               <h3 className="text-sm font-bold text-white">
                 آخر فواتير البيع الصادرة
               </h3>

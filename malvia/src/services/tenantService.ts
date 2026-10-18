@@ -48,13 +48,15 @@ const SAVED_LICENSE_KEY = 'malvia_device_saved_license_key_v1';
 const THEME_KEY = 'malvia_app_theme_v1';
 export const MASTER_OWNER_PIN_KEY = 'malvia_master_owner_pin_v1';
 
-export type AppTheme = 
-  | 'obsidian'
-  | 'midnight'
-  | 'emerald'
-  | 'carbon'
-  | 'light-titanium'
-  | 'light-warm';
+export type AppTheme = 'blue' | 'graphite' | 'light';
+
+export const APP_THEMES: AppTheme[] = ['blue', 'graphite', 'light'];
+const DEFAULT_THEME: AppTheme = 'blue';
+const THEME_META_COLORS: Record<AppTheme, string> = {
+  blue: '#0A0E17',
+  graphite: '#0E0E10',
+  light: '#0F172A',
+};
 
 export function loadTenantLicenses(): TenantLicense[] {
   try {
@@ -108,33 +110,32 @@ function getTenantKey(tenantId: string, resource: string) {
 export function getAppTheme(): AppTheme {
   try {
     const saved = localStorage.getItem(THEME_KEY);
-    if (saved && ['obsidian', 'midnight', 'emerald', 'carbon', 'light-titanium', 'light-warm'].includes(saved)) {
+    if (saved && (APP_THEMES as string[]).includes(saved)) {
       return saved as AppTheme;
     }
   } catch {
     // ignore
   }
-  return 'obsidian';
+  return DEFAULT_THEME;
+}
+
+/** Applies a theme to the page (class on <body> + browser bar colour) without saving it. */
+export function applyAppTheme(theme: AppTheme): void {
+  if (typeof document === 'undefined') return;
+  const body = document.body;
+  APP_THEMES.forEach(t => body.classList.remove(`theme-${t}`));
+  body.classList.add(`theme-${theme}`);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', THEME_META_COLORS[theme]);
 }
 
 export function setAppTheme(theme: AppTheme): void {
   try {
     localStorage.setItem(THEME_KEY, theme);
-    if (typeof document !== 'undefined') {
-      const body = document.body;
-      body.classList.remove(
-        'theme-obsidian', 
-        'theme-midnight', 
-        'theme-emerald', 
-        'theme-carbon', 
-        'theme-light-titanium', 
-        'theme-light-warm'
-      );
-      body.classList.add(`theme-${theme}`);
-    }
   } catch (err) {
-    console.warn('Error setting theme:', err);
+    console.warn('Error saving theme:', err);
   }
+  applyAppTheme(theme);
 }
 
 export function loadTenantStoreData(tenant: TenantLicense) {

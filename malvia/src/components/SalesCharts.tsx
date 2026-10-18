@@ -147,7 +147,7 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="p-3 rounded-xl bg-[#0E121B] border border-neutral-700 shadow-2xl text-xs space-y-1.5 min-w-[170px]">
+        <div className="p-3 rounded-xl bg-surface-1 border border-neutral-700 shadow-2xl text-xs space-y-1.5 min-w-[170px]">
           <p className="font-bold text-white border-b border-neutral-800 pb-1">{label}</p>
           <div className="flex justify-between items-center text-amber-400">
             <span>إجمالي المبيعات:</span>
@@ -171,7 +171,7 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="p-5 rounded-3xl bg-[#141926] border border-neutral-800 shadow-xl space-y-5">
+      <div className="p-5 rounded-3xl bg-surface-2 border border-neutral-800 shadow-xl space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-neutral-800/80">
           <div>
             <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider mb-1">
@@ -183,7 +183,7 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
             </h3>
           </div>
 
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-[#0E121B] border border-neutral-800 self-start sm:self-auto">
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-surface-1 border border-neutral-800 self-start sm:self-auto">
             <button
               onClick={() => setTimeframe('daily')}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
@@ -217,7 +217,7 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-          <div className="p-3 rounded-2xl bg-[#0E121B] border border-neutral-800/80">
+          <div className="p-3 rounded-2xl bg-surface-1 border border-neutral-800/80">
             <span className="text-neutral-400 text-[11px] block">
               {timeframe === 'daily' ? 'مبيعات اليوم المسجلة' : 'إجمالي المبيعات المحققة'}
             </span>
@@ -226,14 +226,14 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
             </span>
           </div>
 
-          <div className="p-3 rounded-2xl bg-[#0E121B] border border-neutral-800/80">
+          <div className="p-3 rounded-2xl bg-surface-1 border border-neutral-800/80">
             <span className="text-neutral-400 text-[11px] block">صافي الأرباح المحسوبة</span>
             <span className="text-base font-black text-emerald-400 font-mono mt-0.5 block">
               {totalPeriodProfit.toLocaleString()} {currency}
             </span>
           </div>
 
-          <div className="p-3 rounded-2xl bg-[#0E121B] border border-neutral-800/80">
+          <div className="p-3 rounded-2xl bg-surface-1 border border-neutral-800/80">
             <span className="text-neutral-400 text-[11px] block">متوسط هامش الربح</span>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="text-base font-black text-white font-mono">
@@ -247,9 +247,9 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
             </div>
           </div>
 
-          <div className="p-3 rounded-2xl bg-[#0E121B] border border-neutral-800/80">
+          <div className="p-3 rounded-2xl bg-surface-1 border border-neutral-800/80">
             <span className="text-neutral-400 text-[11px] block">قطع الغيار المباعة</span>
-            <span className="text-base font-black text-blue-400 font-mono mt-0.5 block">
+            <span className="text-base font-black text-amber-400 font-mono mt-0.5 block">
               {totalPeriodVolume.toLocaleString()} قطعة
             </span>
           </div>
@@ -260,24 +260,24 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
             <AreaChart data={activeData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
               <defs>
                 <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                  <stop offset="5%" stopColor="var(--color-amber-500)" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="var(--color-amber-500)" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
                   <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-neutral-800)" vertical={false} />
               <XAxis 
                 dataKey="label" 
-                stroke="#6b7280" 
+                stroke="var(--color-neutral-500)" 
                 fontSize={11} 
                 tickLine={false} 
                 axisLine={false} 
               />
               <YAxis 
-                stroke="#6b7280" 
+                stroke="var(--color-neutral-500)" 
                 fontSize={11} 
                 tickLine={false} 
                 axisLine={false}
@@ -291,7 +291,7 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
               <Area 
                 type="monotone" 
                 dataKey="sales" 
-                stroke="#f59e0b" 
+                stroke="var(--color-amber-500)" 
                 strokeWidth={2.5} 
                 fillOpacity={1} 
                 fill="url(#salesGrad)" 

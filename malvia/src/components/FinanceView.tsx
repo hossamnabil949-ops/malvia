@@ -427,7 +427,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
   return (
     <div className="space-y-6 pb-12 animate-fadeIn" dir="rtl">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl bg-gradient-to-r from-[#141926] via-[#1A2234] to-[#141926] border border-neutral-800 shadow-xl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl bg-gradient-to-r from-surface-2 via-surface-3 to-surface-2 border border-neutral-800 shadow-xl">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 text-xs font-bold border border-amber-500/30 flex items-center gap-1.5">
@@ -447,7 +447,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setShowAddExpenseModal(true)}
-            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-[#222A3C] hover:bg-[#2A344A] text-white border border-neutral-700 font-bold text-xs transition-all shadow-sm"
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-surface-3 hover:bg-surface-4 text-white border border-neutral-700 font-bold text-xs transition-all shadow-sm"
           >
             <Plus className="w-4 h-4 text-amber-400" />
             <span>تسجيل مصروف</span>
@@ -455,7 +455,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
           <button
             onClick={() => setShowReportModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-neutral-950 font-black text-xs transition-all shadow-md active:scale-95"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-neutral-950 font-black text-xs transition-all shadow-md active:scale-95"
           >
             <FileText className="w-4 h-4" />
             <span>القوائم المالية الختامية</span>
@@ -479,7 +479,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all border ${
                 isActive
                   ? 'bg-amber-500 text-neutral-950 border-amber-400 shadow-md'
-                  : 'bg-[#141926] text-neutral-300 border-neutral-800 hover:border-neutral-700'
+                  : 'bg-surface-2 text-neutral-300 border-neutral-800 hover:border-neutral-700'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -499,7 +499,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       {activeFinanceTab === 'equity' && (
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-            <div className="p-4 rounded-3xl bg-[#141926] border border-neutral-800 relative overflow-hidden">
+            <div className="p-4 rounded-3xl bg-surface-2 border border-neutral-800 relative overflow-hidden">
               <div className="flex items-center justify-between text-neutral-400 text-xs">
                 <span>رأس المال التأسيسي الأول</span>
                 <Building2 className="w-4 h-4 text-amber-400" />
@@ -512,12 +512,12 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               </span>
             </div>
 
-            <div className="p-4 rounded-3xl bg-[#141926] border border-neutral-800 relative overflow-hidden">
+            <div className="p-4 rounded-3xl bg-surface-2 border border-neutral-800 relative overflow-hidden">
               <div className="flex items-center justify-between text-neutral-400 text-xs">
                 <span>رأس المال الإضافي المجرى ضخه</span>
-                <ArrowUpRight className="w-4 h-4 text-blue-400" />
+                <ArrowUpRight className="w-4 h-4 text-amber-400" />
               </div>
-              <span className="text-xl md:text-2xl font-black text-blue-400 font-mono mt-1.5 block">
+              <span className="text-xl md:text-2xl font-black text-amber-400 font-mono mt-1.5 block">
                 +{totalAddedCapital.toLocaleString()} ج.م
               </span>
               <span className="text-[10px] text-neutral-500 mt-1 block">
@@ -525,7 +525,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               </span>
             </div>
 
-            <div className="p-4 rounded-3xl bg-[#141926] border border-neutral-800 relative overflow-hidden">
+            <div className="p-4 rounded-3xl bg-surface-2 border border-neutral-800 relative overflow-hidden">
               <div className="flex items-center justify-between text-neutral-400 text-xs">
                 <span>الأرباح المعادة رسملتها</span>
                 <PiggyBank className="w-4 h-4 text-emerald-400" />
@@ -538,7 +538,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               </span>
             </div>
 
-            <div className="p-4 rounded-3xl bg-gradient-to-br from-[#12201D] to-[#141926] border border-emerald-500/40 relative overflow-hidden">
+            <div className="p-4 rounded-3xl bg-gradient-to-br from-emerald-950/40 to-surface-2 border border-emerald-500/40 relative overflow-hidden">
               <div className="flex items-center justify-between text-emerald-400 text-xs font-bold">
                 <span>إجمالي حقوق الملكية الحالية</span>
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -552,7 +552,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             </div>
           </div>
 
-          <div className="p-5 rounded-3xl bg-[#141926] border border-neutral-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="p-5 rounded-3xl bg-surface-2 border border-neutral-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase mb-1">
                 <Sparkles className="w-4 h-4" />
@@ -569,7 +569,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => setShowAddPartnerModal(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-[#1E2538] hover:bg-[#28324A] text-amber-300 border border-amber-500/30 font-bold text-xs transition-all shadow-sm active:scale-95"
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-surface-3 hover:bg-surface-4 text-amber-300 border border-amber-500/30 font-bold text-xs transition-all shadow-sm active:scale-95"
               >
                 <UserPlus className="w-4 h-4" />
                 <span>إضافة شريك جديد</span>
@@ -580,7 +580,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   setTargetPartnerId(partners[0]?.id || '');
                   setShowInjectCapitalModal(true);
                 }}
-                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-[#1A2538] hover:bg-[#22314C] text-blue-300 border border-blue-500/30 font-bold text-xs transition-all shadow-sm active:scale-95"
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-surface-3 hover:bg-surface-4 text-amber-300 border border-amber-500/30 font-bold text-xs transition-all shadow-sm active:scale-95"
               >
                 <ArrowUpRight className="w-4 h-4" />
                 <span>ضخ رأس مال إضافي</span>
@@ -591,7 +591,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   setTargetPartnerId(partners[0]?.id || '');
                   setShowReinvestProfitModal(true);
                 }}
-                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-[#122822] hover:bg-[#18362E] text-emerald-300 border border-emerald-500/30 font-bold text-xs transition-all shadow-sm active:scale-95"
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-emerald-950/40 hover:bg-emerald-950/40 text-emerald-300 border border-emerald-500/30 font-bold text-xs transition-all shadow-sm active:scale-95"
               >
                 <PiggyBank className="w-4 h-4" />
                 <span>رسملة الأرباح (إدخالها برأس المال)</span>
@@ -599,7 +599,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
               <button
                 onClick={() => setShowAdjustSharesModal(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-[#222A3C] hover:bg-[#2A344A] text-neutral-300 border border-neutral-700 font-bold text-xs transition-all shadow-sm active:scale-95"
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-surface-3 hover:bg-surface-4 text-neutral-300 border border-neutral-700 font-bold text-xs transition-all shadow-sm active:scale-95"
               >
                 <Percent className="w-4 h-4 text-amber-400" />
                 <span>تعديل نسب الحصص</span>
@@ -607,7 +607,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
               <button
                 onClick={() => setShowDistributeModal(true)}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 text-neutral-950 font-black text-xs shadow-md shadow-amber-500/20 active:scale-95 transition-all"
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 text-neutral-950 font-black text-xs shadow-md shadow-amber-500/20 active:scale-95 transition-all"
               >
                 <Receipt className="w-4 h-4" />
                 <span>توزيع الأرباح النقدية</span>
@@ -616,7 +616,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <div className="p-6 rounded-3xl bg-[#141926] border border-neutral-800 space-y-4 flex flex-col justify-between">
+            <div className="p-6 rounded-3xl bg-surface-2 border border-neutral-800 space-y-4 flex flex-col justify-between">
               <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
                 <div className="flex items-center gap-2">
                   <PieIcon className="w-4 h-4 text-amber-400" />
@@ -644,7 +644,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     </Pie>
                     <Tooltip
                       formatter={(val: any, name: any) => [`${val}% من الأرباح والملكية`, name]}
-                      contentStyle={{ backgroundColor: '#141926', borderColor: '#334155', borderRadius: '12px', fontSize: '11px' }}
+                      contentStyle={{ backgroundColor: 'var(--color-surface-2)', borderColor: 'var(--color-neutral-700)', borderRadius: '12px', fontSize: '11px' }}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -691,7 +691,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   return (
                     <div
                       key={partner.id}
-                      className="p-5 rounded-3xl bg-[#141926] border border-neutral-800 hover:border-neutral-700 transition-all space-y-4 shadow-lg relative overflow-hidden flex flex-col justify-between"
+                      className="p-5 rounded-3xl bg-surface-2 border border-neutral-800 hover:border-neutral-700 transition-all space-y-4 shadow-lg relative overflow-hidden flex flex-col justify-between"
                     >
                       <div>
                         <div className="flex items-start justify-between">
@@ -712,7 +712,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           </div>
                         </div>
 
-                        <div className="p-3.5 rounded-2xl bg-[#0E121B] border border-neutral-800/80 space-y-2 text-xs mt-3.5">
+                        <div className="p-3.5 rounded-2xl bg-surface-1 border border-neutral-800/80 space-y-2 text-xs mt-3.5">
                           <div className="flex justify-between items-center pb-2 border-b border-neutral-800 font-bold">
                             <span className="text-amber-300">إجمالي رأس مال الشريك الحالي:</span>
                             <span className="font-mono text-base text-amber-400 font-black">
@@ -727,7 +727,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
                           <div className="flex justify-between text-neutral-400 text-[11px]">
                             <span>• رأس المال الإضافي المجرى ضخه:</span>
-                            <span className="font-mono text-blue-400">+{((partner.addedCapital || 0)).toLocaleString()} ج.م</span>
+                            <span className="font-mono text-amber-400">+{((partner.addedCapital || 0)).toLocaleString()} ج.م</span>
                           </div>
 
                           <div className="flex justify-between text-neutral-400 text-[11px]">
@@ -755,7 +755,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                             setTargetPartnerId(partner.id);
                             setShowInjectCapitalModal(true);
                           }}
-                          className="py-2 px-1 rounded-xl bg-[#1A2538] hover:bg-[#23314B] text-blue-300 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors"
+                          className="py-2 px-1 rounded-xl bg-surface-3 hover:bg-surface-4 text-amber-300 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors"
                           title="ضخ أموال جديدة وزيادة الحصة"
                         >
                           <ArrowUpRight className="w-3.5 h-3.5" />
@@ -767,7 +767,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                             setTargetPartnerId(partner.id);
                             setShowReinvestProfitModal(true);
                           }}
-                          className="py-2 px-1 rounded-xl bg-[#122822] hover:bg-[#18362E] text-emerald-300 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors"
+                          className="py-2 px-1 rounded-xl bg-emerald-950/40 hover:bg-emerald-950/40 text-emerald-300 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors"
                           title="إدخال أرباح الشريك في رأس المال"
                         >
                           <PiggyBank className="w-3.5 h-3.5" />
@@ -792,7 +792,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                               notes: 'تم اعتماد الصرف بالتحويل البنكي لحساب الشريك المعتمد'
                             });
                           }}
-                          className="py-2 px-1 rounded-xl bg-[#1E2536] hover:bg-[#283248] text-amber-300 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors"
+                          className="py-2 px-1 rounded-xl bg-surface-3 hover:bg-surface-4 text-amber-300 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors"
                           title="طباعة سند صرف أرباح دورية"
                         >
                           <Receipt className="w-3.5 h-3.5" />
@@ -811,7 +811,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       {activeFinanceTab === 'income' && (
         <div className="space-y-5">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-            <div className="p-4 rounded-2xl bg-[#141926] border border-neutral-800">
+            <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800">
               <span className="text-neutral-400 text-xs block">إجمالي الإيرادات (المبيعات)</span>
               <span className="text-xl font-black text-amber-400 font-mono mt-1 block">
                 {totalSalesRevenue.toLocaleString()} ج.م
@@ -819,7 +819,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               <span className="text-[10px] text-neutral-500 mt-1 block">شامل الفواتير النقدية والآجلة ({invoices.length} فاتورة)</span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-[#141926] border border-neutral-800">
+            <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800">
               <span className="text-neutral-400 text-xs block">تكلفة البضاعة المباعة (COGS)</span>
               <span className="text-xl font-black text-neutral-300 font-mono mt-1 block">
                 {estimatedCOGS.toLocaleString()} ج.م
@@ -827,7 +827,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               <span className="text-[10px] text-neutral-500 mt-1 block">تكلفة شراء القطع من الوكلاء</span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-[#141926] border border-neutral-800">
+            <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800">
               <span className="text-neutral-400 text-xs block">المصروفات التشغيلية</span>
               <span className="text-xl font-black text-rose-400 font-mono mt-1 block">
                 {totalOperatingExpenses.toLocaleString()} ج.م
@@ -835,7 +835,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               <span className="text-[10px] text-neutral-500 mt-1 block">إيجار، رواتب، شحن، كهرباء</span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-[#141926] border border-emerald-500/40 bg-gradient-to-br from-[#12201D] to-[#141926]">
+            <div className="p-4 rounded-2xl bg-surface-2 border border-emerald-500/40 bg-gradient-to-br from-emerald-950/40 to-surface-2">
               <span className="text-emerald-400 text-xs font-bold block">صافي الربح القابل للتوزيع</span>
               <span className="text-xl font-black text-emerald-400 font-mono mt-1 block">
                 {netDistributableProfit.toLocaleString()} ج.م
@@ -844,7 +844,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             </div>
           </div>
 
-          <div className="p-6 rounded-3xl bg-[#141926] border border-neutral-800 space-y-4">
+          <div className="p-6 rounded-3xl bg-surface-2 border border-neutral-800 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="w-5 h-5 text-amber-400" />
@@ -865,7 +865,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <span className="font-mono text-neutral-300">-{estimatedCOGS.toFixed(2)} ج.م</span>
               </div>
 
-              <div className="py-2.5 flex justify-between font-bold bg-[#0E121B] px-3 rounded-lg text-amber-400">
+              <div className="py-2.5 flex justify-between font-bold bg-surface-1 px-3 rounded-lg text-amber-400">
                 <span>(=) مجمل الربح التجاري (Gross Profit) - هامش %{grossProfitMargin}</span>
                 <span className="font-mono">{grossProfit.toFixed(2)} ج.م</span>
               </div>
@@ -890,7 +890,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             {paymentBreakdown.map((pb) => {
               const color = PAYMENT_COLORS[pb.key] || '#94a3b8';
               return (
-                <div key={pb.key} className="p-4 rounded-3xl bg-[#141926] border border-neutral-800 space-y-2">
+                <div key={pb.key} className="p-4 rounded-3xl bg-surface-2 border border-neutral-800 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
                     <span className="text-[10px] font-mono text-neutral-500">{pb.count} فواتير</span>
@@ -914,12 +914,12 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-6 rounded-3xl bg-[#141926] border border-neutral-800 space-y-3">
+            <div className="p-6 rounded-3xl bg-surface-2 border border-neutral-800 space-y-3">
               <h4 className="text-sm font-bold text-white flex items-center gap-2">
                 <Banknote className="w-4 h-4 text-emerald-400" />
                 <span>السيولة النقدية الشاملة (خزينة وبنوك ومحافظ)</span>
               </h4>
-              <div className="p-4 rounded-2xl bg-[#0E121B] border border-neutral-800 flex flex-col justify-between gap-3">
+              <div className="p-4 rounded-2xl bg-surface-1 border border-neutral-800 flex flex-col justify-between gap-3">
                 <div>
                   <span className="text-neutral-400 text-xs block">صافي السيولة التراكمية بعد المصروفات:</span>
                   <span className="text-2xl font-black text-emerald-400 font-mono mt-1 block">
@@ -932,7 +932,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               </div>
             </div>
 
-            <div className="p-6 rounded-3xl bg-gradient-to-br from-[#122822] to-[#141926] border border-emerald-500/40 space-y-3">
+            <div className="p-6 rounded-3xl bg-gradient-to-br from-emerald-950/40 to-surface-2 border border-emerald-500/40 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-bold text-emerald-300 flex items-center gap-2">
                   <Coins className="w-4 h-4 text-amber-400" />
@@ -942,7 +942,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   متصل ومربوط حياً
                 </span>
               </div>
-              <div className="p-4 rounded-2xl bg-[#0E121B] border border-neutral-800 flex items-center justify-between">
+              <div className="p-4 rounded-2xl bg-surface-1 border border-neutral-800 flex items-center justify-between">
                 <div>
                   <span className="text-neutral-400 text-xs block">الرصيد النقدي المتوفر بالخزينة الآن:</span>
                   <span className="text-2xl font-black text-amber-400 font-mono mt-1 block">
@@ -976,7 +976,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
           <div className="rounded-2xl border border-neutral-800 overflow-hidden">
             <table className="w-full text-right text-neutral-300 text-xs">
-              <thead className="bg-[#0E121B] text-neutral-400 text-[11px] border-b border-neutral-800">
+              <thead className="bg-surface-1 text-neutral-400 text-[11px] border-b border-neutral-800">
                 <tr>
                   <th className="p-3">التاريخ</th>
                   <th className="p-3">بيان المصروف</th>
@@ -986,9 +986,9 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   <th className="p-3">المسؤول</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-neutral-800 bg-[#121622]">
+              <tbody className="divide-y divide-neutral-800 bg-surface-2">
                 {expenses.map((exp) => (
-                  <tr key={exp.id} className="hover:bg-[#181E2E]">
+                  <tr key={exp.id} className="hover:bg-surface-2">
                     <td className="p-3 font-mono text-[11px]">{exp.date}</td>
                     <td className="p-3 font-bold text-white">{exp.title}</td>
                     <td className="p-3">
@@ -1013,7 +1013,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           onClick={() => setShowAddPartnerModal(false)}
         >
           <div 
-            className="w-full max-w-lg bg-[#141926] rounded-3xl border border-neutral-800 p-6 text-white shadow-2xl space-y-4"
+            className="w-full max-w-lg bg-surface-2 rounded-3xl border border-neutral-800 p-6 text-white shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -1035,7 +1035,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   value={newPartnerName}
                   onChange={(e) => setNewPartnerName(e.target.value)}
                   placeholder="مثال: أ. محمود الشناوي"
-                  className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                  className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                 />
               </div>
 
@@ -1045,7 +1045,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   <select
                     value={newPartnerRole}
                     onChange={(e) => setNewPartnerRole(e.target.value)}
-                    className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                   >
                     <option value="شريك ممول ورأس المال">شريك ممول ورأس المال</option>
                     <option value="شريك مؤسس وتنفيذي">شريك مؤسس وتنفيذي</option>
@@ -1062,7 +1062,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     value={newPartnerPhone}
                     onChange={(e) => setNewPartnerPhone(e.target.value)}
                     placeholder="010XXXXXXXX"
-                    className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
                   />
                 </div>
               </div>
@@ -1076,7 +1076,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     min="1000"
                     value={newPartnerInitialCapital || ''}
                     onChange={(e) => setNewPartnerInitialCapital(Number(e.target.value))}
-                    className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
                   />
                 </div>
 
@@ -1089,14 +1089,14 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     max="100"
                     value={newPartnerSharePercent || ''}
                     onChange={(e) => setNewPartnerSharePercent(Number(e.target.value))}
-                    className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono text-amber-400 font-bold"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono text-amber-400 font-bold"
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 text-neutral-950 font-black text-xs shadow-lg mt-2 active:scale-98"
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 text-neutral-950 font-black text-xs shadow-lg mt-2 active:scale-98"
               >
                 تأكيد انضمام الشريك وقيد رأس المال
               </button>
@@ -1111,12 +1111,12 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           onClick={() => setShowInjectCapitalModal(false)}
         >
           <div 
-            className="w-full max-w-lg bg-[#141926] rounded-3xl border border-neutral-800 p-6 text-white shadow-2xl space-y-4"
+            className="w-full max-w-lg bg-surface-2 rounded-3xl border border-neutral-800 p-6 text-white shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
               <h3 className="text-sm font-bold flex items-center gap-2">
-                <ArrowUpRight className="w-4 h-4 text-blue-400" />
+                <ArrowUpRight className="w-4 h-4 text-amber-400" />
                 <span>ضخ رأس مال إضافي وزيادة حصة الشريك</span>
               </h3>
               <button onClick={() => setShowInjectCapitalModal(false)} className="text-neutral-400 hover:text-white">
@@ -1130,7 +1130,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <select
                   value={targetPartnerId}
                   onChange={(e) => setTargetPartnerId(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-bold"
+                  className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-bold"
                 >
                   {partners.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -1149,7 +1149,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     min="100"
                     value={injectAmount || ''}
                     onChange={(e) => setInjectAmount(Number(e.target.value))}
-                    className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono text-blue-400 font-bold"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono text-amber-400 font-bold"
                   />
                 </div>
 
@@ -1158,7 +1158,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   <select
                     value={injectPaymentMethod}
                     onChange={(e) => setInjectPaymentMethod(e.target.value)}
-                    className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                   >
                     <option value="نقدي">نقدي (إيداع الخزينة)</option>
                     <option value="فيزا / بطاقة">فيزا / مدى (الحساب البنكي)</option>
@@ -1169,7 +1169,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-500 text-white font-black text-xs shadow-lg mt-2 active:scale-98"
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-600 to-amber-500 text-[#ffffff] font-black text-xs shadow-lg mt-2 active:scale-98"
               >
                 اعتماد ضخ رأس المال وإصدار سند الإيداع
               </button>
@@ -1184,7 +1184,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           onClick={() => setShowReinvestProfitModal(false)}
         >
           <div 
-            className="w-full max-w-lg bg-[#141926] rounded-3xl border border-neutral-800 p-6 text-white shadow-2xl space-y-4"
+            className="w-full max-w-lg bg-surface-2 rounded-3xl border border-neutral-800 p-6 text-white shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -1203,7 +1203,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <select
                   value={targetPartnerId}
                   onChange={(e) => setTargetPartnerId(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-bold"
+                  className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-bold"
                 >
                   {partners.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -1221,13 +1221,13 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   min="1"
                   value={reinvestAmount || ''}
                   onChange={(e) => setReinvestAmount(Number(e.target.value))}
-                  className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono text-emerald-400 font-bold"
+                  className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono text-emerald-400 font-bold"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-black text-xs shadow-lg mt-2 active:scale-98"
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-amber-500 text-[#ffffff] font-black text-xs shadow-lg mt-2 active:scale-98"
               >
                 تأكيد رسملة الأرباح وإصدار شهادة القيد الرأسمالي
               </button>
@@ -1242,7 +1242,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           onClick={() => setShowAdjustSharesModal(false)}
         >
           <div 
-            className="w-full max-w-md bg-[#141926] rounded-3xl border border-neutral-800 p-6 text-white shadow-2xl space-y-4"
+            className="w-full max-w-md bg-surface-2 rounded-3xl border border-neutral-800 p-6 text-white shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -1258,7 +1258,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             <div className="space-y-3 text-xs">
               <div className="space-y-2">
                 {partners.map((p) => (
-                  <div key={p.id} className="p-3 rounded-2xl bg-[#0E121B] border border-neutral-800 flex items-center justify-between">
+                  <div key={p.id} className="p-3 rounded-2xl bg-surface-1 border border-neutral-800 flex items-center justify-between">
                     <div>
                       <span className="font-bold text-white block">{p.name}</span>
                       <span className="text-[10px] text-neutral-400">{p.role}</span>
@@ -1273,7 +1273,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           const val = Number(e.target.value);
                           setEditingShares((prev) => ({ ...prev, [p.id]: val }));
                         }}
-                        className="w-16 h-8 text-center rounded-lg bg-[#141926] border border-neutral-700 text-amber-400 font-mono font-bold text-xs"
+                        className="w-16 h-8 text-center rounded-lg bg-surface-2 border border-neutral-700 text-amber-400 font-mono font-bold text-xs"
                       />
                       <span className="text-neutral-400 font-bold">%</span>
                     </div>
@@ -1298,7 +1298,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           onClick={() => setShowAddExpenseModal(false)}
         >
           <div 
-            className="w-full max-w-md bg-[#141926] rounded-3xl border border-neutral-800 p-6 text-white shadow-2xl space-y-4"
+            className="w-full max-w-md bg-surface-2 rounded-3xl border border-neutral-800 p-6 text-white shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -1320,7 +1320,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   value={expenseTitle}
                   onChange={(e) => setExpenseTitle(e.target.value)}
                   placeholder="مثال: صيانة رافعة البضائع، سداد كهرباء..."
-                  className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                  className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                 />
               </div>
 
@@ -1333,7 +1333,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     min="1"
                     value={expenseAmount || ''}
                     onChange={(e) => setExpenseAmount(Number(e.target.value))}
-                    className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono text-rose-400 font-bold"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono text-rose-400 font-bold"
                   />
                 </div>
 
@@ -1342,7 +1342,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   <select
                     value={expensePaymentMethod}
                     onChange={(e) => setExpensePaymentMethod(e.target.value as any)}
-                    className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                   >
                     <option value="نقدي">كاش / نقدي</option>
                     <option value="فيزا / بطاقة">فيزا / مدى</option>
@@ -1368,7 +1368,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           onClick={() => setShowDistributeModal(false)}
         >
           <div 
-            className="w-full max-w-lg bg-[#141926] rounded-3xl border border-neutral-800 p-6 text-white shadow-2xl space-y-4"
+            className="w-full max-w-lg bg-surface-2 rounded-3xl border border-neutral-800 p-6 text-white shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -1381,7 +1381,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               </button>
             </div>
 
-            <div className="p-3 rounded-2xl bg-[#0E121B] border border-neutral-800 space-y-1 text-xs">
+            <div className="p-3 rounded-2xl bg-surface-1 border border-neutral-800 space-y-1 text-xs">
               <div className="flex justify-between">
                 <span className="text-neutral-400">صافي الأرباح القابلة للتوزيع:</span>
                 <span className="font-mono font-bold text-emerald-400 text-sm">
@@ -1392,7 +1392,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
             <div className="space-y-2">
               <span className="text-xs font-bold text-neutral-300 block">حصص الشركاء المحددة تعاقدياً:</span>
-              <div className="divide-y divide-neutral-800 bg-[#0E121B] rounded-2xl p-3 border border-neutral-800">
+              <div className="divide-y divide-neutral-800 bg-surface-1 rounded-2xl p-3 border border-neutral-800">
                 {partners.map((p) => {
                   const amt = ((netDistributableProfit * p.sharePercentage) / 100).toFixed(2);
                   return (
@@ -1412,7 +1412,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
             <button
               onClick={handleExecuteDistribution}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 text-neutral-950 font-black text-xs shadow-lg active:scale-98"
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 text-neutral-950 font-black text-xs shadow-lg active:scale-98"
             >
               تأكيد صرف وحفظ سند التوزيع
             </button>
@@ -1426,7 +1426,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           onClick={() => setShowReportModal(false)}
         >
           <div 
-            className="w-full max-w-4xl bg-[#141926] rounded-3xl border border-neutral-700 p-6 text-neutral-100 shadow-2xl space-y-6 print:p-0 print:border-none print:shadow-none"
+            className="w-full max-w-4xl bg-surface-2 rounded-3xl border border-neutral-700 p-6 text-neutral-100 shadow-2xl space-y-6 print:p-0 print:border-none print:shadow-none"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-4 border-b border-neutral-800">
@@ -1467,7 +1467,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
               <div className="rounded-2xl border border-neutral-800 overflow-hidden text-xs">
                 <table className="w-full text-right text-neutral-300">
-                  <thead className="bg-[#0E121B] text-neutral-400 text-[11px] border-b border-neutral-800">
+                  <thead className="bg-surface-1 text-neutral-400 text-[11px] border-b border-neutral-800">
                     <tr>
                       <th className="p-3">اسم الشريك</th>
                       <th className="p-3">نسبة الحصة %</th>
@@ -1478,7 +1478,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                       <th className="p-3">أرباح الدورة المستحقة</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-neutral-800 bg-[#121622]">
+                  <tbody className="divide-y divide-neutral-800 bg-surface-2">
                     {partners.map((p) => {
                       const shareAmt = ((netDistributableProfit * p.sharePercentage) / 100).toFixed(2);
                       const curCap = p.totalCurrentCapital || (p.initialCapital + (p.addedCapital || 0) + (p.reinvestedProfits || 0));
@@ -1487,7 +1487,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           <td className="p-3 font-bold text-white">{p.name}</td>
                           <td className="p-3 font-mono font-bold text-amber-400">%{p.sharePercentage}</td>
                           <td className="p-3 font-mono">{p.initialCapital.toLocaleString()} ج.م</td>
-                          <td className="p-3 font-mono text-blue-400">+{(p.addedCapital || 0).toLocaleString()} ج.م</td>
+                          <td className="p-3 font-mono text-amber-400">+{(p.addedCapital || 0).toLocaleString()} ج.م</td>
                           <td className="p-3 font-mono text-emerald-400">+{(p.reinvestedProfits || 0).toLocaleString()} ج.م</td>
                           <td className="p-3 font-mono font-black text-amber-400">{curCap.toLocaleString()} ج.م</td>
                           <td className="p-3 font-mono font-bold text-emerald-400">{Number(shareAmt).toLocaleString()} ج.م</td>

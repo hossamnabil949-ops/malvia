@@ -128,7 +128,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
     {/* Brand */}
     <button
       onClick={onLogoClick}
-      className={`flex items-center shrink-0 h-16 border-b border-slate-800 transition hover:bg-slate-800/40 ${
+      className={`flex items-center shrink-0 h-16 border-b border-nav-line transition hover:bg-nav-hover ${
         collapsed ? 'justify-center px-2' : 'gap-3 px-4'
       }`}
       title="الصفحة الرئيسية"
@@ -142,7 +142,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
             <span className="block text-[10px] px-1.5 py-0.5 w-fit rounded-full bg-amber-400/10 text-amber-400 border border-amber-400/20 font-bold whitespace-nowrap">
               قطع الغيار الذكي
             </span>
-            <span className="block text-xs text-slate-400 truncate mt-0.5">
+            <span className="block text-xs text-nav-muted truncate mt-0.5">
               {shopName || 'مركز خدمة وقطع الغيار'}
             </span>
           </span>
@@ -155,9 +155,9 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
       {NAV_GROUPS.map((group, gi) => (
         <div key={group.title}>
           {collapsed ? (
-            gi > 0 && <div className="mx-2 mb-2 border-t border-slate-800" />
+            gi > 0 && <div className="mx-2 mb-2 border-t border-nav-line" />
           ) : (
-            <div className="px-3 pb-1.5 text-[11px] font-bold tracking-wide text-slate-500">
+            <div className="px-3 pb-1.5 text-[11px] font-bold tracking-wide text-nav-muted">
               {group.title}
             </div>
           )}
@@ -176,7 +176,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
                     } ${
                       isActive
                         ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                        : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                        : 'text-nav-text hover:text-nav-strong hover:bg-nav-hover'
                     }`}
                   >
                     <Icon className="w-5 h-5 shrink-0" />
@@ -276,9 +276,9 @@ export const Navigation: React.FC<NavigationProps> = ({
 
   const toolItems = [
     { label: 'موديلات السيارات', icon: CarFront, color: 'text-amber-400', onClick: onOpenCarModels },
-    { label: 'مشاركة صور القطع', icon: Camera, color: 'text-cyan-400', onClick: onOpenPhotoSharing },
+    { label: 'مشاركة صور القطع', icon: Camera, color: 'text-amber-300', onClick: onOpenPhotoSharing },
     { label: 'استيراد / تصدير إكسيل', icon: FileSpreadsheet, color: 'text-emerald-400', onClick: onOpenExcelModal },
-    { label: 'جرد المخزون', icon: ClipboardCheck, color: 'text-violet-400', onClick: onOpenInventoryAudit },
+    { label: 'جرد المخزون', icon: ClipboardCheck, color: 'text-amber-300', onClick: onOpenInventoryAudit },
     { label: 'دليل النشر والتشغيل', icon: BookOpen, color: 'text-slate-300', onClick: onOpenDeploymentGuide },
   ].filter(t => typeof t.onClick === 'function');
 
@@ -286,7 +286,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     <div className="min-h-screen flex">
       {/* ===== Desktop sidebar (right side in RTL) ===== */}
       <aside
-        className={`hidden lg:flex flex-col fixed inset-y-0 start-0 z-40 bg-slate-900 border-e border-slate-800 transition-[width] duration-200 ${
+        className={`hidden lg:flex flex-col fixed inset-y-0 start-0 z-40 bg-nav-bg border-e border-nav-line transition-[width] duration-200 ${
           collapsed ? 'w-[72px]' : 'w-64'
         }`}
       >
@@ -300,7 +300,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         <button
           onClick={toggleCollapsed}
           title={collapsed ? 'توسيع القائمة' : 'طي القائمة'}
-          className={`shrink-0 flex items-center h-12 border-t border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800/60 transition text-xs font-semibold ${
+          className={`shrink-0 flex items-center h-12 border-t border-nav-line text-nav-muted hover:text-nav-strong hover:bg-nav-hover transition text-xs font-semibold ${
             collapsed ? 'justify-center' : 'gap-2 px-5'
           }`}
         >
@@ -316,10 +316,10 @@ export const Navigation: React.FC<NavigationProps> = ({
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setDrawerOpen(false)}
           />
-          <aside className="absolute inset-y-0 start-0 w-72 max-w-[85vw] flex flex-col bg-slate-900 border-e border-slate-800 shadow-2xl">
+          <aside className="absolute inset-y-0 start-0 w-72 max-w-[85vw] flex flex-col bg-nav-bg border-e border-nav-line shadow-2xl">
             <button
               onClick={() => setDrawerOpen(false)}
-              className="absolute top-3 end-3 z-10 p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+              className="absolute top-3 end-3 z-10 p-1.5 rounded-lg bg-nav-hover text-nav-text hover:text-nav-strong"
               aria-label="إغلاق القائمة"
             >
               <X className="w-4 h-4" />
@@ -360,12 +360,12 @@ export const Navigation: React.FC<NavigationProps> = ({
                 <Menu className="w-5 h-5" />
               </button>
               <img
-                src="/logo-header.png"
+                src="/icon-192.png"
                 alt="MALVIA"
-                className="lg:hidden h-8 w-auto shrink-0"
+                className="lg:hidden h-8 w-8 rounded-lg shrink-0"
                 draggable={false}
               />
-              <h1 className="hidden lg:block text-lg font-black text-white truncate">
+              <h1 className="text-base lg:text-lg font-black text-white truncate">
                 {currentLabel}
               </h1>
             </div>
@@ -433,7 +433,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               >
                 <Bell className="w-4 h-4" />
                 {activeNotificationsCount > 0 && (
-                  <span className="absolute -top-1 -left-1 min-w-5 h-5 px-1 bg-rose-500 text-white rounded-full text-[10px] font-bold flex items-center justify-center animate-pulse">
+                  <span className="absolute -top-1 -left-1 min-w-5 h-5 px-1 bg-rose-500 text-[#ffffff] rounded-full text-[10px] font-bold flex items-center justify-center animate-pulse">
                     {activeNotificationsCount}
                   </span>
                 )}

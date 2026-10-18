@@ -371,7 +371,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-[#151B2B] via-[#101420] to-[#151B2B] p-5 rounded-3xl border border-neutral-800 shadow-xl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-surface-2 via-surface-2 to-surface-2 p-5 rounded-3xl border border-neutral-800 shadow-xl">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-inner">
             <FileText className="w-6 h-6" />
@@ -390,7 +390,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="p-1 rounded-2xl bg-[#0E121B] border border-neutral-700 flex items-center gap-1">
+          <div className="p-1 rounded-2xl bg-surface-1 border border-neutral-700 flex items-center gap-1">
             <button
               onClick={() => setCurrentTab('invoices')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
@@ -405,7 +405,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
               onClick={() => setCurrentTab('returns')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                 currentTab === 'returns'
-                  ? 'bg-rose-500 text-white font-black shadow-sm'
+                  ? 'bg-rose-500 text-[#ffffff] font-black shadow-sm'
                   : 'text-rose-400 hover:text-rose-300'
               }`}
             >
@@ -436,15 +436,15 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-[#121622] border border-neutral-800 hover:border-blue-500/40 p-4 rounded-2xl shadow-sm transition-all group">
+        <div className="bg-surface-2 border border-neutral-800 hover:border-amber-500/40 p-4 rounded-2xl shadow-sm transition-all group">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-neutral-400">إجمالي المشتريات الصافية</span>
-            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 group-hover:scale-110 transition-transform">
+            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 group-hover:scale-110 transition-transform">
               <FileText className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-blue-400 font-mono">
+            <span className="text-2xl font-black text-amber-400 font-mono">
               {totalPurchasesAmount.toLocaleString()}
             </span>
             <span className="text-xs font-bold text-neutral-400">ج.م</span>
@@ -452,7 +452,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           <p className="text-[11px] text-neutral-400 mt-1">إجمالي التوريدات بعد خصم المرتجعات</p>
         </div>
 
-        <div className="bg-[#121622] border border-neutral-800 hover:border-emerald-500/40 p-4 rounded-2xl shadow-sm transition-all group">
+        <div className="bg-surface-2 border border-neutral-800 hover:border-emerald-500/40 p-4 rounded-2xl shadow-sm transition-all group">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-neutral-400">مسدد نقداً من الخزينة</span>
             <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 group-hover:scale-110 transition-transform">
@@ -468,7 +468,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           <p className="text-[11px] text-neutral-400 mt-1">مبالغ خرجت من الخزينة للموردين</p>
         </div>
 
-        <div className="bg-[#121622] border border-neutral-800 hover:border-amber-500/40 p-4 rounded-2xl shadow-sm transition-all group">
+        <div className="bg-surface-2 border border-neutral-800 hover:border-amber-500/40 p-4 rounded-2xl shadow-sm transition-all group">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-neutral-400">دفعات آجلة متبقية (المجدولة)</span>
             <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 group-hover:scale-110 transition-transform">
@@ -484,7 +484,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           <p className="text-[11px] text-neutral-400 mt-1">مبالغ مستحقة قيد السداد للموردين</p>
         </div>
 
-        <div className="bg-[#121622] border border-neutral-800 hover:border-rose-500/40 p-4 rounded-2xl shadow-sm transition-all group">
+        <div className="bg-surface-2 border border-neutral-800 hover:border-rose-500/40 p-4 rounded-2xl shadow-sm transition-all group">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-neutral-400">إجمالي مرتجعات المشتريات</span>
             <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 group-hover:scale-110 transition-transform">
@@ -501,7 +501,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         </div>
       </div>
 
-      <div className="p-4 rounded-2xl bg-[#141926] border border-neutral-800 flex flex-col sm:flex-row items-center gap-3">
+      <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 flex flex-col sm:flex-row items-center gap-3">
         <div className="relative flex-grow w-full">
           <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
           <input
@@ -511,7 +511,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             placeholder={currentTab === 'invoices' 
               ? "ابحث برقم الفاتورة، اسم المورد/التاجر، أو رقم فاتورة المورد..." 
               : "ابحث برقم إذن مرتجع المشتريات، المورد، أو الفاتورة الأصلية..."}
-            className="w-full h-11 pr-10 pl-4 rounded-xl bg-[#0E121B] border border-neutral-700 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400"
+            className="w-full h-11 pr-10 pl-4 rounded-xl bg-surface-1 border border-neutral-700 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400"
           />
         </div>
 
@@ -519,7 +519,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-[#0E121B] border border-neutral-700 text-neutral-200 text-xs rounded-xl px-3 h-11 focus:outline-none focus:border-amber-400 w-full sm:w-auto"
+            className="bg-surface-1 border border-neutral-700 text-neutral-200 text-xs rounded-xl px-3 h-11 focus:outline-none focus:border-amber-400 w-full sm:w-auto"
           >
             <option value="all">كافة حالات السداد</option>
             <option value="مدفوعة نقداً">مدفوعة نقداً</option>
@@ -531,10 +531,10 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       </div>
 
       {currentTab === 'invoices' && (
-        <div className="bg-[#141926] border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
+        <div className="bg-surface-2 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs text-neutral-300">
-              <thead className="bg-[#0E121B] text-neutral-400 text-[11px] uppercase border-b border-neutral-800">
+              <thead className="bg-surface-1 text-neutral-400 text-[11px] uppercase border-b border-neutral-800">
                 <tr>
                   <th className="p-3.5">رقم الفاتورة</th>
                   <th className="p-3.5">فاتورة المورد</th>
@@ -561,7 +561,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                     const hasReturn = (inv.returnedAmount || 0) > 0;
 
                     return (
-                      <tr key={inv.id} className="hover:bg-[#1A2234] transition-colors">
+                      <tr key={inv.id} className="hover:bg-surface-3 transition-colors">
                         <td className="p-3.5 font-mono font-bold text-white">
                           {inv.invoiceNumber}
                         </td>
@@ -647,7 +647,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       )}
 
       {currentTab === 'returns' && (
-        <div className="bg-[#141926] border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
+        <div className="bg-surface-2 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
           <div className="p-4 bg-rose-950/20 border-b border-rose-500/20 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <RotateCcw className="w-5 h-5 text-rose-400" />
@@ -668,7 +668,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs text-neutral-300">
-              <thead className="bg-[#0E121B] text-neutral-400 text-[11px] uppercase border-b border-neutral-800">
+              <thead className="bg-surface-1 text-neutral-400 text-[11px] uppercase border-b border-neutral-800">
                 <tr>
                   <th className="p-3.5">رقم إذن المرتجع</th>
                   <th className="p-3.5">فاتورة المشتريات</th>
@@ -690,7 +690,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   </tr>
                 ) : (
                   filteredReturns.map((ret) => (
-                    <tr key={ret.id} className="hover:bg-[#1A2234] transition-colors">
+                    <tr key={ret.id} className="hover:bg-surface-3 transition-colors">
                       <td className="p-3.5 font-mono font-bold text-rose-400">
                         {ret.returnNumber}
                       </td>
@@ -761,7 +761,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           onClick={() => setShowCreateModal(false)}
         >
           <div 
-            className="w-full max-w-4xl bg-[#141926] text-white rounded-3xl p-6 shadow-2xl border border-neutral-800 space-y-5 my-8 max-h-[90vh] overflow-y-auto"
+            className="w-full max-w-4xl bg-surface-2 text-white rounded-3xl p-6 shadow-2xl border border-neutral-800 space-y-5 my-8 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -786,13 +786,13 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             </div>
 
             <form onSubmit={handleSubmitInvoice} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-[#0E121B] p-4 rounded-2xl border border-neutral-800">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-surface-1 p-4 rounded-2xl border border-neutral-800">
                 <div>
                   <label className="text-xs font-bold text-neutral-400 block mb-1">المورد / التاجر:</label>
                   <select
                     value={selectedSupplierId}
                     onChange={(e) => setSelectedSupplierId(e.target.value)}
-                    className="w-full h-9 px-3 rounded-xl bg-[#161C2C] border border-neutral-700 text-xs text-white focus:outline-none focus:border-amber-400"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none focus:border-amber-400"
                   >
                     {suppliers.map(s => (
                       <option key={s.id} value={s.id}>
@@ -809,7 +809,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                     value={supplierInvoiceNumber}
                     onChange={(e) => setSupplierInvoiceNumber(e.target.value)}
                     placeholder="مثال: فاتورة 89201"
-                    className="w-full h-9 px-3 rounded-xl bg-[#161C2C] border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400 font-mono"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400 font-mono"
                   />
                 </div>
 
@@ -819,7 +819,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                     type="date"
                     value={invoiceDate}
                     onChange={(e) => setInvoiceDate(e.target.value)}
-                    className="w-full h-9 px-3 rounded-xl bg-[#161C2C] border border-neutral-700 text-xs text-white focus:outline-none focus:border-amber-400"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none focus:border-amber-400"
                   />
                 </div>
               </div>
@@ -843,7 +843,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
                 <div className="border border-neutral-800 rounded-2xl overflow-hidden">
                   <table className="w-full text-right text-xs">
-                    <thead className="bg-[#0E121B] text-neutral-400 text-[11px] border-b border-neutral-800">
+                    <thead className="bg-surface-1 text-neutral-400 text-[11px] border-b border-neutral-800">
                       <tr>
                         <th className="p-2.5">اختيار من المخزن أو صنف جديد</th>
                         <th className="p-2.5">التصنيف</th>
@@ -858,12 +858,12 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
                       {invoiceItems.map((item, index) => (
-                        <tr key={index} className="hover:bg-[#1A2234]">
+                        <tr key={index} className="hover:bg-surface-3">
                           <td className="p-2.5 min-w-56">
                             <div className="space-y-1">
                               <select
                                 onChange={(e) => handleSelectExistingPart(index, e.target.value)}
-                                className="w-full h-7 px-2 rounded-lg bg-[#0E121B] border border-neutral-700 text-[11px] text-neutral-300 focus:outline-none"
+                                className="w-full h-7 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-[11px] text-neutral-300 focus:outline-none"
                               >
                                 <option value="">-- اختر صنف موجود أو اكتب جديد --</option>
                                 {parts.map(p => (
@@ -879,14 +879,14 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                                   value={item.partName}
                                   onChange={(e) => handleItemChange(index, 'partName', e.target.value)}
                                   placeholder="اسم القطعة (تيل، بوجيهات...)"
-                                  className="w-full h-7 px-2 rounded-lg bg-[#0E121B] border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none"
+                                  className="w-full h-7 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none"
                                 />
                                 <input
                                   type="text"
                                   value={item.partNumber}
                                   onChange={(e) => handleItemChange(index, 'partNumber', e.target.value)}
                                   placeholder="كود OEM"
-                                  className="w-24 h-7 px-2 rounded-lg bg-[#0E121B] border border-neutral-700 text-[11px] font-mono text-amber-400 placeholder-neutral-500 focus:outline-none"
+                                  className="w-24 h-7 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-[11px] font-mono text-amber-400 placeholder-neutral-500 focus:outline-none"
                                 />
                               </div>
                             </div>
@@ -896,7 +896,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                             <select
                               value={item.category}
                               onChange={(e) => handleItemChange(index, 'category', e.target.value)}
-                              className="h-8 px-2 rounded-lg bg-[#0E121B] border border-neutral-700 text-[11px] text-neutral-300"
+                              className="h-8 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-[11px] text-neutral-300"
                             >
                               {PART_CATEGORIES.map(cat => (
                                 <option key={cat} value={cat}>{cat}</option>
@@ -910,7 +910,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                               min="1"
                               value={item.quantity}
                               onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                              className="w-16 h-8 text-center rounded-lg bg-[#0E121B] border border-neutral-700 text-xs font-mono font-bold text-white"
+                              className="w-16 h-8 text-center rounded-lg bg-surface-1 border border-neutral-700 text-xs font-mono font-bold text-white"
                             />
                           </td>
 
@@ -921,7 +921,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                               step="0.5"
                               value={item.costPrice}
                               onChange={(e) => handleItemChange(index, 'costPrice', e.target.value)}
-                              className="w-20 h-8 text-center rounded-lg bg-[#161C2C] border border-amber-500/60 text-xs font-mono font-black text-amber-300 focus:border-amber-400 focus:outline-none"
+                              className="w-20 h-8 text-center rounded-lg bg-surface-2 border border-amber-500/60 text-xs font-mono font-black text-amber-300 focus:border-amber-400 focus:outline-none"
                               title="سعر الشراء والتكلفة من التاجر - يمكنك تعديله بحرية"
                             />
                           </td>
@@ -933,7 +933,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                               step="0.5"
                               value={item.salePrice}
                               onChange={(e) => handleItemChange(index, 'salePrice', e.target.value)}
-                              className="w-20 h-8 text-center rounded-lg bg-[#0E121B] border border-neutral-700 text-xs font-mono text-emerald-400"
+                              className="w-20 h-8 text-center rounded-lg bg-surface-1 border border-neutral-700 text-xs font-mono text-emerald-400"
                               title="سعر البيع المقترح في المحل للزبائن"
                             />
                           </td>
@@ -958,13 +958,13 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-[#0E121B] p-4 rounded-2xl border border-neutral-800">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-surface-1 p-4 rounded-2xl border border-neutral-800">
                 <div>
                   <label className="text-xs font-bold text-neutral-400 block mb-1">حالة سداد الفاتورة للتاجر:</label>
                   <select
                     value={paymentStatus}
                     onChange={(e) => handlePaymentStatusChange(e.target.value as any)}
-                    className="w-full h-9 px-3 rounded-xl bg-[#161C2C] border border-neutral-700 text-xs text-white focus:outline-none focus:border-amber-400 font-bold"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none focus:border-amber-400 font-bold"
                   >
                     <option value="مدفوعة نقداً">مدفوعة نقداً (صرف كامل القيمة من الخزنة)</option>
                     <option value="مسددة جزئياً">مسددة جزئياً (عربون/دفعة والباقي آجل مجدول)</option>
@@ -983,7 +983,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                       max={grandTotal}
                       value={amountPaid}
                       onChange={(e) => setAmountPaid(Number(e.target.value))}
-                      className="w-full h-9 px-3 rounded-xl bg-[#161C2C] border border-emerald-500/50 text-xs text-emerald-300 font-mono font-bold focus:outline-none"
+                      className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-emerald-500/50 text-xs text-emerald-300 font-mono font-bold focus:outline-none"
                     />
                   </div>
                 )}
@@ -993,7 +993,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   <select
                     value={paymentMethod}
                     onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-full h-9 px-3 rounded-xl bg-[#161C2C] border border-neutral-700 text-xs text-white focus:outline-none"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none"
                   >
                     <option value="كاش (نقدي)">كاش (نقدي من الخزنة)</option>
                     <option value="إنستاباي / InstaPay">إنستاباي InstaPay</option>
@@ -1003,7 +1003,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-[#0E121B] border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="p-4 rounded-2xl bg-surface-1 border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-4 text-xs text-neutral-400">
                     <span>المجموع: <strong className="text-white font-mono">{subtotal.toLocaleString()} ج.م</strong></span>
@@ -1050,7 +1050,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           onClick={() => setReturnPurchaseInvoice(null)}
         >
           <div 
-            className="w-full max-w-3xl bg-[#141926] text-white rounded-3xl p-6 shadow-2xl border border-neutral-800 space-y-5 my-8"
+            className="w-full max-w-3xl bg-surface-2 text-white rounded-3xl p-6 shadow-2xl border border-neutral-800 space-y-5 my-8"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -1074,7 +1074,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-[#0E121B] p-3.5 rounded-2xl border border-neutral-800 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-surface-1 p-3.5 rounded-2xl border border-neutral-800 text-xs">
               <div>
                 <span className="text-neutral-400 block">إجمالي الفاتورة قبل المرتجع:</span>
                 <span className="text-sm font-bold font-mono text-white">{returnPurchaseInvoice.grandTotal.toLocaleString()} ج.م</span>
@@ -1096,7 +1096,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                 <span className="text-xs font-bold text-neutral-300 block">حدد القطع المعادة للمورد والكمية:</span>
                 <div className="border border-neutral-800 rounded-2xl overflow-hidden">
                   <table className="w-full text-right text-xs">
-                    <thead className="bg-[#0E121B] text-neutral-400 text-[11px] border-b border-neutral-800">
+                    <thead className="bg-surface-1 text-neutral-400 text-[11px] border-b border-neutral-800">
                       <tr>
                         <th className="p-2.5">الصنف</th>
                         <th className="p-2.5 text-center">الكمية المستلمة</th>
@@ -1111,7 +1111,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                         const rowReturnTotal = currentReturnQty * it.costPrice;
 
                         return (
-                          <tr key={it.partNumber} className="hover:bg-[#1A2234]">
+                          <tr key={it.partNumber} className="hover:bg-surface-3">
                             <td className="p-2.5">
                               <span className="font-bold text-white block">{it.partName}</span>
                               <span className="font-mono text-[10px] text-amber-400">{it.partNumber}</span>
@@ -1143,7 +1143,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                                     const val = Math.min(it.quantity, Math.max(0, parseInt(e.target.value) || 0));
                                     setReturnItems(prev => ({ ...prev, [it.partNumber]: val }));
                                   }}
-                                  className="w-14 h-7 text-center rounded bg-[#0E121B] border border-neutral-700 text-white font-mono text-xs font-bold"
+                                  className="w-14 h-7 text-center rounded bg-surface-1 border border-neutral-700 text-white font-mono text-xs font-bold"
                                 />
                                 <button
                                   type="button"
@@ -1201,9 +1201,9 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                 </div>
 
                 {returnCalculation.excessCash > 0 && (
-                  <div className="mt-2 p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/30 flex items-center justify-between">
+                  <div className="mt-2 p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/30 flex items-center justify-between">
                     <div>
-                      <span className="text-purple-300 font-bold block">
+                      <span className="text-amber-300 font-bold block">
                         فائض المرتجع يتجاوز الديون غير المسددة بمقدار: {returnCalculation.excessCash.toLocaleString()} ج.م
                       </span>
                       <span className="text-[11px] text-neutral-400">اختر طريقة تسوية الفائض:</span>
@@ -1243,7 +1243,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   <select
                     value={returnReason}
                     onChange={(e) => setReturnReason(e.target.value)}
-                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-xs text-white focus:outline-none focus:border-rose-400"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-xs text-white focus:outline-none focus:border-rose-400"
                   >
                     <option value="بضاعة معيبة / تلف مصنعي">بضاعة معيبة / تلف مصنعي</option>
                     <option value="غير مطابقة للمواصفات أو الطلبية">غير مطابقة للمواصفات أو الطلبية</option>
@@ -1259,12 +1259,12 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                     value={returnNotes}
                     onChange={(e) => setReturnNotes(e.target.value)}
                     placeholder="رقم إذن الاسترجاع مع مندوب المورد..."
-                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-rose-400"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-rose-400"
                   />
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-[#0E121B] border border-neutral-800 flex items-center justify-between">
+              <div className="p-4 rounded-2xl bg-surface-1 border border-neutral-800 flex items-center justify-between">
                 <div>
                   <span className="text-xs text-neutral-400 block">إجمالي قيمة المرتجع المحسوم:</span>
                   <span className="text-2xl font-black text-rose-400 font-mono">
@@ -1284,7 +1284,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   <button
                     type="submit"
                     disabled={returnCalculation.totalReturnAmount <= 0}
-                    className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black shadow-lg shadow-rose-600/30 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-[#ffffff] text-xs font-black shadow-lg shadow-rose-600/30 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>تأكيد المرتجع وتعديل الفاتورة وإعادة الجدولة</span>
@@ -1302,7 +1302,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           onClick={() => setSelectedInvoiceForModal(null)}
         >
           <div 
-            className="w-full max-w-2xl bg-[#141926] text-white rounded-3xl p-6 shadow-2xl border border-neutral-800 space-y-4"
+            className="w-full max-w-2xl bg-surface-2 text-white rounded-3xl p-6 shadow-2xl border border-neutral-800 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -1318,7 +1318,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs bg-[#0E121B] p-3 rounded-2xl">
+            <div className="grid grid-cols-2 gap-3 text-xs bg-surface-1 p-3 rounded-2xl">
               <div>
                 <span className="text-neutral-400 block">رقم الفاتورة:</span>
                 <span className="font-mono font-bold text-white">{selectedInvoiceForModal.invoiceNumber}</span>
@@ -1339,7 +1339,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
             <div className="border border-neutral-800 rounded-2xl overflow-hidden">
               <table className="w-full text-right text-xs">
-                <thead className="bg-[#0E121B] text-neutral-400 text-[11px]">
+                <thead className="bg-surface-1 text-neutral-400 text-[11px]">
                   <tr>
                     <th className="p-2.5">الصنف</th>
                     <th className="p-2.5 text-center">الكمية</th>
@@ -1360,7 +1360,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
               </table>
             </div>
 
-            <div className="p-3 bg-[#0E121B] rounded-2xl flex items-center justify-between text-xs">
+            <div className="p-3 bg-surface-1 rounded-2xl flex items-center justify-between text-xs">
               <span className="text-neutral-400">إجمالي الفاتورة:</span>
               <span className="text-base font-black text-amber-400 font-mono">{selectedInvoiceForModal.grandTotal.toLocaleString()} ج.م</span>
             </div>

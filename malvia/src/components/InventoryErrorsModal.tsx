@@ -138,10 +138,10 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="w-full max-w-4xl bg-[#0F1422] rounded-3xl border border-rose-500/40 text-white shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+      <div className="w-full max-w-4xl bg-surface-2 rounded-3xl border border-rose-500/40 text-white shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
         
         {/* Header */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-neutral-900 via-[#22151D] to-neutral-900 border-b border-neutral-800 flex items-center justify-between">
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-neutral-900 via-surface-2 to-neutral-900 border-b border-neutral-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-rose-500/20 border border-rose-500/30 text-rose-400">
               <AlertTriangle className="w-6 h-6 animate-pulse" />
@@ -164,7 +164,7 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowAddForm(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs shadow-md shadow-rose-600/30 transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-[#ffffff] font-black text-xs shadow-md shadow-rose-600/30 transition-all active:scale-95"
             >
               <Plus className="w-4 h-4" />
               <span>تسجيل خطأ / فارق جرد جديد</span>
@@ -184,19 +184,19 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
           
           {/* Summary KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-            <div className="p-3.5 rounded-2xl bg-[#141A28] border border-neutral-800 space-y-1">
+            <div className="p-3.5 rounded-2xl bg-surface-2 border border-neutral-800 space-y-1">
               <span className="text-neutral-400 block">إجمالي أخطاء وفروقات الجرد المسجلة</span>
               <span className="text-xl font-black font-mono text-white block">{errors.length} خطأ مسجل</span>
               <span className="text-[10px] text-neutral-500">يشمل العجز والفائض والكسر</span>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-[#22151A] border border-rose-500/30 space-y-1">
+            <div className="p-3.5 rounded-2xl bg-surface-2 border border-rose-500/30 space-y-1">
               <span className="text-rose-400 block font-bold">إجمالي الأثر المالي المقدر للعجز والتلف</span>
               <span className="text-xl font-black font-mono text-rose-300 block">{totalDeficitCost.toLocaleString()} ج.م</span>
               <span className="text-[10px] text-neutral-400">قيمة القطع المفقودة بسعر التكلفة</span>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-[#12241F] border border-emerald-500/30 space-y-1">
+            <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 space-y-1">
               <span className="text-emerald-400 block font-bold">الأخطاء التي تم تصحيحها وتسويتها</span>
               <span className="text-xl font-black font-mono text-emerald-300 block">
                 {errors.filter(e => e.isCorrected).length} من أصل {errors.length}
@@ -206,7 +206,7 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
           </div>
 
           {/* Search & Filters */}
-          <div className="flex flex-col sm:flex-row items-center gap-3 bg-[#131828] p-3 rounded-2xl border border-neutral-800 text-xs">
+          <div className="flex flex-col sm:flex-row items-center gap-3 bg-surface-2 p-3 rounded-2xl border border-neutral-800 text-xs">
             <div className="relative flex-1 w-full">
               <Search className="w-4 h-4 text-neutral-400 absolute right-3 top-1/2 -translate-y-1/2" />
               <input
@@ -214,14 +214,14 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="ابحث باسم الصنف، كود القطعة، رقم الخطأ..."
-                className="w-full h-9 pr-9 pl-3 rounded-xl bg-[#0E121C] border border-neutral-700 text-white placeholder:text-neutral-500 focus:outline-none focus:border-rose-500 text-xs"
+                className="w-full h-9 pr-9 pl-3 rounded-xl bg-surface-1 border border-neutral-700 text-white placeholder:text-neutral-500 focus:outline-none focus:border-rose-500 text-xs"
               />
             </div>
 
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="h-9 px-3 rounded-xl bg-[#0E121C] border border-neutral-700 text-white text-xs font-bold"
+              className="h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-xs font-bold"
             >
               <option value="all">كافة أنواع الأخطاء</option>
               <option value="عجز / نقص مخزني">عجز / نقص مخزني</option>
@@ -233,7 +233,7 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as any)}
-              className="h-9 px-3 rounded-xl bg-[#0E121C] border border-neutral-700 text-white text-xs font-bold"
+              className="h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-xs font-bold"
             >
               <option value="all">كافة الحالات</option>
               <option value="pending">قيد الانتظار والمعالجة</option>
@@ -242,9 +242,9 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
           </div>
 
           {/* List of Discrepancies */}
-          <div className="rounded-2xl border border-neutral-800 overflow-hidden bg-[#121624]">
+          <div className="rounded-2xl border border-neutral-800 overflow-hidden bg-surface-2">
             <table className="w-full text-right text-xs text-neutral-300">
-              <thead className="bg-[#0C101A] text-neutral-400 text-[11px] border-b border-neutral-800">
+              <thead className="bg-surface-1 text-neutral-400 text-[11px] border-b border-neutral-800">
                 <tr>
                   <th className="p-3">رقم الخطأ</th>
                   <th className="p-3">الصنف ومكان الرف</th>
@@ -266,7 +266,7 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
                   </tr>
                 ) : (
                   filteredErrors.map((err) => (
-                    <tr key={err.id} className="hover:bg-[#181F30] transition-colors">
+                    <tr key={err.id} className="hover:bg-surface-3 transition-colors">
                       <td className="p-3 font-mono font-bold text-amber-400">{err.errorNumber}</td>
                       <td className="p-3">
                         <div className="font-bold text-white">{err.partName}</div>
@@ -278,7 +278,7 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                           err.errorType === 'عجز / نقص مخزني' || err.errorType === 'تلف / كسر في المخزن'
                             ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                            : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                         }`}>
                           {err.errorType}
                         </span>
@@ -312,7 +312,7 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
                           {!err.isCorrected ? (
                             <button
                               onClick={() => onCorrectError(err.id, 'تعديل رصيد المخزن')}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold shadow-sm"
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-[#ffffff] text-[10px] font-bold shadow-sm"
                               title="تصحيح رصيد المخزن فوراً لمطابقة الواقع الفعلي"
                             >
                               تصحيح المخزن
@@ -360,7 +360,7 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
             onClick={() => setShowAddForm(false)}
           >
             <div 
-              className="w-full max-w-lg bg-[#121624] rounded-3xl border border-rose-500/50 p-6 text-white shadow-2xl space-y-4"
+              className="w-full max-w-lg bg-surface-2 rounded-3xl border border-rose-500/50 p-6 text-white shadow-2xl space-y-4"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -384,7 +384,7 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
                       const part = parts.find(p => p.id === pId);
                       if (part) setActualPhysicalStock(part.stockQuantity);
                     }}
-                    className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-bold"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-bold"
                   >
                     {parts.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -395,7 +395,7 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
                 </div>
 
                 {selectedPart && (
-                  <div className="p-3 rounded-2xl bg-[#0E121B] border border-neutral-800 space-y-1.5 text-xs">
+                  <div className="p-3 rounded-2xl bg-surface-1 border border-neutral-800 space-y-1.5 text-xs">
                     <div className="flex justify-between">
                       <span className="text-neutral-400">الرصيد الدفتري المسجل بالنظام:</span>
                       <strong className="text-white font-mono text-sm">{selectedPart.stockQuantity} {selectedPart.unit}</strong>
@@ -420,7 +420,7 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
                       required
                       value={actualPhysicalStock}
                       onChange={(e) => setActualPhysicalStock(Number(e.target.value))}
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono font-bold text-sm"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono font-bold text-sm"
                     />
                   </div>
 
@@ -429,7 +429,7 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
                     <select
                       value={errorType}
                       onChange={(e) => setErrorType(e.target.value as any)}
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-bold"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-bold"
                     >
                       <option value="عجز / نقص مخزني">عجز / نقص مخزني</option>
                       <option value="فائض غير مسجل">فائض غير مسجل</option>
@@ -442,7 +442,7 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
 
                 {/* Live Impact Calculation */}
                 <div className={`p-3 rounded-2xl border text-xs flex justify-between items-center font-bold ${
-                  difference < 0 ? 'bg-rose-950/20 border-rose-500/40 text-rose-300' : 'bg-blue-950/20 border-blue-500/40 text-blue-300'
+                  difference < 0 ? 'bg-rose-950/20 border-rose-500/40 text-rose-300' : 'bg-amber-950/20 border-amber-500/40 text-amber-300'
                 }`}>
                   <span>الفارق المحسوب: {difference > 0 ? `فائض +${difference}` : `عجز ${difference}`} قطعة</span>
                   <span className="font-mono text-sm">الأثر المالي: {estimatedImpact.toLocaleString()} ج.م</span>
@@ -454,7 +454,7 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
                     <Camera className="w-3.5 h-3.5 text-amber-400" />
                     <span>صورة توثيق التلف أو الخطأ (اختياري):</span>
                   </label>
-                  <label className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-[#0E121B] hover:bg-neutral-800 border border-dashed border-neutral-700 cursor-pointer text-xs text-neutral-300 transition-colors">
+                  <label className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-surface-1 hover:bg-neutral-800 border border-dashed border-neutral-700 cursor-pointer text-xs text-neutral-300 transition-colors">
                     <Upload className="w-4 h-4 text-amber-400" />
                     <span>{imageUrl ? 'تم إرفاق صورة ✓ (اضغط للتغيير)' : 'رفع صورة من الكاميرا أو المعرض'}</span>
                     <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
@@ -468,13 +468,13 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="مثال: كسر أثناء النقل، خطأ في كود الفاتورة 1092..."
-                    className="w-full p-2.5 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                    className="w-full p-2.5 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-red-500 hover:from-rose-500 text-white font-black text-xs shadow-lg shadow-rose-600/30 active:scale-95 transition-all"
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 text-[#ffffff] font-black text-xs shadow-lg shadow-rose-600/30 active:scale-95 transition-all"
                 >
                   تأكيد وقيد الخطأ الجردي بالنظام
                 </button>

@@ -180,7 +180,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
 
   return (
     <div className="space-y-5 pb-12">
-      <div className="p-5 rounded-3xl bg-[#141926] border border-neutral-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-5 rounded-3xl bg-surface-2 border border-neutral-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase mb-1">
             <Receipt className="w-4 h-4" />
@@ -197,7 +197,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="p-1 rounded-2xl bg-[#0E121B] border border-neutral-700 flex items-center gap-1">
+          <div className="p-1 rounded-2xl bg-surface-1 border border-neutral-700 flex items-center gap-1">
             <button
               onClick={() => setCurrentView('invoices')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
@@ -212,7 +212,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
               onClick={() => setCurrentView('returns')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                 currentView === 'returns'
-                  ? 'bg-rose-500 text-white font-black shadow-sm'
+                  ? 'bg-rose-500 text-[#ffffff] font-black shadow-sm'
                   : 'text-rose-400 hover:text-rose-300'
               }`}
             >
@@ -231,7 +231,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
         </div>
       </div>
 
-      <div className="p-4 rounded-2xl bg-[#141926] border border-neutral-800 flex flex-col sm:flex-row items-center gap-3">
+      <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 flex flex-col sm:flex-row items-center gap-3">
         <div className="relative flex-grow w-full">
           <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
           <input
@@ -241,7 +241,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
             placeholder={currentView === 'invoices' 
               ? "ابحث برقم الفاتورة، اسم الزبون، الورشة، أو بيانات السيارة..." 
               : "ابحث برقم إذن المرتجع، رقم الفاتورة، أو اسم الزبون..."}
-            className="w-full h-11 pr-10 pl-4 rounded-xl bg-[#0E121B] border border-neutral-700 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400"
+            className="w-full h-11 pr-10 pl-4 rounded-xl bg-surface-1 border border-neutral-700 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400"
           />
         </div>
 
@@ -250,7 +250,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-[#0E121B] border border-neutral-700 text-neutral-200 text-xs rounded-xl px-3 h-11 focus:outline-none focus:border-amber-400 w-full sm:w-auto"
+              className="bg-surface-1 border border-neutral-700 text-neutral-200 text-xs rounded-xl px-3 h-11 focus:outline-none focus:border-amber-400 w-full sm:w-auto"
             >
               <option value="all">كافة الحالات</option>
               <option value="مسددة">مسددة بالكامل</option>
@@ -261,7 +261,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
             <select
               value={paymentFilter}
               onChange={(e) => setPaymentFilter(e.target.value)}
-              className="bg-[#0E121B] border border-neutral-700 text-neutral-200 text-xs rounded-xl px-3 h-11 focus:outline-none focus:border-amber-400 w-full sm:w-auto"
+              className="bg-surface-1 border border-neutral-700 text-neutral-200 text-xs rounded-xl px-3 h-11 focus:outline-none focus:border-amber-400 w-full sm:w-auto"
             >
               <option value="all">كافة طرق الدفع</option>
               <option value="كاش (نقدي)">كاش (نقدي)</option>
@@ -275,10 +275,10 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       </div>
 
       {currentView === 'invoices' && (
-        <div className="rounded-3xl bg-[#141926] border border-neutral-800 overflow-hidden shadow-xl">
+        <div className="rounded-3xl bg-surface-2 border border-neutral-800 overflow-hidden shadow-xl">
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs text-neutral-300">
-              <thead className="bg-[#0E121B] text-neutral-400 text-[11px] uppercase border-b border-neutral-800">
+              <thead className="bg-surface-1 text-neutral-400 text-[11px] uppercase border-b border-neutral-800">
                 <tr>
                   <th className="p-3.5">رقم الفاتورة</th>
                   <th className="p-3.5">التاريخ والوقت</th>
@@ -302,7 +302,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                   filteredInvoices.map((inv) => {
                     const isFullyReturned = inv.status === 'مرتجع كلي';
                     return (
-                      <tr key={inv.id} className="hover:bg-[#1A2234] transition-colors">
+                      <tr key={inv.id} className="hover:bg-surface-3 transition-colors">
                         <td className="p-3.5 font-mono font-bold text-white">
                           {inv.invoiceNumber}
                         </td>
@@ -377,7 +377,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       )}
 
       {currentView === 'returns' && (
-        <div className="bg-[#141926] border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
+        <div className="bg-surface-2 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
           <div className="p-4 bg-rose-950/20 border-b border-rose-500/20 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <RotateCcw className="w-5 h-5 text-rose-400" />
@@ -398,7 +398,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
 
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs text-neutral-300">
-              <thead className="bg-[#0E121B] text-neutral-400 text-[11px] uppercase border-b border-neutral-800">
+              <thead className="bg-surface-1 text-neutral-400 text-[11px] uppercase border-b border-neutral-800">
                 <tr>
                   <th className="p-3.5">رقم إذن المرتجع</th>
                   <th className="p-3.5">الفاتورة الأصلية</th>
@@ -420,7 +420,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                   </tr>
                 ) : (
                   filteredReturns.map((ret) => (
-                    <tr key={ret.id} className="hover:bg-[#1A2234] transition-colors">
+                    <tr key={ret.id} className="hover:bg-surface-3 transition-colors">
                       <td className="p-3.5 font-mono font-bold text-rose-400">
                         {ret.returnNumber}
                       </td>
@@ -488,7 +488,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
           onClick={() => setReturnInvoice(null)}
         >
           <div 
-            className="w-full max-w-2xl bg-[#141926] text-white rounded-3xl p-6 shadow-2xl border border-neutral-800 space-y-5"
+            className="w-full max-w-2xl bg-surface-2 text-white rounded-3xl p-6 shadow-2xl border border-neutral-800 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -526,7 +526,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                 <span className="text-xs font-bold text-neutral-300 block">حدد القطع والكميات المراد إرجاعها:</span>
                 <div className="border border-neutral-800 rounded-2xl overflow-hidden">
                   <table className="w-full text-right text-xs">
-                    <thead className="bg-[#0E121B] text-neutral-400 text-[11px] border-b border-neutral-800">
+                    <thead className="bg-surface-1 text-neutral-400 text-[11px] border-b border-neutral-800">
                       <tr>
                         <th className="p-2.5">الصنف</th>
                         <th className="p-2.5 text-center">الكمية المباعة</th>
@@ -540,7 +540,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                         const currentReturnQty = returnItems[it.partNumber] || 0;
                         const itemSubtotal = currentReturnQty * it.unitPrice;
                         return (
-                          <tr key={it.partNumber} className="hover:bg-[#1A2234]">
+                          <tr key={it.partNumber} className="hover:bg-surface-3">
                             <td className="p-2.5">
                               <span className="font-bold text-white block">{it.partName}</span>
                               <span className="font-mono text-[10px] text-amber-400">{it.partNumber}</span>
@@ -572,7 +572,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                                     const val = Math.min(it.quantity, Math.max(0, parseInt(e.target.value) || 0));
                                     setReturnItems(prev => ({ ...prev, [it.partNumber]: val }));
                                   }}
-                                  className="w-14 h-7 text-center rounded bg-[#0E121B] border border-neutral-700 text-white font-mono text-xs font-bold"
+                                  className="w-14 h-7 text-center rounded bg-surface-1 border border-neutral-700 text-white font-mono text-xs font-bold"
                                 />
                                 <button
                                   type="button"
@@ -615,7 +615,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                         className={`p-3 rounded-2xl border text-right transition-all flex flex-col justify-between ${
                           isSelected
                             ? 'bg-rose-500/20 border-rose-500 text-white shadow-md'
-                            : 'bg-[#0E121B] border-neutral-700 text-neutral-400 hover:border-neutral-600'
+                            : 'bg-surface-1 border-neutral-700 text-neutral-400 hover:border-neutral-600'
                         }`}
                       >
                         <div className="flex items-center justify-between w-full mb-1">
@@ -635,7 +635,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                   <select
                     value={returnReason}
                     onChange={(e) => setReturnReason(e.target.value)}
-                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-xs text-white focus:outline-none focus:border-rose-400"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-xs text-white focus:outline-none focus:border-rose-400"
                   >
                     <option value="عيب في الصنف / تلف">عيب في الصنف / تلف مصنعي</option>
                     <option value="عدم مطابقة لموديل السيارة">عدم مطابقة لموديل السيارة</option>
@@ -652,12 +652,12 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                     value={returnNotes}
                     onChange={(e) => setReturnNotes(e.target.value)}
                     placeholder="ملاحظات فنية أو إذن المستودع..."
-                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-rose-400"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-rose-400"
                   />
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-[#0E121B] border border-neutral-800 flex items-center justify-between">
+              <div className="p-4 rounded-2xl bg-surface-1 border border-neutral-800 flex items-center justify-between">
                 <div>
                   <span className="text-xs text-neutral-400 block">إجمالي قيمة المرتجع المسترد:</span>
                   <span className="text-2xl font-black text-rose-400 font-mono">
@@ -682,7 +682,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                   <button
                     type="submit"
                     disabled={calculatedReturnTotal <= 0}
-                    className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black shadow-lg shadow-rose-600/30 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-[#ffffff] text-xs font-black shadow-lg shadow-rose-600/30 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>تأكيد المرتجع والخصم من الخزنة</span>

@@ -61,8 +61,8 @@ export const InventoryAuditModal: React.FC<InventoryAuditModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in print:p-0 print:bg-white print:static">
-      <div className="bg-[#101522] border border-amber-500/30 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] print:border-none print:shadow-none print:max-h-full print:bg-white print:text-black">
-        <div className="p-4 sm:p-6 bg-gradient-to-r from-neutral-900 via-[#171D2E] to-neutral-900 border-b border-neutral-800 flex items-center justify-between print:border-b-2 print:border-black">
+      <div className="bg-surface-2 border border-amber-500/30 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] print:border-none print:shadow-none print:max-h-full print:bg-white print:text-black">
+        <div className="p-4 sm:p-6 bg-gradient-to-r from-neutral-900 via-surface-2 to-neutral-900 border-b border-neutral-800 flex items-center justify-between print:border-b-2 print:border-black">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-amber-400 print:text-black">
               <Boxes className="w-6 h-6" />
@@ -92,23 +92,23 @@ export const InventoryAuditModal: React.FC<InventoryAuditModalProps> = ({
 
         <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-sm">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 bg-[#151B2B] rounded-2xl border border-neutral-800">
+            <div className="p-3 bg-surface-2 rounded-2xl border border-neutral-800">
               <span className="text-xs text-neutral-400 block mb-1">رقم القطعة OEM</span>
               <span className="font-mono font-bold text-amber-400 text-sm">{part.partNumber}</span>
             </div>
-            <div className="p-3 bg-[#151B2B] rounded-2xl border border-neutral-800">
+            <div className="p-3 bg-surface-2 rounded-2xl border border-neutral-800">
               <span className="text-xs text-neutral-400 block mb-1">الماركة والمنشأ</span>
               <span className="font-bold text-white text-sm">{part.brand} - {part.origin}</span>
             </div>
-            <div className="p-3 bg-[#151B2B] rounded-2xl border border-neutral-800">
+            <div className="p-3 bg-surface-2 rounded-2xl border border-neutral-800">
               <span className="text-xs text-neutral-400 block mb-1">الموقع / الرف</span>
               <span className="font-bold text-emerald-400 text-sm flex items-center gap-1">
                 <MapPin className="w-3.5 h-3.5" /> {part.shelfLocation}
               </span>
             </div>
-            <div className="p-3 bg-[#151B2B] rounded-2xl border border-neutral-800">
+            <div className="p-3 bg-surface-2 rounded-2xl border border-neutral-800">
               <span className="text-xs text-neutral-400 block mb-1">القسم والتصنيف</span>
-              <span className="font-bold text-sky-400 text-sm">{part.category}</span>
+              <span className="font-bold text-amber-400 text-sm">{part.category}</span>
             </div>
           </div>
 
@@ -149,7 +149,7 @@ export const InventoryAuditModal: React.FC<InventoryAuditModalProps> = ({
             <div className="w-full bg-neutral-800 rounded-full h-2.5 overflow-hidden my-2">
               <div 
                 className={`h-full rounded-full transition-all duration-500 ${
-                  isOutOfStock ? 'w-0' : isLow ? 'bg-gradient-to-r from-amber-500 to-rose-500' : 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                  isOutOfStock ? 'w-0' : isLow ? 'bg-gradient-to-r from-amber-500 to-rose-500' : 'bg-gradient-to-r from-emerald-500 to-amber-400'
                 }`}
                 style={{ width: `${Math.min(100, Math.max(5, (part.stockQuantity / Math.max(1, part.minAlertStock * 2)) * 100))}%` }}
               />
@@ -160,7 +160,7 @@ export const InventoryAuditModal: React.FC<InventoryAuditModalProps> = ({
             </div>
           </div>
 
-          <div className="p-4 bg-[#141A29] rounded-2xl border border-neutral-800 space-y-3">
+          <div className="p-4 bg-surface-2 rounded-2xl border border-neutral-800 space-y-3">
             <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
               <DollarSign className="w-4 h-4 text-emerald-400" /> التدقيق المالي وهوامش الربح للصنف
             </h4>
@@ -177,14 +177,14 @@ export const InventoryAuditModal: React.FC<InventoryAuditModalProps> = ({
                 <span className="text-xs text-emerald-400 block">ربح الحبة الواحدة</span>
                 <span className="text-base font-bold text-emerald-300">+{profitPerUnit} ج.م ({profitMarginPercent}%)</span>
               </div>
-              <div className="p-2.5 rounded-xl bg-sky-950/30 border border-sky-500/20">
-                <span className="text-xs text-sky-400 block">قيمة الرصيد الحالي</span>
-                <span className="text-base font-bold text-sky-300">{totalCostValue.toLocaleString()} ج.م</span>
+              <div className="p-2.5 rounded-xl bg-amber-950/30 border border-amber-500/20">
+                <span className="text-xs text-amber-400 block">قيمة الرصيد الحالي</span>
+                <span className="text-base font-bold text-amber-300">{totalCostValue.toLocaleString()} ج.م</span>
               </div>
             </div>
           </div>
 
-          <div className="p-4 bg-gradient-to-r from-amber-500/5 via-[#161C2C] to-emerald-500/5 rounded-2xl border border-neutral-800 flex flex-wrap items-center justify-between gap-3 print:hidden">
+          <div className="p-4 bg-gradient-to-r from-amber-500/5 via-surface-2 to-emerald-500/5 rounded-2xl border border-neutral-800 flex flex-wrap items-center justify-between gap-3 print:hidden">
             <div className="flex items-center gap-2">
               <span className="text-xs text-neutral-300 font-bold">توريد فوري للمستودع:</span>
               <div className="flex items-center gap-1.5">
@@ -231,7 +231,7 @@ export const InventoryAuditModal: React.FC<InventoryAuditModalProps> = ({
               onClick={handlePrint}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors border border-neutral-700"
             >
-              <Printer className="w-4 h-4 text-sky-400" />
+              <Printer className="w-4 h-4 text-amber-400" />
               طباعة كشف الجرد
             </button>
           </div>

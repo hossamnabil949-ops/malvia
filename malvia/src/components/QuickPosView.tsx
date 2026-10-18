@@ -151,7 +151,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pb-12">
       <div className="lg:col-span-7 space-y-4">
-        <div className="p-3.5 rounded-2xl bg-[#141926] border border-neutral-800 shadow-md flex items-center gap-3">
+        <div className="p-3.5 rounded-2xl bg-surface-2 border border-neutral-800 shadow-md flex items-center gap-3">
           <div className="relative flex-grow">
             <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
             <input
@@ -159,14 +159,14 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="ابحث باسم القطعة أو رقم OEM أو موقع الرف..."
-              className="w-full h-11 pr-10 pl-4 rounded-xl bg-[#0E121B] border border-neutral-700 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400"
+              className="w-full h-11 pr-10 pl-4 rounded-xl bg-surface-1 border border-neutral-700 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400"
             />
           </div>
 
           {onOpenVoiceAssistant && (
             <button
               onClick={onOpenVoiceAssistant}
-              className="px-3.5 h-11 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white flex items-center gap-2 text-xs font-bold shadow-md transition-all shrink-0 active:scale-95"
+              className="px-3.5 h-11 rounded-xl bg-gradient-to-r from-amber-600 to-amber-600 hover:from-amber-500 hover:to-amber-500 text-[#ffffff] flex items-center gap-2 text-xs font-bold shadow-md transition-all shrink-0 active:scale-95"
               title="تسجيل وتنفيذ عمليات البيع والجرد بصوتك بالذكاء الاصطناعي"
             >
               <Mic className="w-4 h-4 text-amber-300 animate-pulse" />
@@ -196,7 +196,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                 selectedBrand === brand
                   ? 'bg-amber-500 text-neutral-950 font-black shadow-sm'
-                  : 'bg-[#141926] text-neutral-400 hover:text-white border border-neutral-800'
+                  : 'bg-surface-2 text-neutral-400 hover:text-white border border-neutral-800'
               }`}
             >
               {brand}
@@ -232,7 +232,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[580px] overflow-y-auto no-scrollbar p-0.5">
           {filteredParts.length === 0 ? (
-            <div className="col-span-full py-12 text-center text-xs text-neutral-500 bg-[#141926] rounded-2xl border border-neutral-800">
+            <div className="col-span-full py-12 text-center text-xs text-neutral-500 bg-surface-2 rounded-2xl border border-neutral-800">
               لا توجد قطع غيار مطابقة للبحث أو الماركة المحددة
             </div>
           ) : (
@@ -245,7 +245,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                   className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between select-none ${
                     inCartItem
                       ? 'bg-amber-950/20 border-amber-500/50 shadow-md shadow-amber-500/5'
-                      : 'bg-[#141926] border-neutral-800 hover:border-neutral-700 hover:bg-[#181f30]'
+                      : 'bg-surface-2 border-neutral-800 hover:border-neutral-700 hover:bg-surface-3'
                   }`}
                 >
                   <div>
@@ -255,7 +255,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                       </span>
                       <div className="flex items-center gap-1">
                         {part.isScreenOrDisplay && (
-                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold">
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">
                           </span>
                         )}
                         <span className="text-[10px] text-neutral-400 bg-neutral-800/80 px-2 py-0.5 rounded-full font-medium">
@@ -299,7 +299,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                         className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
                           inCartItem
                             ? 'bg-amber-500 text-neutral-950 font-black'
-                            : 'bg-[#222A3C] text-neutral-200 hover:bg-amber-500 hover:text-neutral-950'
+                            : 'bg-surface-3 text-neutral-200 hover:bg-amber-500 hover:text-neutral-950'
                         }`}
                       >
                         {inCartItem ? inCartItem.quantity : '+'}
@@ -313,7 +313,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         </div>
       </div>
 
-      <div className="lg:col-span-5 bg-[#141926] rounded-3xl border border-neutral-800 p-5 flex flex-col justify-between shadow-xl space-y-4">
+      <div className="lg:col-span-5 bg-surface-2 rounded-3xl border border-neutral-800 p-5 flex flex-col justify-between shadow-xl space-y-4">
         <div>
           <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
             <div className="flex items-center gap-2">
@@ -349,7 +349,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               <select
                 value={selectedCustomerId}
                 onChange={(e) => setSelectedCustomerId(e.target.value)}
-                className="bg-[#0E121B] border border-neutral-700 text-neutral-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-amber-400"
+                className="bg-surface-1 border border-neutral-700 text-neutral-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-amber-400"
               >
                 <option value="cash">زبون نقدي / قطاعي</option>
                 {customers.map((c) => (
@@ -366,10 +366,10 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                 value={customerNameInput}
                 onChange={(e) => setCustomerNameInput(e.target.value)}
                 placeholder="اسم الزبون (اختياري)..."
-                className="w-full h-8 px-3 rounded-lg bg-[#0E121B] border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400"
+                className="w-full h-8 px-3 rounded-lg bg-surface-1 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400"
               />
             ) : (
-              <div className="p-2 rounded-lg bg-[#0E121B] text-[11px] text-amber-300 flex justify-between">
+              <div className="p-2 rounded-lg bg-surface-1 text-[11px] text-amber-300 flex justify-between">
                 <span>رصيد الحساب الآجل (شكك):</span>
                 <span className="font-bold">
                   {customers.find((c) => c.id === selectedCustomerId)?.balance.toLocaleString()} ج.م
@@ -382,7 +382,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               value={carDetailsInput}
               onChange={(e) => setCarDetailsInput(e.target.value)}
               placeholder="بيانات العربية (مثال: كورولا 2021 فيراني - لوحة س ن ص 182)"
-              className="w-full h-8 px-3 rounded-lg bg-[#0E121B] border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400"
+              className="w-full h-8 px-3 rounded-lg bg-surface-1 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400"
             />
           </div>
 
@@ -411,7 +411,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <div className="flex items-center gap-1 bg-[#0E121B] border border-neutral-700 rounded-lg p-0.5">
+                        <div className="flex items-center gap-1 bg-surface-1 border border-neutral-700 rounded-lg p-0.5">
                           <button
                             onClick={() => onUpdateCartQuantity(item.part.id, item.quantity - 1)}
                             className="w-5 h-5 rounded flex items-center justify-center text-neutral-400 hover:text-white"
@@ -439,7 +439,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between bg-[#0E121B] p-2 rounded-xl border border-neutral-800">
+                    <div className="flex items-center justify-between bg-surface-1 p-2 rounded-xl border border-neutral-800">
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] text-neutral-400 font-bold">سعر البيع للقطعة:</span>
                         <div className="flex items-center gap-1">
@@ -452,7 +452,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                               const val = parseFloat(e.target.value);
                               onUpdateCartPrice(item.part.id, isNaN(val) ? 0 : val);
                             }}
-                            className="w-20 h-6 px-1.5 text-center text-xs font-mono font-bold text-amber-300 bg-[#161C2C] border border-amber-500/50 rounded focus:border-amber-400 focus:bg-[#1E273D] focus:outline-none"
+                            className="w-20 h-6 px-1.5 text-center text-xs font-mono font-bold text-amber-300 bg-surface-2 border border-amber-500/50 rounded focus:border-amber-400 focus:bg-surface-3 focus:outline-none"
                             title="تعديل سعر البيع مباشرة لهذه الفاتورة"
                           />
                           <span className="text-[10px] text-neutral-400 font-bold">ج.م</span>
@@ -501,13 +501,13 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                 value={discountAmount || ''}
                 onChange={(e) => setDiscountAmount(Number(e.target.value))}
                 placeholder="0"
-                className="w-20 h-7 px-2 text-left rtl:text-right rounded bg-[#0E121B] border border-neutral-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+                className="w-20 h-7 px-2 text-left rtl:text-right rounded bg-surface-1 border border-neutral-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
               />
               <span className="text-[10px] text-neutral-400">ج.م</span>
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-2 rounded-xl bg-[#0E121B] border border-neutral-700/80 text-xs">
+          <div className="flex items-center justify-between p-2 rounded-xl bg-surface-1 border border-neutral-700/80 text-xs">
             <div className="flex items-center gap-1.5">
               <Percent className="w-3.5 h-3.5 text-amber-400" />
               <span className="text-neutral-300 font-bold">ضريبة القيمة المضافة (14%):</span>
@@ -568,7 +568,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                     className={`p-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all ${
                       isSelected
                         ? 'bg-amber-500 text-neutral-950 border-amber-400 shadow-sm'
-                        : 'bg-[#0E121B] text-neutral-300 border-neutral-700 hover:border-neutral-600'
+                        : 'bg-surface-1 text-neutral-300 border-neutral-700 hover:border-neutral-600'
                     }`}
                   >
                     <Icon className="w-3.5 h-3.5" />
@@ -580,7 +580,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           </div>
 
           {paymentMethod === 'كاش (نقدي)' && (
-            <div className="p-2.5 rounded-xl bg-[#0E121B] border border-neutral-700 space-y-1.5 text-xs">
+            <div className="p-2.5 rounded-xl bg-surface-1 border border-neutral-700 space-y-1.5 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-neutral-400">المبلغ المستلم من الزبون:</span>
                 <input
@@ -588,7 +588,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                   value={cashGiven}
                   onChange={(e) => setCashGiven(e.target.value)}
                   placeholder="المبلغ المدفوع كاش..."
-                  className="w-24 h-7 px-2 rounded bg-[#161C2C] border border-neutral-600 text-white text-xs font-mono text-left rtl:text-right"
+                  className="w-24 h-7 px-2 rounded bg-surface-2 border border-neutral-600 text-white text-xs font-mono text-left rtl:text-right"
                 />
               </div>
               {changeDue > 0 && (

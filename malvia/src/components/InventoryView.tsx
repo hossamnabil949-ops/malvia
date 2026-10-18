@@ -149,7 +149,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   return (
     <div className="space-y-5 pb-12">
       {/* Top Header */}
-      <div className="p-5 rounded-3xl bg-[#141926] border border-neutral-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-5 rounded-3xl bg-surface-2 border border-neutral-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase mb-1">
             <Boxes className="w-4 h-4" />
@@ -201,10 +201,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           {onOpenPhotoSharing && (
             <button
               onClick={onOpenPhotoSharing}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 hover:border-sky-500 text-sky-300 text-xs font-bold transition-all shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-amber-300 text-xs font-bold transition-all shadow-sm"
               title="مساحة مشاركة صور القطع على واتساب"
             >
-              <Camera className="w-4 h-4 text-sky-400" />
+              <Camera className="w-4 h-4 text-amber-400" />
               <span>مشاركة الصور</span>
             </button>
           )}
@@ -220,7 +220,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       </div>
 
       {/* Filter and Search Controls */}
-      <div className="p-4 rounded-2xl bg-[#141926] border border-neutral-800 space-y-3">
+      <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 space-y-3">
         <div className="flex flex-col sm:flex-row items-center gap-3">
           <div className="relative flex-grow w-full">
             <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
@@ -229,14 +229,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="ابحث باسم القطعة أو رقم OEM أو موقع الرف..."
-              className="w-full h-11 pr-10 pl-4 rounded-xl bg-[#0E121B] border border-neutral-700 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400"
+              className="w-full h-11 pr-10 pl-4 rounded-xl bg-surface-1 border border-neutral-700 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400"
             />
           </div>
 
           <select
             value={stockStatusFilter}
             onChange={(e) => setStockStatusFilter(e.target.value as any)}
-            className="bg-[#0E121B] border border-neutral-700 text-neutral-200 text-xs rounded-xl px-3 h-11 focus:outline-none focus:border-amber-400 w-full sm:w-auto"
+            className="bg-surface-1 border border-neutral-700 text-neutral-200 text-xs rounded-xl px-3 h-11 focus:outline-none focus:border-amber-400 w-full sm:w-auto"
           >
             <option value="all">كافة الكميات</option>
             <option value="low">أوشكت على النفاد (حرج)</option>
@@ -252,7 +252,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                 selectedBrand === b
                   ? 'bg-amber-500 text-neutral-950 font-black shadow-sm'
-                  : 'bg-[#0E121B] text-neutral-400 hover:text-white border border-neutral-800'
+                  : 'bg-surface-1 text-neutral-400 hover:text-white border border-neutral-800'
               }`}
             >
               {b}
@@ -262,10 +262,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       </div>
 
       {/* Parts Table */}
-      <div className="rounded-3xl bg-[#141926] border border-neutral-800 overflow-hidden shadow-xl">
+      <div className="rounded-3xl bg-surface-2 border border-neutral-800 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-right text-xs text-neutral-300">
-            <thead className="bg-[#0E121B] text-neutral-400 text-[11px] uppercase border-b border-neutral-800">
+            <thead className="bg-surface-1 text-neutral-400 text-[11px] uppercase border-b border-neutral-800">
               <tr>
                 <th className="p-3.5">رقم القطعة (OEM)</th>
                 <th className="p-3.5">اسم القطعة</th>
@@ -289,7 +289,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   const isOut = part.stockQuantity <= 0;
 
                   return (
-                    <tr key={part.id} className="hover:bg-[#1A2234] transition-colors">
+                    <tr key={part.id} className="hover:bg-surface-3 transition-colors">
                       <td className="p-3.5">
                         <span className="font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
                           {part.partNumber}
@@ -366,7 +366,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
                           <button
                             onClick={() => setRestockPart(part)}
-                            className="p-1.5 rounded-lg bg-[#222A3C] hover:bg-[#2A344A] text-neutral-200"
+                            className="p-1.5 rounded-lg bg-surface-3 hover:bg-surface-4 text-neutral-200"
                             title="توريد / تزويد كمية"
                           >
                             <Plus className="w-3.5 h-3.5" />
@@ -388,7 +388,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           onClick={() => setEditPricePart(null)}
         >
           <div 
-            className="w-full max-w-sm rounded-3xl bg-[#141926] border border-neutral-800 p-5 text-white shadow-2xl space-y-4"
+            className="w-full max-w-sm rounded-3xl bg-surface-2 border border-neutral-800 p-5 text-white shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -417,7 +417,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   step="0.5"
                   value={editCostPrice}
                   onChange={(e) => setEditCostPrice(Number(e.target.value))}
-                  className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono text-sm font-bold focus:border-amber-400 focus:outline-none"
+                  className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono text-sm font-bold focus:border-amber-400 focus:outline-none"
                 />
               </div>
 
@@ -431,11 +431,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   step="0.5"
                   value={editSalePrice}
                   onChange={(e) => setEditSalePrice(Number(e.target.value))}
-                  className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-amber-400 font-mono text-sm font-bold focus:border-amber-400 focus:outline-none"
+                  className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-amber-400 font-mono text-sm font-bold focus:border-amber-400 focus:outline-none"
                 />
               </div>
 
-              <div className="p-2.5 rounded-xl bg-[#0E121B] text-[11px] text-neutral-400 flex justify-between">
+              <div className="p-2.5 rounded-xl bg-surface-1 text-[11px] text-neutral-400 flex justify-between">
                 <span>هامش الربح المتوقع:</span>
                 <span className="font-bold text-emerald-400 font-mono">
                   {(editSalePrice - editCostPrice).toFixed(2)} ج.م ({editCostPrice > 0 ? (((editSalePrice - editCostPrice) / editCostPrice) * 100).toFixed(0) : 0}%)
@@ -468,7 +468,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           onClick={() => setRestockPart(null)}
         >
           <div 
-            className="w-full max-w-sm rounded-3xl bg-[#141926] border border-neutral-800 p-5 text-white shadow-2xl"
+            className="w-full max-w-sm rounded-3xl bg-surface-2 border border-neutral-800 p-5 text-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -499,7 +499,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   min="1"
                   value={restockAmount}
                   onChange={(e) => setRestockAmount(Math.max(1, Number(e.target.value)))}
-                  className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono text-sm"
+                  className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono text-sm"
                 />
               </div>
             </div>
@@ -520,7 +520,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           onClick={() => setShowAddModal(false)}
         >
           <div 
-            className="w-full max-w-lg rounded-3xl bg-[#141926] border border-neutral-800 p-6 text-white shadow-2xl my-8"
+            className="w-full max-w-lg rounded-3xl bg-surface-2 border border-neutral-800 p-6 text-white shadow-2xl my-8"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -545,7 +545,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     value={newPartForm.partNumber}
                     onChange={(e) => setNewPartForm({ ...newPartForm, partNumber: e.target.value })}
                     placeholder="مثال: 04465-33470"
-                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
                   />
                 </div>
 
@@ -556,7 +556,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <select
                     value={newPartForm.brand}
                     onChange={(e) => setNewPartForm({ ...newPartForm, brand: e.target.value as any })}
-                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                   >
                     {CAR_BRANDS.filter((b) => b !== 'شامل').map((b) => (
                       <option key={b} value={b}>{b}</option>
@@ -575,7 +575,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   value={newPartForm.name}
                   onChange={(e) => setNewPartForm({ ...newPartForm, name: e.target.value })}
                   placeholder="مثال: طقم تيل فرامل أمامي كوري أصلي"
-                  className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                  className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                 />
               </div>
 
@@ -588,7 +588,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   value={newPartForm.compatibleModels}
                   onChange={(e) => setNewPartForm({ ...newPartForm, compatibleModels: e.target.value })}
                   placeholder="مثال: النترا 2017-2024 / كيا سيراتو"
-                  className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                  className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                 />
               </div>
 
@@ -600,7 +600,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <select
                     value={newPartForm.category}
                     onChange={(e) => setNewPartForm({ ...newPartForm, category: e.target.value as any })}
-                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                   >
                     {PART_CATEGORIES.map((c) => (
                       <option key={c} value={c}>{c}</option>
@@ -615,7 +615,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <select
                     value={newPartForm.origin}
                     onChange={(e) => setNewPartForm({ ...newPartForm, origin: e.target.value as any })}
-                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                   >
                     <option value="أصلي وكالة OEM">أصلي وكالة OEM</option>
                     <option value="ياباني Denso">ياباني Denso</option>
@@ -635,7 +635,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     type="number"
                     value={newPartForm.costPrice}
                     onChange={(e) => setNewPartForm({ ...newPartForm, costPrice: Number(e.target.value) })}
-                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
                   />
                 </div>
 
@@ -648,7 +648,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     required
                     value={newPartForm.salePrice}
                     onChange={(e) => setNewPartForm({ ...newPartForm, salePrice: Number(e.target.value) })}
-                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
                   />
                 </div>
 
@@ -661,7 +661,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     value={newPartForm.shelfLocation}
                     onChange={(e) => setNewPartForm({ ...newPartForm, shelfLocation: e.target.value })}
                     placeholder="مثال: رف B-05"
-                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                   />
                 </div>
               </div>
@@ -675,7 +675,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     type="number"
                     value={newPartForm.stockQuantity}
                     onChange={(e) => setNewPartForm({ ...newPartForm, stockQuantity: Number(e.target.value) })}
-                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
                   />
                 </div>
 
@@ -687,7 +687,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     type="number"
                     value={newPartForm.minAlertStock}
                     onChange={(e) => setNewPartForm({ ...newPartForm, minAlertStock: Number(e.target.value) })}
-                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono"
+                    className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
                   />
                 </div>
               </div>

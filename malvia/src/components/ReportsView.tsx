@@ -369,7 +369,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       stats: `${filteredSales.length} فاتورة بيع | ${totalSalesVal.toLocaleString()} ج.م`,
       icon: Receipt,
       action: exportSalesReport,
-      color: 'from-amber-500/20 to-orange-500/20',
+      color: 'from-amber-500/20 to-amber-500/20',
       border: 'border-amber-500/40',
       btnColor: 'bg-amber-500 hover:bg-amber-400 text-neutral-950',
     },
@@ -380,9 +380,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       stats: `${filteredPurchases.length} فاتورة شراء | ${totalPurchasesVal.toLocaleString()} ج.م`,
       icon: Truck,
       action: exportPurchasesReport,
-      color: 'from-blue-500/20 to-cyan-500/20',
-      border: 'border-blue-500/40',
-      btnColor: 'bg-blue-500 hover:bg-blue-400 text-white',
+      color: 'from-amber-500/20 to-amber-500/20',
+      border: 'border-amber-500/40',
+      btnColor: 'bg-amber-500 hover:bg-amber-400 text-[#ffffff]',
     },
     {
       id: 'returns',
@@ -391,9 +391,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       stats: `${filteredSalesReturns.length} مرتجع بيع (${totalSalesReturnsVal.toLocaleString()} ج.م) | ${filteredPurchaseReturns.length} مرتجع شراء`,
       icon: RotateCcw,
       action: exportReturnsReport,
-      color: 'from-rose-500/20 to-orange-500/20',
+      color: 'from-rose-500/20 to-amber-500/20',
       border: 'border-rose-500/40',
-      btnColor: 'bg-rose-500 hover:bg-rose-400 text-white',
+      btnColor: 'bg-rose-500 hover:bg-rose-400 text-[#ffffff]',
     },
     {
       id: 'treasury',
@@ -402,9 +402,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       stats: `${filteredTreasury.length} حركة مسجلة | الرصيد الحالي: ${treasuryBalance.toLocaleString()} ج.م`,
       icon: Banknote,
       action: exportTreasuryReport,
-      color: 'from-emerald-500/20 to-teal-500/20',
+      color: 'from-emerald-500/20 to-amber-500/20',
       border: 'border-emerald-500/40',
-      btnColor: 'bg-emerald-500 hover:bg-emerald-400 text-white',
+      btnColor: 'bg-emerald-500 hover:bg-emerald-400 text-[#ffffff]',
     },
     {
       id: 'inventory',
@@ -413,9 +413,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       stats: `${parts.length} صنف | تقييم التكلفة: ${totalInventoryCost.toLocaleString()} ج.م`,
       icon: Boxes,
       action: exportInventoryReport,
-      color: 'from-purple-500/20 to-pink-500/20',
-      border: 'border-purple-500/40',
-      btnColor: 'bg-purple-500 hover:bg-purple-400 text-white',
+      color: 'from-amber-500/20 to-amber-500/20',
+      border: 'border-amber-500/40',
+      btnColor: 'bg-amber-500 hover:bg-amber-400 text-[#ffffff]',
     },
     {
       id: 'accounts',
@@ -424,7 +424,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       stats: `مستحقات موردين: ${totalSuppliersDebts.toLocaleString()} ج.م | ديون ورش: ${totalCustomersCredits.toLocaleString()} ج.م`,
       icon: Wrench,
       action: exportAccountsReport,
-      color: 'from-amber-500/20 to-yellow-500/20',
+      color: 'from-amber-500/20 to-amber-500/20',
       border: 'border-amber-500/40',
       btnColor: 'bg-amber-500 hover:bg-amber-400 text-neutral-950',
     },
@@ -432,7 +432,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-[#151B2B] via-[#101420] to-[#151B2B] p-5 rounded-3xl border border-neutral-800 shadow-xl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-surface-2 via-surface-2 to-surface-2 p-5 rounded-3xl border border-neutral-800 shadow-xl">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-inner">
             <FileSpreadsheet className="w-6 h-6" />
@@ -453,14 +453,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         <button
           onClick={exportMasterBook}
           disabled={downloadingReport === 'master'}
-          className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-neutral-950 font-black text-xs shadow-xl shadow-emerald-500/20 transition-all active:scale-95 group"
+          className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 via-amber-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-neutral-950 font-black text-xs shadow-xl shadow-emerald-500/20 transition-all active:scale-95 group"
         >
           <FileSpreadsheet className="w-4 h-4 text-neutral-950 group-hover:scale-110 transition-transform" />
           <span>{downloadingReport === 'master' ? 'جاري تجهيز المصنف...' : 'تحميل المصنف المحاسبي الشامل (All-in-One)'}</span>
         </button>
       </div>
 
-      <div className="flex items-center justify-between bg-[#121622] p-3 rounded-2xl border border-neutral-800">
+      <div className="flex items-center justify-between bg-surface-2 p-3 rounded-2xl border border-neutral-800">
         <div className="flex items-center gap-2 text-xs text-neutral-300">
           <Filter className="w-4 h-4 text-amber-400" />
           <span className="font-bold">تصفية الفترة الزمنية للتقارير:</span>
@@ -495,7 +495,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           return (
             <div
               key={rc.id}
-              className={`bg-[#121622] border ${rc.border} rounded-3xl p-5 flex flex-col justify-between shadow-lg hover:shadow-xl transition-all group relative overflow-hidden`}
+              className={`bg-surface-2 border ${rc.border} rounded-3xl p-5 flex flex-col justify-between shadow-lg hover:shadow-xl transition-all group relative overflow-hidden`}
             >
               <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${rc.color} rounded-full blur-3xl -z-0 pointer-events-none`} />
 
@@ -511,7 +511,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
                 <h3 className="text-sm font-bold text-white mb-1">{rc.title}</h3>
                 <p className="text-xs text-neutral-400 mb-4">{rc.desc}</p>
-                <div className="p-2.5 rounded-xl bg-[#0E121B] border border-neutral-800 text-[11px] text-neutral-300 font-mono mb-4">
+                <div className="p-2.5 rounded-xl bg-surface-1 border border-neutral-800 text-[11px] text-neutral-300 font-mono mb-4">
                   {rc.stats}
                 </div>
               </div>

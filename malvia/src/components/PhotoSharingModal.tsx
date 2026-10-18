@@ -87,10 +87,10 @@ export const PhotoSharingModal: React.FC<PhotoSharingModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="w-full max-w-2xl bg-[#0F1422] rounded-3xl border border-amber-500/40 text-white shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+      <div className="w-full max-w-2xl bg-surface-2 rounded-3xl border border-amber-500/40 text-white shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
         
         {/* Header */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-neutral-900 via-[#182033] to-neutral-900 border-b border-neutral-800 flex items-center justify-between">
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-neutral-900 via-surface-3 to-neutral-900 border-b border-neutral-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400">
               <Camera className="w-6 h-6 animate-pulse" />
@@ -122,7 +122,7 @@ export const PhotoSharingModal: React.FC<PhotoSharingModalProps> = ({
         <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
           
           {/* Part Selector */}
-          <div className="p-3.5 rounded-2xl bg-[#141A28] border border-neutral-800 space-y-1.5 text-xs">
+          <div className="p-3.5 rounded-2xl bg-surface-2 border border-neutral-800 space-y-1.5 text-xs">
             <label className="font-bold text-neutral-300 block">اختر الصنف المراد مشاركة صورته أو فحص عيّنته:</label>
             <select
               value={selectedPartId}
@@ -130,7 +130,7 @@ export const PhotoSharingModal: React.FC<PhotoSharingModalProps> = ({
                 setSelectedPartId(e.target.value);
                 setUploadedImage('');
               }}
-              className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-amber-300 font-bold focus:outline-none focus:border-amber-500"
+              className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-amber-300 font-bold focus:outline-none focus:border-amber-500"
             >
               {parts.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -141,7 +141,7 @@ export const PhotoSharingModal: React.FC<PhotoSharingModalProps> = ({
           </div>
 
           {/* Photo Display Canvas Area */}
-          <div className="relative w-full aspect-video rounded-3xl overflow-hidden bg-[#0A0D14] border-2 border-dashed border-neutral-700 flex items-center justify-center group shadow-inner">
+          <div className="relative w-full aspect-video rounded-3xl overflow-hidden bg-surface-0 border-2 border-dashed border-neutral-700 flex items-center justify-center group shadow-inner">
             <img
               src={activeImage}
               alt={currentPart.name}
@@ -167,7 +167,7 @@ export const PhotoSharingModal: React.FC<PhotoSharingModalProps> = ({
           </div>
 
           {/* Part Meta Badge */}
-          <div className="p-3.5 rounded-2xl bg-[#141A28] border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="p-3.5 rounded-2xl bg-surface-2 border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
             <div>
               <span className="font-bold text-white text-sm block">{currentPart.name}</span>
               <span className="text-[11px] text-neutral-400 font-mono">
@@ -190,7 +190,7 @@ export const PhotoSharingModal: React.FC<PhotoSharingModalProps> = ({
                 value={recipientPhone}
                 onChange={(e) => setRecipientPhone(e.target.value)}
                 placeholder="010XXXXXXXX (أو اتركه فارغاً لفتح قائمة المحادثات)"
-                className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono"
+                className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
               />
             </div>
 
@@ -203,7 +203,7 @@ export const PhotoSharingModal: React.FC<PhotoSharingModalProps> = ({
                 value={caption}
                 onChange={(e) => setCaption(e.target.value)}
                 placeholder="مثال: متوفر فيش فابريكا، ضمان تجربة 14 يوم، أصلي وكالة..."
-                className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
               />
             </div>
 
@@ -211,7 +211,7 @@ export const PhotoSharingModal: React.FC<PhotoSharingModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
               <button
                 onClick={handleShareWhatsApp}
-                className="py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-lg shadow-emerald-600/30 active:scale-95 transition-all flex items-center justify-center gap-2"
+                className="py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-[#ffffff] font-black text-xs shadow-lg shadow-emerald-600/30 active:scale-95 transition-all flex items-center justify-center gap-2"
               >
                 <Share2 className="w-4 h-4" />
                 <span>إرسال ومشاركة الصورة عبر الواتساب</span>
@@ -219,7 +219,7 @@ export const PhotoSharingModal: React.FC<PhotoSharingModalProps> = ({
 
               <button
                 onClick={handleCopyDetails}
-                className="py-3 px-4 rounded-2xl bg-[#1C2438] hover:bg-[#253046] text-amber-300 border border-amber-500/30 font-bold text-xs transition-all flex items-center justify-center gap-2"
+                className="py-3 px-4 rounded-2xl bg-surface-3 hover:bg-surface-4 text-amber-300 border border-amber-500/30 font-bold text-xs transition-all flex items-center justify-center gap-2"
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 <span>{copied ? 'تم النسخ!' : 'نسخ تفاصيل القطعة للحافظة'}</span>
@@ -230,7 +230,7 @@ export const PhotoSharingModal: React.FC<PhotoSharingModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-[#0C101A] border-t border-neutral-800 flex items-center justify-end">
+        <div className="p-4 bg-surface-1 border-t border-neutral-800 flex items-center justify-end">
           <button
             onClick={onClose}
             className="px-5 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold"

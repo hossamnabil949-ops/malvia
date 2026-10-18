@@ -1,1 +1,263 @@
 @import "tailwindcss";
+
+/*
+ * MALVIA design tokens
+ * ---------------------------------------------------------------
+ * The whole UI uses ONE grey family (neutral = slate), ONE accent
+ * (the "amber" scale is remapped to the theme's accent colour),
+ * plus emerald (money / success) and rose (danger / low stock).
+ * Switching theme = switching the class on <body>:
+ *   theme-blue (default) | theme-graphite | theme-light
+ */
+
+/* ===== Default = Theme A: blue (matches the MALVIA logo) ===== */
+@theme {
+  --color-neutral-50: #F1F5FB;
+  --color-neutral-100: #E3EAF6;
+  --color-neutral-200: #C9D5EA;
+  --color-neutral-300: #A3B3D0;
+  --color-neutral-400: #8394B5;
+  --color-neutral-500: #6B7B9E;
+  --color-neutral-600: #4A5A80;
+  --color-neutral-700: #2A3856;
+  --color-neutral-800: #1C2740;
+  --color-neutral-900: #101726;
+  --color-neutral-950: #0A0E17;
+  --color-slate-50: #F1F5FB;
+  --color-slate-100: #E3EAF6;
+  --color-slate-200: #C9D5EA;
+  --color-slate-300: #A3B3D0;
+  --color-slate-400: #8394B5;
+  --color-slate-500: #6B7B9E;
+  --color-slate-600: #4A5A80;
+  --color-slate-700: #2A3856;
+  --color-slate-800: #1C2740;
+  --color-slate-900: #101726;
+  --color-slate-950: #0A0E17;
+  --color-amber-50: #EFF6FF;
+  --color-amber-100: #DBEAFE;
+  --color-amber-200: #BFDBFE;
+  --color-amber-300: #93C5FD;
+  --color-amber-400: #60A5FA;
+  --color-amber-500: #3B82F6;
+  --color-amber-600: #2563EB;
+  --color-amber-700: #1D4ED8;
+  --color-amber-800: #1E40AF;
+  --color-amber-900: #1E3A8A;
+  --color-amber-950: #172554;
+  --color-surface-0: #0A0E17;
+  --color-surface-1: #101726;
+  --color-surface-2: #131C2E;
+  --color-surface-3: #1A2540;
+  --color-surface-4: #223050;
+  --color-nav-bg: #0D1320;
+  --color-nav-line: #1C2740;
+  --color-nav-hover: #18223A;
+  --color-nav-text: #C9D5EA;
+  --color-nav-muted: #7C8DAF;
+  --color-nav-strong: #FFFFFF;
+}
+
+/* ===== Theme B: graphite + orange ===== */
+body.theme-graphite {
+  --color-neutral-50: #FAFAFA;
+  --color-neutral-100: #F4F4F5;
+  --color-neutral-200: #E4E4E7;
+  --color-neutral-300: #C4C4CA;
+  --color-neutral-400: #A1A1AA;
+  --color-neutral-500: #7C7C85;
+  --color-neutral-600: #55555D;
+  --color-neutral-700: #34343A;
+  --color-neutral-800: #26262A;
+  --color-neutral-900: #17171A;
+  --color-neutral-950: #0E0E10;
+  --color-slate-50: #FAFAFA;
+  --color-slate-100: #F4F4F5;
+  --color-slate-200: #E4E4E7;
+  --color-slate-300: #C4C4CA;
+  --color-slate-400: #A1A1AA;
+  --color-slate-500: #7C7C85;
+  --color-slate-600: #55555D;
+  --color-slate-700: #34343A;
+  --color-slate-800: #26262A;
+  --color-slate-900: #17171A;
+  --color-slate-950: #0E0E10;
+  --color-amber-50: #FFF7ED;
+  --color-amber-100: #FFEDD5;
+  --color-amber-200: #FED7AA;
+  --color-amber-300: #FDBA74;
+  --color-amber-400: #FB923C;
+  --color-amber-500: #F97316;
+  --color-amber-600: #EA580C;
+  --color-amber-700: #C2410C;
+  --color-amber-800: #9A3412;
+  --color-amber-900: #7C2D12;
+  --color-amber-950: #431407;
+  --color-surface-0: #0E0E10;
+  --color-surface-1: #161618;
+  --color-surface-2: #1B1B1E;
+  --color-surface-3: #232327;
+  --color-surface-4: #2E2E33;
+  --color-nav-bg: #131315;
+  --color-nav-line: #26262A;
+  --color-nav-hover: #212125;
+  --color-nav-text: #D4D4D8;
+  --color-nav-muted: #8E8E97;
+  --color-nav-strong: #FFFFFF;
+}
+
+/* ===== Theme C: light content + dark sidebar ===== */
+body.theme-light {
+  --color-neutral-50: #020617;
+  --color-neutral-100: #0F172A;
+  --color-neutral-200: #1E293B;
+  --color-neutral-300: #334155;
+  --color-neutral-400: #475569;
+  --color-neutral-500: #64748B;
+  --color-neutral-600: #94A3B8;
+  --color-neutral-700: #CBD5E1;
+  --color-neutral-800: #E2E8F0;
+  --color-neutral-900: #FFFFFF;
+  --color-neutral-950: #F1F5F9;
+  --color-slate-50: #020617;
+  --color-slate-100: #0F172A;
+  --color-slate-200: #1E293B;
+  --color-slate-300: #334155;
+  --color-slate-400: #475569;
+  --color-slate-500: #64748B;
+  --color-slate-600: #94A3B8;
+  --color-slate-700: #CBD5E1;
+  --color-slate-800: #E2E8F0;
+  --color-slate-900: #FFFFFF;
+  --color-slate-950: #F1F5F9;
+  --color-amber-50: #EFF6FF;
+  --color-amber-100: #DBEAFE;
+  --color-amber-200: #BFDBFE;
+  --color-amber-300: #1D4ED8;
+  --color-amber-400: #2F6FED;
+  --color-amber-500: #2563EB;
+  --color-amber-600: #1D4ED8;
+  --color-amber-700: #1E40AF;
+  --color-amber-800: #1E3A8A;
+  --color-amber-900: #172554;
+  --color-amber-950: #0B1B4A;
+  --color-emerald-50: #ECFDF5;
+  --color-emerald-100: #D1FAE5;
+  --color-emerald-200: #A7F3D0;
+  --color-emerald-300: #047857;
+  --color-emerald-400: #059669;
+  --color-emerald-500: #10B981;
+  --color-emerald-600: #059669;
+  --color-emerald-700: #047857;
+  --color-emerald-800: #065F46;
+  --color-emerald-900: #064E3B;
+  --color-emerald-950: #022C22;
+  --color-rose-50: #FFF1F2;
+  --color-rose-100: #FFE4E6;
+  --color-rose-200: #FECDD3;
+  --color-rose-300: #BE123C;
+  --color-rose-400: #E11D48;
+  --color-rose-500: #F43F5E;
+  --color-rose-600: #E11D48;
+  --color-rose-700: #BE123C;
+  --color-rose-800: #9F1239;
+  --color-rose-900: #881337;
+  --color-rose-950: #4C0519;
+  --color-surface-0: #F1F5F9;
+  --color-surface-1: #FFFFFF;
+  --color-surface-2: #FBFCFE;
+  --color-surface-3: #F1F5F9;
+  --color-surface-4: #E2E8F0;
+  --color-nav-bg: #0F172A;
+  --color-nav-line: #1E293B;
+  --color-nav-hover: #1E293B;
+  --color-nav-text: #CBD5E1;
+  --color-nav-muted: #8394B5;
+  --color-nav-strong: #FFFFFF;
+  --color-white: #0F172A;
+}
+
+body.theme-blue,
+body.theme-graphite {
+  color-scheme: dark;
+}
+body.theme-light {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-surface-0);
+  transition: background-color 0.2s ease;
+}
+
+/* Scrollbars follow the theme */
+* {
+  scrollbar-color: var(--color-neutral-700) transparent;
+}
+
+/*
+ * .paper = a sheet of white paper (invoices, printed reports).
+ * It always uses the light palette, whatever theme is active,
+ * so printed / PDF output never turns dark.
+ */
+.paper {
+  --color-neutral-50: #F8FAFC;
+  --color-neutral-100: #F1F5F9;
+  --color-neutral-200: #E2E8F0;
+  --color-neutral-300: #CBD5E1;
+  --color-neutral-400: #94A3B8;
+  --color-neutral-500: #64748B;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1E293B;
+  --color-neutral-900: #0F172A;
+  --color-neutral-950: #020617;
+  --color-slate-50: #F8FAFC;
+  --color-slate-100: #F1F5F9;
+  --color-slate-200: #E2E8F0;
+  --color-slate-300: #CBD5E1;
+  --color-slate-400: #94A3B8;
+  --color-slate-500: #64748B;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1E293B;
+  --color-slate-900: #0F172A;
+  --color-slate-950: #020617;
+  --color-amber-50: #EFF6FF;
+  --color-amber-100: #DBEAFE;
+  --color-amber-200: #BFDBFE;
+  --color-amber-300: #93C5FD;
+  --color-amber-400: #60A5FA;
+  --color-amber-500: #3B82F6;
+  --color-amber-600: #2563EB;
+  --color-amber-700: #1D4ED8;
+  --color-amber-800: #1E40AF;
+  --color-amber-900: #1E3A8A;
+  --color-amber-950: #172554;
+  --color-emerald-50: #ECFDF5;
+  --color-emerald-100: #D1FAE5;
+  --color-emerald-200: #A7F3D0;
+  --color-emerald-300: #6EE7B7;
+  --color-emerald-400: #34D399;
+  --color-emerald-500: #10B981;
+  --color-emerald-600: #059669;
+  --color-emerald-700: #047857;
+  --color-emerald-800: #065F46;
+  --color-emerald-900: #064E3B;
+  --color-emerald-950: #022C22;
+  --color-rose-50: #FFF1F2;
+  --color-rose-100: #FFE4E6;
+  --color-rose-200: #FECDD3;
+  --color-rose-300: #FDA4AF;
+  --color-rose-400: #FB7185;
+  --color-rose-500: #F43F5E;
+  --color-rose-600: #E11D48;
+  --color-rose-700: #BE123C;
+  --color-rose-800: #9F1239;
+  --color-rose-900: #881337;
+  --color-rose-950: #4C0519;
+  --color-white: #FFFFFF;
+  background-color: #FFFFFF;
+  color: #0F172A;
+  color-scheme: light;
+}

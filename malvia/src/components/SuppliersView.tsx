@@ -473,10 +473,10 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md">
           <div className="flex items-center justify-between text-slate-400 text-xs font-bold mb-1">
             <span>إجمالي المشتريات والتوريدات</span>
-            <ArrowDownLeft className="w-4 h-4 text-blue-400" />
+            <ArrowDownLeft className="w-4 h-4 text-amber-400" />
           </div>
-          <div className="text-xl sm:text-2xl font-black text-blue-400">
-            {totalPurchasesSum.toLocaleString()} <span className="text-xs text-blue-300 font-normal">ج.م</span>
+          <div className="text-xl sm:text-2xl font-black text-amber-400">
+            {totalPurchasesSum.toLocaleString()} <span className="text-xs text-amber-300 font-normal">ج.م</span>
           </div>
           <div className="text-[11px] text-slate-400 mt-1">
             قيمة جميع بضائع قطع الغيار الموردة
@@ -1290,7 +1290,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs">
               <div>
                 <span className="text-slate-400 block text-[11px]">إجمالي التوريدات:</span>
-                <p className="text-sm font-bold text-blue-400 mt-0.5">
+                <p className="text-sm font-bold text-amber-400 mt-0.5">
                   {statementSupplier.totalSupplied.toLocaleString()} ج.م
                 </p>
               </div>
@@ -1340,7 +1340,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
                             ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
                             : rec.type.includes('مرتجع')
                             ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
-                            : 'bg-blue-500/15 text-blue-400 border border-blue-500/25'
+                            : 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
                         }`}>
                           {rec.type}
                         </span>
@@ -1350,7 +1350,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
                         )}
                       </td>
                       <td className="py-2.5 px-3 font-mono text-amber-400">{rec.ref}</td>
-                      <td className="py-2.5 px-3 font-bold text-blue-400">
+                      <td className="py-2.5 px-3 font-bold text-amber-400">
                         {rec.amountIn > 0 ? `${rec.amountIn.toLocaleString()} ج.م` : '-'}
                       </td>
                       <td className="py-2.5 px-3 font-bold text-emerald-400">

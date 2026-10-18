@@ -279,10 +279,10 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="w-full max-w-3xl bg-[#0F1422] rounded-3xl border border-emerald-500/40 text-white shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+      <div className="w-full max-w-3xl bg-surface-2 rounded-3xl border border-emerald-500/40 text-white shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
         
         {/* Header */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-neutral-900 via-[#13231D] to-neutral-900 border-b border-neutral-800 flex items-center justify-between">
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-neutral-900 via-emerald-950/40 to-neutral-900 border-b border-neutral-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400">
               <FileSpreadsheet className="w-6 h-6 animate-pulse" />
@@ -311,7 +311,7 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex border-b border-neutral-800 bg-[#0C101A] text-xs font-bold">
+        <div className="flex border-b border-neutral-800 bg-surface-1 text-xs font-bold">
           <button
             onClick={() => setActiveTab('import')}
             className={`flex items-center gap-2 px-5 py-3 border-b-2 transition-all ${
@@ -343,7 +343,7 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
           {activeTab === 'import' ? (
             <div className="space-y-5">
               {/* Step 1: Download Templates */}
-              <div className="p-4 rounded-2xl bg-[#141A28] border border-neutral-800 space-y-2.5">
+              <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
                     <Sparkles className="w-4 h-4" />
@@ -355,7 +355,7 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <button
                     onClick={handleDownloadSamplePartsTemplate}
-                    className="p-3 rounded-xl bg-[#0E121C] hover:bg-[#181F30] border border-neutral-700 hover:border-amber-500 text-right text-xs transition-all flex items-center justify-between group"
+                    className="p-3 rounded-xl bg-surface-1 hover:bg-surface-3 border border-neutral-700 hover:border-amber-500 text-right text-xs transition-all flex items-center justify-between group"
                   >
                     <div>
                       <span className="font-bold text-white block">قالب أصناف قطع الغيار</span>
@@ -366,7 +366,7 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
 
                   <button
                     onClick={handleDownloadSampleCarModelsTemplate}
-                    className="p-3 rounded-xl bg-[#0E121C] hover:bg-[#181F30] border border-neutral-700 hover:border-amber-500 text-right text-xs transition-all flex items-center justify-between group"
+                    className="p-3 rounded-xl bg-surface-1 hover:bg-surface-3 border border-neutral-700 hover:border-amber-500 text-right text-xs transition-all flex items-center justify-between group"
                   >
                     <div>
                       <span className="font-bold text-white block">قالب موديلات وسنوات السيارات</span>
@@ -378,7 +378,7 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
               </div>
 
               {/* Step 2: Upload File Box */}
-              <div className="p-6 rounded-3xl bg-[#0A0E18] border-2 border-dashed border-emerald-500/40 text-center space-y-3">
+              <div className="p-6 rounded-3xl bg-surface-0 border-2 border-dashed border-emerald-500/40 text-center space-y-3">
                 <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto shadow-md">
                   <Upload className="w-7 h-7" />
                 </div>
@@ -390,7 +390,7 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
                 </div>
 
                 <div className="pt-2">
-                  <label className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 text-neutral-950 font-black text-xs cursor-pointer shadow-lg active:scale-95 transition-all">
+                  <label className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-amber-500 hover:from-emerald-400 text-neutral-950 font-black text-xs cursor-pointer shadow-lg active:scale-95 transition-all">
                     <FileSpreadsheet className="w-4 h-4" />
                     <span>تحديد ملف إكسيل لرفعه الآن</span>
                     <input
@@ -431,7 +431,7 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="p-4 rounded-2xl bg-[#131828] border border-neutral-800 hover:border-emerald-500/40 flex flex-col justify-between space-y-3">
+                <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 hover:border-emerald-500/40 flex flex-col justify-between space-y-3">
                   <div>
                     <div className="flex items-center gap-2 text-xs font-bold text-white mb-1">
                       <Boxes className="w-4 h-4 text-amber-400" />
@@ -443,17 +443,17 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
                   </div>
                   <button
                     onClick={handleExportFullInventory}
-                    className="w-full py-2.5 rounded-xl bg-neutral-800 hover:bg-emerald-600 hover:text-white text-xs font-bold text-neutral-200 transition-colors flex items-center justify-center gap-1.5"
+                    className="w-full py-2.5 rounded-xl bg-neutral-800 hover:bg-emerald-600 hover:text-[#ffffff] text-xs font-bold text-neutral-200 transition-colors flex items-center justify-center gap-1.5"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>تنزيل شيت المخزون ({parts.length} صنف)</span>
                   </button>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-[#131828] border border-neutral-800 hover:border-emerald-500/40 flex flex-col justify-between space-y-3">
+                <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 hover:border-emerald-500/40 flex flex-col justify-between space-y-3">
                   <div>
                     <div className="flex items-center gap-2 text-xs font-bold text-white mb-1">
-                      <Car className="w-4 h-4 text-blue-400" />
+                      <Car className="w-4 h-4 text-amber-400" />
                       <span>شيت إكسيل موديلات وسنوات السيارات</span>
                     </div>
                     <p className="text-[11px] text-neutral-400">
@@ -462,7 +462,7 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
                   </div>
                   <button
                     onClick={handleExportCarModels}
-                    className="w-full py-2.5 rounded-xl bg-neutral-800 hover:bg-emerald-600 hover:text-white text-xs font-bold text-neutral-200 transition-colors flex items-center justify-center gap-1.5"
+                    className="w-full py-2.5 rounded-xl bg-neutral-800 hover:bg-emerald-600 hover:text-[#ffffff] text-xs font-bold text-neutral-200 transition-colors flex items-center justify-center gap-1.5"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>تنزيل شيت الموديلات ({carModels.length} موديل)</span>
@@ -475,7 +475,7 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-[#0C101A] border-t border-neutral-800 flex items-center justify-end">
+        <div className="p-4 bg-surface-1 border-t border-neutral-800 flex items-center justify-end">
           <button
             onClick={onClose}
             className="px-5 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold"

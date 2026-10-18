@@ -128,17 +128,17 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div 
-        className="w-full max-w-4xl max-h-[92vh] rounded-3xl bg-[#0F1422] border border-neutral-800 shadow-2xl flex flex-col text-neutral-100 overflow-hidden"
+        className="w-full max-w-4xl max-h-[92vh] rounded-3xl bg-surface-2 border border-neutral-800 shadow-2xl flex flex-col text-neutral-100 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 sm:p-6 border-b border-neutral-800 bg-gradient-to-r from-[#171E2F] via-[#141A29] to-[#101421] flex items-center justify-between">
+        <div className="p-5 sm:p-6 border-b border-neutral-800 bg-gradient-to-r from-surface-3 via-surface-2 to-surface-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 relative">
               <Bell className="w-6 h-6" />
               {lowStockParts.length > 0 && (
                 <span className="absolute -top-1 -right-1 flex h-4 w-4">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-4 w-4 bg-rose-500 text-[9px] font-bold text-white items-center justify-center">
+                  <span className="relative inline-flex rounded-full h-4 w-4 bg-rose-500 text-[9px] font-bold text-[#ffffff] items-center justify-center">
                     {lowStockParts.length}
                   </span>
                 </span>
@@ -179,7 +179,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         </div>
 
         {showPrintView ? (
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-white text-neutral-900 font-sans">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 paper bg-white text-neutral-900 font-sans">
             <div className="flex justify-between items-start border-b-2 border-neutral-800 pb-4">
               <div>
                 <h2 className="text-xl font-bold">أمر شراء ونواقص مستودع قطع الغيار</h2>
@@ -217,11 +217,11 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                       <td className="p-2 font-bold">{p.name}</td>
                       <td className="p-2">{p.brand} ({p.compatibleModels})</td>
                       <td className="p-2 text-center">{p.shelfLocation}</td>
-                      <td className={`p-2 text-center font-bold ${p.stockQuantity === 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                      <td className={`p-2 text-center font-bold ${p.stockQuantity === 0 ? 'text-rose-600' : 'text-amber-600'}`}>
                         {p.stockQuantity} {p.unit}
                       </td>
                       <td className="p-2 text-center text-neutral-600">{p.minAlertStock}</td>
-                      <td className="p-2 text-center font-bold text-blue-700 bg-blue-50">
+                      <td className="p-2 text-center font-bold text-amber-700 bg-amber-50">
                         {needed} {p.unit}
                       </td>
                       <td className="p-2 text-left font-mono">
@@ -234,7 +234,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               <tfoot>
                 <tr className="bg-neutral-100 font-bold border-t-2 border-neutral-800">
                   <td colSpan={7} className="p-2.5 text-right">الإجمالي التقديري لطلب الشراء:</td>
-                  <td className="p-2.5 text-center text-blue-800">{totalDeficitUnits} قطعة</td>
+                  <td className="p-2.5 text-center text-amber-800">{totalDeficitUnits} قطعة</td>
                   <td className="p-2.5 text-left font-mono text-emerald-800">{estimatedRestockCost.toLocaleString()} ج.م</td>
                 </tr>
               </tfoot>
@@ -260,8 +260,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
           </div>
         ) : (
           <>
-            <div className="p-4 bg-[#141A28] border-b border-neutral-800/80 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 rounded-2xl bg-[#0D121D] border border-rose-500/20">
+            <div className="p-4 bg-surface-2 border-b border-neutral-800/80 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3 rounded-2xl bg-surface-1 border border-rose-500/20">
                 <div className="flex items-center justify-between text-neutral-400 text-xs">
                   <span>نفد بالكامل (0 حبة)</span>
                   <AlertCircle className="w-4 h-4 text-rose-500" />
@@ -272,7 +272,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                 </div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-[#0D121D] border border-amber-500/20">
+              <div className="p-3 rounded-2xl bg-surface-1 border border-amber-500/20">
                 <div className="flex items-center justify-between text-neutral-400 text-xs">
                   <span>تحت الحد الأدنى</span>
                   <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -283,18 +283,18 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                 </div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-[#0D121D] border border-blue-500/20">
+              <div className="p-3 rounded-2xl bg-surface-1 border border-amber-500/20">
                 <div className="flex items-center justify-between text-neutral-400 text-xs">
                   <span>القطع المطلوبة للتوريد</span>
-                  <Boxes className="w-4 h-4 text-blue-400" />
+                  <Boxes className="w-4 h-4 text-amber-400" />
                 </div>
-                <div className="text-xl font-black text-blue-400 font-mono mt-1">
+                <div className="text-xl font-black text-amber-400 font-mono mt-1">
                   {totalDeficitUnits}{' '}
                   <span className="text-xs font-normal text-neutral-400">قطعة</span>
                 </div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-[#0D121D] border border-emerald-500/20">
+              <div className="p-3 rounded-2xl bg-surface-1 border border-emerald-500/20">
                 <div className="flex items-center justify-between text-neutral-400 text-xs">
                   <span>التكلفة التقديرية للتوريد</span>
                   <Truck className="w-4 h-4 text-emerald-400" />
@@ -306,14 +306,14 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               </div>
             </div>
 
-            <div className="p-4 border-b border-neutral-800 bg-[#121623] flex flex-wrap items-center justify-between gap-3">
+            <div className="p-4 border-b border-neutral-800 bg-surface-2 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   onClick={() => setActiveFilter('all')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                     activeFilter === 'all'
                       ? 'bg-amber-500 text-neutral-950 font-black shadow-md'
-                      : 'bg-[#181F2E] text-neutral-300 hover:text-white border border-neutral-800'
+                      : 'bg-surface-2 text-neutral-300 hover:text-white border border-neutral-800'
                   }`}
                 >
                   جميع النواقص ({lowStockParts.length})
@@ -322,8 +322,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                   onClick={() => setActiveFilter('out')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                     activeFilter === 'out'
-                      ? 'bg-rose-500 text-white font-black shadow-md'
-                      : 'bg-[#181F2E] text-rose-300 hover:text-white border border-neutral-800'
+                      ? 'bg-rose-500 text-[#ffffff] font-black shadow-md'
+                      : 'bg-surface-2 text-rose-300 hover:text-white border border-neutral-800'
                   }`}
                 >
                   نفد من المخزن ({outOfStockParts.length})
@@ -332,8 +332,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                   onClick={() => setActiveFilter('critical')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                     activeFilter === 'critical'
-                      ? 'bg-orange-500 text-neutral-950 font-black shadow-md'
-                      : 'bg-[#181F2E] text-orange-300 hover:text-white border border-neutral-800'
+                      ? 'bg-amber-500 text-neutral-950 font-black shadow-md'
+                      : 'bg-surface-2 text-amber-300 hover:text-white border border-neutral-800'
                   }`}
                 >
                   مخزون حرج جداً ({criticalParts.length})
@@ -343,7 +343,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                   <select
                     value={selectedBrand}
                     onChange={(e) => setSelectedBrand(e.target.value)}
-                    className="px-3 py-1.5 rounded-xl text-xs bg-[#181F2E] text-neutral-200 border border-neutral-700 focus:outline-none focus:border-amber-400"
+                    className="px-3 py-1.5 rounded-xl text-xs bg-surface-2 text-neutral-200 border border-neutral-700 focus:outline-none focus:border-amber-400"
                   >
                     <option value="all">كل الماركات</option>
                     {availableBrands.map((b) => (
@@ -358,7 +358,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleCopySupplierRequisition}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1C2436] hover:bg-[#253046] text-xs font-bold text-amber-400 border border-amber-500/30 transition-all active:scale-95"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-3 hover:bg-surface-4 text-xs font-bold text-amber-400 border border-amber-500/30 transition-all active:scale-95"
                 >
                   {copiedSupplierList ? (
                     <>
@@ -443,7 +443,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                                   <AlertCircle className="w-3.5 h-3.5" /> نفد تماماً من المستودع!
                                 </span>
                               ) : isCritical ? (
-                                <span className="text-orange-400 font-bold flex items-center gap-1">
+                                <span className="text-amber-400 font-bold flex items-center gap-1">
                                   <AlertTriangle className="w-3.5 h-3.5" /> مستوى حرج جداً
                                 </span>
                               ) : (
@@ -459,7 +459,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                           <div className="w-full h-2 rounded-full bg-neutral-800 overflow-hidden">
                             <div 
                               className={`h-full transition-all duration-300 ${
-                                isOutOfStock ? 'bg-rose-500 w-0' : isCritical ? 'bg-orange-500' : 'bg-amber-400'
+                                isOutOfStock ? 'bg-rose-500 w-0' : isCritical ? 'bg-amber-500' : 'bg-amber-400'
                               }`}
                               style={{ width: `${Math.max(4, progressPct)}%` }}
                             />
@@ -468,7 +468,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2 self-end md:self-center flex-shrink-0">
-                        <div className="flex items-center gap-1 bg-[#161D2B] p-1 rounded-xl border border-neutral-700/80">
+                        <div className="flex items-center gap-1 bg-surface-2 p-1 rounded-xl border border-neutral-700/80">
                           <button
                             type="button"
                             onClick={() => handleSetRestockQty(part.id, 5)}
@@ -488,7 +488,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                             min="1"
                             value={currentRestockInput}
                             onChange={(e) => handleSetRestockQty(part.id, parseInt(e.target.value) || 1)}
-                            className="w-14 h-7 text-center font-mono text-xs font-bold bg-[#0D121D] border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-amber-400"
+                            className="w-14 h-7 text-center font-mono text-xs font-bold bg-surface-1 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-amber-400"
                           />
                           <span className="text-[10px] text-neutral-400 px-1">{part.unit}</span>
                         </div>
@@ -535,7 +535,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               )}
             </div>
 
-            <div className="p-4 border-t border-neutral-800 bg-[#121623] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-neutral-400">
+            <div className="p-4 border-t border-neutral-800 bg-surface-2 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-neutral-400">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
                 <span>النظام يفحص مستويات المخزون تلقائياً بعد كل فاتورة بيع صادرة</span>

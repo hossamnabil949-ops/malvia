@@ -48,7 +48,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               setShowModal(true);
             }
           }}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold transition-all shadow-sm active:scale-95 ${className}`}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-500/20 hover:from-amber-500/30 hover:to-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold transition-all shadow-sm active:scale-95 ${className}`}
           title="تثبيت تطبيق MALVIA على الموبايل والكمبيوتر"
         >
           <Download className="w-3.5 h-3.5 animate-bounce" />
@@ -66,7 +66,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               setShowModal(true);
             }
           }}
-          className={`flex items-center gap-2 px-4 py-3 rounded-2xl bg-[#141A29] hover:bg-[#1C2438] border border-amber-500/30 text-white font-bold text-xs transition-all ${className}`}
+          className={`flex items-center gap-2 px-4 py-3 rounded-2xl bg-surface-2 hover:bg-surface-3 border border-amber-500/30 text-white font-bold text-xs transition-all ${className}`}
         >
           <Download className="w-4 h-4 text-amber-400" />
           <span>تنزيل وتثبيت التطبيق على أجهزة الموظفين والكاشير</span>
@@ -79,7 +79,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
           onClick={() => setShowModal(false)}
         >
           <div 
-            className="w-full max-w-xl bg-[#101422] rounded-3xl border border-amber-500/40 p-6 text-white shadow-2xl space-y-5"
+            className="w-full max-w-xl bg-surface-2 rounded-3xl border border-amber-500/40 p-6 text-white shadow-2xl space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -105,7 +105,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             </div>
 
             {isInstallable && (
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-[#1A2234] to-emerald-500/20 border border-amber-500/40 flex items-center justify-between gap-3">
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-surface-3 to-emerald-500/20 border border-amber-500/40 flex items-center justify-between gap-3">
                 <div>
                   <span className="text-sm font-bold text-white block">متصفحك يدعم التثبيت الفوري بنقرة واحدة!</span>
                   <span className="text-xs text-neutral-400">سيتم إضافة أيقونة MALVIA على هاتفك أو سطح المكتب</span>
@@ -115,7 +115,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                     install();
                     setShowModal(false);
                   }}
-                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 text-neutral-950 font-black text-xs shadow-lg active:scale-95 whitespace-nowrap"
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 text-neutral-950 font-black text-xs shadow-lg active:scale-95 whitespace-nowrap"
                 >
                   تثبيت الآن
                 </button>
@@ -128,7 +128,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                 <span>طريقة التثبيت حسب جهازك:</span>
               </h4>
 
-              <div className="p-3.5 rounded-2xl bg-[#141928] border border-neutral-800 space-y-1.5 text-xs">
+              <div className="p-3.5 rounded-2xl bg-surface-2 border border-neutral-800 space-y-1.5 text-xs">
                 <div className="flex items-center gap-2 text-amber-400 font-bold">
                   <Smartphone className="w-4 h-4" />
                   <span>1. على هواتف أندرويد (Google Chrome):</span>
@@ -138,17 +138,17 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                 </p>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-[#141928] border border-neutral-800 space-y-1.5 text-xs">
-                <div className="flex items-center gap-2 text-sky-400 font-bold">
+              <div className="p-3.5 rounded-2xl bg-surface-2 border border-neutral-800 space-y-1.5 text-xs">
+                <div className="flex items-center gap-2 text-amber-400 font-bold">
                   <Share2 className="w-4 h-4" />
                   <span>2. على آيفون وآيباد (Safari):</span>
                 </div>
                 <p className="text-neutral-300 pr-6 leading-relaxed">
-                  افتح الرابط في متصفح <strong>Safari</strong>، اضغط على زر <strong>المشاركة <Share2 className="w-3.5 h-3.5 inline mx-1 text-sky-400" /></strong> في شريط الأدوات بالأسفل، ثم مرر لأسفل واختر <strong>"إضافة إلى الصفحة الرئيسية" (Add to Home Screen) <PlusSquare className="w-3.5 h-3.5 inline mx-1 text-amber-400" /></strong>.
+                  افتح الرابط في متصفح <strong>Safari</strong>، اضغط على زر <strong>المشاركة <Share2 className="w-3.5 h-3.5 inline mx-1 text-amber-400" /></strong> في شريط الأدوات بالأسفل، ثم مرر لأسفل واختر <strong>"إضافة إلى الصفحة الرئيسية" (Add to Home Screen) <PlusSquare className="w-3.5 h-3.5 inline mx-1 text-amber-400" /></strong>.
                 </p>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-[#141928] border border-neutral-800 space-y-1.5 text-xs">
+              <div className="p-3.5 rounded-2xl bg-surface-2 border border-neutral-800 space-y-1.5 text-xs">
                 <div className="flex items-center gap-2 text-emerald-400 font-bold">
                   <Monitor className="w-4 h-4" />
                   <span>3. على كمبيوتر المحل ولابتوب الإدارة (Chrome / Edge):</span>

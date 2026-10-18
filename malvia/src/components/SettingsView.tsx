@@ -201,7 +201,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
+  const [activeTheme, setActiveTheme] = useState<AppTheme>(currentTheme);
+
   const handleThemeChange = (th: AppTheme) => {
+    setActiveTheme(th);
     if (onSelectTheme) {
       onSelectTheme(th);
     } else {
@@ -275,56 +278,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     { key: 'canManageSettings', label: 'إدارة الإعدادات والموظفين', desc: 'تعديل بيانات المحل والشعار وتعيين الصلاحيات' },
   ];
 
-  const THEMES_LIST: { id: AppTheme; name: string; desc: string; previewBg: string; border: string; isLight?: boolean }[] = [
+  const THEMES_LIST: {
+    id: AppTheme;
+    name: string;
+    desc: string;
+    isLight?: boolean;
+    preview: { page: string; nav: string; card: string; accent: string; text: string; ok: string; bad: string };
+  }[] = [
     {
-      id: 'obsidian',
-      name: 'كربون أوبسيديان (Obsidian Dark)',
-      desc: 'أسود ملكي كربوني مع ذهبي عنبري (الوضع الافتراضي الفاخر)',
-      previewBg: 'bg-[#0A0D14]',
-      border: 'border-amber-500/40',
+      id: 'blue',
+      name: 'أزرق داكن (الافتراضي)',
+      desc: 'بنفس زرقة شعار MALVIA، فتبدو الواجهة والشعار عائلة واحدة',
+      preview: { page: '#0A0E17', nav: '#0D1320', card: '#131C2E', accent: '#3B82F6', text: '#E3EAF6', ok: '#34D399', bad: '#FB7185' },
     },
     {
-      id: 'midnight',
-      name: 'أزرق كحلي ليلي (Midnight Navy)',
-      desc: 'درجات كحلية ملكية عميقة ومريحة للمحلات ومراكز الصيانة',
-      previewBg: 'bg-[#070B16]',
-      border: 'border-blue-500/40',
+      id: 'graphite',
+      name: 'جرافيت وبرتقالي',
+      desc: 'رمادي فحمي مع برتقالي، بطابع الورش والسيارات',
+      preview: { page: '#0E0E10', nav: '#131315', card: '#1B1B1E', accent: '#F97316', text: '#F4F4F5', ok: '#34D399', bad: '#FB7185' },
     },
     {
-      id: 'emerald',
-      name: 'زمردي ملكي (Royal Emerald)',
-      desc: 'درجات زيتية زمردية داكنة فاخرة مع لمسات ذهبية',
-      previewBg: 'bg-[#06110D]',
-      border: 'border-emerald-500/40',
-    },
-    {
-      id: 'carbon',
-      name: 'جرافيت سبورت (Carbon Sport)',
-      desc: 'رمادي معدني داكن مستوحى من عالم السيارات والسباقات',
-      previewBg: 'bg-[#111215]',
-      border: 'border-neutral-500/40',
-    },
-    {
-      id: 'light-titanium',
-      name: 'نهاري ناصع (Clean Daylight)',
-      desc: 'وضع نهاري أبيض عالي الوضوح والتباين لطابعات الفواتير',
-      previewBg: 'bg-[#F8FAFC]',
-      border: 'border-amber-500',
+      id: 'light',
+      name: 'فاتح نظيف',
+      desc: 'صفحات بيضاء واضحة في إضاءة المحل، مع شريط جانبي داكن',
       isLight: true,
-    },
-    {
-      id: 'light-warm',
-      name: 'عاجي كلاسيكي (Warm Ivory Light)',
-      desc: 'وضع فاتح دافئ مريح للعين طوال ساعات العمل',
-      previewBg: 'bg-[#F5F5F0]',
-      border: 'border-amber-600',
-      isLight: true,
+      preview: { page: '#F1F5F9', nav: '#0F172A', card: '#FFFFFF', accent: '#2563EB', text: '#0F172A', ok: '#059669', bad: '#E11D48' },
     },
   ];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-[#151B2B] via-[#101420] to-[#151B2B] p-5 rounded-3xl border border-neutral-800 shadow-xl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-surface-2 via-surface-2 to-surface-2 p-5 rounded-3xl border border-neutral-800 shadow-xl">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-inner">
             <Settings className="w-6 h-6" />
@@ -395,7 +379,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       {activeTab === 'profile' ? (
         <div className="space-y-6">
-          <div className="bg-[#121622] border border-neutral-800 p-6 rounded-3xl shadow-lg space-y-4">
+          <div className="bg-surface-2 border border-neutral-800 p-6 rounded-3xl shadow-lg space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-800 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400">
@@ -413,17 +397,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               <button
                 type="button"
-                onClick={() => handleThemeChange(currentTheme === 'light-titanium' ? 'obsidian' : 'light-titanium')}
+                onClick={() => handleThemeChange(activeTheme === 'light' ? 'blue' : 'light')}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-amber-300 text-xs font-bold border border-neutral-700 self-start sm:self-auto transition-all"
               >
-                {currentTheme.includes('light') ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-                <span>{currentTheme.includes('light') ? 'التبديل إلى الوضع الليلي' : 'التبديل إلى الوضع النهاري'}</span>
+                {activeTheme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                <span>{activeTheme === 'light' ? 'التبديل إلى الوضع الليلي' : 'التبديل إلى الوضع النهاري'}</span>
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 pt-1">
               {THEMES_LIST.map((th) => {
-                const isSelected = currentTheme === th.id;
+                const isSelected = activeTheme === th.id;
                 return (
                   <button
                     key={th.id}
@@ -431,8 +415,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     onClick={() => handleThemeChange(th.id)}
                     className={`p-4 rounded-2xl border text-right transition-all flex flex-col justify-between relative overflow-hidden group ${
                       isSelected
-                        ? 'border-amber-500 ring-2 ring-amber-500/40 bg-gradient-to-b from-[#181F30] to-[#131724]'
-                        : 'border-neutral-800 bg-[#0E121B] hover:border-neutral-700'
+                        ? 'border-amber-500 ring-2 ring-amber-500/40 bg-gradient-to-b from-surface-3 to-surface-2'
+                        : 'border-neutral-800 bg-surface-1 hover:border-neutral-700'
                     }`}
                   >
                     <div className="space-y-1.5 z-10">
@@ -452,11 +436,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       </p>
                     </div>
 
-                    <div className="mt-3 pt-2.5 border-t border-neutral-800/80 flex items-center gap-2">
-                      <div className={`w-6 h-6 rounded-lg ${th.previewBg} border border-neutral-700 shadow-sm`} />
-                      <span className="text-[10px] text-neutral-400 font-bold">
-                        {th.isLight ? 'وضع فاتح (Light)' : 'وضع ليلي (Dark)'}
-                      </span>
+                    <div
+                      className="mt-3 rounded-xl p-2 flex gap-1.5 h-24 border border-neutral-700"
+                      style={{ background: th.preview.page }}
+                      aria-hidden="true"
+                    >
+                      <div className="w-9 rounded-lg p-1 space-y-1" style={{ background: th.preview.nav }}>
+                        <div className="h-1.5 rounded" style={{ background: th.preview.accent }} />
+                        <div className="h-1.5 rounded opacity-40" style={{ background: th.preview.text }} />
+                        <div className="h-1.5 rounded opacity-40" style={{ background: th.preview.text }} />
+                      </div>
+                      <div className="flex-1 grid grid-cols-3 gap-1 content-start">
+                        <div className="rounded-md h-6" style={{ background: th.preview.card }} />
+                        <div className="rounded-md h-6" style={{ background: th.preview.card }}>
+                          <div className="h-1.5 w-1/2 rounded mt-2 mx-1" style={{ background: th.preview.ok }} />
+                        </div>
+                        <div className="rounded-md h-6" style={{ background: th.preview.card }}>
+                          <div className="h-1.5 w-1/2 rounded mt-2 mx-1" style={{ background: th.preview.bad }} />
+                        </div>
+                        <div className="rounded-md h-5 col-span-3" style={{ background: th.preview.accent }} />
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[10px] text-neutral-400 font-bold">
+                      {th.isLight ? 'وضع فاتح' : 'وضع ليلي'}
                     </div>
                   </button>
                 );
@@ -464,7 +466,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
 
-          <div className="bg-[#121622] border border-amber-500/40 p-6 rounded-3xl shadow-lg space-y-4">
+          <div className="bg-surface-2 border border-amber-500/40 p-6 rounded-3xl shadow-lg space-y-4">
             <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400">
@@ -496,7 +498,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     value={ownerDisplayName}
                     onChange={(e) => setOwnerDisplayName(e.target.value)}
                     placeholder="المدير العام"
-                    className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl px-3.5 py-2.5 font-bold text-white focus:outline-none focus:border-amber-500"
+                    className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3.5 py-2.5 font-bold text-white focus:outline-none focus:border-amber-500"
                   />
                   <p className="text-[10px] text-neutral-500 mt-1">يظهر في رأس النظام والفواتير</p>
                 </div>
@@ -512,7 +514,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       value={newOwnerPassword}
                       onChange={(e) => setNewOwnerPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl px-3.5 py-2.5 pl-10 font-mono text-white focus:outline-none focus:border-amber-500"
+                      className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3.5 py-2.5 pl-10 font-mono text-white focus:outline-none focus:border-amber-500"
                     />
                     <button
                       type="button"
@@ -535,7 +537,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     value={confirmOwnerPassword}
                     onChange={(e) => setConfirmOwnerPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl px-3.5 py-2.5 font-mono text-white focus:outline-none focus:border-amber-500"
+                    className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3.5 py-2.5 font-mono text-white focus:outline-none focus:border-amber-500"
                   />
                   <p className="text-[10px] text-neutral-500 mt-1">إعادة كتابة كلمة المرور</p>
                 </div>
@@ -570,7 +572,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           <form onSubmit={handleSaveSettings} className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 space-y-4 bg-[#121622] border border-neutral-800 p-6 rounded-3xl shadow-lg">
+              <div className="lg:col-span-2 space-y-4 bg-surface-2 border border-neutral-800 p-6 rounded-3xl shadow-lg">
                 <h2 className="text-sm font-extrabold text-white flex items-center gap-2 border-b border-neutral-800 pb-3">
                   <Building2 className="w-4 h-4 text-amber-400" />
                   <span>بيانات المؤسسة والفواتير الضريبية</span>
@@ -586,7 +588,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       required
                       value={systemName}
                       onChange={(e) => setSystemName(e.target.value)}
-                      className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl px-3.5 py-2.5 font-black text-amber-400 text-sm focus:outline-none focus:border-amber-500"
+                      className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3.5 py-2.5 font-black text-amber-400 text-sm focus:outline-none focus:border-amber-500"
                     />
                     <p className="text-[10px] text-neutral-400 mt-1">الاسم الأساسي للسيستم (MALVIA)</p>
                   </div>
@@ -600,7 +602,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       required
                       value={shopName}
                       onChange={(e) => setShopName(e.target.value)}
-                      className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl px-3.5 py-2.5 font-bold text-white focus:outline-none focus:border-amber-500"
+                      className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3.5 py-2.5 font-bold text-white focus:outline-none focus:border-amber-500"
                     />
                     <p className="text-[10px] text-neutral-400 mt-1">يظهر في رأس الفواتير الضريبية والإيصالات</p>
                   </div>
@@ -612,7 +614,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     type="text"
                     value={shopSubtitle}
                     onChange={(e) => setShopSubtitle(e.target.value)}
-                    className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-500"
+                    className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
@@ -628,7 +630,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         required
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl pr-9 pl-3 py-2.5 text-white focus:outline-none focus:border-amber-500"
+                        className="w-full bg-surface-2 border border-neutral-700 rounded-xl pr-9 pl-3 py-2.5 text-white focus:outline-none focus:border-amber-500"
                       />
                     </div>
                   </div>
@@ -641,7 +643,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl pr-9 pl-3 py-2.5 text-white focus:outline-none focus:border-amber-500"
+                        className="w-full bg-surface-2 border border-neutral-700 rounded-xl pr-9 pl-3 py-2.5 text-white focus:outline-none focus:border-amber-500"
                       />
                     </div>
                   </div>
@@ -658,7 +660,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       required
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
-                      className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl pr-9 pl-3 py-2.5 text-white focus:outline-none focus:border-amber-500"
+                      className="w-full bg-surface-2 border border-neutral-700 rounded-xl pr-9 pl-3 py-2.5 text-white focus:outline-none focus:border-amber-500"
                     />
                   </div>
                 </div>
@@ -670,7 +672,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       type="text"
                       value={commercialRegister}
                       onChange={(e) => setCommercialRegister(e.target.value)}
-                      className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl px-3.5 py-2.5 font-mono text-white focus:outline-none focus:border-amber-500"
+                      className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3.5 py-2.5 font-mono text-white focus:outline-none focus:border-amber-500"
                     />
                   </div>
 
@@ -680,7 +682,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       type="text"
                       value={taxId}
                       onChange={(e) => setTaxId(e.target.value)}
-                      className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl px-3.5 py-2.5 font-mono text-white focus:outline-none focus:border-amber-500"
+                      className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3.5 py-2.5 font-mono text-white focus:outline-none focus:border-amber-500"
                     />
                   </div>
                 </div>
@@ -693,7 +695,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       value={currency}
                       onChange={(e) => setCurrency(e.target.value)}
                       placeholder="مثال: ج.م أو ر.س أو $"
-                      className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-500"
+                      className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-500"
                     />
                   </div>
 
@@ -707,7 +709,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         max="100"
                         value={vatRate}
                         onChange={(e) => setVatRate(Number(e.target.value))}
-                        className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl pr-3 pl-9 py-2.5 font-mono text-white focus:outline-none focus:border-amber-500"
+                        className="w-full bg-surface-2 border border-neutral-700 rounded-xl pr-3 pl-9 py-2.5 font-mono text-white focus:outline-none focus:border-amber-500"
                       />
                     </div>
                   </div>
@@ -719,7 +721,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     rows={2}
                     value={invoiceFooterNotes}
                     onChange={(e) => setInvoiceFooterNotes(e.target.value)}
-                    className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl p-3 text-white focus:outline-none focus:border-amber-500 leading-relaxed"
+                    className="w-full bg-surface-2 border border-neutral-700 rounded-xl p-3 text-white focus:outline-none focus:border-amber-500 leading-relaxed"
                   />
                 </div>
 
@@ -735,13 +737,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
 
               <div className="space-y-4">
-                <div className="bg-[#121622] border border-neutral-800 p-6 rounded-3xl shadow-lg space-y-4">
+                <div className="bg-surface-2 border border-neutral-800 p-6 rounded-3xl shadow-lg space-y-4">
                   <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
                     <CarFront className="w-4 h-4 text-amber-400" />
                     <span>شعار وهوية المحل التجارية</span>
                   </h3>
 
-                  <div className="flex flex-col items-center justify-center p-4 rounded-2xl bg-[#0E121B] border border-dashed border-neutral-700 text-center">
+                  <div className="flex flex-col items-center justify-center p-4 rounded-2xl bg-surface-1 border border-dashed border-neutral-700 text-center">
                     {logoUrl ? (
                       <div className="relative group">
                         <img
@@ -752,15 +754,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <button
                           type="button"
                           onClick={() => setLogoUrl('')}
-                          className="absolute -top-2 -right-2 p-1 rounded-full bg-rose-500 text-white shadow-md hover:bg-rose-600"
+                          className="absolute -top-2 -right-2 p-1 rounded-full bg-rose-500 text-[#ffffff] shadow-md hover:bg-rose-600"
                           title="حذف الشعار"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ) : (
-                      <div className="w-24 h-24 rounded-2xl bg-gradient-to-tr from-amber-600 via-amber-500 to-yellow-400 p-0.5 shadow-md flex items-center justify-center">
-                        <div className="w-full h-full rounded-[14px] bg-[#0E121B] flex items-center justify-center text-amber-400">
+                      <div className="w-24 h-24 rounded-2xl bg-gradient-to-tr from-amber-600 via-amber-500 to-amber-400 p-0.5 shadow-md flex items-center justify-center">
+                        <div className="w-full h-full rounded-[14px] bg-surface-1 flex items-center justify-center text-amber-400">
                           <CarFront className="w-10 h-10" />
                         </div>
                       </div>
@@ -786,7 +788,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </div>
                 </div>
 
-                <div className="bg-gradient-to-br from-[#131D2D] via-[#101422] to-[#141A28] border border-amber-500/40 p-5 rounded-3xl space-y-3 shadow-lg">
+                <div className="bg-gradient-to-br from-surface-2 via-surface-2 to-surface-2 border border-amber-500/40 p-5 rounded-3xl space-y-3 shadow-lg">
                   <div className="flex items-center gap-2 text-amber-400 font-extrabold text-xs">
                     <Sparkles className="w-4 h-4" />
                     <span>تثبيت التطبيق على أي موبايل أو كمبيوتر</span>
@@ -799,7 +801,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
             </div>
 
-            <div className="bg-[#181016] border border-rose-500/40 p-6 rounded-3xl shadow-lg space-y-4">
+            <div className="bg-surface-0 border border-rose-500/40 p-6 rounded-3xl shadow-lg space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-start gap-3">
                   <div className="p-3 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
@@ -821,7 +823,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowClearConfirm(true)}
-                  className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs shadow-lg shadow-rose-600/30 transition-all active:scale-95 shrink-0"
+                  className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-500 text-[#ffffff] font-black text-xs shadow-lg shadow-rose-600/30 transition-all active:scale-95 shrink-0"
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>مسح البيانات التجريبية والموظفين بالكامل</span>
@@ -839,7 +841,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       ) : (
         <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#121622] p-4 rounded-2xl border border-neutral-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-2 p-4 rounded-2xl border border-neutral-800">
             <div>
               <h2 className="text-sm font-extrabold text-white">فريق العمل والموظفين المسجلين</h2>
               <p className="text-xs text-neutral-400">إدارة الصلاحيات لكل موظف وتحديد المسؤول الحالي في النظام</p>
@@ -861,9 +863,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               return (
                 <div
                   key={emp.id}
-                  className={`bg-[#121622] border rounded-2xl p-4 flex flex-col justify-between transition-all shadow-md ${
+                  className={`bg-surface-2 border rounded-2xl p-4 flex flex-col justify-between transition-all shadow-md ${
                     isActiveUser
-                      ? 'border-amber-500/60 ring-1 ring-amber-500/30 bg-gradient-to-b from-[#181E2E] to-[#121622]'
+                      ? 'border-amber-500/60 ring-1 ring-amber-500/30 bg-gradient-to-b from-surface-2 to-surface-2'
                       : 'border-neutral-800 hover:border-neutral-700'
                   }`}
                 >
@@ -896,25 +898,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <span className="text-neutral-400 block font-bold">الصلاحيات الممنوحة:</span>
                       <div className="flex flex-wrap gap-1">
                         {emp.permissions.canSellPos && (
-                          <span className="px-2 py-0.5 rounded bg-blue-500/15 text-blue-400 text-[10px]">بيع POS</span>
+                          <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[10px]">بيع POS</span>
                         )}
                         {emp.permissions.canManageInventory && (
                           <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[10px]">مخزون وجرد</span>
                         )}
                         {emp.permissions.canManagePurchases && (
-                          <span className="px-2 py-0.5 rounded bg-purple-500/15 text-purple-400 text-[10px]">مشتريات وموردين</span>
+                          <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[10px]">مشتريات وموردين</span>
                         )}
                         {emp.permissions.canManageTreasury && (
                           <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[10px]">الخزينة والصرف</span>
                         )}
                         {emp.permissions.canViewReports && (
-                          <span className="px-2 py-0.5 rounded bg-teal-500/15 text-teal-400 text-[10px]">تقارير إكسيل</span>
+                          <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[10px]">تقارير إكسيل</span>
                         )}
                         {emp.permissions.canManagePartners && (
                           <span className="px-2 py-0.5 rounded bg-rose-500/15 text-rose-400 text-[10px]">الشركاء والأرباح</span>
                         )}
                         {emp.permissions.canManageSettings && (
-                          <span className="px-2 py-0.5 rounded bg-orange-500/15 text-orange-400 text-[10px]">الإعدادات</span>
+                          <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[10px]">الإعدادات</span>
                         )}
                       </div>
                     </div>
@@ -959,7 +961,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       {showAddEmpModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121622] border border-neutral-700 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-2 border border-neutral-700 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
@@ -990,7 +992,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     placeholder="مثال: أحمد فتحي"
                     value={empName}
                     onChange={(e) => setEmpName(e.target.value)}
-                    className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
+                    className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
@@ -999,7 +1001,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <select
                     value={empRole}
                     onChange={(e) => setEmpRole(e.target.value as Employee['role'])}
-                    className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
+                    className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
                   >
                     <option value="كاشير مبيعات">كاشير مبيعات</option>
                     <option value="أمين مستودع">أمين مستودع</option>
@@ -1021,7 +1023,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     placeholder="010XXXXXXXX"
                     value={empPhone}
                     onChange={(e) => setEmpPhone(e.target.value)}
-                    className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl px-3 py-2 font-mono text-white focus:outline-none focus:border-amber-500"
+                    className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3 py-2 font-mono text-white focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
@@ -1030,7 +1032,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <select
                     value={empShift}
                     onChange={(e) => setEmpShift(e.target.value as Employee['shift'])}
-                    className="w-full bg-[#1A1F2C] border border-neutral-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                    className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
                   >
                     <option value="صباحي">صباحي</option>
                     <option value="مسائي">مسائي</option>
@@ -1050,7 +1052,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     placeholder="مثال: ahmed أو cashier"
                     value={empUsername}
                     onChange={(e) => setEmpUsername(e.target.value)}
-                    className="w-full bg-[#141A28] border border-neutral-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
+                    className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
@@ -1064,7 +1066,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     placeholder="مثال: 1234"
                     value={empPassword}
                     onChange={(e) => setEmpPassword(e.target.value)}
-                    className="w-full bg-[#141A28] border border-neutral-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
+                    className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
                   />
                 </div>
               </div>
@@ -1115,7 +1117,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       {editingEmployee && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121622] border border-neutral-700 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-2 border border-neutral-700 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
               <div>
                 <h3 className="text-base font-black text-white">تعديل بيانات وصلاحيات: {editingEmployee.name}</h3>
@@ -1140,7 +1142,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     required
                     value={editingEmployee.name}
                     onChange={(e) => setEditingEmployee({ ...editingEmployee, name: e.target.value })}
-                    className="w-full bg-[#141A28] border border-neutral-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
+                    className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
@@ -1151,7 +1153,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <select
                     value={editingEmployee.role}
                     onChange={(e) => setEditingEmployee({ ...editingEmployee, role: e.target.value as Employee['role'] })}
-                    className="w-full bg-[#141A28] border border-neutral-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
+                    className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
                   >
                     <option value="كاشير مبيعات">كاشير مبيعات</option>
                     <option value="أمين مستودع">أمين مستودع</option>
@@ -1171,7 +1173,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     required
                     value={editingEmployee.username || ''}
                     onChange={(e) => setEditingEmployee({ ...editingEmployee, username: e.target.value })}
-                    className="w-full bg-[#141A28] border border-neutral-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
+                    className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
@@ -1184,7 +1186,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     required
                     value={editingEmployee.password || ''}
                     onChange={(e) => setEditingEmployee({ ...editingEmployee, password: e.target.value })}
-                    className="w-full bg-[#141A28] border border-neutral-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
+                    className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
                   />
                 </div>
               </div>
@@ -1239,7 +1241,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           onClick={() => setShowClearConfirm(false)}
         >
           <div 
-            className="w-full max-w-md bg-[#141A28] border border-rose-500/50 rounded-3xl p-6 shadow-2xl space-y-4"
+            className="w-full max-w-md bg-surface-2 border border-rose-500/50 rounded-3xl p-6 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 text-rose-400">
@@ -1252,7 +1254,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
             </div>
 
-            <p className="text-xs text-neutral-300 leading-relaxed bg-[#0E121B] p-3.5 rounded-2xl border border-neutral-800">
+            <p className="text-xs text-neutral-300 leading-relaxed bg-surface-1 p-3.5 rounded-2xl border border-neutral-800">
               سيتم تفريغ كافة أصناف قطع الغيار، فواتير المبيعات، مرتجعات البيع، حسابات العملاء، حسابات الموردين، فواتير المشتريات، حركة الخزينة، وتقارير التحليل البياني، ومسح كافة الموظفين التجريبيين الإضافيين (مع الإبقاء فقط على حساب المالك الرئيسي admin).
             </p>
 
@@ -1274,7 +1276,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   setClearSuccess(true);
                   setTimeout(() => setClearSuccess(false), 6000);
                 }}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs shadow-lg shadow-rose-600/30 transition-all active:scale-95"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-[#ffffff] font-black text-xs shadow-lg shadow-rose-600/30 transition-all active:scale-95"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>نعم، احذف كافة البيانات والموظفين الآن</span>

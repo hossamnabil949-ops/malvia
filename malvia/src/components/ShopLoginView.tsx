@@ -52,7 +52,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
   }, [licenses]);
 
   const handleToggleTheme = () => {
-    const nextTheme: AppTheme = currentTheme === 'light-titanium' ? 'obsidian' : 'light-titanium';
+    const nextTheme: AppTheme = currentTheme === 'light' ? 'blue' : 'light';
     setCurrentThemeState(nextTheme);
     setAppTheme(nextTheme);
   };
@@ -123,9 +123,9 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#080B12] via-[#0E1322] to-[#0A0E18] text-neutral-100 flex flex-col justify-between p-4 sm:p-6 lg:p-8 font-sans select-none antialiased relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-surface-0 via-surface-2 to-surface-0 text-neutral-100 flex flex-col justify-between p-4 sm:p-6 lg:p-8 font-sans select-none antialiased relative overflow-hidden">
       <div className="absolute top-0 right-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-amber-600/10 rounded-full blur-3xl pointer-events-none" />
 
       <header className="max-w-5xl w-full mx-auto flex items-center justify-between z-10">
         <div className="flex items-center gap-3">
@@ -144,9 +144,9 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800/80 hover:bg-neutral-700 border border-neutral-700 text-xs font-bold text-amber-400 transition-all active:scale-95"
             title="تبديل الوضع الليلي / النهاري"
           >
-            {currentTheme === 'light-titanium' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+            {currentTheme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
             <span className="hidden sm:inline">
-              {currentTheme === 'light-titanium' ? 'الوضع الليلي' : 'الوضع النهاري'}
+              {currentTheme === 'light' ? 'الوضع الليلي' : 'الوضع النهاري'}
             </span>
           </button>
 
@@ -155,9 +155,9 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
       </header>
 
       <main className="max-w-md w-full mx-auto my-auto py-6 z-10">
-        <div className="bg-[#111625]/95 backdrop-blur-xl border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-5 relative">
+        <div className="bg-surface-2/95 backdrop-blur-xl border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-5 relative">
           <div className="text-center space-y-1.5">
-            <img src="/logo-login.png" alt="MALVIA" className="mx-auto w-56 sm:w-64 h-auto mb-2" draggable={false} />
+            <div className="mx-auto w-fit rounded-3xl bg-nav-bg px-6 py-3 mb-2"><img src="/logo-login.png" alt="MALVIA" className="mx-auto w-48 sm:w-56 h-auto" draggable={false} /></div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold mb-1">
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>نظام تجاري مستقل 100% — جاهز للبيع والتشغيل الفوري</span>
@@ -175,7 +175,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
               type="button"
               disabled={isLoading}
               onClick={handleDirectOwnerLogin}
-              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-neutral-950 font-black text-xs shadow-xl shadow-amber-500/25 active:scale-95 transition-all flex items-center justify-between group disabled:opacity-50"
+              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-neutral-950 font-black text-xs shadow-xl shadow-amber-500/25 active:scale-95 transition-all flex items-center justify-between group disabled:opacity-50"
             >
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-neutral-950 text-amber-400 flex items-center justify-center font-bold">
@@ -193,7 +193,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
               type="button"
               disabled={isLoading}
               onClick={handleDirectCashierLogin}
-              className="w-full py-2.5 px-4 rounded-xl bg-[#172033] hover:bg-[#1E2942] border border-neutral-700/80 text-neutral-200 text-xs font-bold transition-all flex items-center justify-between"
+              className="w-full py-2.5 px-4 rounded-xl bg-surface-3 hover:bg-surface-4 border border-neutral-700/80 text-neutral-200 text-xs font-bold transition-all flex items-center justify-between"
             >
               <span>دخول سريع ككاشير مبيعات (POS)</span>
               <span className="text-[10px] text-neutral-400 font-mono">user: ahmed</span>
@@ -202,7 +202,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
 
           <div className="relative flex items-center justify-center">
             <div className="border-t border-neutral-800 w-full" />
-            <span className="bg-[#111625] px-3 text-[11px] text-neutral-500 font-bold whitespace-nowrap">
+            <span className="bg-surface-2 px-3 text-[11px] text-neutral-500 font-bold whitespace-nowrap">
               أو تسجيل الدخول اليدوي
             </span>
             <div className="border-t border-neutral-800 w-full" />
@@ -227,7 +227,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
               </div>
 
               {matchedTenant && !isChangingKey ? (
-                <div className="p-3 rounded-2xl bg-gradient-to-r from-[#142321] to-[#121929] border border-emerald-500/40 flex items-center justify-between gap-3">
+                <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-950/40 to-surface-2 border border-emerald-500/40 flex items-center justify-between gap-3">
                   <div className="space-y-0.5">
                     <span className="text-xs font-bold text-emerald-300 block">
                       {matchedTenant.companyName}
@@ -249,7 +249,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
                       setErrorMessage(null);
                     }}
                     placeholder="MALVIA-XXXX-XXXX-XX"
-                    className="w-full h-11 px-4 rounded-xl bg-[#161D2E] border border-neutral-700 text-xs font-mono text-amber-400 tracking-wider placeholder:text-neutral-600 focus:outline-none focus:border-amber-500 shadow-inner uppercase"
+                    className="w-full h-11 px-4 rounded-xl bg-surface-2 border border-neutral-700 text-xs font-mono text-amber-400 tracking-wider placeholder:text-neutral-600 focus:outline-none focus:border-amber-500 shadow-inner uppercase"
                   />
                   {matchedTenant && (
                     <button
@@ -279,7 +279,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
                   setErrorMessage(null);
                 }}
                 placeholder="مثال: admin أو ahmed أو رقم الهاتف"
-                className="w-full h-11 px-4 rounded-xl bg-[#161D2E] border border-neutral-700 text-xs text-white placeholder:text-neutral-500 focus:outline-none focus:border-amber-500 shadow-inner"
+                className="w-full h-11 px-4 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white placeholder:text-neutral-500 focus:outline-none focus:border-amber-500 shadow-inner"
               />
             </div>
 
@@ -299,7 +299,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
                     setErrorMessage(null);
                   }}
                   placeholder="••••••••"
-                  className="w-full h-11 px-4 pr-4 pl-11 rounded-xl bg-[#161D2E] border border-neutral-700 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-amber-500 shadow-inner font-mono"
+                  className="w-full h-11 px-4 pr-4 pl-11 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-amber-500 shadow-inner font-mono"
                 />
 
                 <button
@@ -330,7 +330,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {isLoading ? (
                 <>
@@ -346,7 +346,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
             </button>
           </form>
 
-          <div className="p-3.5 rounded-2xl bg-[#0D121F] border border-neutral-800 space-y-2 text-[11px] text-neutral-400">
+          <div className="p-3.5 rounded-2xl bg-surface-1 border border-neutral-800 space-y-2 text-[11px] text-neutral-400">
             <div className="flex items-center gap-1.5 text-amber-400 font-bold">
               <Sparkles className="w-3.5 h-3.5" />
               <span>إرشادات صاحب المحل والموظفين:</span>

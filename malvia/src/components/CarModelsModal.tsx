@@ -92,10 +92,10 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="w-full max-w-4xl bg-[#0F1422] rounded-3xl border border-amber-500/40 text-white shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+      <div className="w-full max-w-4xl bg-surface-2 rounded-3xl border border-amber-500/40 text-white shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
         
         {/* Header */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-neutral-900 via-[#182033] to-neutral-900 border-b border-neutral-800 flex items-center justify-between">
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-neutral-900 via-surface-3 to-neutral-900 border-b border-neutral-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400">
               <Car className="w-6 h-6" />
@@ -137,7 +137,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
         <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
           
           {/* Search & Brand Filter */}
-          <div className="flex flex-col sm:flex-row items-center gap-3 bg-[#131828] p-3 rounded-2xl border border-neutral-800 text-xs">
+          <div className="flex flex-col sm:flex-row items-center gap-3 bg-surface-2 p-3 rounded-2xl border border-neutral-800 text-xs">
             <div className="relative flex-1 w-full">
               <Search className="w-4 h-4 text-neutral-400 absolute right-3 top-1/2 -translate-y-1/2" />
               <input
@@ -145,7 +145,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="ابحث باسم الموديل (كورولا، إلنترا، صني، كامري، تيجو)..."
-                className="w-full h-9 pr-9 pl-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white placeholder:text-neutral-500 focus:outline-none focus:border-amber-500 text-xs"
+                className="w-full h-9 pr-9 pl-3 rounded-xl bg-surface-1 border border-neutral-700 text-white placeholder:text-neutral-500 focus:outline-none focus:border-amber-500 text-xs"
               />
             </div>
 
@@ -155,7 +155,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                 className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all ${
                   selectedBrandFilter === 'all'
                     ? 'bg-amber-500 text-neutral-950'
-                    : 'bg-[#0E121B] text-neutral-400 hover:text-white border border-neutral-800'
+                    : 'bg-surface-1 text-neutral-400 hover:text-white border border-neutral-800'
                 }`}
               >
                 الكل
@@ -167,7 +167,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                   className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all ${
                     selectedBrandFilter === b
                       ? 'bg-amber-500 text-neutral-950'
-                      : 'bg-[#0E121B] text-neutral-400 hover:text-white border border-neutral-800'
+                      : 'bg-surface-1 text-neutral-400 hover:text-white border border-neutral-800'
                   }`}
                 >
                   {b}
@@ -179,14 +179,14 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
           {/* Car Models Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {filteredModels.length === 0 ? (
-              <div className="col-span-full py-12 text-center text-xs text-neutral-500 bg-[#121622] rounded-2xl border border-neutral-800">
+              <div className="col-span-full py-12 text-center text-xs text-neutral-500 bg-surface-2 rounded-2xl border border-neutral-800">
                 لا توجد موديلات سيارات مطابقة لبحثك
               </div>
             ) : (
               filteredModels.map((model) => (
                 <div
                   key={model.id}
-                  className="bg-[#121624] border border-neutral-800 hover:border-neutral-700 p-4 rounded-2xl flex flex-col justify-between shadow-md space-y-3 group"
+                  className="bg-surface-2 border border-neutral-800 hover:border-neutral-700 p-4 rounded-2xl flex flex-col justify-between shadow-md space-y-3 group"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
@@ -216,7 +216,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                     )}
 
                     {model.notes && (
-                      <p className="text-[10px] text-neutral-500 mt-2 italic bg-[#0C101A] p-2 rounded-xl border border-neutral-800/80">
+                      <p className="text-[10px] text-neutral-500 mt-2 italic bg-surface-1 p-2 rounded-xl border border-neutral-800/80">
                         {model.notes}
                       </p>
                     )}
@@ -253,7 +253,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
             onClick={() => setShowAddForm(false)}
           >
             <div 
-              className="w-full max-w-lg bg-[#121624] rounded-3xl border border-amber-500/50 p-6 text-white shadow-2xl space-y-4"
+              className="w-full max-w-lg bg-surface-2 rounded-3xl border border-amber-500/50 p-6 text-white shadow-2xl space-y-4"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -273,7 +273,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                     <select
                       value={brand}
                       onChange={(e) => setBrand(e.target.value as CarBrand)}
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-bold"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-bold"
                     >
                       {CAR_BRANDS.filter(b => b !== 'شامل').map((b) => (
                         <option key={b} value={b}>{b}</option>
@@ -289,7 +289,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                       value={modelName}
                       onChange={(e) => setModelName(e.target.value)}
                       placeholder="مثلاً: كورولا (Corolla)"
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-bold focus:outline-none focus:border-amber-500"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-bold focus:outline-none focus:border-amber-500"
                     />
                   </div>
                 </div>
@@ -304,7 +304,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                       max="2030"
                       value={yearFrom}
                       onChange={(e) => setYearFrom(Number(e.target.value))}
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
                     />
                   </div>
 
@@ -317,7 +317,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                       max="2030"
                       value={yearTo}
                       onChange={(e) => setYearTo(Number(e.target.value))}
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
                     />
                   </div>
                 </div>
@@ -329,7 +329,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                     value={engineSpecs}
                     onChange={(e) => setEngineSpecs(e.target.value)}
                     placeholder="مثال: 1.6L 4-Cylinder / Turbo"
-                    className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                   />
                 </div>
 
@@ -340,7 +340,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                     value={generation}
                     onChange={(e) => setGeneration(e.target.value)}
                     placeholder="مثال: الشكل الجديد E210 / AD"
-                    className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                   />
                 </div>
 
@@ -351,13 +351,13 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="مثال: مشتركة مع كيا سيراتو في الفحمات والفلاتر..."
-                    className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
                 >
                   حفظ وإدراج موديل السيارة في النظام
                 </button>
@@ -373,7 +373,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
             onClick={() => setEditingModel(null)}
           >
             <div 
-              className="w-full max-w-lg bg-[#121624] rounded-3xl border border-amber-500/50 p-6 text-white shadow-2xl space-y-4"
+              className="w-full max-w-lg bg-surface-2 rounded-3xl border border-amber-500/50 p-6 text-white shadow-2xl space-y-4"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -390,7 +390,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                     <select
                       value={editingModel.brand}
                       onChange={(e) => setEditingModel({ ...editingModel, brand: e.target.value as CarBrand })}
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-bold"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-bold"
                     >
                       {CAR_BRANDS.filter(b => b !== 'شامل').map((b) => (
                         <option key={b} value={b}>{b}</option>
@@ -405,7 +405,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                       required
                       value={editingModel.modelName}
                       onChange={(e) => setEditingModel({ ...editingModel, modelName: e.target.value })}
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-bold"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-bold"
                     />
                   </div>
                 </div>
@@ -418,7 +418,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                       required
                       value={editingModel.yearFrom}
                       onChange={(e) => setEditingModel({ ...editingModel, yearFrom: Number(e.target.value) })}
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
                     />
                   </div>
 
@@ -429,7 +429,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                       required
                       value={editingModel.yearTo}
                       onChange={(e) => setEditingModel({ ...editingModel, yearTo: Number(e.target.value) })}
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
                     />
                   </div>
                 </div>

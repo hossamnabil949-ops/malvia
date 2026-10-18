@@ -1169,6 +1169,7 @@ export default function App() {
           isOpen={Boolean(selectedInvoiceForDetail)}
           onClose={() => setSelectedInvoiceForDetail(null)}
           invoice={selectedInvoiceForDetail}
+          settings={settings}
         />
       )}
 

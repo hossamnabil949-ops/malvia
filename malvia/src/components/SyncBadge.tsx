@@ -24,7 +24,7 @@ export const SyncBadge: React.FC = () => {
     else if (detail.includes('معلق')) label = 'ترخيص المحل معلق';
     else if (detail) label = 'تعذرت المزامنة: ' + detail.slice(0, 80);
   }
-  const color = status === 'synced' ? 'text-emerald-400' : status === 'syncing' ? 'text-sky-400' : 'text-amber-400';
+  const color = status === 'synced' ? 'text-emerald-400' : status === 'syncing' ? 'text-amber-400' : 'text-amber-400';
   return (
     <div className={`fixed bottom-20 lg:bottom-3 left-3 z-50 text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-900/90 border border-slate-700 ${color}`}>
       {label}

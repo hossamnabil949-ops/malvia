@@ -73,12 +73,12 @@ export const TenantActivationGateway: React.FC<TenantActivationGatewayProps> = (
 
   return (
     <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-lg flex items-center justify-center p-4 overflow-y-auto">
-      <div className="w-full max-w-lg bg-[#0F1422] rounded-3xl border border-amber-500/50 p-6 sm:p-8 text-white shadow-2xl space-y-6 relative overflow-hidden">
+      <div className="w-full max-w-lg bg-surface-2 rounded-3xl border border-amber-500/50 p-6 sm:p-8 text-white shadow-2xl space-y-6 relative overflow-hidden">
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="text-center space-y-2">
-          <img src="/logo-login.png" alt="MALVIA" className="mx-auto w-52 h-auto" draggable={false} />
+          <div className="mx-auto w-fit rounded-3xl bg-nav-bg px-6 py-3"><img src="/logo-login.png" alt="MALVIA" className="mx-auto w-44 h-auto" draggable={false} /></div>
 
           <h2 className="text-xl sm:text-2xl font-black text-white tracking-wide">
             بوابة تفعيل تراخيص محلات <span className="text-amber-400 font-mono">MALVIA</span>
@@ -126,13 +126,13 @@ export const TenantActivationGateway: React.FC<TenantActivationGatewayProps> = (
                 value={inputKey}
                 onChange={(e) => handleKeyChange(e.target.value)}
                 placeholder="MALVIA-XXXX-XXXX-XX"
-                className="w-full h-12 px-4 rounded-2xl bg-[#141A28] border border-neutral-700 text-center text-sm font-mono tracking-widest text-amber-400 uppercase placeholder:text-neutral-600 focus:outline-none focus:border-amber-500 shadow-inner"
+                className="w-full h-12 px-4 rounded-2xl bg-surface-2 border border-neutral-700 text-center text-sm font-mono tracking-widest text-amber-400 uppercase placeholder:text-neutral-600 focus:outline-none focus:border-amber-500 shadow-inner"
               />
             </div>
           </div>
 
           {previewLicense && (
-            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#122820] to-[#121A28] border border-emerald-500/40 space-y-1.5 text-xs animate-fade-in">
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/40 to-surface-2 border border-emerald-500/40 space-y-1.5 text-xs animate-fade-in">
               <div className="flex items-center gap-2 text-emerald-400 font-bold">
                 <CheckCircle2 className="w-4 h-4" />
                 <span>تم التعرف على الترخيص: {previewLicense.companyName}</span>
@@ -161,7 +161,7 @@ export const TenantActivationGateway: React.FC<TenantActivationGatewayProps> = (
           <button
             type="submit"
             disabled={activatedSuccess || !inputKey.trim()}
-            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all disabled:opacity-50"
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all disabled:opacity-50"
           >
             تفعيل وتشغيل نظام المحل الآن
           </button>

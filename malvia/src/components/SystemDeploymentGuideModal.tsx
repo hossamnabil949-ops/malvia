@@ -44,12 +44,12 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="w-full max-w-4xl bg-[#0F1422] rounded-3xl border border-amber-500/50 text-white shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+      <div className="w-full max-w-4xl bg-surface-2 rounded-3xl border border-amber-500/50 text-white shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
         
         {/* Header */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-neutral-900 via-[#161F33] to-neutral-900 border-b border-neutral-800 flex items-center justify-between">
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-neutral-900 via-surface-3 to-neutral-900 border-b border-neutral-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-amber-500/30 to-yellow-400/20 border border-amber-500/40 text-amber-400 shadow-md">
+            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-amber-500/30 to-amber-400/20 border border-amber-500/40 text-amber-400 shadow-md">
               <Download className="w-6 h-6 animate-pulse" />
             </div>
             <div>
@@ -76,7 +76,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-neutral-800 bg-[#0C101A] overflow-x-auto text-xs font-bold scrollbar-none">
+        <div className="flex border-b border-neutral-800 bg-surface-1 overflow-x-auto text-xs font-bold scrollbar-none">
           <button
             onClick={() => setActiveTab('quickstart')}
             className={`flex items-center gap-2 px-4 py-3 border-b-2 whitespace-nowrap transition-all ${
@@ -109,7 +109,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
                 : 'border-transparent text-neutral-400 hover:text-neutral-200'
             }`}
           >
-            <Smartphone className="w-4 h-4 text-sky-400" />
+            <Smartphone className="w-4 h-4 text-amber-400" />
             <span>3. تثبيت على الموبايل والتابلت</span>
           </button>
 
@@ -123,7 +123,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
                 : 'border-transparent text-neutral-400 hover:text-neutral-200'
             }`}
           >
-            <Users className="w-4 h-4 text-indigo-400" />
+            <Users className="w-4 h-4 text-amber-400" />
             <span>5. ربط عدة أجهزة ومستخدمين لنفس المحل</span>
           </button>
         </div>
@@ -134,7 +134,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
           {/* TAB 1: Quickstart & How it links */}
           {activeTab === 'quickstart' && (
             <div className="space-y-5 animate-fade-in">
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-[#1A2338] to-emerald-500/15 border border-amber-500/40 space-y-2">
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-surface-3 to-emerald-500/15 border border-amber-500/40 space-y-2">
                 <div className="flex items-center gap-2 text-amber-400 font-black text-sm">
                   <Sparkles className="w-5 h-5" />
                   <span>الربط بين السيستم والتطبيق: نظام سحابي موحد بتقنية PWA الحديثة</span>
@@ -148,7 +148,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
 
               {/* Steps to launch */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-2xl bg-[#131828] border border-neutral-800 space-y-2">
+                <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 space-y-2">
                   <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 font-mono font-black flex items-center justify-center text-sm border border-amber-500/30">
                     1
                   </div>
@@ -158,8 +158,8 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
                   </p>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-[#131828] border border-neutral-800 space-y-2">
-                  <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 font-mono font-black flex items-center justify-center text-sm border border-blue-500/30">
+                <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 space-y-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 font-mono font-black flex items-center justify-center text-sm border border-amber-500/30">
                     2
                   </div>
                   <h4 className="font-bold text-white text-xs">إرسال المفتاح للعميل بالواتساب</h4>
@@ -168,7 +168,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
                   </p>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-[#131828] border border-neutral-800 space-y-2">
+                <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 space-y-2">
                   <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 font-mono font-black flex items-center justify-center text-sm border border-emerald-500/30">
                     3
                   </div>
@@ -187,7 +187,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
                         onClose();
                         onOpenActivation();
                       }}
-                      className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-[#182033] hover:bg-[#202B45] border border-neutral-700 text-neutral-200 font-bold text-xs active:scale-95 transition-all"
+                      className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-surface-3 hover:bg-surface-4 border border-neutral-700 text-neutral-200 font-bold text-xs active:scale-95 transition-all"
                     >
                       <Key className="w-4 h-4 text-amber-400" />
                       <span> إدخال وتفعيل كود الترخيص</span>
@@ -200,7 +200,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
           {/* TAB 2: Desktop PC Installation */}
           {activeTab === 'desktop' && (
             <div className="space-y-4 animate-fade-in">
-              <div className="p-4 rounded-2xl bg-[#131B2A] border border-emerald-500/30 flex items-start gap-3">
+              <div className="p-4 rounded-2xl bg-surface-2 border border-emerald-500/30 flex items-start gap-3">
                 <Monitor className="w-6 h-6 text-emerald-400 flex-shrink-0 mt-0.5" />
                 <div className="space-y-1 text-xs">
                   <h4 className="font-bold text-white text-sm">تثبيت MALVIA على أجهزة الكمبيوتر واللابتوب (Windows & Mac)</h4>
@@ -211,7 +211,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div className="p-4 rounded-2xl bg-[#121624] border border-neutral-800 space-y-3">
+                <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 space-y-3">
                   <div className="flex items-center gap-2 font-bold text-emerald-400">
                     <CheckCircle2 className="w-4 h-4" />
                     <span>خطوات التثبيت في متصفح Google Chrome:</span>
@@ -227,8 +227,8 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
                   </ol>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-[#121624] border border-neutral-800 space-y-3">
-                  <div className="flex items-center gap-2 font-bold text-blue-400">
+                <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 space-y-3">
+                  <div className="flex items-center gap-2 font-bold text-amber-400">
                     <CheckCircle2 className="w-4 h-4" />
                     <span>خطوات التثبيت في متصفح Microsoft Edge:</span>
                   </div>
@@ -241,17 +241,17 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-[#141A28] border border-neutral-800 space-y-2 text-xs">
+              <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 space-y-2 text-xs">
                 <h4 className="font-bold text-white flex items-center gap-2">
                   <Printer className="w-4 h-4 text-amber-400" />
                   <span>دعم الأجهزة وملحقات الكاشير في المحلات والورش:</span>
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-neutral-300">
-                  <div className="flex items-center gap-2 bg-[#0E121B] p-2.5 rounded-xl border border-neutral-800">
+                  <div className="flex items-center gap-2 bg-surface-1 p-2.5 rounded-xl border border-neutral-800">
                     <Printer className="w-3.5 h-3.5 text-emerald-400" />
                     <span>طابعات الفواتير الحرارية (80mm / 58mm Thermal Printers)</span>
                   </div>
-                  <div className="flex items-center gap-2 bg-[#0E121B] p-2.5 rounded-xl border border-neutral-800">
+                  <div className="flex items-center gap-2 bg-surface-1 p-2.5 rounded-xl border border-neutral-800">
                     <Barcode className="w-3.5 h-3.5 text-amber-400" />
                     <span>قارئ الباركود اللاسلكي والـ USB للقطع والكراتين</span>
                   </div>
@@ -265,7 +265,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
                       install();
                       onClose();
                     }}
-                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 text-neutral-950 font-black text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-amber-500 hover:from-emerald-400 text-neutral-950 font-black text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
                   >
                     <Download className="w-4 h-4" />
                     <span>تثبيت برنامج سطح المكتب على هذا الجهاز الآن (بنقرة واحدة)</span>
@@ -278,8 +278,8 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
           {/* TAB 3: Mobile & Tablet Installation */}
           {activeTab === 'mobile' && (
             <div className="space-y-4 animate-fade-in">
-              <div className="p-4 rounded-2xl bg-[#131E2A] border border-sky-500/30 flex items-start gap-3">
-                <Smartphone className="w-6 h-6 text-sky-400 flex-shrink-0 mt-0.5" />
+              <div className="p-4 rounded-2xl bg-surface-2 border border-amber-500/30 flex items-start gap-3">
+                <Smartphone className="w-6 h-6 text-amber-400 flex-shrink-0 mt-0.5" />
                 <div className="space-y-1 text-xs">
                   <h4 className="font-bold text-white text-sm">تثبيت التطبيق على هواتف أندرويد وآيفون وأجهزة التابلت</h4>
                   <p className="text-neutral-300 leading-relaxed">
@@ -290,7 +290,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                 {/* Android */}
-                <div className="p-4 rounded-2xl bg-[#121624] border border-neutral-800 space-y-3">
+                <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 space-y-3">
                   <div className="flex items-center gap-2 font-bold text-amber-400">
                     <Smartphone className="w-4 h-4" />
                     <span>على هواتف أندرويد (Samsung / Xiaomi / Oppo / Huawei):</span>
@@ -305,15 +305,15 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
                 </div>
 
                 {/* iPhone / iPad */}
-                <div className="p-4 rounded-2xl bg-[#121624] border border-neutral-800 space-y-3">
-                  <div className="flex items-center gap-2 font-bold text-sky-400">
+                <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 space-y-3">
+                  <div className="flex items-center gap-2 font-bold text-amber-400">
                     <Smartphone className="w-4 h-4" />
                     <span>على هواتف iPhone وأجهزة iPad (متصفح Safari):</span>
                   </div>
                   <ol className="space-y-2 text-neutral-300 pr-5 list-decimal leading-relaxed">
                     <li>افتح رابط المنظومة في متصفح <strong>Safari</strong> حصراً.</li>
                     <li>
-                      اضغط على زر <strong>المشاركة (Share)</strong> في شريط الأدوات بالأسفل <Share2 className="w-3.5 h-3.5 inline text-sky-400 mx-1" />.
+                      اضغط على زر <strong>المشاركة (Share)</strong> في شريط الأدوات بالأسفل <Share2 className="w-3.5 h-3.5 inline text-amber-400 mx-1" />.
                     </li>
                     <li>
                       مرر القائمة لأسفل واختر <strong>"إضافة إلى الصفحة الرئيسية" (Add to Home Screen)</strong> <PlusSquare className="w-3.5 h-3.5 inline text-amber-400 mx-1" />.
@@ -329,8 +329,8 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
           {/* TAB 5: Multi-Device Sync for Same Store */}
           {activeTab === 'multidevice' && (
             <div className="space-y-4 animate-fade-in">
-              <div className="p-4 rounded-2xl bg-[#141B2E] border border-indigo-500/30 flex items-start gap-3">
-                <Users className="w-6 h-6 text-indigo-400 flex-shrink-0 mt-0.5" />
+              <div className="p-4 rounded-2xl bg-surface-2 border border-amber-500/30 flex items-start gap-3">
+                <Users className="w-6 h-6 text-amber-400 flex-shrink-0 mt-0.5" />
                 <div className="space-y-1 text-xs">
                   <h4 className="font-bold text-white text-sm">ربط عدة أجهزة ومستخدمين داخل نفس المحل أو الشركة</h4>
                   <p className="text-neutral-300 leading-relaxed">
@@ -340,7 +340,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 text-xs">
-                <div className="p-4 rounded-2xl bg-[#121624] border border-neutral-800 space-y-2">
+                <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 space-y-2">
                   <div className="flex items-center gap-2 text-amber-400 font-bold">
                     <Monitor className="w-4 h-4" />
                     <span>جهاز الكاشير الرئيسي</span>
@@ -350,7 +350,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
                   </p>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-[#121624] border border-neutral-800 space-y-2">
+                <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 space-y-2">
                   <div className="flex items-center gap-2 text-emerald-400 font-bold">
                     <Laptop className="w-4 h-4" />
                     <span>تابلت أمين المستودع</span>
@@ -360,8 +360,8 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
                   </p>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-[#121624] border border-neutral-800 space-y-2">
-                  <div className="flex items-center gap-2 text-sky-400 font-bold">
+                <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 space-y-2">
+                  <div className="flex items-center gap-2 text-amber-400 font-bold">
                     <Smartphone className="w-4 h-4" />
                     <span>موبايل صاحب المحل</span>
                   </div>
@@ -371,7 +371,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-[#141A28] border border-neutral-800 space-y-2 text-xs">
+              <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 space-y-2 text-xs">
                 <h4 className="font-bold text-white flex items-center gap-2">
                   <Lock className="w-4 h-4 text-amber-400" />
                   <span>توزيع الصلاحيات على موظفي المحل (من  الإعدادات):</span>
@@ -385,7 +385,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-[#0C101A] border-t border-neutral-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        <div className="p-4 bg-surface-1 border-t border-neutral-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
           <div className="text-neutral-400 flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-amber-400" />
             <span>نظام MALVIA Cloud ERP - الإصدار المؤسسي متعدد الفروع والمحلات</span>

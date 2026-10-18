@@ -240,10 +240,10 @@ ${window.location.origin}`;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="w-full max-w-5xl bg-[#0F1422] rounded-3xl border border-amber-500/50 text-white shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+      <div className="w-full max-w-5xl bg-surface-2 rounded-3xl border border-amber-500/50 text-white shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
         
         {/* Header */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-neutral-900 via-[#182033] to-neutral-900 border-b border-neutral-800 flex items-center justify-between">
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-neutral-900 via-surface-3 to-neutral-900 border-b border-neutral-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400">
               <ShieldCheck className="w-6 h-6 animate-pulse" />
@@ -294,7 +294,7 @@ ${window.location.origin}`;
                   setPinError(false);
                 }}
                 placeholder="أدخل رمز المالك أو أنشئه أول مرة (12 خانة على الأقل)"
-                className="w-full h-12 text-center text-lg tracking-widest font-mono rounded-2xl bg-[#141A28] border border-neutral-700 text-amber-400 placeholder:text-neutral-600 focus:outline-none focus:border-amber-500"
+                className="w-full h-12 text-center text-lg tracking-widest font-mono rounded-2xl bg-surface-2 border border-neutral-700 text-amber-400 placeholder:text-neutral-600 focus:outline-none focus:border-amber-500"
               />
 
               {pinError && (
@@ -306,7 +306,7 @@ ${window.location.origin}`;
 
               <button
                 type="submit"
-                className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
               >
                 تأكيد الدخول للوحة المالك
               </button>
@@ -317,16 +317,16 @@ ${window.location.origin}`;
         ) : (
           <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-              <div className="p-4 rounded-3xl bg-[#131828] border border-neutral-800 space-y-1">
+              <div className="p-4 rounded-3xl bg-surface-2 border border-neutral-800 space-y-1">
                 <span className="text-xs text-neutral-400 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-blue-400" />
+                  <Building2 className="w-3.5 h-3.5 text-amber-400" />
                   <span>إجمالي المحلات المشتركة</span>
                 </span>
                 <span className="text-2xl font-black font-mono text-white block">{stats.total} محلات</span>
                 <span className="text-[10px] text-neutral-500">مسجلة على سحابة MALVIA</span>
               </div>
 
-              <div className="p-4 rounded-3xl bg-[#12241E] border border-emerald-500/30 space-y-1">
+              <div className="p-4 rounded-3xl bg-emerald-950/40 border border-emerald-500/30 space-y-1">
                 <span className="text-xs text-emerald-400 flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   <span>التراخيص النشطة السارية</span>
@@ -335,7 +335,7 @@ ${window.location.origin}`;
                 <span className="text-[10px] text-emerald-500/70">تعمل بدون أي انقطاع</span>
               </div>
 
-              <div className="p-4 rounded-3xl bg-[#261E14] border border-amber-500/30 space-y-1">
+              <div className="p-4 rounded-3xl bg-surface-2 border border-amber-500/30 space-y-1">
                 <span className="text-xs text-amber-400 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-amber-400" />
                   <span>أوشكت على الانتهاء (15 يوم)</span>
@@ -344,7 +344,7 @@ ${window.location.origin}`;
                 <span className="text-[10px] text-amber-500/70">تحتاج تواصل للتجديد</span>
               </div>
 
-              <div className="p-4 rounded-3xl bg-[#221419] border border-rose-500/30 space-y-1">
+              <div className="p-4 rounded-3xl bg-surface-2 border border-rose-500/30 space-y-1">
                 <span className="text-xs text-rose-400 flex items-center gap-1.5">
                   <XCircle className="w-3.5 h-3.5 text-rose-400" />
                   <span>محلات معلقة مؤقتاً</span>
@@ -354,7 +354,7 @@ ${window.location.origin}`;
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#131828] p-3.5 rounded-2xl border border-neutral-800">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-surface-2 p-3.5 rounded-2xl border border-neutral-800">
               <div className="flex items-center gap-2 flex-1">
                 <div className="relative flex-1">
                   <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500" />
@@ -363,14 +363,14 @@ ${window.location.origin}`;
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="بحث باسم المحل، المالك، مفتاح التفعيل، الهاتف..."
-                    className="w-full h-10 pr-9 pl-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-xs text-white placeholder:text-neutral-500 focus:outline-none focus:border-amber-500"
+                    className="w-full h-10 pr-9 pl-3 rounded-xl bg-surface-1 border border-neutral-700 text-xs text-white placeholder:text-neutral-500 focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as any)}
-                  className="h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-xs text-neutral-300 font-bold focus:outline-none focus:border-amber-500"
+                  className="h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-xs text-neutral-300 font-bold focus:outline-none focus:border-amber-500"
                 >
                   <option value="all">كل الحالات</option>
                   <option value="نشط">نشط فقط</option>
@@ -391,7 +391,7 @@ ${window.location.origin}`;
 
                 <button
                   onClick={() => setShowGenerateModal(true)}
-                  className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-md shadow-amber-500/20 active:scale-95 transition-all"
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-md shadow-amber-500/20 active:scale-95 transition-all"
                 >
                   <Plus className="w-4 h-4" />
                   <span>إصدار وتفعيل ترخيص لمحل جديد</span>
@@ -399,9 +399,9 @@ ${window.location.origin}`;
               </div>
             </div>
 
-            <div className="rounded-2xl border border-neutral-800 overflow-hidden bg-[#121624]">
+            <div className="rounded-2xl border border-neutral-800 overflow-hidden bg-surface-2">
               <table className="w-full text-right text-xs text-neutral-300">
-                <thead className="bg-[#0C101A] text-neutral-400 text-[11px] border-b border-neutral-800">
+                <thead className="bg-surface-1 text-neutral-400 text-[11px] border-b border-neutral-800">
                   <tr>
                     <th className="p-3.5">اسم المحل / الشركة</th>
                     <th className="p-3.5">مفتاح التفعيل (License Key)</th>
@@ -423,7 +423,7 @@ ${window.location.origin}`;
                     return (
                       <tr 
                         key={lic.id} 
-                        className={`transition-colors hover:bg-[#181F30] ${isCurrent ? 'bg-amber-500/5 border-l-4 border-l-amber-500' : ''}`}
+                        className={`transition-colors hover:bg-surface-3 ${isCurrent ? 'bg-amber-500/5 border-l-4 border-l-amber-500' : ''}`}
                       >
                         <td className="p-3.5 font-bold text-white">
                           <div className="flex items-center gap-1.5">
@@ -515,7 +515,7 @@ ${window.location.origin}`;
 
                             <button
                               onClick={() => handleExtendSubscription(lic.id, 12)}
-                              className="px-2 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300 text-[10px] font-bold"
+                              className="px-2 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[10px] font-bold"
                               title="تمديد الاشتراك لمدة سنة إضافية"
                             >
                               +سنة
@@ -542,7 +542,7 @@ ${window.location.origin}`;
               </table>
             </div>
 
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-[#141E30] to-[#121624] border border-blue-500/30 flex items-start gap-3">
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-surface-3 to-surface-2 border border-amber-500/30 flex items-start gap-3">
               <Zap className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
               <div className="text-xs space-y-1 text-neutral-300">
                 <span className="font-bold text-white block">تحكم كامل ومطلق لك كصاحب النظام:</span>
@@ -566,7 +566,7 @@ ${window.location.origin}`;
             onClick={() => setShowGenerateModal(false)}
           >
             <div 
-              className="w-full max-w-xl bg-[#121624] rounded-3xl border border-amber-500/40 p-6 text-white shadow-2xl space-y-4"
+              className="w-full max-w-xl bg-surface-2 rounded-3xl border border-amber-500/40 p-6 text-white shadow-2xl space-y-4"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -589,7 +589,7 @@ ${window.location.origin}`;
                       value={newCompanyName}
                       onChange={(e) => setNewCompanyName(e.target.value)}
                       placeholder="مثلاً: شركة الفرسان لقطع الغيار"
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white focus:outline-none focus:border-amber-500"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white focus:outline-none focus:border-amber-500"
                     />
                   </div>
 
@@ -601,7 +601,7 @@ ${window.location.origin}`;
                       value={newOwnerName}
                       onChange={(e) => setNewOwnerName(e.target.value)}
                       placeholder="أ. محمود الشناوي"
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white focus:outline-none focus:border-amber-500"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white focus:outline-none focus:border-amber-500"
                     />
                   </div>
                 </div>
@@ -615,7 +615,7 @@ ${window.location.origin}`;
                       value={newPhone}
                       onChange={(e) => setNewPhone(e.target.value)}
                       placeholder="01012345678"
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono focus:outline-none focus:border-amber-500"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono focus:outline-none focus:border-amber-500"
                     />
                   </div>
 
@@ -626,7 +626,7 @@ ${window.location.origin}`;
                       value={newCity}
                       onChange={(e) => setNewCity(e.target.value)}
                       placeholder="القاهرة - مدينة نصر"
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white focus:outline-none focus:border-amber-500"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white focus:outline-none focus:border-amber-500"
                     />
                   </div>
                 </div>
@@ -637,7 +637,7 @@ ${window.location.origin}`;
                     <select
                       value={newPlan}
                       onChange={(e) => setNewPlan(e.target.value as any)}
-                      className="w-full h-10 px-2 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-bold"
+                      className="w-full h-10 px-2 rounded-xl bg-surface-1 border border-neutral-700 text-white font-bold"
                     >
                       <option value="باقة سنوية PRO">باقة سنوية PRO</option>
                       <option value="باقة VIP شاملة الفروع">باقة VIP شاملة الفروع</option>
@@ -652,7 +652,7 @@ ${window.location.origin}`;
                     <select
                       value={durationMonths}
                       onChange={(e) => setDurationMonths(Number(e.target.value))}
-                      className="w-full h-10 px-2 rounded-xl bg-[#0E121B] border border-neutral-700 text-amber-400 font-bold"
+                      className="w-full h-10 px-2 rounded-xl bg-surface-1 border border-neutral-700 text-amber-400 font-bold"
                     >
                       <option value={1}>شهر واحد</option>
                       <option value={3}>3 شهور</option>
@@ -670,12 +670,12 @@ ${window.location.origin}`;
                       max="100"
                       value={newMaxEmployees}
                       onChange={(e) => setNewMaxEmployees(Number(e.target.value))}
-                      className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono"
+                      className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
                     />
                   </div>
                 </div>
 
-                <div className="p-3 rounded-2xl bg-[#0E121B] border border-neutral-800 space-y-2">
+                <div className="p-3 rounded-2xl bg-surface-1 border border-neutral-800 space-y-2">
                   <span className="text-[11px] font-bold text-amber-400 block">الصلاحيات والميزات المفتوحة للمحل:</span>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                     <label className="flex items-center gap-1.5 cursor-pointer">
@@ -760,13 +760,13 @@ ${window.location.origin}`;
                     value={newNotes}
                     onChange={(e) => setNewNotes(e.target.value)}
                     placeholder="مثلاً: تم استلام دفعة سنوية 4500 جنيه عبر إنستاباي"
-                    className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-lg mt-2 active:scale-95 transition-all"
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-lg mt-2 active:scale-95 transition-all"
                 >
                   توليد كود التفعيل واعتماد الترخيص
                 </button>
@@ -782,7 +782,7 @@ ${window.location.origin}`;
             onClick={() => setShowChangePinModal(false)}
           >
             <div 
-              className="w-full max-w-md bg-[#121624] rounded-3xl border border-amber-500/40 p-6 text-white shadow-2xl space-y-4"
+              className="w-full max-w-md bg-surface-2 rounded-3xl border border-amber-500/40 p-6 text-white shadow-2xl space-y-4"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -821,7 +821,7 @@ ${window.location.origin}`;
                       placeholder="أدخل رمز مرور جديد قوي (أرقام أو حروف)"
                       value={newMasterPin}
                       onChange={(e) => setNewMasterPin(e.target.value)}
-                      className="w-full h-11 px-3.5 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono text-center tracking-widest text-sm focus:outline-none focus:border-amber-500"
+                      className="w-full h-11 px-3.5 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono text-center tracking-widest text-sm focus:outline-none focus:border-amber-500"
                     />
                     <p className="text-[10px] text-neutral-400 mt-1">
                       هذا الرمز خاص بك وحدك كصاحب النظام ولا يظهر لأي عميل أو موظف.

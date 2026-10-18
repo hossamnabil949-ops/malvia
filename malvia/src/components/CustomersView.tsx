@@ -111,7 +111,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         : '0';
 
       return (
-        <div className="p-3 rounded-2xl bg-[#0E121B] border border-neutral-700 shadow-2xl text-xs space-y-1.5 min-w-[200px]">
+        <div className="p-3 rounded-2xl bg-surface-1 border border-neutral-700 shadow-2xl text-xs space-y-1.5 min-w-[200px]">
           <div className="flex items-center gap-1.5 border-b border-neutral-800 pb-1">
             <span className="w-5 h-5 rounded-full bg-amber-500 text-neutral-950 font-bold flex items-center justify-center text-[10px]">
               #{data.rank}
@@ -144,7 +144,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         : '0';
 
       return (
-        <div className="p-2.5 rounded-xl bg-[#0E121B] border border-neutral-700 shadow-xl text-xs space-y-1">
+        <div className="p-2.5 rounded-xl bg-surface-1 border border-neutral-700 shadow-xl text-xs space-y-1">
           <p className="font-bold text-white">{data.name}</p>
           <div className="flex items-center gap-2 text-amber-400 font-mono">
             <span>{Number(data.value).toLocaleString()} ج.م</span>
@@ -158,7 +158,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
   return (
     <div className="space-y-6 pb-12">
-      <div className="p-5 rounded-3xl bg-[#141926] border border-neutral-800 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-5 rounded-3xl bg-surface-2 border border-neutral-800 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase mb-1">
             <Wrench className="w-4 h-4" />
@@ -181,7 +181,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         </button>
       </div>
 
-      <div className="p-6 rounded-3xl bg-gradient-to-r from-[#171E2E] via-[#141A28] to-[#121622] border border-neutral-800 shadow-xl space-y-5">
+      <div className="p-6 rounded-3xl bg-gradient-to-r from-surface-2 via-surface-2 to-surface-2 border border-neutral-800 shadow-xl space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-neutral-800/80">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
@@ -200,7 +200,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto bg-[#0E121B] px-3 py-1.5 rounded-xl border border-neutral-800 text-xs">
+          <div className="flex items-center gap-2 self-start sm:self-auto bg-surface-1 px-3 py-1.5 rounded-xl border border-neutral-800 text-xs">
             <span className="text-neutral-400">إجمالي مشتريات الخمسة الأوائل:</span>
             <span className="font-mono font-bold text-amber-400">
               {totalTop5MonthlySpend.toLocaleString()} ج.م
@@ -209,7 +209,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
-          <div className="lg:col-span-7 bg-[#0E121B] p-4 rounded-2xl border border-neutral-800/80 space-y-3">
+          <div className="lg:col-span-7 bg-surface-1 p-4 rounded-2xl border border-neutral-800/80 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs font-bold text-neutral-200">
                 <BarChart3 className="w-4 h-4 text-amber-400" />
@@ -254,7 +254,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             </div>
           </div>
 
-          <div className="lg:col-span-5 bg-[#0E121B] p-4 rounded-2xl border border-neutral-800/80 space-y-3 flex flex-col justify-between">
+          <div className="lg:col-span-5 bg-surface-1 p-4 rounded-2xl border border-neutral-800/80 space-y-3 flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs font-bold text-neutral-200">
                 <PieIcon className="w-4 h-4 text-emerald-400" />
@@ -297,8 +297,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 key={cust.id}
                 className={`p-3.5 rounded-2xl border flex flex-col justify-between transition-all ${
                   isFirst
-                    ? 'bg-gradient-to-b from-[#2A2111] to-[#141926] border-amber-500/60 shadow-lg shadow-amber-500/10'
-                    : 'bg-[#0E121B] border-neutral-800 hover:border-neutral-700'
+                    ? 'bg-gradient-to-b from-surface-2 to-surface-2 border-amber-500/60 shadow-lg shadow-amber-500/10'
+                    : 'bg-surface-1 border-neutral-800 hover:border-neutral-700'
                 }`}
               >
                 <div>
@@ -310,7 +310,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                           : isSecond
                           ? 'bg-neutral-300 text-neutral-950'
                           : isThird
-                          ? 'bg-amber-700 text-white'
+                          ? 'bg-amber-700 text-[#ffffff]'
                           : 'bg-neutral-800 text-neutral-400'
                       }`}
                     >
@@ -358,7 +358,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           {customers.map((c) => (
             <div
               key={c.id}
-              className="p-5 rounded-3xl bg-[#141926] border border-neutral-800 flex flex-col justify-between shadow-md space-y-4 hover:border-neutral-700 transition-all"
+              className="p-5 rounded-3xl bg-surface-2 border border-neutral-800 flex flex-col justify-between shadow-md space-y-4 hover:border-neutral-700 transition-all"
             >
               <div>
                 <div className="flex items-start justify-between">
@@ -379,7 +379,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 </div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-[#0E121B] border border-neutral-800/80 space-y-1.5 text-xs">
+              <div className="p-3 rounded-2xl bg-surface-1 border border-neutral-800/80 space-y-1.5 text-xs">
                 <div className="flex justify-between">
                   <span className="text-neutral-400">مشتريات هذا الشهر:</span>
                   <span className="font-mono font-bold text-amber-400">
@@ -426,7 +426,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           onClick={() => setSettleModalCustomer(null)}
         >
           <div 
-            className="w-full max-w-sm rounded-3xl bg-[#141926] border border-neutral-800 p-5 text-white shadow-2xl"
+            className="w-full max-w-sm rounded-3xl bg-surface-2 border border-neutral-800 p-5 text-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -457,7 +457,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   max={settleModalCustomer.balance}
                   value={settleAmount}
                   onChange={(e) => setSettleAmount(Number(e.target.value))}
-                  className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono text-sm"
+                  className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono text-sm"
                 />
               </div>
             </div>
@@ -478,7 +478,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           onClick={() => setShowAddModal(false)}
         >
           <div 
-            className="w-full max-w-md rounded-3xl bg-[#141926] border border-neutral-800 p-6 text-white shadow-2xl"
+            className="w-full max-w-md rounded-3xl bg-surface-2 border border-neutral-800 p-6 text-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -500,7 +500,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="مثال: ورشة الأمانة لميكانيكا السيارات"
-                  className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                  className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                 />
               </div>
 
@@ -512,7 +512,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="010XXXXXXXX"
-                  className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white font-mono"
+                  className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
                 />
               </div>
 
@@ -521,7 +521,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 <select
                   value={type}
                   onChange={(e) => setType(e.target.value as any)}
-                  className="w-full h-10 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-white"
+                  className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                 >
                   <option value="ورشة فنية">ورشة فنية (صيانة وميكانيكا)</option>
                   <option value="عميل تجزئة">عميل تجزئة (أفراد)</option>
