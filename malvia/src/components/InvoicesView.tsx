@@ -1,0 +1,698 @@
+import React, { useState, useMemo } from 'react';
+import { 
+  Search, 
+  Receipt, 
+  Printer, 
+  Eye, 
+  Calendar, 
+  DollarSign, 
+  RotateCcw, 
+  CheckCircle2, 
+  AlertCircle, 
+  X, 
+  Banknote, 
+  Zap, 
+  Smartphone, 
+  Clock, 
+  FileSpreadsheet,
+  ArrowDownLeft,
+  Undo2,
+  Trash2,
+  Edit3
+} from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { Invoice, SalesReturn, SalesReturnItem, PaymentMethod } from '../types/autoParts';
+
+interface InvoicesViewProps {
+  invoices: Invoice[];
+  salesReturns: SalesReturn[];
+  onOpenInvoiceModal: (invoice: Invoice) => void;
+  onSalesReturn: (returnData: SalesReturn) => void;
+  onDeleteSalesReturn?: (returnId: string) => void;
+}
+
+export const InvoicesView: React.FC<InvoicesViewProps> = ({
+  invoices,
+  salesReturns,
+  onOpenInvoiceModal,
+  onSalesReturn,
+  onDeleteSalesReturn,
+}) => {
+  const [currentView, setCurrentView] = useState<'invoices' | 'returns'>('invoices');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Sales Return Modal State
+  const [returnInvoice, setReturnInvoice] = useState<Invoice | null>(null);
+  const [returnItems, setReturnItems] = useState<{ [key: string]: number }>({});
+  const [refundMethod, setRefundMethod] = useState<'نقدي (خصم من الخزنة)' | 'خصم من رصيد العميل الآجل' | 'إنستاباي / محفظة'>('نقدي (خصم من الخزنة)');
+  const [returnReason, setReturnReason] = useState('عيب في الصنف / عدم مطابقة لموديل السيارة');
+  const [returnNotes, setReturnNotes] = useState('');
+  const [isCorrectedReturn, setIsCorrectedReturn] = useState(false);
+
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter((inv) => {
+      if (paymentFilter !== 'all' && inv.paymentMethod !== paymentFilter) return false;
+      if (statusFilter !== 'all') {
+        const invStatus = inv.status || 'مسددة';
+        if (statusFilter !== invStatus) return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        return (
+          inv.invoiceNumber.toLowerCase().includes(q) ||
+          inv.customerName.toLowerCase().includes(q) ||
+          (inv.carDetails && inv.carDetails.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+  }, [invoices, paymentFilter, statusFilter, searchQuery]);
+
+  const filteredReturns = useMemo(() => {
+    return salesReturns.filter((ret) => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        return (
+          ret.returnNumber.toLowerCase().includes(q) ||
+          ret.invoiceNumber.toLowerCase().includes(q) ||
+          ret.customerName.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [salesReturns, searchQuery]);
+
+  const totalSalesRevenue = useMemo(() => invoices.reduce((acc, inv) => acc + inv.grandTotal, 0), [invoices]);
+  const totalRefundsFromTreasury = useMemo(() => {
+    return salesReturns
+      .filter(r => r.treasuryDeducted || r.refundMethod === 'نقدي (خصم من الخزنة)')
+      .reduce((acc, r) => acc + r.totalRefundAmount, 0);
+  }, [salesReturns]);
+
+  const handleOpenReturnModal = (inv: Invoice, isCorrection = false) => {
+    setReturnInvoice(inv);
+    setIsCorrectedReturn(isCorrection);
+    const initialQtys: { [key: string]: number } = {};
+    inv.items.forEach(it => {
+      initialQtys[it.partNumber] = 0;
+    });
+    setReturnItems(initialQtys);
+    if (inv.paymentMethod === 'آجل (شكك / حساب ورشة)') {
+      setRefundMethod('خصم من رصيد العميل الآجل');
+    } else {
+      setRefundMethod('نقدي (خصم من الخزنة)');
+    }
+  };
+
+  const calculatedReturnTotal = useMemo(() => {
+    if (!returnInvoice) return 0;
+    return returnInvoice.items.reduce((acc, it) => {
+      const qty = returnItems[it.partNumber] || 0;
+      return acc + (qty * it.unitPrice);
+    }, 0);
+  }, [returnInvoice, returnItems]);
+
+  const handleConfirmReturn = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!returnInvoice || calculatedReturnTotal <= 0) return;
+
+    const itemsToReturn: SalesReturnItem[] = returnInvoice.items
+      .filter(it => (returnItems[it.partNumber] || 0) > 0)
+      .map(it => ({
+        partNumber: it.partNumber,
+        partName: it.partName,
+        quantity: returnItems[it.partNumber],
+        unitPrice: it.unitPrice,
+        total: returnItems[it.partNumber] * it.unitPrice,
+        reason: returnReason,
+      }));
+
+    if (itemsToReturn.length === 0) return;
+
+    const returnRecord: SalesReturn = {
+      id: `ret-${Date.now()}`,
+      returnNumber: `RET-SLS-${Math.floor(1000 + Math.random() * 9000)}`,
+      invoiceId: returnInvoice.id,
+      invoiceNumber: returnInvoice.invoiceNumber,
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+      customerName: returnInvoice.customerName,
+      items: itemsToReturn,
+      totalRefundAmount: calculatedReturnTotal,
+      refundMethod,
+      treasuryDeducted: refundMethod === 'نقدي (خصم من الخزنة)' || refundMethod === 'إنستاباي / محفظة',
+      notes: `${returnReason} ${returnNotes ? ` - ${returnNotes}` : ''}${isCorrectedReturn ? ' [مرتجع مصحح]' : ''}`,
+      recordedBy: 'كاشير المحل',
+      isCorrected: isCorrectedReturn,
+    };
+
+    onSalesReturn(returnRecord);
+    setReturnInvoice(null);
+  };
+
+  const handleExportInvoicesExcel = () => {
+    const data = invoices.map((inv, idx) => ({
+      'م': idx + 1,
+      'رقم الفاتورة': inv.invoiceNumber,
+      'التاريخ': inv.date,
+      'الوقت': inv.time,
+      'اسم الزبون / الورشة': inv.customerName,
+      'نوع العميل': inv.customerType,
+      'بيانات السيارة': inv.carDetails || '-',
+      'عدد الأصناف': inv.items.length,
+      'المجموع الفرعي (ج.م)': inv.subtotal,
+      'ضريبة القيمة المضافة': inv.tax,
+      'الخصم': inv.discount,
+      'الإجمالي النهائي المستحق': inv.grandTotal,
+      'طريقة السداد': inv.paymentMethod,
+      'حالة الفاتورة': inv.status || 'مسددة',
+      'إجمالي المرتجع (ج.م)': inv.returnedAmount || 0,
+      'الكاشير': inv.cashierName
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'فواتير المبيعات');
+    XLSX.writeFile(wb, `MALVIA_Sales_Invoices_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  return (
+    <div className="space-y-5 pb-12">
+      <div className="p-5 rounded-3xl bg-[#141926] border border-neutral-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase mb-1">
+            <Receipt className="w-4 h-4" />
+            <span>إدارة المبيعات والمرتجعات النقدية</span>
+          </div>
+          <h2 className="text-xl font-black text-white">فواتير البيع والمرتجعات المصححة وحذفها</h2>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-400 mt-1">
+            <span>عدد الفواتير: <strong className="text-white font-mono">{invoices.length}</strong></span>
+            <span>·</span>
+            <span>إجمالي المبيعات: <strong className="text-emerald-400 font-mono">{totalSalesRevenue.toLocaleString()} ج.م</strong></span>
+            <span>·</span>
+            <span>المرتجعات المصروفة من الخزنة: <strong className="text-rose-400 font-mono">{totalRefundsFromTreasury.toLocaleString()} ج.م</strong></span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="p-1 rounded-2xl bg-[#0E121B] border border-neutral-700 flex items-center gap-1">
+            <button
+              onClick={() => setCurrentView('invoices')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                currentView === 'invoices'
+                  ? 'bg-amber-500 text-neutral-950 font-black shadow-sm'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              فواتير المبيعات ({invoices.length})
+            </button>
+            <button
+              onClick={() => setCurrentView('returns')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                currentView === 'returns'
+                  ? 'bg-rose-500 text-white font-black shadow-sm'
+                  : 'text-rose-400 hover:text-rose-300'
+              }`}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>سجل المرتجعات المصححة ({salesReturns.length})</span>
+            </button>
+          </div>
+
+          <button
+            onClick={handleExportInvoicesExcel}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 hover:border-emerald-500 text-neutral-200 hover:text-emerald-400 text-xs font-bold transition-all"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            <span className="hidden sm:inline">تصدير إكسيل</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="p-4 rounded-2xl bg-[#141926] border border-neutral-800 flex flex-col sm:flex-row items-center gap-3">
+        <div className="relative flex-grow w-full">
+          <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={currentView === 'invoices' 
+              ? "ابحث برقم الفاتورة، اسم الزبون، الورشة، أو بيانات السيارة..." 
+              : "ابحث برقم إذن المرتجع، رقم الفاتورة، أو اسم الزبون..."}
+            className="w-full h-11 pr-10 pl-4 rounded-xl bg-[#0E121B] border border-neutral-700 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400"
+          />
+        </div>
+
+        {currentView === 'invoices' && (
+          <>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="bg-[#0E121B] border border-neutral-700 text-neutral-200 text-xs rounded-xl px-3 h-11 focus:outline-none focus:border-amber-400 w-full sm:w-auto"
+            >
+              <option value="all">كافة الحالات</option>
+              <option value="مسددة">مسددة بالكامل</option>
+              <option value="مرتجع جزئي">مرتجع جزئي</option>
+              <option value="مرتجع كلي">مرتجع بالكامل</option>
+            </select>
+
+            <select
+              value={paymentFilter}
+              onChange={(e) => setPaymentFilter(e.target.value)}
+              className="bg-[#0E121B] border border-neutral-700 text-neutral-200 text-xs rounded-xl px-3 h-11 focus:outline-none focus:border-amber-400 w-full sm:w-auto"
+            >
+              <option value="all">كافة طرق الدفع</option>
+              <option value="كاش (نقدي)">كاش (نقدي)</option>
+              <option value="إنستاباي / InstaPay">إنستاباي InstaPay</option>
+              <option value="فودافون كاش ومحافظ إلكترونية">فودافون كاش ومحافظ</option>
+              <option value="آجل (شكك / حساب ورشة)">شكك / آجل ورشة</option>
+              <option value="فيزا / بطاقة بنكية">فيزا وبطاقات</option>
+            </select>
+          </>
+        )}
+      </div>
+
+      {currentView === 'invoices' && (
+        <div className="rounded-3xl bg-[#141926] border border-neutral-800 overflow-hidden shadow-xl">
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs text-neutral-300">
+              <thead className="bg-[#0E121B] text-neutral-400 text-[11px] uppercase border-b border-neutral-800">
+                <tr>
+                  <th className="p-3.5">رقم الفاتورة</th>
+                  <th className="p-3.5">التاريخ والوقت</th>
+                  <th className="p-3.5">الزبون / الورشة</th>
+                  <th className="p-3.5">السيارة</th>
+                  <th className="p-3.5">الأصناف</th>
+                  <th className="p-3.5">طريقة السداد</th>
+                  <th className="p-3.5">الحالة</th>
+                  <th className="p-3.5">الإجمالي المستحق</th>
+                  <th className="p-3.5 text-center">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-800/80">
+                {filteredInvoices.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="p-8 text-center text-neutral-500">
+                      لا توجد فواتير مطابقة
+                    </td>
+                  </tr>
+                ) : (
+                  filteredInvoices.map((inv) => {
+                    const isFullyReturned = inv.status === 'مرتجع كلي';
+                    return (
+                      <tr key={inv.id} className="hover:bg-[#1A2234] transition-colors">
+                        <td className="p-3.5 font-mono font-bold text-white">
+                          {inv.invoiceNumber}
+                        </td>
+                        <td className="p-3.5 font-mono text-neutral-400">
+                          {inv.date} · {inv.time}
+                        </td>
+                        <td className="p-3.5 font-bold text-neutral-100">
+                          {inv.customerName}
+                          <span className="text-[10px] text-neutral-400 block font-normal">
+                            ({inv.customerType})
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-neutral-400">
+                          {inv.carDetails || '—'}
+                        </td>
+                        <td className="p-3.5 font-mono">
+                          {inv.items.length} أصناف
+                        </td>
+                        <td className="p-3.5">
+                          <span className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-semibold text-[11px]">
+                            {inv.paymentMethod}
+                          </span>
+                        </td>
+                        <td className="p-3.5">
+                          {inv.status === 'مرتجع كلي' ? (
+                            <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 font-bold text-[10px] border border-rose-500/30">
+                              مرتجع بالكامل
+                            </span>
+                          ) : inv.status === 'مرتجع جزئي' ? (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold text-[10px] border border-amber-500/30">
+                              مرتجع جزئي ({inv.returnedAmount?.toLocaleString()} ج.م)
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px]">
+                              مسددة
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3.5 font-mono font-black text-emerald-400 text-sm">
+                          {inv.grandTotal.toFixed(2)} ج.م
+                        </td>
+                        <td className="p-3.5 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {!isFullyReturned && (
+                              <button
+                                onClick={() => handleOpenReturnModal(inv, false)}
+                                className="px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition-all text-xs font-bold flex items-center gap-1"
+                                title="إجراء مرتجع مبيعات وخصم المبلغ من الخزينة"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+                                <span>مرتجع</span>
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => onOpenInvoiceModal(inv)}
+                              className="p-1.5 rounded-lg bg-neutral-800 hover:bg-amber-500 hover:text-neutral-950 text-neutral-200 transition-colors"
+                              title="طباعة / معاينة الفاتورة"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {currentView === 'returns' && (
+        <div className="bg-[#141926] border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
+          <div className="p-4 bg-rose-950/20 border-b border-rose-500/20 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <RotateCcw className="w-5 h-5 text-rose-400" />
+              <div>
+                <h3 className="text-sm font-bold text-white">سجل المرتجعات المصححة وإمكانية حذفها (Sales Returns Management)</h3>
+                <p className="text-[11px] text-neutral-400">
+                  كافة أذونات المرتجعات مع إمكانية حذف المرتجع ورد المبلغ للخزينة وإعادة خصم الكمية تلقائياً
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-[11px] text-neutral-400 block">إجمالي مبالغ المرتجعات</span>
+              <span className="text-lg font-black text-rose-400 font-mono">
+                {salesReturns.reduce((sum, r) => sum + r.totalRefundAmount, 0).toLocaleString()} ج.م
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs text-neutral-300">
+              <thead className="bg-[#0E121B] text-neutral-400 text-[11px] uppercase border-b border-neutral-800">
+                <tr>
+                  <th className="p-3.5">رقم إذن المرتجع</th>
+                  <th className="p-3.5">الفاتورة الأصلية</th>
+                  <th className="p-3.5">التاريخ والوقت</th>
+                  <th className="p-3.5">اسم الزبون / الورشة</th>
+                  <th className="p-3.5">الأصناف المرتجعة</th>
+                  <th className="p-3.5">طريقة الصرف</th>
+                  <th className="p-3.5">المبلغ المصروف</th>
+                  <th className="p-3.5">الحالة</th>
+                  <th className="p-3.5 text-center">حذف المرتجع</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-800/80">
+                {filteredReturns.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="p-8 text-center text-neutral-500">
+                      لا توجد أذونات مرتجعات مبيعات مسجلة
+                    </td>
+                  </tr>
+                ) : (
+                  filteredReturns.map((ret) => (
+                    <tr key={ret.id} className="hover:bg-[#1A2234] transition-colors">
+                      <td className="p-3.5 font-mono font-bold text-rose-400">
+                        {ret.returnNumber}
+                      </td>
+                      <td className="p-3.5 font-mono text-white">
+                        {ret.invoiceNumber}
+                      </td>
+                      <td className="p-3.5 font-mono text-neutral-400">
+                        {ret.date} · {ret.time}
+                      </td>
+                      <td className="p-3.5 font-bold text-neutral-100">
+                        {ret.customerName}
+                      </td>
+                      <td className="p-3.5">
+                        <div className="space-y-0.5">
+                          {ret.items.map((it, idx) => (
+                            <div key={idx} className="text-[11px] text-neutral-200">
+                              {it.quantity} × {it.partName} ({it.unitPrice} ج.م)
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="p-3.5">
+                        <span className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-semibold text-[11px]">
+                          {ret.refundMethod}
+                        </span>
+                      </td>
+                      <td className="p-3.5 font-mono font-black text-rose-400 text-sm">
+                        -{ret.totalRefundAmount.toFixed(2)} ج.م
+                      </td>
+                      <td className="p-3.5">
+                        {ret.isCorrected ? (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                            مرتجع مصحح ✓
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-300 text-[10px]">
+                            أصلي
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3.5 text-center">
+                        {onDeleteSalesReturn && (
+                          <button
+                            onClick={() => onDeleteSalesReturn(ret.id)}
+                            className="p-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-400 transition-colors"
+                            title="حذف هذا المرتجع وإعادة المبلغ للخزينة والكمية للمخزن"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* SALES RETURN MODAL */}
+      {returnInvoice && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setReturnInvoice(null)}
+        >
+          <div 
+            className="w-full max-w-2xl bg-[#141926] text-white rounded-3xl p-6 shadow-2xl border border-neutral-800 space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">
+                    {isCorrectedReturn ? 'تسجيل مرتجع مبيعات مصحح' : 'إجراء مرتجع مبيعات (رد بضاعة)'}
+                  </h3>
+                  <p className="text-xs text-neutral-400">
+                    فاتورة رقم: <span className="font-mono text-amber-400 font-bold">{returnInvoice.invoiceNumber}</span> · الزبون: <span className="text-white font-bold">{returnInvoice.customerName}</span>
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setReturnInvoice(null)}
+                className="w-8 h-8 rounded-full bg-neutral-800 hover:bg-neutral-700 flex items-center justify-center text-neutral-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 shrink-0 text-amber-400" />
+              <span>
+                عند تأكيد المرتجع: سيتم <strong>إرجاع الكمية فوراً إلى رصيد المخزن</strong>، و<strong>تخصيم القيمة المستردة من الخزينة</strong> في حال الصرف النقدي.
+              </span>
+            </div>
+
+            <form onSubmit={handleConfirmReturn} className="space-y-4">
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-neutral-300 block">حدد القطع والكميات المراد إرجاعها:</span>
+                <div className="border border-neutral-800 rounded-2xl overflow-hidden">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-[#0E121B] text-neutral-400 text-[11px] border-b border-neutral-800">
+                      <tr>
+                        <th className="p-2.5">الصنف</th>
+                        <th className="p-2.5 text-center">الكمية المباعة</th>
+                        <th className="p-2.5 text-center">سعر البيع بالفاتورة</th>
+                        <th className="p-2.5 text-center">كمية المرتجع</th>
+                        <th className="p-2.5 text-left">قيمة المرتجع</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-800">
+                      {returnInvoice.items.map((it) => {
+                        const currentReturnQty = returnItems[it.partNumber] || 0;
+                        const itemSubtotal = currentReturnQty * it.unitPrice;
+                        return (
+                          <tr key={it.partNumber} className="hover:bg-[#1A2234]">
+                            <td className="p-2.5">
+                              <span className="font-bold text-white block">{it.partName}</span>
+                              <span className="font-mono text-[10px] text-amber-400">{it.partNumber}</span>
+                            </td>
+                            <td className="p-2.5 text-center font-mono">
+                              {it.quantity}
+                            </td>
+                            <td className="p-2.5 text-center font-mono font-bold text-emerald-400">
+                              {it.unitPrice} ج.م
+                            </td>
+                            <td className="p-2.5 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setReturnItems(prev => ({
+                                    ...prev,
+                                    [it.partNumber]: Math.max(0, (prev[it.partNumber] || 0) - 1)
+                                  }))}
+                                  className="w-6 h-6 rounded bg-neutral-800 text-neutral-300 hover:text-white"
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={it.quantity}
+                                  value={currentReturnQty}
+                                  onChange={(e) => {
+                                    const val = Math.min(it.quantity, Math.max(0, parseInt(e.target.value) || 0));
+                                    setReturnItems(prev => ({ ...prev, [it.partNumber]: val }));
+                                  }}
+                                  className="w-14 h-7 text-center rounded bg-[#0E121B] border border-neutral-700 text-white font-mono text-xs font-bold"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setReturnItems(prev => ({
+                                    ...prev,
+                                    [it.partNumber]: Math.min(it.quantity, (prev[it.partNumber] || 0) + 1)
+                                  }))}
+                                  className="w-6 h-6 rounded bg-neutral-800 text-neutral-300 hover:text-white"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </td>
+                            <td className="p-2.5 text-left font-mono font-black text-rose-400">
+                              {itemSubtotal.toFixed(2)} ج.م
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-neutral-300 block">طريقة رد المبلغ للزبون:</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {[
+                    { id: 'نقدي (خصم من الخزنة)', label: 'نقدي من الخزنة', desc: 'يتم تخصيمها من الخزينة تلقائياً', icon: Banknote },
+                    { id: 'خصم من رصيد العميل الآجل', label: 'خصم من حساب الآجل', desc: 'تخفيض ديون الورشة / العميل', icon: Clock },
+                    { id: 'إنستاباي / محفظة', label: 'إنستاباي / فودافون كاش', desc: 'خصم من الرصيد الإلكتروني', icon: Zap },
+                  ].map((m) => {
+                    const Icon = m.icon;
+                    const isSelected = refundMethod === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setRefundMethod(m.id as any)}
+                        className={`p-3 rounded-2xl border text-right transition-all flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-rose-500/20 border-rose-500 text-white shadow-md'
+                            : 'bg-[#0E121B] border-neutral-700 text-neutral-400 hover:border-neutral-600'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full mb-1">
+                          <span className="text-xs font-bold text-white">{m.label}</span>
+                          <Icon className={`w-4 h-4 ${isSelected ? 'text-rose-400' : 'text-neutral-500'}`} />
+                        </div>
+                        <span className="text-[10px] text-neutral-400">{m.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-neutral-400 block mb-1">سبب المرتجع:</label>
+                  <select
+                    value={returnReason}
+                    onChange={(e) => setReturnReason(e.target.value)}
+                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-xs text-white focus:outline-none focus:border-rose-400"
+                  >
+                    <option value="عيب في الصنف / تلف">عيب في الصنف / تلف مصنعي</option>
+                    <option value="عدم مطابقة لموديل السيارة">عدم مطابقة لموديل السيارة</option>
+                    <option value="الزبون ألغى الصيانة">الزبون ألغى الصيانة بالورشة</option>
+                    <option value="شراء صنف بالخطأ">شراء صنف بالخطأ</option>
+                    <option value="أخرى">أخرى</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-neutral-400 block mb-1">ملاحظات إضافية:</label>
+                  <input
+                    type="text"
+                    value={returnNotes}
+                    onChange={(e) => setReturnNotes(e.target.value)}
+                    placeholder="ملاحظات فنية أو إذن المستودع..."
+                    className="w-full h-9 px-3 rounded-xl bg-[#0E121B] border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-rose-400"
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[#0E121B] border border-neutral-800 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-neutral-400 block">إجمالي قيمة المرتجع المسترد:</span>
+                  <span className="text-2xl font-black text-rose-400 font-mono">
+                    {calculatedReturnTotal.toFixed(2)} ج.م
+                  </span>
+                  {refundMethod === 'نقدي (خصم من الخزنة)' && (
+                    <span className="text-[10px] text-emerald-400 font-bold block mt-0.5">
+                      ✓ سيتم إصدار إذن صرف فوري وتخصيمها من الخزينة
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReturnInvoice(null)}
+                    className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-bold"
+                  >
+                    إلغاء
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={calculatedReturnTotal <= 0}
+                    className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black shadow-lg shadow-rose-600/30 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>تأكيد المرتجع والخصم من الخزنة</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
