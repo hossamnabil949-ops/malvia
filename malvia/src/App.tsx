@@ -649,9 +649,8 @@ export default function App() {
   const activeNotificationsCount = useMemo(() => {
     const lowStockCount = parts.filter(p => p.stockQuantity <= p.minAlertStock).length;
     const unresolvedErrors = inventoryErrors.filter(e => !e.isCorrected).length;
-    const activeReservations = reservations.filter(r => r.status === 'نشط').length;
-    return lowStockCount + unresolvedErrors + activeReservations;
-  }, [parts, inventoryErrors, reservations]);
+    return lowStockCount + unresolvedErrors;
+  }, [parts, inventoryErrors]);
 
   // Auth / Login Handler
   const handleLoginSuccess = (session: UserSession, tenant: TenantLicense, emps: Employee[]) => {
