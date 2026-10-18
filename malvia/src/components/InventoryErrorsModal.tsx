@@ -102,7 +102,7 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
 
   const handleShareWhatsApp = (err: InventoryDiscrepancyError) => {
     const text = encodeURIComponent(
-      `⚠️ *تقرير خطأ وفارق جرد مخزني - نظام مالفيا*\n` +
+      `⚠️ *تقرير خطأ وفارق جرد مخزني - نظام MALVIA*\n` +
       `رقم الخطأ: ${err.errorNumber}\n` +
       `الصنف: ${err.partName} (${err.partNumber})\n` +
       `الرف: ${err.shelfLocation}\n` +

@@ -32,7 +32,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     return (
       <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-bold text-emerald-400">
         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-        <span>تطبيق مالفيا مُثبّت</span>
+        <span>تطبيق MALVIA مُثبّت</span>
       </div>
     );
   }
@@ -49,7 +49,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             }
           }}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold transition-all shadow-sm active:scale-95 ${className}`}
-          title="تثبيت تطبيق مالفيا على الموبايل والكمبيوتر"
+          title="تثبيت تطبيق MALVIA على الموبايل والكمبيوتر"
         >
           <Download className="w-3.5 h-3.5 animate-bounce" />
           <span className="hidden sm:inline">تنزيل التطبيق</span>
@@ -108,7 +108,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-[#1A2234] to-emerald-500/20 border border-amber-500/40 flex items-center justify-between gap-3">
                 <div>
                   <span className="text-sm font-bold text-white block">متصفحك يدعم التثبيت الفوري بنقرة واحدة!</span>
-                  <span className="text-xs text-neutral-400">سيتم إضافة أيقونة مالفيا على هاتفك أو سطح المكتب</span>
+                  <span className="text-xs text-neutral-400">سيتم إضافة أيقونة MALVIA على هاتفك أو سطح المكتب</span>
                 </div>
                 <button
                   onClick={() => {
@@ -154,7 +154,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                   <span>3. على كمبيوتر المحل ولابتوب الإدارة (Chrome / Edge):</span>
                 </div>
                 <p className="text-neutral-300 pr-6 leading-relaxed">
-                  ستجد أيقونة تثبيت صغيرة <Download className="w-3.5 h-3.5 inline mx-1 text-emerald-400" /> في شريط العنوان أعلى المتصفح، أو من قائمة المتصفح اختر <strong>"تثبيت مالفيا MALVIA كتطبيق سطح مكتب"</strong>.
+                  ستجد أيقونة تثبيت صغيرة <Download className="w-3.5 h-3.5 inline mx-1 text-emerald-400" /> في شريط العنوان أعلى المتصفح، أو من قائمة المتصفح اختر <strong>"تثبيت MALVIA كتطبيق سطح مكتب"</strong>.
                 </p>
               </div>
             </div>

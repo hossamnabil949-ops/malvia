@@ -129,17 +129,11 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
 
       <header className="max-w-5xl w-full mx-auto flex items-center justify-between z-10">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-600 via-amber-500 to-yellow-400 p-0.5 shadow-lg shadow-amber-500/20 flex items-center justify-center">
-            <div className="w-full h-full rounded-[14px] bg-[#0E121B] flex items-center justify-center text-amber-400">
-              <CarFront className="w-6 h-6" />
-            </div>
-          </div>
           <div>
-            <h1 className="text-base font-black text-white tracking-wide flex items-center gap-2">
-              <span className="text-amber-400 font-mono tracking-wider">MALVIA</span>
-              <span className="text-neutral-400 text-xs font-normal">| نظام إدارة قطع الغيار ونقاط البيع</span>
+            <h1 className="text-sm sm:text-base font-black text-white tracking-wide">
+              نظام إدارة قطع الغيار ونقاط البيع
             </h1>
-            <p className="text-[11px] text-neutral-400">منظومة سحابية مستقلة تعمل على أي جهاز دون ربط بحساب جوجل</p>
+            <p className="text-[11px] text-neutral-400">منظومة سحابية تعمل على الكمبيوتر والموبايل وبياناتها متزامنة</p>
           </div>
         </div>
 
@@ -163,6 +157,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
       <main className="max-w-md w-full mx-auto my-auto py-6 z-10">
         <div className="bg-[#111625]/95 backdrop-blur-xl border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-5 relative">
           <div className="text-center space-y-1.5">
+            <img src="/logo-login.png" alt="MALVIA" className="mx-auto w-56 sm:w-64 h-auto mb-2" draggable={false} />
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold mb-1">
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>نظام تجاري مستقل 100% — جاهز للبيع والتشغيل الفوري</span>
@@ -389,7 +384,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
         <div className="flex items-center gap-2">
           <span>MALVIA Cloud ERP v2.4</span>
           <span>•</span>
-          <span>جميع الحقوق محفوظة لنظام مالفيا السحابي</span>
+          <span>جميع الحقوق محفوظة لنظام MALVIA السحابي</span>
         </div>
 
         <div className="flex items-center gap-4">

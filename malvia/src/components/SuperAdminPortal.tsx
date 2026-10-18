@@ -323,7 +323,7 @@ ${window.location.origin}`;
                   <span>إجمالي المحلات المشتركة</span>
                 </span>
                 <span className="text-2xl font-black font-mono text-white block">{stats.total} محلات</span>
-                <span className="text-[10px] text-neutral-500">مسجلة على سحابة مالفيا</span>
+                <span className="text-[10px] text-neutral-500">مسجلة على سحابة MALVIA</span>
               </div>
 
               <div className="p-4 rounded-3xl bg-[#12241E] border border-emerald-500/30 space-y-1">

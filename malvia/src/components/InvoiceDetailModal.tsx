@@ -72,7 +72,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
   const handleShareWhatsApp = () => {
     const text = encodeURIComponent(
-      `مرحباً ${invoice.customerName}،\nإليك تفاصيل فاتورتك من نظام مالفيا لقطع غيار السيارات MALVIA:\nرقم الفاتورة: ${invoice.invoiceNumber}\nالتاريخ: ${invoice.date}\nالإجمالي: ${invoice.grandTotal.toFixed(2)} ج.م\nطريقة السداد: ${invoice.paymentMethod}\nشكراً لتعاملكم معنا!`
+      `مرحباً ${invoice.customerName}،\nإليك تفاصيل فاتورتك من نظام MALVIA لقطع غيار السيارات MALVIA:\nرقم الفاتورة: ${invoice.invoiceNumber}\nالتاريخ: ${invoice.date}\nالإجمالي: ${invoice.grandTotal.toFixed(2)} ج.م\nطريقة السداد: ${invoice.paymentMethod}\nشكراً لتعاملكم معنا!`
     );
     const phone = invoice.customerPhone ? invoice.customerPhone.replace(/[^0-9]/g, '') : '';
     const url = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`;
@@ -146,11 +146,9 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
         <div ref={invoiceRef} className="p-2 bg-white">
           <div className="text-center space-y-2 border-b border-neutral-200 pb-4">
-            <div className="w-10 h-10 rounded-xl bg-neutral-900 text-amber-400 mx-auto flex items-center justify-center font-bold shadow-md">
-              <CarFront className="w-6 h-6" />
-            </div>
+            <img src="/logo-invoice.png" alt="MALVIA" className="h-20 w-auto mx-auto" />
             <h2 className="text-base font-black text-neutral-950">
-              مالفيا MALVIA لقطع غيار السيارات
+              MALVIA لقطع غيار السيارات
             </h2>
             <p className="text-[11px] text-neutral-600">
               فاتورة بيع ضريبية مبسطة وإذن صرف بضاعة
@@ -251,7 +249,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
           <div className="pt-4 flex flex-col items-center justify-center text-center">
             <p className="text-[10px] text-neutral-600 font-medium">
-              شكراً لتعاملكم مع مالفيا MALVIA · القطع الكهربائية غير قابلة للاسترجاع بعد التركيب
+              شكراً لتعاملكم مع MALVIA · القطع الكهربائية غير قابلة للاسترجاع بعد التركيب
             </p>
             <p className="text-[9px] text-neutral-500 mt-0.5">
               شارع دمشق، روكسي، مصر الجديدة، القاهرة - هاتف: 01009876543

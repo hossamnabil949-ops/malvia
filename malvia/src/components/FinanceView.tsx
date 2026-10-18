@@ -1437,7 +1437,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <div>
                   <h3 className="text-base font-black text-white">تقرير القوائم المالية وحقوق الملكية ورأس المال</h3>
                   <p className="text-xs text-neutral-400">
-                    مركز مالفيا لقطع غيار السيارات | س.ت: 104928-القاهرة | الرقم الضريبي: 394-882-105
+                    مركز MALVIA لقطع غيار السيارات | س.ت: 104928-القاهرة | الرقم الضريبي: 394-882-105
                   </p>
                 </div>
               </div>

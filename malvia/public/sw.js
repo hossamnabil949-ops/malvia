@@ -1,5 +1,5 @@
 // Service worker بسيط: يخزّن واجهة التطبيق ليفتح بدون إنترنت، ولا يلمس طلبات /api أبداً.
-const CACHE = 'malvia-shell-v2';
+const CACHE = 'malvia-shell-v3';
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => c.addAll(['/']))); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));

@@ -78,11 +78,7 @@ export const TenantActivationGateway: React.FC<TenantActivationGatewayProps> = (
         <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="text-center space-y-2">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-600 via-amber-500 to-yellow-400 p-0.5 mx-auto shadow-lg shadow-amber-500/20 flex items-center justify-center">
-            <div className="w-full h-full rounded-[14px] bg-[#0E121B] flex items-center justify-center text-amber-400">
-              <CarFront className="w-9 h-9" />
-            </div>
-          </div>
+          <img src="/logo-login.png" alt="MALVIA" className="mx-auto w-52 h-auto" draggable={false} />
 
           <h2 className="text-xl sm:text-2xl font-black text-white tracking-wide">
             بوابة تفعيل تراخيص محلات <span className="text-amber-400 font-mono">MALVIA</span>

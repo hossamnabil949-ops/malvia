@@ -62,7 +62,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
                 </span>
               </div>
               <p className="text-xs text-neutral-400">
-                كيفية تثبيت مالفيا MALVIA على الكمبيوتر والموبايل، وتوزيع المفاتيح للمحلات والتحكم بالصلاحيات
+                كيفية تثبيت MALVIA على الكمبيوتر والموبايل، وتوزيع المفاتيح للمحلات والتحكم بالصلاحيات
               </p>
             </div>
           </div>
@@ -203,7 +203,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
               <div className="p-4 rounded-2xl bg-[#131B2A] border border-emerald-500/30 flex items-start gap-3">
                 <Monitor className="w-6 h-6 text-emerald-400 flex-shrink-0 mt-0.5" />
                 <div className="space-y-1 text-xs">
-                  <h4 className="font-bold text-white text-sm">تثبيت مالفيا MALVIA على أجهزة الكمبيوتر واللابتوب (Windows & Mac)</h4>
+                  <h4 className="font-bold text-white text-sm">تثبيت MALVIA على أجهزة الكمبيوتر واللابتوب (Windows & Mac)</h4>
                   <p className="text-neutral-300 leading-relaxed">
                     يتم تثبيت التطبيق كبرنامج مستقل (Desktop App) بدون أي برامج خارجية، ويظهر كأيقونة على سطح المكتب وشريط المهام (Taskbar)، ويعمل بكامل ال وبسرعة فائقة.
                   </p>
@@ -299,7 +299,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
                     <li>افتح الرابط في متصفح Google Chrome.</li>
                     <li>اضغط على <strong>زر القائمة (ثلاث نقاط رأسية)</strong> أعلى زاوية المتصفح.</li>
                     <li>اختر <strong>"تثبيت التطبيق" (Install App)</strong> أو <strong>"الإضافة لل الرئيسية"</strong>.</li>
-                    <li>اضغط "تثبيت"؛ ستظهر أيقونة مالفيا الذهبية بين تطبيقات هاتفك.</li>
+                    <li>اضغط "تثبيت"؛ ستظهر أيقونة MALVIA الذهبية بين تطبيقات هاتفك.</li>
                     <li>يفتح في وضع ملء ال بدون شريط روابط المتصفح.</li>
                   </ol>
                 </div>
@@ -388,7 +388,7 @@ export const SystemDeploymentGuideModal: React.FC<SystemDeploymentGuideModalProp
         <div className="p-4 bg-[#0C101A] border-t border-neutral-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
           <div className="text-neutral-400 flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-amber-400" />
-            <span>نظام مالفيا MALVIA Cloud ERP - الإصدار المؤسسي متعدد الفروع والمحلات</span>
+            <span>نظام MALVIA Cloud ERP - الإصدار المؤسسي متعدد الفروع والمحلات</span>
           </div>
 
           <div className="flex items-center gap-2">

@@ -932,8 +932,8 @@ export const INITIAL_EMPLOYEES: Employee[] = [
 
 export const INITIAL_SHOP_SETTINGS: ShopSettings = {
   systemName: 'MALVIA',
-  shopName: 'مالفيا لقطع غيار السيارات والورش',
-  shopSubtitle: 'نظام مالفيا السحابي المتكامل لإدارة المخازن، حسابات الموردين، وفواتير البيع والخزينة',
+  shopName: 'MALVIA لقطع غيار السيارات والورش',
+  shopSubtitle: 'نظام MALVIA السحابي المتكامل لإدارة المخازن، حسابات الموردين، وفواتير البيع والخزينة',
   logoUrl: '',
   phone: '01009876543 / 02-24567890',
   email: 'info@malvia-parts.com',
@@ -942,7 +942,7 @@ export const INITIAL_SHOP_SETTINGS: ShopSettings = {
   taxId: '394-882-105',
   currency: 'جنيه مصري (ج.م)',
   vatRate: 14,
-  invoiceFooterNotes: 'شكراً لتعاملكم مع مالفيا MALVIA. القطع الكهربائية مشمولة بضمان التجربة. الاستبدال خلال 14 يوماً بالفاتورة الأصلية.',
+  invoiceFooterNotes: 'شكراً لتعاملكم مع MALVIA. القطع الكهربائية مشمولة بضمان التجربة. الاستبدال خلال 14 يوماً بالفاتورة الأصلية.',
   activeEmployeeId: 'emp-1'
 };
 
@@ -1010,7 +1010,7 @@ export const INITIAL_TENANT_LICENSES: TenantLicense[] = [
     id: 'lic-1',
     licenseKey: 'MALVIA-PRO-2026-EG01',
     tenantId: 'tenant-malvia-main',
-    companyName: 'مالفيا لقطع غيار السيارات ومستلزمات الورش (الفرع الرئيسي)',
+    companyName: 'MALVIA لقطع غيار السيارات ومستلزمات الورش (الفرع الرئيسي)',
     ownerName: 'المدير العام / مالك المحل',
     phone: '01009876543',
     city: 'القاهرة - روكسي',

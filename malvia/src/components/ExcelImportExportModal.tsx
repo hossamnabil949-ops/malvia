@@ -99,7 +99,7 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
     const ws = XLSX.utils.json_to_sheet(sampleData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'قالب_أصناف_قطع_الغيار');
-    XLSX.writeFile(wb, 'قالب_إكسيل_نموذجي_أصناف_مالفيا.xlsx');
+    XLSX.writeFile(wb, 'قالب_إكسيل_نموذجي_أصناف_MALVIA.xlsx');
   };
 
   // 2. Download Sample Excel Template for Car Models

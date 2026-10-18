@@ -100,12 +100,9 @@ export const Navigation: React.FC<NavigationProps> = ({
                 onClick={() => onTabChange('dashboard')}
                 className="flex items-center gap-2.5 cursor-pointer group"
               >
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20 group-hover:scale-105 transition">
-                  <CarFront className="w-6 h-6 text-slate-950 stroke-[2.5]" />
-                </div>
+                <img src="/logo-header.png" alt="MALVIA" className="h-9 w-auto group-hover:scale-105 transition" draggable={false} />
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-black text-lg text-amber-400 tracking-wide">مالفيا</span>
                     <span className="text-xs px-2 py-0.5 rounded-full bg-amber-400/10 text-amber-400 border border-amber-400/20 font-bold hidden sm:inline-block">
                       قطع الغيار الذكي
                     </span>

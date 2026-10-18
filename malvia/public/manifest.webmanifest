@@ -1,7 +1,7 @@
 {
-  "name": "مالفيا | إدارة قطع الغيار",
-  "short_name": "مالفيا",
-  "description": "نظام مالفيا لإدارة المخزون والمبيعات والمشتريات",
+  "name": "MALVIA | إدارة قطع الغيار",
+  "short_name": "MALVIA",
+  "description": "نظام MALVIA لإدارة المخزون والمبيعات والمشتريات",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

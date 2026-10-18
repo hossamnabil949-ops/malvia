@@ -222,7 +222,7 @@ function getClientFallbackResult(command: string, parts: AutoPart[], customers: 
 
   return {
     action: 'GENERAL_ANSWER',
-    spokenFeedback: 'أهلاً بك في مالفيا MALVIA. يمكنك القول: "بعت تيل تويوتا"، "جرد فلتر الزيت"، "سدد 5000 للمورد الأهرام"، أو "سجل مصروف 200 كهرباء".',
+    spokenFeedback: 'أهلاً بك في MALVIA. يمكنك القول: "بعت تيل تويوتا"، "جرد فلتر الزيت"، "سدد 5000 للمورد الأهرام"، أو "سجل مصروف 200 كهرباء".',
     timestamp: time,
   };
 }

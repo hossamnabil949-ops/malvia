@@ -57,7 +57,7 @@ export const PhotoSharingModal: React.FC<PhotoSharingModalProps> = ({
   const handleShareWhatsApp = () => {
     const phone = recipientPhone.replace(/[^0-9]/g, '');
     const text = encodeURIComponent(
-      `مرحباً،\nإليك صورة قطعة الغيار من مركز مالفيا MALVIA:\n` +
+      `مرحباً،\nإليك صورة قطعة الغيار من مركز MALVIA:\n` +
       `الصنف: ${currentPart.name}\n` +
       `كود القطعة: ${currentPart.partNumber}\n` +
       `الماركة: ${currentPart.brand} (${currentPart.compatibleModels})\n` +

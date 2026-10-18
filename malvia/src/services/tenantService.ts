@@ -159,7 +159,7 @@ export function loadTenantStoreData(tenant: TenantLicense) {
   const tenantSettings: ShopSettings = {
     ...INITIAL_SHOP_SETTINGS,
     shopName: tenant.companyName,
-    shopSubtitle: `نظام مالفيا السحابي المتكامل لإدارة قطع الغيار والورش - فرع ${tenant.city}`,
+    shopSubtitle: `نظام MALVIA السحابي المتكامل لإدارة قطع الغيار والورش - فرع ${tenant.city}`,
     phone: tenant.phone,
     email: `contact@${tenant.tenantId}.com`,
     address: `${tenant.city} - مجمع قطع الغيار التجاري`,
