@@ -13,7 +13,8 @@ import {
   clearTenantDemoData,
   updateOwnerPassword
 } from './services/tenantService';
-import { startSync, stopSync, SYNC_EVENT, fetchRegistry, pushRegistry, getAdminToken, setAdminToken } from './services/syncService';
+import { startSync, stopSync, SYNC_EVENT, fetchRegistry, pushRegistry, getAdminToken, setAdminToken, clearAdminToken } from './services/syncService';
+import * as syncSvc from './services/syncService';
 import { INITIAL_TENANT_LICENSES } from './data/autoPartsData';
 import { SyncBadge } from './components/SyncBadge';
 
@@ -170,7 +171,9 @@ export default function App() {
         const mine = loadTenantLicenses().filter(l => !demoKeys.has(l.licenseKey.toUpperCase()));
         if (mine.length) pushRegistry(mine);
       } else {
-        window.alert('تعذر الاتصال بسجل السحابة. تأكد من رمز الإدارة والاتصال بالإنترنت.');
+        const why = syncSvc.lastRegistryError;
+        if (why === 'bad-token') { clearAdminToken(); window.alert('رمز الإدارة غير صحيح أو غير مضبوط في Vercel (ADMIN_TOKEN). أعد فتح الصفحة لإدخاله من جديد.'); }
+        else window.alert('تعذر الاتصال بسجل السحابة: ' + why);
       }
     })();
   }, []);

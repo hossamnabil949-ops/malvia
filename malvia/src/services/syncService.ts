@@ -268,13 +268,23 @@ const ADMIN_TOKEN_KEY = 'malvia_admin_token_v1';
 export const getAdminToken = () => { try { return localStorage.getItem(ADMIN_TOKEN_KEY) || ''; } catch { return ''; } };
 export const setAdminToken = (t: string) => { try { localStorage.setItem(ADMIN_TOKEN_KEY, t.trim()); } catch { /* ignore */ } };
 
+export let lastRegistryError = '';
+export function clearAdminToken() { try { localStorage.removeItem(ADMIN_TOKEN_KEY); } catch { /* ignore */ } }
+
 export async function fetchRegistry(): Promise<any[] | null> {
   const token = getAdminToken();
-  if (!token) return null;
+  lastRegistryError = '';
+  if (!token) { lastRegistryError = 'no-token'; return null; }
   try {
     const r = await api('/api/registry', { method: 'GET', headers: { 'x-admin-token': token } });
-    return r.ok ? r.body.licenses : null;
-  } catch { return null; }
+    if (r.ok) return r.body.licenses;
+    lastRegistryError = r.status === 401 && r.body?.error
+      ? 'bad-token'
+      : r.status === 404 ? 'الـ API غير موجود (HTTP 404): تأكد أن مجلد api مرفوع'
+      : r.status === 401 || r.status === 403 ? 'Vercel يحجب الطلب (HTTP ' + r.status + '): استخدم رابط الإنتاج أو عطّل Deployment Protection'
+      : (r.body?.error || 'HTTP ' + r.status);
+    return null;
+  } catch (e: any) { lastRegistryError = 'لا يوجد اتصال: ' + String(e?.message || e); return null; }
 }
 
 export async function pushRegistry(licenses: unknown[]): Promise<{ ok: boolean; error?: string }> {
