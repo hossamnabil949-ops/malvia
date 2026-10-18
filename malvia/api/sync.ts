@@ -1,6 +1,6 @@
 // نقطة المزامنة: GET يرجّع كل بيانات المحل، POST يكتب مورد واحد بشرط الإصدار.
 // الاعتماد: مفتاح الترخيص (x-license-key) هو سر المحل. سجل التراخيص نفسه محفوظ كمورد داخل tenant "_registry".
-import { getAll, getOne, putIfVersion } from './_db';
+import { getAll, getOne, putIfVersion } from './_db.js';
 
 const REGISTRY = '_registry';
 const ALLOWED = new Set(['parts','invoices','customers','suppliers','supplierPayments','treasury','employees','settings',

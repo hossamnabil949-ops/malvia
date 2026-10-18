@@ -1,5 +1,5 @@
 // سجل المحلات (التراخيص). القراءة/الكتابة الكاملة لصاحب المنظومة فقط عبر ADMIN_TOKEN.
-import { getOne, putIfVersion } from './_db';
+import { getOne, putIfVersion } from './_db.js';
 
 export default async function handler(req: any, res: any) {
   try {
