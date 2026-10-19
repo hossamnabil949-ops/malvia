@@ -261,3 +261,22 @@ body {
   color: #0F172A;
   color-scheme: light;
 }
+
+/*
+ * Mobile: stop sideways swipes / edge gestures from dragging the page,
+ * triggering browser "back" navigation or pull-to-refresh.
+ */
+html {
+  overflow-x: hidden;
+  overscroll-behavior: none;
+}
+body {
+  overflow-x: clip;
+  overscroll-behavior: none;
+  max-width: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+#root {
+  max-width: 100vw;
+  overflow-x: clip;
+}

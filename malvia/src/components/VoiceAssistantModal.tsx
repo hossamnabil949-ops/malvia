@@ -24,7 +24,8 @@ import {
   sendVoiceCommandToServer, 
   AICommandResult, 
   speakArabic, 
-  stopArabicSpeech 
+  stopArabicSpeech,
+  normalizeArabic
 } from '../services/aiVoiceService';
 
 interface VoiceAssistantModalProps {
@@ -66,6 +67,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   const [history, setHistory] = useState<AICommandResult[]>([]);
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
   const [micError, setMicError] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ result: AICommandResult; question: string; warning?: string } | null>(null);
 
   const recognitionRef = useRef<any>(null);
 
@@ -152,52 +154,163 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     setIsListening(false);
   };
 
+  const needsConfirmation = (r: AICommandResult): boolean => {
+    if (r.action === 'EXECUTE_SALE' || r.action === 'RESTOCK_ITEM' || r.action === 'ADD_EXPENSE') return true;
+    if (r.action === 'SETTLE_SUPPLIER') return !!onSettleSupplier;
+    if (r.action === 'COLLECT_CUSTOMER') return !!onCollectCustomer;
+    if (r.action === 'ADD_PURCHASE') return !!onAddPurchase;
+    return false;
+  };
+
+  const describe = (r: AICommandResult): { question: string; done: string; warning?: string } => {
+    const part = r.matchedPartId ? parts.find((p) => p.id === r.matchedPartId) : undefined;
+    const qty = r.quantity && r.quantity > 0 ? r.quantity : 1;
+    if (r.action === 'EXECUTE_SALE' && part) {
+      const total = part.salePrice * qty;
+      return {
+        question: `بيع ${qty} ${part.unit} من «${part.name}» بسعر ${part.salePrice} للوحدة، الإجمالي ${total} ج.م — ${r.customerName || 'عميل نقدي'} — ${r.paymentMethod || 'نقدي'}`,
+        done: `تم بيع ${qty} ${part.unit} من ${part.name} بإجمالي ${total} جنيه.`,
+        warning: qty > part.stockQuantity ? `تنبيه: الرصيد المتاح ${part.stockQuantity} فقط.` : undefined,
+      };
+    }
+    if (r.action === 'RESTOCK_ITEM' && part) {
+      return {
+        question: `توريد ${qty} ${part.unit} إلى «${part.name}» (الرصيد الحالي ${part.stockQuantity})`,
+        done: `تمت إضافة ${qty} ${part.unit} إلى ${part.name}.`,
+      };
+    }
+    if (r.action === 'ADD_EXPENSE') {
+      return {
+        question: `تسجيل مصروف «${r.expenseTitle || 'مصروف عام'}» بمبلغ ${r.expenseAmount} ج.م`,
+        done: `تم تسجيل مصروف ${r.expenseAmount} جنيه: ${r.expenseTitle || 'مصروف عام'}.`,
+      };
+    }
+    if (r.action === 'SETTLE_SUPPLIER') {
+      return {
+        question: `سداد ${r.supplierPaymentAmount} ج.م للمورد «${r.supplierName}»`,
+        done: `تم سداد ${r.supplierPaymentAmount} جنيه للمورد ${r.supplierName}.`,
+      };
+    }
+    if (r.action === 'COLLECT_CUSTOMER') {
+      return {
+        question: `تحصيل ${r.customerCollectionAmount} ج.م من «${r.customerName}»`,
+        done: `تم تحصيل ${r.customerCollectionAmount} جنيه من ${r.customerName}.`,
+      };
+    }
+    if (r.action === 'ADD_PURCHASE') {
+      return {
+        question: `فاتورة مشتريات من «${r.supplierName}» بقيمة ${r.expenseAmount} ج.م`,
+        done: `تم تسجيل فاتورة مشتريات من ${r.supplierName}.`,
+      };
+    }
+    return { question: r.spokenFeedback, done: r.spokenFeedback };
+  };
+
+  // Runs the (already verified and, when needed, confirmed) action.
+  const runAction = (result: AICommandResult) => {
+    let feedback = result.spokenFeedback;
+
+    if (result.action === 'EXECUTE_SALE') {
+      const part = parts.find((p) => p.id === result.matchedPartId);
+      if (!part) return;
+      onDirectSale(part, result.quantity || 1, result.customerName || 'عميل نقدي', result.paymentMethod || 'نقدي');
+      feedback = describe(result).done;
+    } else if (result.action === 'INVENTORY_AUDIT') {
+      const part = parts.find((p) => p.id === result.matchedPartId);
+      if (part) onOpenAudit(part);
+    } else if (result.action === 'RESTOCK_ITEM' && result.matchedPartId) {
+      onRestock(result.matchedPartId, result.quantity || 1);
+      feedback = describe(result).done;
+    } else if (result.action === 'ADD_EXPENSE' && result.expenseAmount) {
+      onAddExpense(result.expenseTitle || 'مصروف عام', result.expenseAmount);
+      feedback = describe(result).done;
+    } else if (result.action === 'SETTLE_SUPPLIER') {
+      if (onSettleSupplier && result.supplierName && result.supplierPaymentAmount) {
+        onSettleSupplier(result.supplierName, result.supplierPaymentAmount);
+        feedback = describe(result).done;
+      } else {
+        feedback = 'لتسجيل سداد المورد افتح صفحة الموردين واختر المورد. لم أنفذ أي شيء.';
+        onNavigateTab('suppliers');
+      }
+    } else if (result.action === 'COLLECT_CUSTOMER') {
+      if (onCollectCustomer && result.customerName && result.customerCollectionAmount) {
+        onCollectCustomer(result.customerName, result.customerCollectionAmount);
+        feedback = describe(result).done;
+      } else {
+        feedback = 'لتسجيل التحصيل افتح صفحة العملاء والورش واختر العميل. لم أنفذ أي شيء.';
+        onNavigateTab('customers');
+      }
+    } else if (result.action === 'ADD_PURCHASE') {
+      if (onAddPurchase && result.supplierName && result.expenseAmount) {
+        onAddPurchase(result.supplierName, result.expenseAmount);
+        feedback = describe(result).done;
+      } else {
+        feedback = 'لتسجيل فاتورة مشتريات افتح صفحة فواتير المشتريات. لم أنفذ أي شيء.';
+        onNavigateTab('purchases');
+      }
+    } else if (result.action === 'QUERY_LOW_STOCK') {
+      onOpenNotifications();
+    } else if (result.action === 'NAVIGATE_TAB' && result.targetTab) {
+      onNavigateTab(result.targetTab === 'home' ? 'dashboard' : result.targetTab);
+    }
+
+    const finalResult: AICommandResult = { ...result, spokenFeedback: feedback };
+    setLastResult(finalResult);
+    if (result.action !== 'GENERAL_ANSWER') {
+      setHistory((prev) => [finalResult, ...prev.slice(0, 9)]);
+    }
+    if (speechEnabled && feedback) speakArabic(feedback);
+  };
+
+  const confirmPending = () => {
+    if (!pending) return;
+    const r = pending.result;
+    setPending(null);
+    runAction(r);
+  };
+
+  const cancelPending = () => {
+    setPending(null);
+    const msg = 'تم إلغاء الأمر ولم يتم تنفيذ شيء.';
+    setLastResult({ action: 'GENERAL_ANSWER', spokenFeedback: msg, timestamp: new Date().toLocaleTimeString('ar-EG') });
+    if (speechEnabled) speakArabic(msg);
+  };
+
   const handleExecuteCommand = async (commandText: string) => {
     const textToExecute = commandText.trim();
     if (!textToExecute) return;
 
     stopListening();
+
+    // While a command waits for confirmation, "تأكيد" / "إلغاء" answer it.
+    if (pending) {
+      const n = normalizeArabic(textToExecute);
+      if (/^(تاكيد|اكد|نفذ|ايوه|ايوا|اه|موافق|تمام|اكيد|نعم|ok|yes)$/.test(n)) {
+        setTranscript('');
+        confirmPending();
+        return;
+      }
+      if (/^(الغاء|الغي|لا|كنسل|وقف|cancel|no)$/.test(n)) {
+        setTranscript('');
+        cancelPending();
+        return;
+      }
+      setPending(null);
+    }
+
     setIsProcessing(true);
     setMicError(null);
 
     try {
       const result = await sendVoiceCommandToServer(textToExecute, parts, customers);
-      setLastResult(result);
-      setHistory((prev) => [result, ...prev.slice(0, 9)]);
 
-      if (result.action === 'EXECUTE_SALE') {
-        const part = parts.find((p) => p.id === result.matchedPartId) || parts[0];
-        if (part) {
-          const qty = result.quantity || 1;
-          const cust = result.customerName || 'عميل نقدي';
-          const method = result.paymentMethod || 'نقدي';
-          onDirectSale(part, qty, cust, method);
-        }
-      } else if (result.action === 'INVENTORY_AUDIT') {
-        const part = parts.find((p) => p.id === result.matchedPartId);
-        if (part) {
-          onOpenAudit(part);
-        } else {
-          onNavigateTab('inventory');
-        }
-      } else if (result.action === 'RESTOCK_ITEM' && result.matchedPartId) {
-        onRestock(result.matchedPartId, result.quantity || 5);
-      } else if (result.action === 'ADD_EXPENSE' && result.expenseAmount) {
-        onAddExpense(result.expenseTitle || 'مصروف عام', result.expenseAmount);
-      } else if (result.action === 'SETTLE_SUPPLIER' && result.supplierPaymentAmount && onSettleSupplier) {
-        onSettleSupplier(result.supplierName || 'مؤسسة الأهرام لقطع غيار تويوتا والياباني', result.supplierPaymentAmount);
-      } else if (result.action === 'COLLECT_CUSTOMER' && result.customerCollectionAmount && onCollectCustomer) {
-        onCollectCustomer(result.customerName || 'ورشة الأمانة لصيانة السيارات', result.customerCollectionAmount);
-      } else if (result.action === 'ADD_PURCHASE' && onAddPurchase) {
-        onAddPurchase(result.supplierName || 'مؤسسة الأهرام لقطع غيار تويوتا والياباني', result.expenseAmount || 5000);
-      } else if (result.action === 'QUERY_LOW_STOCK') {
-        onOpenNotifications();
-      } else if (result.action === 'NAVIGATE_TAB' && result.targetTab) {
-        onNavigateTab(result.targetTab);
-      }
-
-      if (speechEnabled && result.spokenFeedback) {
-        speakArabic(result.spokenFeedback);
+      if (needsConfirmation(result)) {
+        const d = describe(result);
+        setPending({ result, question: d.question, warning: d.warning });
+        setLastResult(null);
+        if (speechEnabled) speakArabic(`هل تقصد: ${d.question}؟ قل تأكيد أو إلغاء.`);
+      } else {
+        runAction(result);
       }
     } catch (err) {
       console.error('Error executing AI command:', err);
@@ -242,7 +355,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                   المساعد الصوتي الذكي (Voice Auto AI)
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                  تحدث والذكاء الاصطناعي ينفذ فورا
+                  تحدث ثم أكّد الأمر قبل التنفيذ
                 </span>
               </div>
               <p className="text-xs text-neutral-400 mt-0.5">
@@ -416,6 +529,30 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
             </button>
           </div>
 
+          {pending && (
+            <div className="p-4 rounded-2xl border border-amber-500/50 bg-amber-950/30 animate-fade-in">
+              <div className="text-xs font-bold text-amber-300 mb-1.5">هل هذا ما تقصده؟ لن يُنفَّذ شيء قبل التأكيد</div>
+              <p className="text-sm font-bold text-white leading-relaxed">{pending.question}</p>
+              {pending.warning && (
+                <p className="text-xs font-bold text-rose-400 mt-1.5">{pending.warning}</p>
+              )}
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={confirmPending}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-black bg-emerald-500 hover:bg-emerald-400 text-[#052e1a] transition-colors"
+                >
+                  تأكيد التنفيذ
+                </button>
+                <button
+                  onClick={cancelPending}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-colors"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </div>
+          )}
+
           {lastResult && (
             <div className={`p-4 rounded-2xl border animate-fade-in ${
               lastResult.action === 'EXECUTE_SALE'
@@ -439,11 +576,13 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-black/40 border border-white/10 uppercase tracking-wide">
                         {lastResult.action === 'EXECUTE_SALE'
-                          ? '✅ تم إنجاز عملية البيع'
+                          ? '✅ تم تنفيذ عملية البيع'
                           : lastResult.action === 'INVENTORY_AUDIT'
                           ? '📋 تم إنجاز الجرد المخزني'
                           : lastResult.action === 'RESTOCK_ITEM'
                           ? '📦 تم توريد المخزون'
+                          : lastResult.action === 'GENERAL_ANSWER'
+                          ? '💬 توضيح'
                           : '⚡ تم تنفيذ الإجراء'}
                       </span>
                       <span className="text-[11px] text-neutral-400">{lastResult.timestamp}</span>

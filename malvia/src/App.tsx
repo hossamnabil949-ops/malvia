@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   loadTenantLicenses, 
   saveTenantLicenses, 
@@ -672,6 +672,56 @@ export default function App() {
 
   // Owner administration is isolated from the shop UI and is only rendered at /owner.
   // Production security still requires server-side authentication and API authorization.
+  // ---- Back gesture / back button: never close the installed app by accident ----
+  // Swiping from the screen edge (or pressing back) used to leave the app because it
+  // has no browser history. Now back closes open dialogs, then returns to the home
+  // page, and only a second back within 2 seconds actually leaves.
+  const backStateRef = useRef({ tab: currentTab, anyModal: false });
+  backStateRef.current = {
+    tab: currentTab,
+    anyModal:
+      showInventoryErrors || showCarModels || showPhotoSharing || showExcelModal || showDeploymentGuide ||
+      showNotifications || showVoiceAssistant || showInventoryAudit,
+  };
+  const lastBackRef = useRef(0);
+  const [exitHint, setExitHint] = useState(false);
+
+  useEffect(() => {
+    try {
+      window.history.pushState({ malvia: 'guard' }, '');
+    } catch {
+      return;
+    }
+    const onPop = () => {
+      const { tab, anyModal } = backStateRef.current;
+      if (!anyModal && tab === 'dashboard' && Date.now() - lastBackRef.current < 2000) {
+        // second back in a row: really leave
+        window.removeEventListener('popstate', onPop);
+        window.history.back();
+        return;
+      }
+      window.history.pushState({ malvia: 'guard' }, '');
+      if (anyModal) {
+        setShowInventoryErrors(false);
+        setShowCarModels(false);
+        setShowPhotoSharing(false);
+        setShowExcelModal(false);
+        setShowDeploymentGuide(false);
+        setShowNotifications(false);
+        setShowVoiceAssistant(false);
+        setShowInventoryAudit(false);
+      } else if (tab !== 'dashboard') {
+        setCurrentTab('dashboard');
+      } else {
+        lastBackRef.current = Date.now();
+        setExitHint(true);
+        window.setTimeout(() => setExitHint(false), 2000);
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   if (window.location.pathname.replace(/\/$/, '') === '/owner') {
     return (
       <SuperAdminPortal
@@ -725,6 +775,13 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950 pb-20 lg:pb-0" dir="rtl">
       <SyncBadge />
+      {exitHint && (
+        <div className="fixed bottom-24 lg:bottom-8 inset-x-0 z-[70] flex justify-center pointer-events-none">
+          <div className="px-4 py-2 rounded-full bg-neutral-800 border border-neutral-700 text-xs font-bold text-white shadow-2xl">
+            اضغط رجوع مرة أخرى للخروج من التطبيق
+          </div>
+        </div>
+      )}
       
       {/* Sidebar + Top Bar + Mobile Bottom Bar (wraps the page content) */}
       <Navigation
