@@ -301,3 +301,68 @@ export async function pushRegistry(licenses: unknown[]): Promise<{ ok: boolean; 
     return r.ok ? { ok: true } : { ok: false, error: r.body?.error || `HTTP ${r.status}` };
   } catch (e: any) { return { ok: false, error: String(e?.message || e) }; }
 }
+
+// ------------------------------------------------------------------ النسخ الاحتياطي
+export interface BackupFile {
+  app: 'MALVIA';
+  format: number;
+  exportedAt: string;
+  company?: string;
+  tenantId?: string;
+  source: 'server' | 'device';
+  docs: Record<string, { data: unknown; version?: number }>;
+}
+
+/** نسخة من بيانات المحل: من السيرفر (الأحدث)، وإن تعذر الاتصال من النسخة المحفوظة على هذا الجهاز. */
+export async function exportShopBackup(tenantId: string, licenseKey: string, company?: string): Promise<{ ok: boolean; file?: BackupFile; error?: string }> {
+  try {
+    const r = await api('/api/backup?action=export', { method: 'GET', headers: { 'x-license-key': licenseKey.trim().toUpperCase() } });
+    if (r.ok && r.body?.docs) return { ok: true, file: { ...r.body, source: 'server' } };
+    if (r.status === 401 || r.status === 403) return { ok: false, error: r.body?.error || 'مفتاح الترخيص غير صالح' };
+  } catch { /* offline: fall back to the copy on this device */ }
+  const docs: BackupFile['docs'] = {};
+  for (const res of SYNC_RESOURCES) {
+    const d = readLocal(tenantId, res);
+    if (d !== undefined) docs[res] = { data: d };
+  }
+  if (!Object.keys(docs).length) return { ok: false, error: 'لا توجد بيانات على هذا الجهاز' };
+  return { ok: true, file: { app: 'MALVIA', format: 1, exportedAt: new Date().toISOString(), company, tenantId, source: 'device', docs } };
+}
+
+export interface BackupMeta { id: number; kind: string; created_at: string; size_bytes: number; resources: number }
+
+async function adminCall(path: string, init: RequestInit & { headers?: Record<string, string> } = {}) {
+  const token = getAdminToken();
+  if (!token) return { ok: false as const, error: 'لا يوجد رمز إدارة (ADMIN_TOKEN)' };
+  try {
+    const headers: Record<string, string> = { ...((init.headers as Record<string, string>) || {}), 'x-admin-token': token };
+    const r = await api(path, { ...init, headers });
+    return r.ok ? { ok: true as const, body: r.body } : { ok: false as const, error: r.body?.error || `HTTP ${r.status}` };
+  } catch (e: any) { return { ok: false as const, error: 'لا يوجد اتصال: ' + String(e?.message || e) }; }
+}
+
+export async function adminListBackups(tenantId: string): Promise<{ ok: boolean; backups?: BackupMeta[]; error?: string }> {
+  const r = await adminCall(`/api/backup?tenant=${encodeURIComponent(tenantId)}`);
+  return r.ok ? { ok: true, backups: r.body.backups } : { ok: false, error: r.error };
+}
+export async function adminCreateBackup(tenantId: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await adminCall('/api/backup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create', tenant: tenantId }) });
+  return r.ok ? { ok: true } : { ok: false, error: r.error };
+}
+export async function adminRestoreBackup(tenantId: string, id: number): Promise<{ ok: boolean; preRestoreId?: number | null; error?: string }> {
+  const r = await adminCall('/api/backup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restore', tenant: tenantId, id }) });
+  return r.ok ? { ok: true, preRestoreId: r.body.preRestoreId } : { ok: false, error: r.error };
+}
+export async function adminFetchBackup(id: number): Promise<{ ok: boolean; file?: any; error?: string }> {
+  const r = await adminCall(`/api/backup?id=${id}`);
+  return r.ok ? { ok: true, file: r.body } : { ok: false, error: r.error };
+}
+
+export function downloadJsonFile(filename: string, data: unknown) {
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}

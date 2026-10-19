@@ -42,6 +42,7 @@ import {
 import { ShopSettings, Employee, EmployeePermissions, TenantLicense } from '../types/autoParts';
 import { AppTheme, getAppTheme, setAppTheme } from '../services/tenantService';
 import { PWAInstallButton } from './PWAInstallButton';
+import { BackupCard } from './BackupCard';
 
 interface SettingsViewProps {
   settings: ShopSettings;
@@ -379,6 +380,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       {activeTab === 'profile' ? (
         <div className="space-y-6">
+          <BackupCard
+            tenantId={activeLicense?.tenantId}
+            licenseKey={activeLicense?.licenseKey}
+            companyName={activeLicense?.companyName}
+          />
+
           <div className="bg-surface-2 border border-neutral-800 p-6 rounded-3xl shadow-lg space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-800 pb-3">
               <div className="flex items-center gap-2.5">

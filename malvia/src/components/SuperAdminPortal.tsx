@@ -25,9 +25,11 @@ import {
   Eye, 
   Share2,
   ExternalLink,
-  Laptop
+  Laptop,
+  DatabaseBackup
 } from 'lucide-react';
 import { TenantLicense, TenantPlan, TenantStatus } from '../types/autoParts';
+import { TenantBackupsModal } from './TenantBackupsModal';
 
 interface SuperAdminPortalProps {
   isOpen: boolean;
@@ -79,6 +81,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   const MASTER_PIN_KEY = 'malvia_master_owner_pin_v1';
 
   const [showChangePinModal, setShowChangePinModal] = useState(false);
+  const [backupLicense, setBackupLicense] = useState<TenantLicense | null>(null);
   const [newMasterPin, setNewMasterPin] = useState('');
   const [pinChangeSuccess, setPinChangeSuccess] = useState(false);
 
@@ -521,6 +524,14 @@ ${window.location.origin}`;
                               +سنة
                             </button>
 
+                            <button
+                              onClick={() => setBackupLicense(lic)}
+                              className="p-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 text-[11px]"
+                              title="النسخ الاحتياطية واسترجاع بيانات المحل"
+                            >
+                              <DatabaseBackup className="w-3.5 h-3.5" />
+                            </button>
+
                             {!isCurrent && (
                               <button
                                 onClick={() => {
@@ -848,6 +859,10 @@ ${window.location.origin}`;
               )}
             </div>
           </div>
+        )}
+
+        {backupLicense && (
+          <TenantBackupsModal license={backupLicense} onClose={() => setBackupLicense(null)} />
         )}
       </div>
     </div>
