@@ -14,6 +14,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { AutoPart } from '../types/autoParts';
+import { PhotoPicker } from './PhotoPicker';
 
 interface PhotoSharingModalProps {
   isOpen: boolean;
@@ -39,18 +40,10 @@ export const PhotoSharingModal: React.FC<PhotoSharingModalProps> = ({
   const currentPart = parts.find(p => p.id === selectedPartId) || parts[0];
   const activeImage = uploadedImage || currentPart?.imageUrl || 'https://images.unsplash.com/photo-1600790142055-619df03207e6?w=800&q=80';
 
-  const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setUploadedImage(result);
-        if (onUpdatePartImage && currentPart) {
-          onUpdatePartImage(currentPart.id, result);
-        }
-      };
-      reader.readAsDataURL(file);
+  const handleImagePicked = (result: string) => {
+    setUploadedImage(result);
+    if (onUpdatePartImage && currentPart) {
+      onUpdatePartImage(currentPart.id, result);
     }
   };
 
@@ -150,12 +143,6 @@ export const PhotoSharingModal: React.FC<PhotoSharingModalProps> = ({
 
             {/* Overlay Action Buttons */}
             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-xs">
-              <label className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs cursor-pointer shadow-lg flex items-center gap-2">
-                <Upload className="w-4 h-4" />
-                <span>رفع صورة جديدة</span>
-                <input type="file" accept="image/*" onChange={handleImageFile} className="hidden" />
-              </label>
-
               <button
                 onClick={handleDownloadImage}
                 className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs shadow-lg flex items-center gap-2"
@@ -165,6 +152,9 @@ export const PhotoSharingModal: React.FC<PhotoSharingModalProps> = ({
               </button>
             </div>
           </div>
+
+          {/* أزرار الكاميرا/المعرض ظاهرة دائماً (لا تعتمد على hover فلا تختفي على الموبايل) */}
+          <PhotoPicker onPick={handleImagePicked} hasImage={!!(uploadedImage || currentPart?.imageUrl)} />
 
           {/* Part Meta Badge */}
           <div className="p-3.5 rounded-2xl bg-surface-2 border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">

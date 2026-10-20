@@ -142,7 +142,9 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
   const totalPeriodSales = useMemo(() => activeData.reduce((acc, curr) => acc + curr.sales, 0), [activeData]);
   const totalPeriodProfit = useMemo(() => activeData.reduce((acc, curr) => acc + curr.profit, 0), [activeData]);
   const totalPeriodVolume = useMemo(() => activeData.reduce((acc, curr) => acc + curr.volume, 0), [activeData]);
-  const profitMargin = totalPeriodSales > 0 ? ((totalPeriodProfit / totalPeriodSales) * 100).toFixed(1) : '0';
+  const totalPeriodCost = totalPeriodSales - totalPeriodProfit;
+  // نسبة الربح تُحسب على أساس التكلفة وليس سعر البيع
+  const profitMargin = totalPeriodCost > 0 ? ((totalPeriodProfit / totalPeriodCost) * 100).toFixed(1) : '0';
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {

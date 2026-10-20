@@ -1,3 +1,4 @@
+import { PhotoPicker } from './PhotoPicker';
 import React, { useState } from 'react';
 import { 
   AlertTriangle, 
@@ -57,17 +58,6 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
   const systemStock = selectedPart?.stockQuantity || 0;
   const difference = actualPhysicalStock - systemStock;
   const estimatedImpact = Math.abs(difference) * (selectedPart?.costPrice || 0);
-
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImageUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
   const handleSubmitError = (e: React.FormEvent) => {
     e.preventDefault();
@@ -454,11 +444,8 @@ export const InventoryErrorsModal: React.FC<InventoryErrorsModalProps> = ({
                     <Camera className="w-3.5 h-3.5 text-amber-400" />
                     <span>صورة توثيق التلف أو الخطأ (اختياري):</span>
                   </label>
-                  <label className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-surface-1 hover:bg-neutral-800 border border-dashed border-neutral-700 cursor-pointer text-xs text-neutral-300 transition-colors">
-                    <Upload className="w-4 h-4 text-amber-400" />
-                    <span>{imageUrl ? 'تم إرفاق صورة ✓ (اضغط للتغيير)' : 'رفع صورة من الكاميرا أو المعرض'}</span>
-                    <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                  </label>
+                  <PhotoPicker onPick={setImageUrl} hasImage={!!imageUrl} />
+                  {imageUrl && <span className="block mt-1 text-[11px] text-emerald-400">تم إرفاق صورة ✓</span>}
                 </div>
 
                 <div>

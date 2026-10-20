@@ -181,14 +181,15 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   }, [totalSalesRevenue]);
 
   const grossProfit = totalSalesRevenue - estimatedCOGS;
-  const grossProfitMargin = totalSalesRevenue > 0 ? ((grossProfit / totalSalesRevenue) * 100).toFixed(1) : '0';
+  // نسبة الربح على أساس التكلفة وليس سعر البيع
+  const grossProfitMargin = estimatedCOGS > 0 ? ((grossProfit / estimatedCOGS) * 100).toFixed(1) : '0';
 
   const totalOperatingExpenses = useMemo(() => {
     return expenses.reduce((sum, exp) => sum + exp.amount, 0);
   }, [expenses]);
 
   const netDistributableProfit = Math.max(0, grossProfit - totalOperatingExpenses);
-  const netProfitMargin = totalSalesRevenue > 0 ? ((netDistributableProfit / totalSalesRevenue) * 100).toFixed(1) : '0';
+  const netProfitMargin = estimatedCOGS > 0 ? ((netDistributableProfit / estimatedCOGS) * 100).toFixed(1) : '0';
 
   const totalInitialCapital = useMemo(() => {
     return partners.reduce((sum, p) => sum + (p.initialCapital || 0), 0);

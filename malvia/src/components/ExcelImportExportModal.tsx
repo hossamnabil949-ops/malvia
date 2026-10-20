@@ -17,6 +17,25 @@ import {
 import * as XLSX from 'xlsx';
 import { AutoPart, CarModel, Invoice, Customer, Supplier, CarBrand, PartCategory } from '../types/autoParts';
 
+// يقرأ أول عمود غير فارغ من الأسماء المحتملة، ويعتبر 0 قيمة صحيحة (لا يستبدلها بقيمة افتراضية)
+const pickCell = (row: Record<string, any>, keys: string[]): any => {
+  for (const k of keys) {
+    const v = row[k];
+    if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+  }
+  return undefined;
+};
+const toNum = (v: any): number | undefined => {
+  if (v === undefined || v === null) return undefined;
+  const norm = String(v)
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/[٬,\s]/g, '')
+    .replace('٫', '.');
+  const n = Number(norm);
+  return Number.isFinite(n) ? n : undefined;
+};
+
+
 interface ExcelImportExportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -178,12 +197,12 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
             const brand = (row['الماركة'] || row['brand'] || 'شامل') as CarBrand;
             const compatibleModels = row['السيارات المتوافقة'] || row['compatibleModels'] || 'شامل';
             const category = (row['القسم'] || row['category'] || 'فرامل ومكابح') as PartCategory;
-            const origin = row['المنشأ والجودة'] || row['origin'] || 'تجاري درجة 1';
+            const origin = row['المنشأ والجودة'] || row['المنشأ / الجودة'] || row['origin'] || 'تجاري درجة 1';
             const shelfLocation = row['مكان الرف'] || row['shelfLocation'] || 'رف عام';
-            const costPrice = Number(row['سعر الشراء والتكلفة'] || row['costPrice'] || row['التكلفة'] || 100);
-            const salePrice = Number(row['سعر البيع'] || row['salePrice'] || row['البيع'] || Math.round(costPrice * 1.35));
-            const stockQuantity = Number(row['الكمية الحالية'] || row['stockQuantity'] || row['الكمية'] || 10);
-            const minAlertStock = Number(row['حد التنبيه الأدنى'] || row['minAlertStock'] || 3);
+            const costPrice = toNum(pickCell(row, ['سعر الشراء والتكلفة', 'سعر الشراء / التكلفة (ج.م)', 'costPrice', 'التكلفة'])) ?? 0;
+            const salePrice = toNum(pickCell(row, ['سعر البيع', 'سعر البيع قطاعي (ج.م)', 'salePrice', 'البيع'])) ?? Math.round(costPrice * 1.35);
+            const stockQuantity = toNum(pickCell(row, ['الكمية الحالية', 'الكمية المتوفرة بالمخزن', 'stockQuantity', 'الكمية'])) ?? 0;
+            const minAlertStock = toNum(pickCell(row, ['حد التنبيه الأدنى', 'minAlertStock'])) ?? 3;
             const unit = row['الوحدة'] || row['unit'] || 'قطعة';
             const isScreenOrDisplay = false;
 

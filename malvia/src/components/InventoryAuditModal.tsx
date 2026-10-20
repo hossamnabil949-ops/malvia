@@ -42,7 +42,7 @@ export const InventoryAuditModal: React.FC<InventoryAuditModalProps> = ({
   const isLow = part.stockQuantity <= part.minAlertStock;
   const isOutOfStock = part.stockQuantity === 0;
   const profitPerUnit = part.salePrice - part.costPrice;
-  const profitMarginPercent = Math.round((profitPerUnit / part.salePrice) * 100);
+  const profitMarginPercent = part.costPrice > 0 ? Math.round((profitPerUnit / part.costPrice) * 100) : 0;
   const totalCostValue = part.stockQuantity * part.costPrice;
   const totalSaleValue = part.stockQuantity * part.salePrice;
   const expectedTotalProfit = totalSaleValue - totalCostValue;
