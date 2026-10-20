@@ -74,6 +74,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         const q = searchQuery.toLowerCase().trim();
         return (
           part.partNumber.toLowerCase().includes(q) ||
+          (part.barcode || '').toLowerCase().includes(q) ||
           part.name.includes(q) ||
           part.compatibleModels.includes(q) ||
           part.shelfLocation.toLowerCase().includes(q)
@@ -129,6 +130,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           quantity: item.quantity,
           unitPrice: effectivePrice,
           originalPrice: effectivePrice,
+          costPrice: item.part.costPrice,
           total: effectivePrice * item.quantity,
         };
       }),

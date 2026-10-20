@@ -89,6 +89,7 @@ export interface AutoPart {
   reservedQuantity?: number; // محجوز
   minAlertStock: number;
   unit: string; // حبة، طقم، لتر
+  barcode?: string; // باركود المنتج (اختياري) — يُسجَّل يدوياً أو بالكاميرا
   imageUrl?: string; // صورة القطعة للمعاينة والمشاركة
   isScreenOrDisplay?: boolean; // هل القطعة شاشة أو تابلوه
   alternatives?: PartAlternative[]; // البدائل المتطابقة
@@ -120,6 +121,7 @@ export interface InvoiceItem {
   quantity: number;
   unitPrice: number; // سعر البيع (معدل أو افتراضي)
   originalPrice?: number;
+  costPrice?: number; // تكلفة الوحدة وقت البيع (لحساب تكلفة البضاعة المباعة بدقة)
   total: number;
   returnedQuantity?: number;
 }

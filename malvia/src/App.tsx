@@ -252,11 +252,13 @@ export default function App() {
     });
   };
 
-  const handleUpdatePartPrices = (partId: string, costPrice: number, salePrice: number) => {
+  const handleUpdatePartPrices = (partId: string, costPrice: number, salePrice: number, barcode?: string) => {
     setParts(prev => {
       const updated = prev.map(p => {
         if (p.id === partId) {
-          return { ...p, costPrice, salePrice };
+          return barcode === undefined
+            ? { ...p, costPrice, salePrice }
+            : { ...p, costPrice, salePrice, barcode: barcode || undefined };
         }
         return p;
       });
@@ -949,6 +951,8 @@ export default function App() {
         {currentTab === 'finance' && (
           <FinanceView
             invoices={invoices}
+            parts={parts}
+            salesReturns={salesReturns}
             expenses={expenses}
             partners={partners}
             distributions={[]}
@@ -1148,6 +1152,7 @@ export default function App() {
                 partName: part.name,
                 quantity,
                 unitPrice: part.salePrice,
+                costPrice: part.costPrice,
                 total
               }],
               subtotal: total,

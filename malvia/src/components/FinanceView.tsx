@@ -58,12 +58,16 @@ import {
   ExpenseCategory,
   CapitalTransaction,
   CapitalTransactionType,
-  TreasuryTransaction
+  TreasuryTransaction,
+  AutoPart,
+  SalesReturn
 } from '../types/autoParts';
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS_LIST } from '../data/autoPartsData';
 
 interface FinanceViewProps {
   invoices: Invoice[];
+  parts?: AutoPart[];
+  salesReturns?: SalesReturn[];
   expenses: Expense[];
   partners: Partner[];
   distributions: ProfitDistributionRecord[];
@@ -90,6 +94,8 @@ const PARTNER_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#a855f7', '#ec4899', '
 
 export const FinanceView: React.FC<FinanceViewProps> = ({
   invoices,
+  parts = [],
+  salesReturns = [],
   expenses,
   partners,
   distributions,
@@ -172,13 +178,48 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     }
   }, [partners, targetPartnerId]);
 
-  const totalSalesRevenue = useMemo(() => {
-    return invoices.reduce((sum, inv) => sum + inv.grandTotal, 0);
-  }, [invoices]);
+  // تكلفة البضاعة المباعة من تكلفة كل صنف مباع فعلياً:
+  // 1) تكلفة الوحدة المسجلة في الفاتورة وقت البيع، وإلا
+  // 2) تكلفة الصنف الحالية من المخزون (بالمطابقة برقم القطعة)، وإلا
+  // 3) تقدير 70% من سعر البيع (ويُنبَّه المستخدم لعدد هذه البنود).
+  const { totalSalesRevenue, estimatedCOGS, estimatedCostItemsCount } = useMemo(() => {
+    const norm = (v: string) => (v || '').toLowerCase().replace(/[\s\-_.\/]/g, '');
+    const costByPart = new Map<string, number>();
+    parts.forEach((p) => costByPart.set(norm(p.partNumber), p.costPrice));
 
-  const estimatedCOGS = useMemo(() => {
-    return Math.round(totalSalesRevenue * 0.62);
-  }, [totalSalesRevenue]);
+    let revenue = 0;
+    let cogs = 0;
+    let estimatedCount = 0;
+
+    invoices.forEach((inv) => {
+      if (inv.status === 'ملغاة') return;
+      revenue += inv.grandTotal;
+      inv.items.forEach((it) => {
+        let unitCost = it.costPrice;
+        if (unitCost === undefined) unitCost = costByPart.get(norm(it.partNumber));
+        if (unitCost === undefined) {
+          unitCost = it.unitPrice * 0.7;
+          estimatedCount += 1;
+        }
+        cogs += unitCost * it.quantity;
+      });
+    });
+
+    // المرتجعات: تُخصم من الإيراد، وتكلفة القطع المرتجعة تُخصم من التكلفة
+    salesReturns.forEach((ret) => {
+      revenue -= ret.totalRefundAmount || 0;
+      ret.items.forEach((it) => {
+        const unitCost = costByPart.get(norm(it.partNumber)) ?? it.unitPrice * 0.7;
+        cogs -= unitCost * it.quantity;
+      });
+    });
+
+    return {
+      totalSalesRevenue: Math.max(0, revenue),
+      estimatedCOGS: Math.max(0, Math.round(cogs)),
+      estimatedCostItemsCount: estimatedCount,
+    };
+  }, [invoices, parts, salesReturns]);
 
   const grossProfit = totalSalesRevenue - estimatedCOGS;
   // نسبة الربح على أساس التكلفة وليس سعر البيع
@@ -817,7 +858,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               <span className="text-xl font-black text-amber-400 font-mono mt-1 block">
                 {totalSalesRevenue.toLocaleString()} ج.م
               </span>
-              <span className="text-[10px] text-neutral-500 mt-1 block">شامل الفواتير النقدية والآجلة ({invoices.length} فاتورة)</span>
+              <span className="text-[10px] text-neutral-500 mt-1 block">صافي بعد المرتجعات، شامل الفواتير النقدية والآجلة ({invoices.length} فاتورة)</span>
             </div>
 
             <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800">
@@ -825,7 +866,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               <span className="text-xl font-black text-neutral-300 font-mono mt-1 block">
                 {estimatedCOGS.toLocaleString()} ج.م
               </span>
-              <span className="text-[10px] text-neutral-500 mt-1 block">تكلفة شراء القطع من الوكلاء</span>
+              <span className="text-[10px] text-neutral-500 mt-1 block">
+                محسوبة من تكلفة كل صنف مباع
+                {estimatedCostItemsCount > 0 && ` (${estimatedCostItemsCount} بند بتكلفة تقديرية لعدم توفر تكلفته)`}
+              </span>
             </div>
 
             <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800">

@@ -1,3 +1,4 @@
+import { BarcodeField } from './BarcodeField';
 import React, { useState, useMemo } from 'react';
 import { 
   Search, 
@@ -26,7 +27,7 @@ interface InventoryViewProps {
   parts: AutoPart[];
   onAddNewPart: (newPart: AutoPart) => void;
   onUpdateStock: (partId: string, addedStock: number) => void;
-  onUpdatePartPrices?: (partId: string, costPrice: number, salePrice: number) => void;
+  onUpdatePartPrices?: (partId: string, costPrice: number, salePrice: number, barcode?: string) => void;
   onQuickSalePart: (part: AutoPart) => void;
   onOpenInventoryErrors?: () => void;
   onOpenCarModels?: () => void;
@@ -59,6 +60,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [editPricePart, setEditPricePart] = useState<AutoPart | null>(null);
   const [editCostPrice, setEditCostPrice] = useState<number>(0);
   const [editSalePrice, setEditSalePrice] = useState<number>(0);
+  const [editBarcode, setEditBarcode] = useState<string>('');
 
   const [newPartForm, setNewPartForm] = useState<Partial<AutoPart>>({
     partNumber: '',
@@ -86,6 +88,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         const q = searchQuery.toLowerCase().trim();
         return (
           part.partNumber.toLowerCase().includes(q) ||
+          (part.barcode || '').toLowerCase().includes(q) ||
           part.name.includes(q) ||
           part.compatibleModels.includes(q) ||
           part.shelfLocation.toLowerCase().includes(q)
@@ -110,9 +113,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       shelfLocation: newPartForm.shelfLocation || 'مستودع رئيسي',
       costPrice: Number(newPartForm.costPrice) || 0,
       salePrice: Number(newPartForm.salePrice) || 0,
-      stockQuantity: Number(newPartForm.stockQuantity) || 1,
-      minAlertStock: Number(newPartForm.minAlertStock) || 2,
+      stockQuantity: Number.isFinite(Number(newPartForm.stockQuantity)) ? Number(newPartForm.stockQuantity) : 0,
+      minAlertStock: Number.isFinite(Number(newPartForm.minAlertStock)) ? Number(newPartForm.minAlertStock) : 2,
       unit: newPartForm.unit || 'طقم',
+      barcode: newPartForm.barcode?.trim() || undefined,
     };
 
     onAddNewPart(part);
@@ -130,6 +134,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       stockQuantity: 10,
       minAlertStock: 3,
       unit: 'طقم',
+      barcode: '',
     });
   };
 
@@ -142,7 +147,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const handleConfirmEditPrices = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editPricePart || !onUpdatePartPrices) return;
-    onUpdatePartPrices(editPricePart.id, editCostPrice, editSalePrice);
+    onUpdatePartPrices(editPricePart.id, editCostPrice, editSalePrice, editBarcode.trim());
     setEditPricePart(null);
   };
 
@@ -232,6 +237,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               className="w-full h-11 pr-10 pl-4 rounded-xl bg-surface-1 border border-neutral-700 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400"
             />
           </div>
+
 
           <select
             value={stockStatusFilter}
@@ -329,6 +335,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                               setEditPricePart(part);
                               setEditCostPrice(part.costPrice);
                               setEditSalePrice(part.salePrice);
+                              setEditBarcode(part.barcode || '');
                             }}
                             className="p-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-amber-400"
                             title="تعديل سعر البيع وسعر الشراء"
@@ -433,6 +440,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   onChange={(e) => setEditSalePrice(Number(e.target.value))}
                   className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-amber-400 font-mono text-sm font-bold focus:border-amber-400 focus:outline-none"
                 />
+              </div>
+
+              <div>
+                <label className="text-neutral-300 font-bold block mb-1">الباركود</label>
+                <BarcodeField value={editBarcode} onChange={setEditBarcode} />
               </div>
 
               <div className="p-2.5 rounded-xl bg-surface-1 text-[11px] text-neutral-400 flex justify-between">
@@ -576,6 +588,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   onChange={(e) => setNewPartForm({ ...newPartForm, name: e.target.value })}
                   placeholder="مثال: طقم تيل فرامل أمامي كوري أصلي"
                   className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-neutral-300 font-bold block mb-1">
+                  الباركود (اختياري)
+                </label>
+                <BarcodeField
+                  value={newPartForm.barcode || ''}
+                  onChange={(v) => setNewPartForm({ ...newPartForm, barcode: v })}
                 />
               </div>
 

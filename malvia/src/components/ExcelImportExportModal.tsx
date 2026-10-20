@@ -204,6 +204,8 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
             const stockQuantity = toNum(pickCell(row, ['الكمية الحالية', 'الكمية المتوفرة بالمخزن', 'stockQuantity', 'الكمية'])) ?? 0;
             const minAlertStock = toNum(pickCell(row, ['حد التنبيه الأدنى', 'minAlertStock'])) ?? 3;
             const unit = row['الوحدة'] || row['unit'] || 'قطعة';
+            const barcodeCell = pickCell(row, ['الباركود', 'barcode', 'Barcode']);
+            const barcode = barcodeCell !== undefined ? String(barcodeCell).trim() : undefined;
             const isScreenOrDisplay = false;
 
             newPartsList.push({
@@ -220,6 +222,7 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
               stockQuantity,
               minAlertStock,
               unit,
+              barcode,
               isScreenOrDisplay
             });
           }
@@ -268,6 +271,7 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
       'الكمية المتوفرة بالمخزن': p.stockQuantity,
       'حد التنبيه الأدنى': p.minAlertStock,
       'الوحدة': p.unit,
+      'الباركود': p.barcode || '',
       'إجمالي التكلفة': p.stockQuantity * p.costPrice,
       'إجمالي القيمة البيعية': p.stockQuantity * p.salePrice
     }));
