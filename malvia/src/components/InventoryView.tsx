@@ -22,12 +22,16 @@ import {
 } from 'lucide-react';
 import { AutoPart, CarBrand, PartCategory } from '../types/autoParts';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
+import { BrandBar } from './BrandBar';
 
 interface InventoryViewProps {
   parts: AutoPart[];
   onAddNewPart: (newPart: AutoPart) => void;
   onUpdateStock: (partId: string, addedStock: number) => void;
   onUpdatePartPrices?: (partId: string, costPrice: number, salePrice: number, barcode?: string) => void;
+  carBrands?: string[];
+  onAddBrand?: (brand: string) => void;
+  onRemoveBrand?: (brand: string) => void;
   onQuickSalePart: (part: AutoPart) => void;
   onOpenInventoryErrors?: () => void;
   onOpenCarModels?: () => void;
@@ -41,6 +45,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   onAddNewPart,
   onUpdateStock,
   onUpdatePartPrices,
+  carBrands = CAR_BRANDS,
+  onAddBrand,
+  onRemoveBrand,
   onQuickSalePart,
   onOpenInventoryErrors,
   onOpenCarModels,
@@ -76,6 +83,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     minAlertStock: 3,
     unit: 'طقم',
   });
+
+  const brandCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    parts.forEach((p) => { m[p.brand] = (m[p.brand] || 0) + 1; });
+    return m;
+  }, [parts]);
 
   const filteredParts = useMemo(() => {
     return parts.filter((part) => {
@@ -250,21 +263,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </select>
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1">
-          {CAR_BRANDS.map((b) => (
-            <button
-              key={b}
-              onClick={() => setSelectedBrand(b)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                selectedBrand === b
-                  ? 'bg-amber-500 text-neutral-950 font-black shadow-sm'
-                  : 'bg-surface-1 text-neutral-400 hover:text-white border border-neutral-800'
-              }`}
-            >
-              {b}
-            </button>
-          ))}
-        </div>
+        <BrandBar
+          brands={carBrands}
+          selected={selectedBrand}
+          onSelect={setSelectedBrand}
+          onAddBrand={onAddBrand}
+          onRemoveBrand={onRemoveBrand}
+          countByBrand={brandCounts}
+        />
       </div>
 
       {/* Parts Table */}
@@ -570,7 +576,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     onChange={(e) => setNewPartForm({ ...newPartForm, brand: e.target.value as any })}
                     className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                   >
-                    {CAR_BRANDS.filter((b) => b !== 'شامل').map((b) => (
+                    {carBrands.filter((b) => b !== 'شامل').map((b) => (
                       <option key={b} value={b}>{b}</option>
                     ))}
                   </select>

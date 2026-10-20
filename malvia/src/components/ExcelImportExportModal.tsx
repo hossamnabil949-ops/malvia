@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { AutoPart, CarModel, Invoice, Customer, Supplier, CarBrand, PartCategory } from '../types/autoParts';
+import { normKey, normalizeBrand, GENERAL_BRAND } from '../data/brands';
 
 // يقرأ أول عمود غير فارغ من الأسماء المحتملة، ويعتبر 0 قيمة صحيحة (لا يستبدلها بقيمة افتراضية)
 const pickCell = (row: Record<string, any>, keys: string[]): any => {
@@ -36,6 +37,28 @@ const toNum = (v: any): number | undefined => {
 };
 
 
+// قراءة عمود بالاسم مع تجاهل حالة الحروف والمسافات والرموز وتشكيل العربي،
+// فيعمل مع عناوين عربية أو إنجليزية مثل: Brand / brand / الماركة / الماركه
+const makeGetter = (row: Record<string, any>) => {
+  const byKey = new Map<string, any>();
+  Object.keys(row).forEach((k) => byKey.set(normKey(k), row[k]));
+  const keys = Array.from(byKey.keys());
+  return (aliases: string[]): any => {
+    const ks = aliases.map(normKey);
+    for (const k of ks) {
+      const v = byKey.get(k);
+      if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+    }
+    // تطابق جزئي: اسم العمود يحتوي الاسم المطلوب (لأسماء مثل "رقم القطعة (OEM)")
+    for (const k of ks) {
+      if (k.length < 4) continue;
+      const hit = keys.find((rk) => rk.includes(k) && String(byKey.get(rk) ?? '').trim() !== '');
+      if (hit) return byKey.get(hit);
+    }
+    return undefined;
+  };
+};
+
 interface ExcelImportExportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -46,6 +69,7 @@ interface ExcelImportExportModalProps {
   suppliers: Supplier[];
   onImportParts: (newParts: AutoPart[]) => void;
   onImportCarModels?: (newModels: CarModel[]) => void;
+  onBrandsDetected?: (brands: string[]) => void;
 }
 
 export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
@@ -58,6 +82,7 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
   suppliers,
   onImportParts,
   onImportCarModels,
+  onBrandsDetected,
 }) => {
   const [activeTab, setActiveTab] = useState<'import' | 'export'>('import');
   const [importStatus, setImportStatus] = useState<{
@@ -162,9 +187,12 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
       try {
         const bstr = evt.target?.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
-        const firstSheetName = wb.SheetNames[0];
-        const ws = wb.Sheets[firstSheetName];
-        const data: any[] = XLSX.utils.sheet_to_json(ws);
+        // نقرأ كل الصفحات (Sheets) وليس الأولى فقط
+        const data: any[] = [];
+        wb.SheetNames.forEach((sheetName) => {
+          const rows: any[] = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+          rows.forEach((r) => data.push(r));
+        });
 
         if (!data || data.length === 0) {
           setImportStatus({
@@ -176,71 +204,99 @@ export const ExcelImportExportModal: React.FC<ExcelImportExportModalProps> = ({
 
         const newPartsList: AutoPart[] = [];
         const newModelsList: CarModel[] = [];
+        const detectedBrands = new Set<string>();
+        let skipped = 0;
+
+        const PART_NAME_KEYS = ['اسم القطعة', 'اسم الصنف', 'الصنف', 'البيان', 'name', 'part name', 'item', 'item name', 'description'];
+        const PART_NUM_KEYS = ['رقم القطعة OEM', 'رقم القطعة', 'partNumber', 'part number', 'part no', 'part #', 'oem', 'oem number', 'sku', 'الكود', 'كود الصنف', 'code'];
+        const MODEL_NAME_KEYS = ['اسم الموديل', 'الموديل', 'اسم السيارة', 'modelName', 'model name', 'model', 'car model', 'car'];
+        const BRAND_KEYS = ['الماركة', 'الماركه', 'ماركة السيارة', 'ماركه السياره', 'نوع السيارة', 'السيارة', 'brand', 'car brand', 'make', 'car make', 'manufacturer'];
 
         data.forEach((row, idx) => {
-          // Detect if it's car models file or parts file
-          if (row['اسم الموديل'] || row['modelName'] || row['Model']) {
+          const get = makeGetter(row);
+          const hasPartCols = get(PART_NAME_KEYS) !== undefined || get(PART_NUM_KEYS) !== undefined;
+          const modelName = get(MODEL_NAME_KEYS);
+
+          // ملف موديلات سيارات: فيه عمود موديل وليس فيه اسم/رقم قطعة
+          if (!hasPartCols && modelName !== undefined) {
+            const brand = normalizeBrand(get(BRAND_KEYS) ?? '') || 'أخرى';
+            if (brand !== GENERAL_BRAND && brand !== 'أخرى') detectedBrands.add(brand);
             newModelsList.push({
               id: `cm-import-${Date.now()}-${idx}`,
-              brand: (row['الماركة'] || row['brand'] || 'تويوتا') as CarBrand,
-              modelName: row['اسم الموديل'] || row['modelName'] || `موديل ${idx + 1}`,
-              yearFrom: Number(row['سنة الصنع من'] || row['yearFrom'] || 2015),
-              yearTo: Number(row['سنة الصنع إلى'] || row['yearTo'] || 2025),
-              engineSpecs: row['مواصفات المحرك'] || row['engineSpecs'] || '',
-              generation: row['الجيل'] || row['generation'] || '',
-              notes: row['ملاحظات'] || row['notes'] || 'مستورد من شيت إكسيل'
+              brand: brand as CarBrand,
+              modelName: String(modelName).trim(),
+              yearFrom: toNum(get(['سنة الصنع من', 'من سنة', 'yearFrom', 'year from', 'from year', 'from'])) ?? 2015,
+              yearTo: toNum(get(['سنة الصنع إلى', 'سنة الصنع الى', 'إلى سنة', 'الى سنة', 'yearTo', 'year to', 'to year', 'to'])) ?? 2025,
+              engineSpecs: String(get(['مواصفات المحرك', 'المحرك', 'engineSpecs', 'engine', 'engine specs']) ?? ''),
+              generation: String(get(['الجيل', 'generation']) ?? ''),
+              notes: String(get(['ملاحظات', 'notes']) ?? 'مستورد من شيت إكسيل')
             });
-          } else {
-            // AutoPart item
-            const partNum = row['رقم القطعة OEM'] || row['partNumber'] || row['PartNumber'] || row['الكود'] || `OEM-${Math.floor(10000 + Math.random() * 90000)}`;
-            const name = row['اسم القطعة'] || row['name'] || row['Name'] || row['الصنف'] || 'قطعة غيار غير محددة';
-            const brand = (row['الماركة'] || row['brand'] || 'شامل') as CarBrand;
-            const compatibleModels = row['السيارات المتوافقة'] || row['compatibleModels'] || 'شامل';
-            const category = (row['القسم'] || row['category'] || 'فرامل ومكابح') as PartCategory;
-            const origin = row['المنشأ والجودة'] || row['المنشأ / الجودة'] || row['origin'] || 'تجاري درجة 1';
-            const shelfLocation = row['مكان الرف'] || row['shelfLocation'] || 'رف عام';
-            const costPrice = toNum(pickCell(row, ['سعر الشراء والتكلفة', 'سعر الشراء / التكلفة (ج.م)', 'costPrice', 'التكلفة'])) ?? 0;
-            const salePrice = toNum(pickCell(row, ['سعر البيع', 'سعر البيع قطاعي (ج.م)', 'salePrice', 'البيع'])) ?? Math.round(costPrice * 1.35);
-            const stockQuantity = toNum(pickCell(row, ['الكمية الحالية', 'الكمية المتوفرة بالمخزن', 'stockQuantity', 'الكمية'])) ?? 0;
-            const minAlertStock = toNum(pickCell(row, ['حد التنبيه الأدنى', 'minAlertStock'])) ?? 3;
-            const unit = row['الوحدة'] || row['unit'] || 'قطعة';
-            const barcodeCell = pickCell(row, ['الباركود', 'barcode', 'Barcode']);
-            const barcode = barcodeCell !== undefined ? String(barcodeCell).trim() : undefined;
-            const isScreenOrDisplay = false;
-
-            newPartsList.push({
-              id: `part-import-${Date.now()}-${idx}`,
-              partNumber: String(partNum).trim(),
-              name: String(name).trim(),
-              brand,
-              compatibleModels: String(compatibleModels).trim(),
-              category,
-              origin,
-              shelfLocation: String(shelfLocation).trim(),
-              costPrice,
-              salePrice,
-              stockQuantity,
-              minAlertStock,
-              unit,
-              barcode,
-              isScreenOrDisplay
-            });
+            return;
           }
+
+          if (!hasPartCols) { skipped += 1; return; }
+
+          // AutoPart item
+          const partNum = get(PART_NUM_KEYS) ?? `OEM-${Math.floor(10000 + Math.random() * 90000)}`;
+          const name = get(PART_NAME_KEYS) ?? 'قطعة غيار غير محددة';
+          const brand = normalizeBrand(get(BRAND_KEYS) ?? GENERAL_BRAND) || GENERAL_BRAND;
+          if (brand !== GENERAL_BRAND && brand !== 'أخرى') detectedBrands.add(brand);
+          const compatibleModels = get(['السيارات المتوافقة', 'الموديلات المتوافقة', 'compatibleModels', 'compatible models', 'compatibility', 'models', 'الموديل', 'model']) ?? 'شامل';
+          const category = (get(['القسم', 'التصنيف', 'الفئة', 'category']) ?? 'فرامل ومكابح') as PartCategory;
+          const origin = get(['المنشأ والجودة', 'المنشأ / الجودة', 'المنشأ', 'الجودة', 'origin', 'quality']) ?? 'تجاري درجة 1';
+          const shelfLocation = get(['مكان الرف', 'الرف', 'shelfLocation', 'shelf', 'location']) ?? 'رف عام';
+          const costPrice = toNum(get(['سعر الشراء والتكلفة', 'سعر الشراء / التكلفة (ج.م)', 'سعر الشراء', 'سعر التكلفة', 'التكلفة', 'costPrice', 'cost price', 'cost', 'purchase price'])) ?? 0;
+          const salePrice = toNum(get(['سعر البيع', 'سعر البيع قطاعي (ج.م)', 'سعر البيع قطاعي', 'البيع', 'salePrice', 'sale price', 'selling price', 'price'])) ?? Math.round(costPrice * 1.35);
+          const stockQuantity = toNum(get(['الكمية الحالية', 'الكمية المتوفرة بالمخزن', 'الكمية', 'الرصيد', 'stockQuantity', 'stock quantity', 'quantity', 'qty', 'stock'])) ?? 0;
+          const minAlertStock = toNum(get(['حد التنبيه الأدنى', 'حد التنبيه', 'minAlertStock', 'min alert', 'min stock'])) ?? 3;
+          const unit = get(['الوحدة', 'unit']) ?? 'قطعة';
+          const barcodeCell = get(['الباركود', 'barcode']);
+          const barcode = barcodeCell !== undefined ? String(barcodeCell).trim() : undefined;
+          const isScreenOrDisplay = false;
+
+          newPartsList.push({
+            id: `part-import-${Date.now()}-${idx}`,
+            partNumber: String(partNum).trim(),
+            name: String(name).trim(),
+            brand,
+            compatibleModels: String(compatibleModels).trim(),
+            category,
+            origin,
+            shelfLocation: String(shelfLocation).trim(),
+            costPrice,
+            salePrice,
+            stockQuantity,
+            minAlertStock,
+            unit,
+            barcode,
+            isScreenOrDisplay
+          });
         });
+
+        // الماركات الجديدة الموجودة في الملف تُضاف تلقائياً لشريط الماركات
+        if (detectedBrands.size > 0 && onBrandsDetected) onBrandsDetected(Array.from(detectedBrands));
+
+        const brandsNote = detectedBrands.size > 0 ? ` | الماركات: ${Array.from(detectedBrands).join('، ')}` : '';
+        const skippedNote = skipped > 0 ? ` (تم تجاهل ${skipped} صف غير مفهوم)` : '';
 
         if (newPartsList.length > 0) {
           onImportParts(newPartsList);
           setImportStatus({
             success: true,
-            message: `تم بنجاح استيراد وإدراج ${newPartsList.length} صنف وقطعة غيار في المستودع والمحل!`,
+            message: `تم بنجاح استيراد وإدراج ${newPartsList.length} صنف وقطعة غيار في المستودع والمحل!${brandsNote}${skippedNote}`,
             count: newPartsList.length
           });
         } else if (newModelsList.length > 0 && onImportCarModels) {
           onImportCarModels(newModelsList);
           setImportStatus({
             success: true,
-            message: `تم بنجاح استيراد ${newModelsList.length} موديل سيارة جديد في النظام!`,
+            message: `تم بنجاح استيراد ${newModelsList.length} موديل سيارة جديد في النظام!${brandsNote}${skippedNote}`,
             count: newModelsList.length
+          });
+        } else {
+          setImportStatus({
+            success: false,
+            message: 'لم أتعرف على أعمدة الملف. تأكد أن الصف الأول يحتوي عناوين مثل: اسم القطعة، رقم القطعة، الماركة، سعر الشراء، سعر البيع، الكمية (أو ما يقابلها بالإنجليزية). حمّل القالب النموذجي كمرجع.'
           });
         }
       } catch (err) {

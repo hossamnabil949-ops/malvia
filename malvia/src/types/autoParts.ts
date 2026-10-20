@@ -1,4 +1,5 @@
-export type CarBrand = 'تويوتا' | 'هيونداي' | 'نيسان' | 'كيا' | 'فورد' | 'مرسيدس' | 'شيري' | 'إم جي' | 'بي إم دبليو' | 'أخرى' | 'شامل';
+// ماركات السيارات قابلة للإضافة والحذف من قبل المستخدم، لذلك هي نص حر وليست قائمة ثابتة
+export type CarBrand = string;
 
 export type PartCategory = 
   | 'فلاتر وزيوت' 
@@ -450,6 +451,7 @@ export interface ShopSettings {
   vatRate: number;
   invoiceFooterNotes: string;
   activeEmployeeId: string;
+  carBrands?: string[]; // قائمة ماركات السيارات التي يتعامل معها المحل (بدون «شامل»)
 }
 
 export type TenantPlan = 

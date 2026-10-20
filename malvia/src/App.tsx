@@ -41,6 +41,7 @@ import {
 } from './types/autoParts';
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
+import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands';
 
 // Components
 import { Navigation, ActiveTab } from './components/Navigation';
@@ -119,20 +120,55 @@ export default function App() {
   // Load tenant data whenever activeTenant changes
   const reloadTenantData = useCallback((tenant: TenantLicense) => {
     const data = loadTenantStoreData(tenant);
-    setParts(data.parts);
+
+    // توحيد أسماء الماركات القديمة (MG → إم جي ...) حتى تظهر القطع تحت زر الماركة الصحيح،
+    // وإضافة أي ماركة موجودة في البيانات ولم تكن في القائمة.
+    let partsData = data.parts;
+    let modelsData = data.carModels;
+    let changedParts = false;
+    let changedModels = false;
+    partsData = partsData.map(p => {
+      const b = normalizeBrand(p.brand);
+      if (b !== p.brand) { changedParts = true; return { ...p, brand: b }; }
+      return p;
+    });
+    modelsData = modelsData.map(m => {
+      const b = normalizeBrand(m.brand);
+      if (b !== m.brand) { changedModels = true; return { ...m, brand: b }; }
+      return m;
+    });
+    const baseSettings = data.settings || INITIAL_SHOP_SETTINGS;
+    const baseBrands = (baseSettings.carBrands ?? DEFAULT_CAR_BRANDS).filter(b => b !== GENERAL_BRAND);
+    const brandSet = new Set(baseBrands);
+    const added: string[] = [];
+    // أول مرة فقط (لم تُحفظ قائمة ماركات بعد): أضف كل ماركة موجودة في البيانات.
+    // بعد ذلك لا نُرجع ماركة حذفها المستخدم عمداً.
+    if (baseSettings.carBrands === undefined) {
+      [...partsData.map(p => p.brand), ...modelsData.map(m => m.brand)].forEach(b => {
+        if (b && b !== GENERAL_BRAND && b !== 'أخرى' && !brandSet.has(b)) { brandSet.add(b); added.push(b); }
+      });
+    }
+    const nextSettings: ShopSettings = { ...baseSettings, carBrands: Array.from(brandSet) };
+    const updates: Parameters<typeof saveTenantStoreData>[1] = {};
+    if (changedParts) updates.parts = partsData;
+    if (changedModels) updates.carModels = modelsData;
+    if (baseSettings.carBrands === undefined) updates.settings = nextSettings;
+    if (Object.keys(updates).length > 0) saveTenantStoreData(tenant.tenantId, updates);
+
+    setParts(partsData);
     setInvoices(data.invoices);
     setCustomers(data.customers);
     setSuppliers(data.suppliers);
     setSupplierPayments(data.supplierPayments || []);
     setTreasury(data.treasuryTransactions);
     setEmployees(data.employees);
-    setSettings(data.settings || INITIAL_SHOP_SETTINGS);
+    setSettings(nextSettings);
     setSalesReturns(data.salesReturns);
     setPurchaseInvoices(data.purchaseInvoices);
     setPurchaseReturns(data.purchaseReturns);
     setExpenses(data.expenses);
     setPartners(data.partners);
-    setCarModels(data.carModels);
+    setCarModels(modelsData);
     setInventoryErrors(data.inventoryErrors);
   }, []);
 
@@ -221,6 +257,37 @@ export default function App() {
       return tx.type === 'قبض' ? sum + tx.amount : sum - tx.amount;
     }, 0);
   }, [treasury]);
+
+  // ماركات السيارات التي يتعامل بها المحل («شامل» دائماً أولاً)
+  const carBrands = useMemo(
+    () => [GENERAL_BRAND, ...(settings.carBrands ?? DEFAULT_CAR_BRANDS).filter(b => b !== GENERAL_BRAND)],
+    [settings.carBrands]
+  );
+
+  const saveCarBrands = (list: string[]) => {
+    setSettings(prev => {
+      const next = { ...prev, carBrands: list };
+      persistChanges({ settings: next });
+      return next;
+    });
+  };
+
+  const handleAddBrand = (brand: string) => {
+    const clean = normalizeBrand(brand);
+    if (!clean || clean === GENERAL_BRAND) return;
+    setSettings(prev => {
+      const cur = (prev.carBrands ?? DEFAULT_CAR_BRANDS).filter(b => b !== GENERAL_BRAND);
+      if (cur.includes(clean)) return prev;
+      const next = { ...prev, carBrands: [...cur, clean] };
+      persistChanges({ settings: next });
+      return next;
+    });
+  };
+
+  const handleRemoveBrand = (brand: string) => {
+    const cur = (settings.carBrands ?? DEFAULT_CAR_BRANDS).filter(b => b !== GENERAL_BRAND && b !== brand);
+    saveCarBrands(cur);
+  };
 
   // Handlers for Inventory
   const handleUpdatePart = (updatedPart: AutoPart) => {
@@ -826,6 +893,9 @@ export default function App() {
         {currentTab === 'pos' && (
           <QuickPosView
             parts={parts}
+            carBrands={carBrands}
+            onAddBrand={handleAddBrand}
+            onRemoveBrand={handleRemoveBrand}
             customers={customers}
             cart={cart}
             onAddToCart={handleAddToCart}
@@ -842,6 +912,9 @@ export default function App() {
         {currentTab === 'inventory' && (
           <InventoryView
             parts={parts}
+            carBrands={carBrands}
+            onAddBrand={handleAddBrand}
+            onRemoveBrand={handleRemoveBrand}
             onAddNewPart={handleAddPart}
             onUpdateStock={handleUpdateStock}
             onUpdatePartPrices={handleUpdatePartPrices}
@@ -1004,8 +1077,9 @@ export default function App() {
             employees={employees}
             activeLicense={activeTenant}
             onUpdateSettings={(newSettings: ShopSettings) => {
-              setSettings(newSettings);
-              persistChanges({ settings: newSettings });
+              const merged = { ...newSettings, carBrands: settings.carBrands ?? newSettings.carBrands };
+              setSettings(merged);
+              persistChanges({ settings: merged });
             }}
             onAddEmployee={(newEmp: Employee) => {
               setEmployees(prev => {
@@ -1064,6 +1138,7 @@ export default function App() {
           isOpen={showCarModels}
           onClose={() => setShowCarModels(false)}
           carModels={carModels}
+          carBrands={carBrands}
           onAddCarModel={handleAddCarModel}
           onDeleteCarModel={handleDeleteCarModel}
           onUpdateCarModel={handleUpdateCarModel}
@@ -1095,6 +1170,7 @@ export default function App() {
           invoices={invoices}
           customers={customers}
           suppliers={suppliers}
+          onBrandsDetected={(names: string[]) => names.forEach(handleAddBrand)}
           onImportParts={(newParts: AutoPart[]) => {
             setParts(prev => {
               const updated = [...prev, ...newParts];

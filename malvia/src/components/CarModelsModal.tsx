@@ -23,6 +23,7 @@ interface CarModelsModalProps {
   onAddCarModel: (model: CarModel) => void;
   onDeleteCarModel: (modelId: string) => void;
   onUpdateCarModel?: (model: CarModel) => void;
+  carBrands?: string[];
 }
 
 export const CarModelsModal: React.FC<CarModelsModalProps> = ({
@@ -32,7 +33,9 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
   onAddCarModel,
   onDeleteCarModel,
   onUpdateCarModel,
+  carBrands,
 }) => {
+  const brandsList = carBrands && carBrands.length > 0 ? carBrands : CAR_BRANDS;
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBrandFilter, setSelectedBrandFilter] = useState<string>('all');
@@ -160,7 +163,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
               >
                 الكل
               </button>
-              {CAR_BRANDS.filter(b => b !== 'شامل').map((b) => (
+              {brandsList.filter(b => b !== 'شامل').map((b) => (
                 <button
                   key={b}
                   onClick={() => setSelectedBrandFilter(b)}
@@ -275,7 +278,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                       onChange={(e) => setBrand(e.target.value as CarBrand)}
                       className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-bold"
                     >
-                      {CAR_BRANDS.filter(b => b !== 'شامل').map((b) => (
+                      {brandsList.filter(b => b !== 'شامل').map((b) => (
                         <option key={b} value={b}>{b}</option>
                       ))}
                     </select>
@@ -392,7 +395,7 @@ export const CarModelsModal: React.FC<CarModelsModalProps> = ({
                       onChange={(e) => setEditingModel({ ...editingModel, brand: e.target.value as CarBrand })}
                       className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-bold"
                     >
-                      {CAR_BRANDS.filter(b => b !== 'شامل').map((b) => (
+                      {brandsList.filter(b => b !== 'شامل').map((b) => (
                         <option key={b} value={b}>{b}</option>
                       ))}
                     </select>

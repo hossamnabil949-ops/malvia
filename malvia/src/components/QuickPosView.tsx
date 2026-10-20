@@ -27,6 +27,7 @@ import {
 import confetti from 'canvas-confetti';
 import { AutoPart, CartItem, Customer, Invoice, CarBrand, PartCategory, PaymentMethod } from '../types/autoParts';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
+import { BrandBar } from './BrandBar';
 
 interface QuickPosViewProps {
   parts: AutoPart[];
@@ -40,6 +41,9 @@ interface QuickPosViewProps {
   onCheckoutComplete: (invoice: Invoice) => void;
   onOpenVoiceAssistant?: () => void;
   onOpenReturns?: () => void;
+  carBrands?: string[];
+  onAddBrand?: (brand: string) => void;
+  onRemoveBrand?: (brand: string) => void;
 }
 
 export const QuickPosView: React.FC<QuickPosViewProps> = ({
@@ -54,6 +58,9 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   onCheckoutComplete,
   onOpenVoiceAssistant,
   onOpenReturns,
+  carBrands = CAR_BRANDS,
+  onAddBrand,
+  onRemoveBrand,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<CarBrand>('شامل');
@@ -65,6 +72,12 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('كاش (نقدي)');
   const [cashGiven, setCashGiven] = useState<string>('');
   const [applyVat, setApplyVat] = useState<boolean>(false);
+
+  const brandCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    parts.forEach((p) => { m[p.brand] = (m[p.brand] || 0) + 1; });
+    return m;
+  }, [parts]);
 
   const filteredParts = useMemo(() => {
     return parts.filter((part) => {
@@ -190,21 +203,15 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-          {CAR_BRANDS.map((brand) => (
-            <button
-              key={brand}
-              onClick={() => setSelectedBrand(brand)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                selectedBrand === brand
-                  ? 'bg-amber-500 text-neutral-950 font-black shadow-sm'
-                  : 'bg-surface-2 text-neutral-400 hover:text-white border border-neutral-800'
-              }`}
-            >
-              {brand}
-            </button>
-          ))}
-        </div>
+        <BrandBar
+          brands={carBrands}
+          selected={selectedBrand}
+          onSelect={setSelectedBrand}
+          onAddBrand={onAddBrand}
+          onRemoveBrand={onRemoveBrand}
+          countByBrand={brandCounts}
+          inactiveClass="bg-surface-2 text-neutral-400 hover:text-white border border-neutral-800"
+        />
 
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
           <button
