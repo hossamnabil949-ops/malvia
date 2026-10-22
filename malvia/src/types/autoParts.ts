@@ -374,6 +374,7 @@ export interface PurchaseReturn {
   notes?: string;
   recordedBy: string;
   isCorrected?: boolean;
+  isSettled?: boolean; // تمت تسوية أثر المرتجع على رصيد المورد والفاتورة
 }
 
 export type TreasuryTransactionType = 'قبض' | 'صرف';

@@ -682,6 +682,7 @@ export default function App() {
       creditedToStoreBalance: credited,
       unpaidDebtBeforeReturn: debtBefore,
       unpaidDebtAfterReturn: debtBefore - deducted,
+      isSettled: true,
     };
 
     setPurchaseReturns(prev => {
@@ -773,6 +774,77 @@ export default function App() {
         return updated;
       });
     }
+  };
+
+  // تسوية مرتجع مشتريات قديم سُجّل قبل إصلاح الأرصدة: يطبّق أثره على رصيد المورد والفاتورة (بدون لمس المخزن أو الخزنة)
+  const handleSettlePurchaseReturn = (returnId: string) => {
+    const ret = purchaseReturns.find(r => r.id === returnId);
+    if (!ret || ret.isSettled) return;
+
+    const supplier = suppliers.find(s => s.id === ret.supplierId);
+    const cashRefund = Math.min(Math.max(0, ret.cashRefundToTreasury || 0), ret.totalReturnAmount);
+    const nonCash = Math.max(0, ret.totalReturnAmount - cashRefund);
+    const debtBefore = supplier ? (supplier.deferredDebt ?? supplier.balance ?? 0) : 0;
+    const deducted = Math.min(nonCash, debtBefore);
+    const credited = nonCash - deducted;
+
+    setPurchaseReturns(prev => {
+      const updated = prev.map(r => r.id === returnId ? {
+        ...r,
+        deductedFromDeferredDebt: deducted,
+        creditedToStoreBalance: credited,
+        unpaidDebtBeforeReturn: debtBefore,
+        unpaidDebtAfterReturn: debtBefore - deducted,
+        isSettled: true,
+      } : r);
+      persistChanges({ purchaseReturns: updated });
+      return updated;
+    });
+
+    if (supplier) {
+      setSuppliers(prev => {
+        const updated = prev.map(s => {
+          if (s.id !== ret.supplierId) return s;
+          const newDebt = Math.max(0, (s.deferredDebt ?? s.balance ?? 0) - deducted);
+          return {
+            ...s,
+            deferredDebt: newDebt,
+            balance: newDebt,
+            storeCredit: (s.storeCredit || 0) + credited,
+            totalReturned: (s.totalReturned || 0) + ret.totalReturnAmount,
+          };
+        });
+        persistChanges({ suppliers: updated });
+        return updated;
+      });
+    }
+
+    setPurchaseInvoices(prev => {
+      const updated = prev.map(inv => {
+        if (inv.id !== ret.purchaseInvoiceId) return inv;
+        if ((inv.returnedAmount || 0) >= ret.totalReturnAmount) return inv; // أثره مسجل على الفاتورة بالفعل
+        const original = inv.originalGrandTotal ?? (inv.grandTotal + (inv.returnedAmount || 0));
+        const returnedAmount = (inv.returnedAmount || 0) + ret.totalReturnAmount;
+        const newGrandTotal = Math.max(0, original - returnedAmount);
+        const newPaid = Math.max(0, inv.amountPaid - cashRefund);
+        const items = inv.items.map(it => {
+          const r = ret.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
+          return r ? { ...it, returnedQuantity: (it.returnedQuantity || 0) + r.quantity } : it;
+        });
+        return {
+          ...inv,
+          items,
+          originalGrandTotal: original,
+          returnedAmount,
+          grandTotal: newGrandTotal,
+          amountPaid: newPaid,
+          remainingBalance: Math.max(0, newGrandTotal - newPaid),
+          paymentStatus: newGrandTotal === 0 ? 'مرتجع كلي' as const : 'مرتجع جزئي' as const,
+        };
+      });
+      persistChanges({ purchaseInvoices: updated });
+      return updated;
+    });
   };
 
   const handleDeletePurchaseReturn = (returnId: string) => {
@@ -1196,6 +1268,7 @@ export default function App() {
               setSuppliers(prev => { const updated = prev.map(s => s.id === updatedSupplier.id ? updatedSupplier : s); persistChanges({ suppliers: updated }); return updated; });
             }}
             onAddPurchaseReturn={handleAddPurchaseReturn}
+            onSettlePurchaseReturn={handleSettlePurchaseReturn}
             onAddSupplier={(newSup: Supplier) => {
               setSuppliers(prev => {
                 const updated = [newSup, ...prev];

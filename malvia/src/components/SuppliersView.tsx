@@ -56,6 +56,7 @@ interface SuppliersViewProps {
     notes: string
   ) => void;
   onAddPurchaseReturn?: (returnData: PurchaseReturn) => void;
+  onSettlePurchaseReturn?: (returnId: string) => void;
 }
 
 export const SuppliersView: React.FC<SuppliersViewProps> = ({
@@ -68,6 +69,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
   onUpdateSupplier,
   onSettleSupplierPayment,
   onAddPurchaseReturn,
+  onSettlePurchaseReturn,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -761,6 +763,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
                   <th className="py-3 px-4 font-bold">رصيد دائن للمحل</th>
                   <th className="py-3 px-4 font-bold">البيان والأصناف</th>
                   <th className="py-3 px-4 font-bold">المسؤول</th>
+                  <th className="py-3 px-4 font-bold">إجراء</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
@@ -792,11 +795,28 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
                     </td>
                     <td className="py-3 px-4 text-slate-300 max-w-xs truncate">{r.notes || '-'}</td>
                     <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">{r.recordedBy}</td>
+                    <td className="py-3 px-4">
+                      {onSettlePurchaseReturn && !r.isSettled && !(r.deductedFromDeferredDebt && r.deductedFromDeferredDebt > 0) && !(r.creditedToStoreBalance && r.creditedToStoreBalance > 0) ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`تسوية المرتجع ${r.returnNumber}؟ سيتم خصم ${r.totalReturnAmount.toLocaleString()} ج.م من مديونية المورد، وأي زيادة تُسجَّل رصيداً للمحل. لن يتغير المخزن.`)) {
+                              onSettlePurchaseReturn(r.id);
+                            }
+                          }}
+                          className="px-3 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-bold text-[11px] whitespace-nowrap"
+                        >
+                          تسوية
+                        </button>
+                      ) : (
+                        <span className="text-slate-500">-</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {purchaseReturns.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="text-center py-8 text-slate-500">
+                    <td colSpan={9} className="text-center py-8 text-slate-500">
                       لا توجد مرتجعات بضائع مسجلة للموردين
                     </td>
                   </tr>
