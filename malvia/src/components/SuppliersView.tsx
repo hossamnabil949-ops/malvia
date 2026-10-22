@@ -253,16 +253,8 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
       onAddPurchaseReturn(returnRecord);
     }
 
-    if (onUpdateSupplier) {
-      onUpdateSupplier({
-        ...returnModalSupplier,
-        balance: newDebt,
-        deferredDebt: newDebt,
-        storeCredit: newCredit,
-        totalReturned: (returnModalSupplier.totalReturned || 0) + totalReturnVal
-      });
-    }
-
+    // تحديث رصيد المورد (تخفيض المديونية / الرصيد الدائن) يتم مركزياً داخل onAddPurchaseReturn
+    // حتى لا يُحتسب المرتجع مرتين.
     setReturnModalSupplier(null);
   };
 

@@ -63,6 +63,7 @@ import {
   SalesReturn
 } from '../types/autoParts';
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS_LIST } from '../data/autoPartsData';
+import { TreasuryAccountsReport } from './TreasuryAccountsReport';
 
 interface FinanceViewProps {
   invoices: Invoice[];
@@ -931,6 +932,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
       {activeFinanceTab === 'treasury' && (
         <div className="space-y-6">
+          <TreasuryAccountsReport transactions={treasuryTransactions} />
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
             {paymentBreakdown.map((pb) => {
               const color = PAYMENT_COLORS[pb.key] || '#94a3b8';

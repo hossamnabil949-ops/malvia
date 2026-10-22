@@ -79,7 +79,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     }
   };
 
-  const totalOutstandingCredit = customers.reduce((sum, c) => sum + c.balance, 0);
+  const totalOutstandingCredit = customers.reduce((sum, c) => sum + Math.max(0, c.balance), 0);
 
   const top5Customers = [...customers]
     .sort((a, b) => (b.monthlyPurchases || 0) - (a.monthlyPurchases || 0))
@@ -336,7 +336,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 <div className="mt-3 pt-2 border-t border-neutral-800 text-[10px] text-neutral-400 flex items-center justify-between">
                   <span>{cust.invoices} فاتورة</span>
                   <span className={cust.balance > 0 ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
-                    {cust.balance > 0 ? `آجل: ${cust.balance} ج.م` : 'مسدد بالكامل'}
+                    {cust.balance > 0 ? `آجل: ${cust.balance} ج.م` : cust.balance < 0 ? `رصيد له: ${Math.abs(cust.balance)} ج.م` : 'مسدد بالكامل'}
                   </span>
                 </div>
               </div>
@@ -389,7 +389,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 <div className="flex justify-between">
                   <span className="text-neutral-400">الرصيد الآجل المستحق:</span>
                   <span className={`font-mono font-bold ${c.balance > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                    {c.balance.toLocaleString()} ج.م
+                    {c.balance < 0 ? `رصيد له: ${Math.abs(c.balance).toLocaleString()}` : c.balance.toLocaleString()} ج.م
                   </span>
                 </div>
                 <div className="flex justify-between">

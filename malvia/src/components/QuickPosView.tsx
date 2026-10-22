@@ -25,7 +25,7 @@ import {
   CarFront,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { AutoPart, CartItem, Customer, Invoice, CarBrand, PartCategory, PaymentMethod } from '../types/autoParts';
+import { AutoPart, CartItem, Customer, Invoice, CarBrand, CarModel, PartCategory, PaymentMethod } from '../types/autoParts';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
 import { BrandBar } from './BrandBar';
 
@@ -42,6 +42,7 @@ interface QuickPosViewProps {
   onOpenVoiceAssistant?: () => void;
   onOpenReturns?: () => void;
   carBrands?: string[];
+  carModels?: CarModel[];
   onAddBrand?: (brand: string) => void;
   onRemoveBrand?: (brand: string) => void;
 }
@@ -59,6 +60,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   onOpenVoiceAssistant,
   onOpenReturns,
   carBrands = CAR_BRANDS,
+  carModels = [],
   onAddBrand,
   onRemoveBrand,
 }) => {
@@ -68,6 +70,23 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('cash');
   const [customerNameInput, setCustomerNameInput] = useState('زبون نقدي (قطاعي)');
   const [carDetailsInput, setCarDetailsInput] = useState('');
+  const [customerPhoneInput, setCustomerPhoneInput] = useState('');
+  const [carBrandInput, setCarBrandInput] = useState('');
+  const [carModelInput, setCarModelInput] = useState('');
+  const [carYearInput, setCarYearInput] = useState('');
+
+  // موديلات الماركة المختارة (من قائمة موديلات السيارات المسجلة بالمخزن)
+  const modelsForBrand = useMemo(
+    () => carModels.filter((m) => m.brand === carBrandInput),
+    [carModels, carBrandInput]
+  );
+  const yearsForModel = useMemo(() => {
+    const m = modelsForBrand.find((x) => x.modelName === carModelInput);
+    if (!m || !m.yearFrom || !m.yearTo) return [] as number[];
+    const list: number[] = [];
+    for (let y = m.yearTo; y >= m.yearFrom && list.length < 60; y--) list.push(y);
+    return list;
+  }, [modelsForBrand, carModelInput]);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('كاش (نقدي)');
   const [cashGiven, setCashGiven] = useState<string>('');
@@ -126,15 +145,23 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
     const finalCustomerName = selectedCustomerId === 'cash' ? customerNameInput : customerObj?.name || customerNameInput;
     const finalCustomerType = customerObj?.type === 'ورشة فنية' ? 'ورشة' : 'تجزئة';
 
+    const phone = customerPhoneInput.trim() || customerObj?.phone || '';
+    const carDetailsFull = [carBrandInput, carModelInput.trim(), carYearInput.trim(), carDetailsInput.trim()]
+      .filter(Boolean)
+      .join(' ');
+
     const newInvoice: Invoice = {
       id: `inv-${Date.now()}`,
       invoiceNumber: `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       date: new Date().toISOString().split('T')[0],
       time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
       customerName: finalCustomerName,
-      customerPhone: customerObj?.phone || '',
+      customerPhone: phone,
       customerType: finalCustomerType,
-      carDetails: carDetailsInput || undefined,
+      carDetails: carDetailsFull || undefined,
+      carBrand: carBrandInput || undefined,
+      carModel: carModelInput.trim() || undefined,
+      carYear: carYearInput.trim() || undefined,
       items: cart.map((item) => {
         const effectivePrice = item.customPrice !== undefined ? item.customPrice : item.part.salePrice;
         return {
@@ -161,6 +188,10 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
     setDiscountAmount(0);
     setCashGiven('');
     setCarDetailsInput('');
+    setCustomerPhoneInput('');
+    setCarBrandInput('');
+    setCarModelInput('');
+    setCarYearInput('');
   };
 
   return (
@@ -357,7 +388,12 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               <span className="text-neutral-400 font-bold">الزبون / الورشة:</span>
               <select
                 value={selectedCustomerId}
-                onChange={(e) => setSelectedCustomerId(e.target.value)}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setSelectedCustomerId(id);
+                  const c = customers.find((x) => x.id === id);
+                  setCustomerPhoneInput(c?.phone || '');
+                }}
                 className="bg-surface-1 border border-neutral-700 text-neutral-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-amber-400"
               >
                 <option value="cash">زبون نقدي / قطاعي</option>
@@ -387,10 +423,61 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
             )}
 
             <input
+              type="tel"
+              inputMode="tel"
+              value={customerPhoneInput}
+              onChange={(e) => setCustomerPhoneInput(e.target.value)}
+              placeholder="رقم تليفون العميل (اختياري)"
+              className="w-full h-8 px-3 rounded-lg bg-surface-1 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400 font-mono"
+            />
+
+            <div className="grid grid-cols-3 gap-2">
+              <select
+                value={carBrandInput}
+                onChange={(e) => { setCarBrandInput(e.target.value); setCarModelInput(''); setCarYearInput(''); }}
+                className="h-8 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-xs text-white focus:outline-none focus:border-amber-400"
+              >
+                <option value="">ماركة السيارة</option>
+                {carBrands.filter((b) => b !== 'شامل').map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+
+              <input
+                type="text"
+                list="pos-car-models"
+                value={carModelInput}
+                onChange={(e) => { setCarModelInput(e.target.value); setCarYearInput(''); }}
+                placeholder={carBrandInput ? 'الموديل' : 'اختر الماركة أولاً'}
+                className="h-8 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400"
+              />
+              <datalist id="pos-car-models">
+                {modelsForBrand.map((m) => (
+                  <option key={m.id} value={m.modelName} />
+                ))}
+              </datalist>
+
+              <input
+                type="text"
+                inputMode="numeric"
+                list="pos-car-years"
+                value={carYearInput}
+                onChange={(e) => setCarYearInput(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+                placeholder="السنة"
+                className="h-8 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400 font-mono"
+              />
+              <datalist id="pos-car-years">
+                {yearsForModel.map((y) => (
+                  <option key={y} value={String(y)} />
+                ))}
+              </datalist>
+            </div>
+
+            <input
               type="text"
               value={carDetailsInput}
               onChange={(e) => setCarDetailsInput(e.target.value)}
-              placeholder="بيانات العربية (مثال: كورولا 2021 فيراني - لوحة س ن ص 182)"
+              placeholder="ملاحظات السيارة / رقم اللوحة (اختياري)"
               className="w-full h-8 px-3 rounded-lg bg-surface-1 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400"
             />
           </div>

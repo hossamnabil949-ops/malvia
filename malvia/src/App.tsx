@@ -42,6 +42,10 @@ import {
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
 import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands';
+import { isCreditMethod } from './utils/treasuryAccounts';
+
+const todayISO = () => new Date().toISOString().split('T')[0];
+const normKey = (v?: string) => (v || '').trim().toLowerCase();
 
 // Components
 import { Navigation, ActiveTab } from './components/Navigation';
@@ -300,7 +304,7 @@ export default function App() {
 
   const handleAddPart = (newPart: AutoPart) => {
     setParts(prev => {
-      const updated = [newPart, ...prev];
+      const updated = [{ ...newPart, createdAt: newPart.createdAt || todayISO(), updatedAt: todayISO() }, ...prev];
       persistChanges({ parts: updated });
       return updated;
     });
@@ -310,7 +314,7 @@ export default function App() {
     setParts(prev => {
       const updated = prev.map(p => {
         if (p.id === partId) {
-          return { ...p, stockQuantity: Math.max(0, p.stockQuantity + addedStock) };
+          return { ...p, stockQuantity: Math.max(0, p.stockQuantity + addedStock), updatedAt: todayISO() };
         }
         return p;
       });
@@ -387,7 +391,7 @@ export default function App() {
         const soldItem = invoice.items.find(item => item.partNumber === part.partNumber || item.partName === part.name);
         if (soldItem) {
           const newStock = Math.max(0, part.stockQuantity - soldItem.quantity);
-          return { ...part, stockQuantity: newStock };
+          return { ...part, stockQuantity: newStock, updatedAt: todayISO() };
         }
         return part;
       });
@@ -395,27 +399,65 @@ export default function App() {
       return updated;
     });
 
-    // Add treasury transaction
-    const newTx: TreasuryTransaction = {
-      id: `TX-SALE-${Date.now()}`,
-      txNumber: `TX-${Math.floor(1000 + Math.random() * 9000)}`,
-      date: invoice.date,
-      time: invoice.time || new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
-      type: 'قبض',
-      category: 'مبيعات كاشير (فواتير بيع)',
-      amount: invoice.grandTotal,
-      paymentMethod: invoice.paymentMethod,
-      balanceAfter: treasuryBalance + invoice.grandTotal,
-      referenceId: invoice.id,
-      description: `مبيعات فاتورة #${invoice.invoiceNumber} - عميل: ${invoice.customerName}`,
-      recordedBy: currentUser?.employeeName || 'الكاشير'
-    };
+    if (isCreditMethod(invoice.paymentMethod)) {
+      // البيع الآجل لا يدخل نقدية للخزنة؛ يُسجَّل كمديونية على العميل حتى يسدد.
+      setCustomers(prev => {
+        const nameKey = normKey(invoice.customerName);
+        const phoneKey = normKey(invoice.customerPhone);
+        const idx = prev.findIndex(c =>
+          (phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey
+        );
+        let updated: Customer[];
+        if (idx >= 0) {
+          updated = prev.map((c, i) => i === idx ? {
+            ...c,
+            balance: c.balance + invoice.grandTotal,
+            totalPurchases: (c.totalPurchases || 0) + invoice.grandTotal,
+            monthlyPurchases: (c.monthlyPurchases || 0) + invoice.grandTotal,
+            invoicesCount: (c.invoicesCount || 0) + 1,
+            lastVisit: invoice.date,
+            phone: c.phone || invoice.customerPhone || '',
+          } : c);
+        } else {
+          const created: Customer = {
+            id: `cust-${Date.now()}`,
+            name: invoice.customerName || 'عميل آجل',
+            type: invoice.customerType === 'ورشة' ? 'ورشة فنية' : 'عميل تجزئة',
+            phone: invoice.customerPhone || '',
+            balance: invoice.grandTotal,
+            totalPurchases: invoice.grandTotal,
+            monthlyPurchases: invoice.grandTotal,
+            invoicesCount: 1,
+            lastVisit: invoice.date,
+          };
+          updated = [created, ...prev];
+        }
+        persistChanges({ customers: updated });
+        return updated;
+      });
+    } else {
+      // Add treasury transaction
+      const newTx: TreasuryTransaction = {
+        id: `TX-SALE-${Date.now()}`,
+        txNumber: `TX-${Math.floor(1000 + Math.random() * 9000)}`,
+        date: invoice.date,
+        time: invoice.time || new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        type: 'قبض',
+        category: 'مبيعات كاشير (فواتير بيع)',
+        amount: invoice.grandTotal,
+        paymentMethod: invoice.paymentMethod,
+        balanceAfter: treasuryBalance + invoice.grandTotal,
+        referenceId: invoice.id,
+        description: `مبيعات فاتورة #${invoice.invoiceNumber} - عميل: ${invoice.customerName}`,
+        recordedBy: currentUser?.employeeName || 'الكاشير'
+      };
 
-    setTreasury(prev => {
-      const updated = [newTx, ...prev];
-      persistChanges({ treasuryTransactions: updated });
-      return updated;
-    });
+      setTreasury(prev => {
+        const updated = [newTx, ...prev];
+        persistChanges({ treasuryTransactions: updated });
+        return updated;
+      });
+    }
 
     // Clear cart on completion
     setCart([]);
@@ -429,13 +471,33 @@ export default function App() {
       return updated;
     });
 
+    // خصم قيمة المرتجع من الفاتورة الأصلية وتحديث حالتها
+    setInvoices(prev => {
+      const updated = prev.map(inv => {
+        if (inv.id !== salesReturn.invoiceId) return inv;
+        const items = inv.items.map(it => {
+          const r = salesReturn.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
+          return r ? { ...it, returnedQuantity: (it.returnedQuantity || 0) + r.quantity } : it;
+        });
+        const allReturned = items.every(it => (it.returnedQuantity || 0) >= it.quantity);
+        return {
+          ...inv,
+          items,
+          returnedAmount: (inv.returnedAmount || 0) + salesReturn.totalRefundAmount,
+          status: allReturned ? 'مرتجع كلي' as const : 'مرتجع جزئي' as const,
+        };
+      });
+      persistChanges({ invoices: updated });
+      return updated;
+    });
+
     // Restock parts if returned
     if (salesReturn.items && salesReturn.items.length > 0) {
       setParts(prevParts => {
         const updated = prevParts.map(part => {
           const item = salesReturn.items.find(i => i.partNumber === part.partNumber);
           if (item) {
-            return { ...part, stockQuantity: part.stockQuantity + item.quantity };
+            return { ...part, stockQuantity: part.stockQuantity + item.quantity, updatedAt: todayISO() };
           }
           return part;
         });
@@ -444,8 +506,26 @@ export default function App() {
       });
     }
 
+    // المرتجع على حساب العميل الآجل: يُخصم من مديونيته (وإن زاد عنها يصبح له رصيد دائن ظاهر بالسالب)
+    if (salesReturn.refundMethod === 'خصم من رصيد العميل الآجل') {
+      const original = invoices.find(i => i.id === salesReturn.invoiceId);
+      setCustomers(prev => {
+        const nameKey = normKey(salesReturn.customerName);
+        const phoneKey = normKey(original?.customerPhone);
+        const updated = prev.map(c =>
+          ((phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey)
+            ? { ...c, balance: c.balance - salesReturn.totalRefundAmount }
+            : c
+        );
+        persistChanges({ customers: updated });
+        return updated;
+      });
+    }
+
     // Add refund treasury transaction if cash paid out
     if (salesReturn.totalRefundAmount > 0 && salesReturn.treasuryDeducted) {
+      const original = invoices.find(i => i.id === salesReturn.invoiceId);
+      const refundViaWallet = salesReturn.refundMethod === 'إنستاباي / محفظة';
       const newTx: TreasuryTransaction = {
         id: `TX-RET-${Date.now()}`,
         txNumber: `TX-R-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -454,7 +534,8 @@ export default function App() {
         type: 'صرف',
         category: 'مرتجع مبيعات نقدي (صرف من الخزنة)',
         amount: salesReturn.totalRefundAmount,
-        paymentMethod: 'نقدي',
+        // يُخصم من نفس الحساب الذي دخلت منه الفاتورة (كاش/إنستاباي/فيزا...)
+        paymentMethod: refundViaWallet ? (original && !isCreditMethod(original.paymentMethod) ? original.paymentMethod : 'انستاباي / InstaPay') : 'نقدي',
         balanceAfter: treasuryBalance - salesReturn.totalRefundAmount,
         referenceId: salesReturn.id,
         description: `مرتجع مبيعات #${salesReturn.returnNumber || salesReturn.id} - عميل: ${salesReturn.customerName}`,
@@ -485,35 +566,76 @@ export default function App() {
     });
 
     // Keep supplier ledger synchronized with the purchase invoice.
+    // لو للمحل رصيد دائن عند المورد (من مرتجع سابق) يُخصم أولاً من المتبقي على هذه الفاتورة.
     setSuppliers(prev => {
       const updated = prev.map(s => {
         if (s.id !== invoice.supplierId) return s;
         const remaining = Math.max(0, invoice.grandTotal - invoice.amountPaid);
+        const credit = s.storeCredit || 0;
+        const usedCredit = Math.min(credit, remaining);
+        const debtNow = Math.max(0, (s.deferredDebt ?? s.balance ?? 0) + remaining - usedCredit);
         return {
           ...s,
           totalSupplied: (s.totalSupplied || 0) + invoice.grandTotal,
           totalPaid: (s.totalPaid || 0) + invoice.amountPaid,
-          deferredDebt: Math.max(0, (s.deferredDebt ?? s.balance ?? 0) + remaining),
-          balance: Math.max(0, (s.deferredDebt ?? s.balance ?? 0) + remaining),
+          deferredDebt: debtNow,
+          balance: debtNow,
+          storeCredit: credit - usedCredit,
         };
       });
       persistChanges({ suppliers: updated });
       return updated;
     });
 
-    // Increase stock for purchased parts
+    // Increase stock for purchased parts — والأصناف الجديدة تُضاف للمخزن تلقائياً بالرصيد
     setParts(prevParts => {
-      const updated = prevParts.map(part => {
-        const boughtItem = invoice.items.find(item => item.partNumber === part.partNumber);
-        if (boughtItem) {
-          return { 
-            ...part, 
-            stockQuantity: part.stockQuantity + boughtItem.quantity,
-            costPrice: boughtItem.costPrice || part.costPrice 
-          };
-        }
-        return part;
+      const today = todayISO();
+      // تجميع كميات كل صنف في الفاتورة (قد يتكرر الصنف في أكثر من سطر)
+      const byKey = new Map<string, { item: typeof invoice.items[number]; qty: number }>();
+      invoice.items.forEach(item => {
+        const key = normKey(item.partNumber) || normKey(item.partName);
+        const cur = byKey.get(key);
+        if (cur) byKey.set(key, { item, qty: cur.qty + item.quantity });
+        else byKey.set(key, { item, qty: item.quantity });
       });
+
+      const matched = new Set<string>();
+      const updatedExisting = prevParts.map(part => {
+        const k1 = normKey(part.partNumber);
+        const hit = byKey.get(k1) ?? byKey.get(normKey(part.name));
+        if (!hit) return part;
+        matched.add(byKey.get(k1) ? k1 : normKey(part.name));
+        return {
+          ...part,
+          stockQuantity: part.stockQuantity + hit.qty,
+          costPrice: hit.item.costPrice || part.costPrice,
+          updatedAt: today,
+        };
+      });
+
+      const newParts: AutoPart[] = [];
+      byKey.forEach(({ item, qty }, key) => {
+        if (matched.has(key)) return;
+        newParts.push({
+          id: `p-${Date.now()}-${newParts.length}`,
+          partNumber: item.partNumber || `NEW-${Date.now().toString().slice(-6)}-${newParts.length + 1}`,
+          name: item.partName,
+          brand: item.brand || GENERAL_BRAND,
+          compatibleModels: 'عام',
+          category: item.category,
+          origin: 'تجاري درجة 1',
+          shelfLocation: 'مستودع رئيسي',
+          costPrice: item.costPrice,
+          salePrice: item.salePrice || item.costPrice,
+          stockQuantity: qty,
+          minAlertStock: 2,
+          unit: 'حبة',
+          createdAt: today,
+          updatedAt: today,
+        });
+      });
+
+      const updated = [...newParts, ...updatedExisting];
       persistChanges({ parts: updated });
       return updated;
     });
@@ -543,18 +665,85 @@ export default function App() {
   };
 
   const handleAddPurchaseReturn = (purchaseReturn: PurchaseReturn) => {
+    const supplier = suppliers.find(s => s.id === purchaseReturn.supplierId);
+    const originalInvoice = purchaseInvoices.find(i => i.id === purchaseReturn.purchaseInvoiceId);
+
+    // توزيع قيمة المرتجع: (1) استرداد نقدي إن اختير، (2) تخفيض مديونية المورد، (3) الباقي رصيد دائن للمحل عند المورد
+    const cashRefund = Math.min(Math.max(0, purchaseReturn.cashRefundToTreasury || 0), purchaseReturn.totalReturnAmount);
+    const nonCash = Math.max(0, purchaseReturn.totalReturnAmount - cashRefund);
+    const debtBefore = supplier ? (supplier.deferredDebt ?? supplier.balance ?? 0) : 0;
+    const deducted = Math.min(nonCash, debtBefore);
+    const credited = nonCash - deducted;
+
+    const finalReturn: PurchaseReturn = {
+      ...purchaseReturn,
+      cashRefundToTreasury: cashRefund,
+      deductedFromDeferredDebt: deducted,
+      creditedToStoreBalance: credited,
+      unpaidDebtBeforeReturn: debtBefore,
+      unpaidDebtAfterReturn: debtBefore - deducted,
+    };
+
     setPurchaseReturns(prev => {
-      const updated = [purchaseReturn, ...prev];
+      const updated = [finalReturn, ...prev];
       persistChanges({ purchaseReturns: updated });
       return updated;
     });
+
+    // حساب المورد: تخفيض المديونية + رصيد دائن للمحل (لا يضيع الفائض ويظهر بدل الصفر)
+    if (supplier) {
+      setSuppliers(prev => {
+        const updated = prev.map(s => {
+          if (s.id !== purchaseReturn.supplierId) return s;
+          const newDebt = Math.max(0, (s.deferredDebt ?? s.balance ?? 0) - deducted);
+          return {
+            ...s,
+            deferredDebt: newDebt,
+            balance: newDebt,
+            storeCredit: (s.storeCredit || 0) + credited,
+            totalReturned: (s.totalReturned || 0) + purchaseReturn.totalReturnAmount,
+          };
+        });
+        persistChanges({ suppliers: updated });
+        return updated;
+      });
+    }
+
+    // خصم قيمة المرتجع من فاتورة المشتريات الأصلية وتحديث حالتها
+    if (originalInvoice) {
+      setPurchaseInvoices(prev => {
+        const updated = prev.map(inv => {
+          if (inv.id !== purchaseReturn.purchaseInvoiceId) return inv;
+          const original = inv.originalGrandTotal ?? (inv.grandTotal + (inv.returnedAmount || 0));
+          const returnedAmount = (inv.returnedAmount || 0) + purchaseReturn.totalReturnAmount;
+          const newGrandTotal = Math.max(0, original - returnedAmount);
+          const newPaid = Math.max(0, inv.amountPaid - cashRefund);
+          const items = inv.items.map(it => {
+            const r = purchaseReturn.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
+            return r ? { ...it, returnedQuantity: (it.returnedQuantity || 0) + r.quantity } : it;
+          });
+          return {
+            ...inv,
+            items,
+            originalGrandTotal: original,
+            returnedAmount,
+            grandTotal: newGrandTotal,
+            amountPaid: newPaid,
+            remainingBalance: Math.max(0, newGrandTotal - newPaid),
+            paymentStatus: newGrandTotal === 0 ? 'مرتجع كلي' as const : 'مرتجع جزئي' as const,
+          };
+        });
+        persistChanges({ purchaseInvoices: updated });
+        return updated;
+      });
+    }
 
     // Reduce stock
     setParts(prevParts => {
       const updated = prevParts.map(part => {
         const item = purchaseReturn.items.find(i => i.partNumber === part.partNumber);
         if (item) {
-          return { ...part, stockQuantity: Math.max(0, part.stockQuantity - item.quantity) };
+          return { ...part, stockQuantity: Math.max(0, part.stockQuantity - item.quantity), updatedAt: todayISO() };
         }
         return part;
       });
@@ -563,7 +752,7 @@ export default function App() {
     });
 
     // If cash refund received to treasury
-    if (purchaseReturn.cashRefundToTreasury > 0) {
+    if (cashRefund > 0) {
       const newTx: TreasuryTransaction = {
         id: `TX-PR-${Date.now()}`,
         txNumber: `TX-PR-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -571,9 +760,9 @@ export default function App() {
         time: purchaseReturn.time,
         type: 'قبض',
         category: 'مرتجع مشتريات نقدي (توريد للخزنة)',
-        amount: purchaseReturn.cashRefundToTreasury,
-        paymentMethod: 'نقدي',
-        balanceAfter: treasuryBalance + purchaseReturn.cashRefundToTreasury,
+        amount: cashRefund,
+        paymentMethod: originalInvoice?.paymentMethod || 'نقدي',
+        balanceAfter: treasuryBalance + cashRefund,
         referenceId: purchaseReturn.id,
         description: `استرداد نقدي لمرتجع مشتريات من مورد: ${purchaseReturn.supplierName}`,
         recordedBy: currentUser?.employeeName || 'مسؤول المشتريات'
@@ -662,7 +851,7 @@ export default function App() {
       const targetPart = parts.find(p => p.id === errorRecord.partId);
       if (targetPart) {
         const adjustedStock = Math.max(0, targetPart.stockQuantity + errorRecord.differenceQty);
-        handleUpdatePart({ ...targetPart, stockQuantity: adjustedStock });
+        handleUpdatePart({ ...targetPart, stockQuantity: adjustedStock, updatedAt: todayISO() });
       }
     }
 
@@ -874,6 +1063,8 @@ export default function App() {
           <HomeDashboard
             parts={parts}
             invoices={invoices}
+            treasuryTransactions={treasury}
+            onOpenTreasuryReports={() => setCurrentTab('finance')}
             currentSession={currentUser}
             onChangeTab={setCurrentTab}
             onOpenInvoiceModal={(inv) => setSelectedInvoiceForDetail(inv)}
@@ -893,6 +1084,7 @@ export default function App() {
         {currentTab === 'pos' && (
           <QuickPosView
             parts={parts}
+            carModels={carModels}
             carBrands={carBrands}
             onAddBrand={handleAddBrand}
             onRemoveBrand={handleRemoveBrand}
@@ -940,6 +1132,7 @@ export default function App() {
 
         {currentTab === 'purchases' && (
           <PurchasesView
+            carBrands={carBrands.filter(b => b !== GENERAL_BRAND)}
             purchaseInvoices={purchaseInvoices}
             purchaseReturns={purchaseReturns}
             suppliers={suppliers}
@@ -962,9 +1155,30 @@ export default function App() {
               });
             }}
             onSettleBalance={(customerId: string, amount: number) => {
+              const cust = customers.find(c => c.id === customerId);
               setCustomers(prev => {
                 const updated = prev.map(c => c.id === customerId ? { ...c, balance: Math.max(0, c.balance - amount) } : c);
                 persistChanges({ customers: updated });
+                return updated;
+              });
+              // التحصيل من العميل يدخل الخزنة (كان لا يُسجَّل في الخزنة)
+              const tx: TreasuryTransaction = {
+                id: `TX-CUST-${Date.now()}`,
+                txNumber: `TX-C-${Math.floor(1000 + Math.random() * 9000)}`,
+                date: todayISO(),
+                time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+                type: 'قبض',
+                category: 'تحصيل من عميل / ورشة',
+                amount,
+                paymentMethod: 'نقدي',
+                balanceAfter: treasuryBalance + amount,
+                referenceId: customerId,
+                description: `تحصيل من عميل: ${cust?.name || customerId}`,
+                recordedBy: currentUser?.employeeName || 'الكاشير'
+              };
+              setTreasury(prev => {
+                const updated = [tx, ...prev];
+                persistChanges({ treasuryTransactions: updated });
                 return updated;
               });
             }}
@@ -992,7 +1206,13 @@ export default function App() {
             onSettleSupplierPayment={(supplierId, amount, paymentDate, paymentMethod, _treasurySource, notes) => {
               const supplier = suppliers.find(s => s.id === supplierId);
               setSuppliers(prev => {
-                const updated = prev.map(s => s.id === supplierId ? { ...s, balance: Math.max(0, (s.deferredDebt ?? s.balance) - amount), deferredDebt: Math.max(0, (s.deferredDebt ?? s.balance) - amount), totalPaid: (s.totalPaid || 0) + amount, lastPaymentDate: paymentDate } : s);
+                const updated = prev.map(s => {
+                  if (s.id !== supplierId) return s;
+                  const debt = s.deferredDebt ?? s.balance ?? 0;
+                  const newDebt = Math.max(0, debt - amount);
+                  const overpaid = Math.max(0, amount - debt); // الزيادة عن المديونية = رصيد دائن للمحل عند المورد
+                  return { ...s, balance: newDebt, deferredDebt: newDebt, storeCredit: (s.storeCredit || 0) + overpaid, totalPaid: (s.totalPaid || 0) + amount, lastPaymentDate: paymentDate };
+                });
                 persistChanges({ suppliers: updated });
                 return updated;
               });
@@ -1173,7 +1393,8 @@ export default function App() {
           onBrandsDetected={(names: string[]) => names.forEach(handleAddBrand)}
           onImportParts={(newParts: AutoPart[]) => {
             setParts(prev => {
-              const updated = [...prev, ...newParts];
+              const today = todayISO();
+              const updated = [...prev, ...newParts.map(p => ({ ...p, createdAt: p.createdAt || today, updatedAt: p.updatedAt || today }))];
               persistChanges({ parts: updated });
               return updated;
             });

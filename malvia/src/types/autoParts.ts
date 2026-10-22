@@ -94,6 +94,8 @@ export interface AutoPart {
   imageUrl?: string; // صورة القطعة للمعاينة والمشاركة
   isScreenOrDisplay?: boolean; // هل القطعة شاشة أو تابلوه
   alternatives?: PartAlternative[]; // البدائل المتطابقة
+  createdAt?: string; // تاريخ إضافة الصنف للمخزن (YYYY-MM-DD)
+  updatedAt?: string; // تاريخ آخر حركة على رصيد الصنف (YYYY-MM-DD)
 }
 
 export interface CartItem {
@@ -136,6 +138,9 @@ export interface Invoice {
   customerPhone?: string;
   customerType: 'تجزئة' | 'ورشة' | 'شركة نقليات';
   carDetails?: string;
+  carBrand?: string; // ماركة السيارة المختارة وقت البيع
+  carModel?: string; // موديل السيارة
+  carYear?: string; // سنة الصنع (اختياري)
   items: InvoiceItem[];
   subtotal: number;
   tax: number; // ضريبة القيمة المضافة
@@ -283,6 +288,7 @@ export interface PurchaseInvoiceItem {
   partNumber: string;
   partName: string;
   category: PartCategory;
+  brand?: string; // ماركة السيارة (تُستخدم عند إضافة صنف جديد للمخزن تلقائياً)
   quantity: number;
   costPrice: number;
   salePrice: number;

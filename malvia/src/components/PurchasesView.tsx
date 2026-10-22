@@ -38,6 +38,8 @@ import {
   PartCategory 
 } from '../types/autoParts';
 import { PART_CATEGORIES } from '../data/autoPartsData';
+import { DateRangeFilter } from './DateRangeFilter';
+import { DateRange, EMPTY_DATE_RANGE, inDateRange } from '../utils/dateRange';
 
 interface PurchasesViewProps {
   purchaseInvoices: PurchaseInvoice[];
@@ -50,6 +52,7 @@ interface PurchasesViewProps {
   onPurchaseReturn: (returnData: PurchaseReturn) => void;
   onDeletePurchaseReturn?: (returnId: string) => void;
   onAddNewPart?: (part: AutoPart) => void;
+  carBrands?: string[];
 }
 
 export const PurchasesView: React.FC<PurchasesViewProps> = ({
@@ -63,10 +66,12 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   onPurchaseReturn,
   onDeletePurchaseReturn,
   onAddNewPart,
+  carBrands = [],
 }) => {
   const [currentTab, setCurrentTab] = useState<'invoices' | 'returns'>('invoices');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [dateRange, setDateRange] = useState<DateRange>(EMPTY_DATE_RANGE);
   const [selectedInvoiceForModal, setSelectedInvoiceForModal] = useState<PurchaseInvoice | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
@@ -74,7 +79,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const [returnPurchaseInvoice, setReturnPurchaseInvoice] = useState<PurchaseInvoice | null>(null);
   const [returnItems, setReturnItems] = useState<{ [key: string]: number }>({});
   const [returnReason, setReturnReason] = useState('بضاعة معيبة / غير مطابقة للمواصفات');
-  const [excessSettlementOption, setExcessSettlementOption] = useState<'treasury_cash' | 'supplier_credit'>('treasury_cash');
+  const [excessSettlementOption, setExcessSettlementOption] = useState<'treasury_cash' | 'supplier_credit'>('supplier_credit');
   const [returnNotes, setReturnNotes] = useState('');
 
   // New Invoice Form State
@@ -154,6 +159,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         partNumber: existing.partNumber,
         partName: existing.name,
         category: existing.category,
+        brand: existing.brand,
         costPrice: existing.costPrice,
         salePrice: existing.salePrice,
         total: Math.round(updated[index].quantity * existing.costPrice)
@@ -186,7 +192,19 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     e.preventDefault();
     if (!selectedSupplier || invoiceItems.length === 0) return;
 
-    const validItems = invoiceItems.filter(it => it.partName.trim() && it.quantity > 0);
+    const stamp = Date.now().toString().slice(-6);
+    const validItems = invoiceItems
+      .filter(it => it.partName.trim() && Number(it.quantity) > 0)
+      .map((it, idx) => {
+        const name = it.partName.trim();
+        let partNumber = it.partNumber.trim();
+        if (!partNumber) {
+          // نفس الاسم موجود بالمخزن؟ استخدم رقمه، وإلا ولّد رقماً للصنف الجديد
+          const sameName = parts.find(p => p.name.trim() === name);
+          partNumber = sameName ? sameName.partNumber : `NEW-${stamp}-${idx + 1}`;
+        }
+        return { ...it, partName: name, partNumber, quantity: Number(it.quantity), costPrice: Number(it.costPrice), salePrice: Number(it.salePrice) };
+      });
     if (validItems.length === 0) return;
 
     const finalAmountPaid = paymentStatus === 'مدفوعة نقداً' ? grandTotal : (paymentStatus === 'آجل' ? 0 : amountPaid);
@@ -234,8 +252,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const handleOpenReturnModal = (inv: PurchaseInvoice) => {
     setReturnPurchaseInvoice(inv);
     const initialQtys: { [key: string]: number } = {};
-    inv.items.forEach(it => {
-      initialQtys[it.partNumber] = 0;
+    inv.items.forEach((_, idx) => {
+      initialQtys[String(idx)] = 0;
     });
     setReturnItems(initialQtys);
     setReturnNotes('');
@@ -246,8 +264,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       return { totalReturnAmount: 0, unpaidBefore: 0, debtReduction: 0, unpaidAfter: 0, excessCash: 0, newGrandTotal: 0 };
     }
 
-    const totalReturnAmount = returnPurchaseInvoice.items.reduce((acc, it) => {
-      const qty = returnItems[it.partNumber] || 0;
+    const totalReturnAmount = returnPurchaseInvoice.items.reduce((acc, it, idx) => {
+      const qty = returnItems[String(idx)] || 0;
       return acc + (qty * it.costPrice);
     }, 0);
 
@@ -265,13 +283,14 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     if (!returnPurchaseInvoice || returnCalculation.totalReturnAmount <= 0) return;
 
     const returnedItemsList: PurchaseReturnItem[] = returnPurchaseInvoice.items
-      .filter(it => (returnItems[it.partNumber] || 0) > 0)
-      .map(it => ({
+      .map((it, idx) => ({ it, qty: returnItems[String(idx)] || 0 }))
+      .filter(({ qty }) => qty > 0)
+      .map(({ it, qty }) => ({
         partNumber: it.partNumber,
         partName: it.partName,
-        quantity: returnItems[it.partNumber],
+        quantity: qty,
         unitCost: it.costPrice,
-        total: returnItems[it.partNumber] * it.costPrice,
+        total: qty * it.costPrice,
         reason: returnReason,
       }));
 
@@ -308,12 +327,13 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         (inv.supplierInvoiceNumber && inv.supplierInvoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()));
       
       const matchesStatus = filterStatus === 'all' || inv.paymentStatus === filterStatus;
-      return matchesSearch && matchesStatus;
+      return matchesSearch && matchesStatus && inDateRange(inv.date, dateRange);
     });
-  }, [purchaseInvoices, searchQuery, filterStatus]);
+  }, [purchaseInvoices, searchQuery, filterStatus, dateRange]);
 
   const filteredReturns = useMemo(() => {
     return purchaseReturns.filter(ret => {
+      if (!inDateRange(ret.date, dateRange)) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         return (
@@ -324,7 +344,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       }
       return true;
     });
-  }, [purchaseReturns, searchQuery]);
+  }, [purchaseReturns, searchQuery, dateRange]);
 
   const totalPurchasesAmount = useMemo(() => {
     return purchaseInvoices.reduce((acc, i) => acc + i.grandTotal, 0);
@@ -515,6 +535,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           />
         </div>
 
+        <DateRangeFilter value={dateRange} onChange={setDateRange} />
+
         {currentTab === 'invoices' && (
           <select
             value={filterStatus}
@@ -526,6 +548,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             <option value="مسددة جزئياً">مسددة جزئياً</option>
             <option value="آجل">آجل (قيد السداد)</option>
             <option value="مرتجع جزئي">مرتجع جزئي</option>
+            <option value="مرتجع كلي">مرتجع كلي</option>
           </select>
         )}
       </div>
@@ -600,7 +623,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                         <td className="p-3.5">
                           {hasReturn ? (
                             <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold">
-                              مرتجع جزئي
+                              {inv.grandTotal === 0 ? 'مرتجع كلي' : 'مرتجع جزئي'}
                             </span>
                           ) : inv.paymentStatus === 'مدفوعة نقداً' ? (
                             <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
@@ -893,15 +916,30 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                           </td>
 
                           <td className="p-2.5">
-                            <select
-                              value={item.category}
-                              onChange={(e) => handleItemChange(index, 'category', e.target.value)}
-                              className="h-8 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-[11px] text-neutral-300"
-                            >
-                              {PART_CATEGORIES.map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
-                              ))}
-                            </select>
+                            <div className="space-y-1">
+                              <select
+                                value={item.category}
+                                onChange={(e) => handleItemChange(index, 'category', e.target.value)}
+                                className="h-8 w-full px-2 rounded-lg bg-surface-1 border border-neutral-700 text-[11px] text-neutral-300"
+                              >
+                                {PART_CATEGORIES.map(cat => (
+                                  <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                              </select>
+                              {carBrands.length > 0 && (
+                                <select
+                                  value={item.brand || ''}
+                                  onChange={(e) => handleItemChange(index, 'brand', e.target.value)}
+                                  className="h-8 w-full px-2 rounded-lg bg-surface-1 border border-neutral-700 text-[11px] text-neutral-300"
+                                  title="ماركة السيارة — تُستخدم عند إضافة صنف جديد للمخزن"
+                                >
+                                  <option value="">ماركة السيارة (شامل)</option>
+                                  {carBrands.map(b => (
+                                    <option key={b} value={b}>{b}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
                           </td>
 
                           <td className="p-2.5 text-center">
@@ -1106,18 +1144,23 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
-                      {returnPurchaseInvoice.items.map((it) => {
-                        const currentReturnQty = returnItems[it.partNumber] || 0;
+                      {returnPurchaseInvoice.items.map((it, idx) => {
+                        const rowKey = String(idx);
+                        const maxReturnable = Math.max(0, it.quantity - (it.returnedQuantity || 0));
+                        const currentReturnQty = returnItems[rowKey] || 0;
                         const rowReturnTotal = currentReturnQty * it.costPrice;
 
                         return (
-                          <tr key={it.partNumber} className="hover:bg-surface-3">
+                          <tr key={rowKey} className="hover:bg-surface-3">
                             <td className="p-2.5">
                               <span className="font-bold text-white block">{it.partName}</span>
                               <span className="font-mono text-[10px] text-amber-400">{it.partNumber}</span>
                             </td>
                             <td className="p-2.5 text-center font-mono">
                               {it.quantity}
+                              {(it.returnedQuantity || 0) > 0 && (
+                                <span className="block text-[10px] text-rose-400">مرتجع سابقاً: {it.returnedQuantity}</span>
+                              )}
                             </td>
                             <td className="p-2.5 text-center font-mono font-bold text-amber-300">
                               {it.costPrice} ج.م
@@ -1128,7 +1171,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                                   type="button"
                                   onClick={() => setReturnItems(prev => ({
                                     ...prev,
-                                    [it.partNumber]: Math.max(0, (prev[it.partNumber] || 0) - 1)
+                                    [rowKey]: Math.max(0, (prev[rowKey] || 0) - 1)
                                   }))}
                                   className="w-6 h-6 rounded bg-neutral-800 text-neutral-300 hover:text-white"
                                 >
@@ -1137,11 +1180,11 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                                 <input
                                   type="number"
                                   min="0"
-                                  max={it.quantity}
+                                  max={maxReturnable}
                                   value={currentReturnQty}
                                   onChange={(e) => {
-                                    const val = Math.min(it.quantity, Math.max(0, parseInt(e.target.value) || 0));
-                                    setReturnItems(prev => ({ ...prev, [it.partNumber]: val }));
+                                    const val = Math.min(maxReturnable, Math.max(0, parseInt(e.target.value) || 0));
+                                    setReturnItems(prev => ({ ...prev, [rowKey]: val }));
                                   }}
                                   className="w-14 h-7 text-center rounded bg-surface-1 border border-neutral-700 text-white font-mono text-xs font-bold"
                                 />
@@ -1149,7 +1192,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                                   type="button"
                                   onClick={() => setReturnItems(prev => ({
                                     ...prev,
-                                    [it.partNumber]: Math.min(it.quantity, (prev[it.partNumber] || 0) + 1)
+                                    [rowKey]: Math.min(maxReturnable, (prev[rowKey] || 0) + 1)
                                   }))}
                                   className="w-6 h-6 rounded bg-neutral-800 text-neutral-300 hover:text-white"
                                 >

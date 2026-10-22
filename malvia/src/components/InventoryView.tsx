@@ -23,6 +23,8 @@ import {
 import { AutoPart, CarBrand, PartCategory } from '../types/autoParts';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
 import { BrandBar } from './BrandBar';
+import { DateRangeFilter } from './DateRangeFilter';
+import { DateRange, EMPTY_DATE_RANGE, inDateRange, isDateRangeActive } from '../utils/dateRange';
 
 interface InventoryViewProps {
   parts: AutoPart[];
@@ -59,6 +61,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [selectedBrand, setSelectedBrand] = useState<CarBrand>('شامل');
   const [selectedCategory, setSelectedCategory] = useState<string>('الكل');
   const [stockStatusFilter, setStockStatusFilter] = useState<'all' | 'low' | 'out'>('all');
+  const [dateRange, setDateRange] = useState<DateRange>(EMPTY_DATE_RANGE);
 
   const [showAddModal, setShowAddModal] = useState(isAddModalOpenInitially);
   const [restockPart, setRestockPart] = useState<AutoPart | null>(null);
@@ -96,6 +99,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       if (selectedCategory !== 'الكل' && part.category !== selectedCategory) return false;
       if (stockStatusFilter === 'low' && part.stockQuantity > part.minAlertStock) return false;
       if (stockStatusFilter === 'out' && part.stockQuantity > 0) return false;
+      // فلتر التاريخ: بتاريخ آخر حركة على الصنف (توريد/بيع/تعديل) وإلا تاريخ إضافته
+      if (!inDateRange(part.updatedAt || part.createdAt, dateRange)) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -109,7 +114,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       }
       return true;
     });
-  }, [parts, selectedBrand, selectedCategory, stockStatusFilter, searchQuery]);
+  }, [parts, selectedBrand, selectedCategory, stockStatusFilter, searchQuery, dateRange]);
+
+  const undatedPartsCount = useMemo(
+    () => parts.filter(p => !p.updatedAt && !p.createdAt).length,
+    [parts]
+  );
 
   const handleSaveNewPart = (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,6 +262,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </div>
 
 
+          <DateRangeFilter value={dateRange} onChange={setDateRange} />
+
           <select
             value={stockStatusFilter}
             onChange={(e) => setStockStatusFilter(e.target.value as any)}
@@ -262,6 +274,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             <option value="out">المنتهية تماماً (0 قطع)</option>
           </select>
         </div>
+
+        {isDateRangeActive(dateRange) && (
+          <p className="text-[11px] text-neutral-400">
+            الفلتر بتاريخ آخر حركة على الصنف (إضافة / توريد / بيع / تعديل رصيد).
+            {undatedPartsCount > 0 && ` ${undatedPartsCount} صنف قديم بلا تاريخ حركة لا يظهر مع الفلتر حتى تتم عليه أول حركة.`}
+          </p>
+        )}
 
         <BrandBar
           brands={carBrands}

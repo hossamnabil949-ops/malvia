@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Invoice, SalesReturn, SalesReturnItem, PaymentMethod } from '../types/autoParts';
+import { DateRangeFilter } from './DateRangeFilter';
+import { DateRange, EMPTY_DATE_RANGE, inDateRange } from '../utils/dateRange';
 
 interface InvoicesViewProps {
   invoices: Invoice[];
@@ -42,6 +44,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateRange, setDateRange] = useState<DateRange>(EMPTY_DATE_RANGE);
 
   // Sales Return Modal State
   const [returnInvoice, setReturnInvoice] = useState<Invoice | null>(null);
@@ -54,6 +57,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
   const filteredInvoices = useMemo(() => {
     return invoices.filter((inv) => {
       if (paymentFilter !== 'all' && inv.paymentMethod !== paymentFilter) return false;
+      if (!inDateRange(inv.date, dateRange)) return false;
       if (statusFilter !== 'all') {
         const invStatus = inv.status || 'مسددة';
         if (statusFilter !== invStatus) return false;
@@ -68,10 +72,11 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       }
       return true;
     });
-  }, [invoices, paymentFilter, statusFilter, searchQuery]);
+  }, [invoices, paymentFilter, statusFilter, searchQuery, dateRange]);
 
   const filteredReturns = useMemo(() => {
     return salesReturns.filter((ret) => {
+      if (!inDateRange(ret.date, dateRange)) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         return (
@@ -82,7 +87,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       }
       return true;
     });
-  }, [salesReturns, searchQuery]);
+  }, [salesReturns, searchQuery, dateRange]);
 
   const totalSalesRevenue = useMemo(() => invoices.reduce((acc, inv) => acc + inv.grandTotal, 0), [invoices]);
   const totalRefundsFromTreasury = useMemo(() => {
@@ -95,8 +100,8 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     setReturnInvoice(inv);
     setIsCorrectedReturn(isCorrection);
     const initialQtys: { [key: string]: number } = {};
-    inv.items.forEach(it => {
-      initialQtys[it.partNumber] = 0;
+    inv.items.forEach((_, idx) => {
+      initialQtys[String(idx)] = 0;
     });
     setReturnItems(initialQtys);
     if (inv.paymentMethod === 'آجل (شكك / حساب ورشة)') {
@@ -108,8 +113,8 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
 
   const calculatedReturnTotal = useMemo(() => {
     if (!returnInvoice) return 0;
-    return returnInvoice.items.reduce((acc, it) => {
-      const qty = returnItems[it.partNumber] || 0;
+    return returnInvoice.items.reduce((acc, it, idx) => {
+      const qty = returnItems[String(idx)] || 0;
       return acc + (qty * it.unitPrice);
     }, 0);
   }, [returnInvoice, returnItems]);
@@ -119,13 +124,14 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     if (!returnInvoice || calculatedReturnTotal <= 0) return;
 
     const itemsToReturn: SalesReturnItem[] = returnInvoice.items
-      .filter(it => (returnItems[it.partNumber] || 0) > 0)
-      .map(it => ({
+      .map((it, idx) => ({ it, qty: returnItems[String(idx)] || 0 }))
+      .filter(({ qty }) => qty > 0)
+      .map(({ it, qty }) => ({
         partNumber: it.partNumber,
         partName: it.partName,
-        quantity: returnItems[it.partNumber],
+        quantity: qty,
         unitPrice: it.unitPrice,
-        total: returnItems[it.partNumber] * it.unitPrice,
+        total: qty * it.unitPrice,
         reason: returnReason,
       }));
 
@@ -244,6 +250,8 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
             className="w-full h-11 pr-10 pl-4 rounded-xl bg-surface-1 border border-neutral-700 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400"
           />
         </div>
+
+        <DateRangeFilter value={dateRange} onChange={setDateRange} />
 
         {currentView === 'invoices' && (
           <>
@@ -536,17 +544,22 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
-                      {returnInvoice.items.map((it) => {
-                        const currentReturnQty = returnItems[it.partNumber] || 0;
+                      {returnInvoice.items.map((it, idx) => {
+                        const rowKey = String(idx);
+                        const maxReturnable = Math.max(0, it.quantity - (it.returnedQuantity || 0));
+                        const currentReturnQty = returnItems[rowKey] || 0;
                         const itemSubtotal = currentReturnQty * it.unitPrice;
                         return (
-                          <tr key={it.partNumber} className="hover:bg-surface-3">
+                          <tr key={rowKey} className="hover:bg-surface-3">
                             <td className="p-2.5">
                               <span className="font-bold text-white block">{it.partName}</span>
                               <span className="font-mono text-[10px] text-amber-400">{it.partNumber}</span>
                             </td>
                             <td className="p-2.5 text-center font-mono">
                               {it.quantity}
+                              {(it.returnedQuantity || 0) > 0 && (
+                                <span className="block text-[10px] text-rose-400">مرتجع سابقاً: {it.returnedQuantity}</span>
+                              )}
                             </td>
                             <td className="p-2.5 text-center font-mono font-bold text-emerald-400">
                               {it.unitPrice} ج.م
@@ -557,7 +570,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                                   type="button"
                                   onClick={() => setReturnItems(prev => ({
                                     ...prev,
-                                    [it.partNumber]: Math.max(0, (prev[it.partNumber] || 0) - 1)
+                                    [rowKey]: Math.max(0, (prev[rowKey] || 0) - 1)
                                   }))}
                                   className="w-6 h-6 rounded bg-neutral-800 text-neutral-300 hover:text-white"
                                 >
@@ -566,11 +579,11 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                                 <input
                                   type="number"
                                   min="0"
-                                  max={it.quantity}
+                                  max={maxReturnable}
                                   value={currentReturnQty}
                                   onChange={(e) => {
-                                    const val = Math.min(it.quantity, Math.max(0, parseInt(e.target.value) || 0));
-                                    setReturnItems(prev => ({ ...prev, [it.partNumber]: val }));
+                                    const val = Math.min(maxReturnable, Math.max(0, parseInt(e.target.value) || 0));
+                                    setReturnItems(prev => ({ ...prev, [rowKey]: val }));
                                   }}
                                   className="w-14 h-7 text-center rounded bg-surface-1 border border-neutral-700 text-white font-mono text-xs font-bold"
                                 />
@@ -578,7 +591,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                                   type="button"
                                   onClick={() => setReturnItems(prev => ({
                                     ...prev,
-                                    [it.partNumber]: Math.min(it.quantity, (prev[it.partNumber] || 0) + 1)
+                                    [rowKey]: Math.min(maxReturnable, (prev[rowKey] || 0) + 1)
                                   }))}
                                   className="w-6 h-6 rounded bg-neutral-800 text-neutral-300 hover:text-white"
                                 >

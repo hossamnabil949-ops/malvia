@@ -15,7 +15,9 @@ import {
   TrendingDown,
   Warehouse,
   Filter,
-  Truck
+  Truck,
+  MinusCircle,
+  RotateCcw
 } from 'lucide-react';
 import { AutoPart } from '../types/autoParts';
 
@@ -42,6 +44,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const [restockInputs, setRestockInputs] = useState<Record<string, number>>({});
   const [successRestockId, setSuccessRestockId] = useState<string | null>(null);
   const [showPrintView, setShowPrintView] = useState(false);
+  // أصناف أُلغيت من طلب التوريد (لا تظهر في الطلب المنسوخ أو المطبوع ولا في الإجماليات)
+  const [excludedIds, setExcludedIds] = useState<string[]>([]);
 
   const lowStockParts = useMemo(() => {
     return parts.filter((p) => p.stockQuantity <= p.minAlertStock);
@@ -69,21 +73,25 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     return Array.from(brands);
   }, [lowStockParts]);
 
+  const neededQty = (p: AutoPart) => restockInputs[p.id] ?? Math.max(p.minAlertStock * 2 - p.stockQuantity, 5);
+
+  // الأصناف المطلوبة فعلاً في طلب التوريد (بعد استبعاد الملغي منها)
+  const orderParts = useMemo(
+    () => lowStockParts.filter((p) => !excludedIds.includes(p.id)),
+    [lowStockParts, excludedIds]
+  );
+
+  const toggleExcluded = (partId: string) => {
+    setExcludedIds((prev) => (prev.includes(partId) ? prev.filter((id) => id !== partId) : [...prev, partId]));
+  };
+
   const totalDeficitUnits = useMemo(() => {
-    return lowStockParts.reduce((sum, p) => {
-      const target = Math.max(p.minAlertStock * 2, 5);
-      const needed = Math.max(0, target - p.stockQuantity);
-      return sum + needed;
-    }, 0);
-  }, [lowStockParts]);
+    return orderParts.reduce((sum, p) => sum + neededQty(p), 0);
+  }, [orderParts, restockInputs]);
 
   const estimatedRestockCost = useMemo(() => {
-    return lowStockParts.reduce((sum, p) => {
-      const target = Math.max(p.minAlertStock * 2, 5);
-      const needed = Math.max(0, target - p.stockQuantity);
-      return sum + (needed * p.costPrice);
-    }, 0);
-  }, [lowStockParts]);
+    return orderParts.reduce((sum, p) => sum + neededQty(p) * p.costPrice, 0);
+  }, [orderParts, restockInputs]);
 
   if (!isOpen) return null;
 
@@ -107,11 +115,11 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const handleCopySupplierRequisition = () => {
     const dateStr = new Date().toLocaleDateString('ar-EG');
     let text = `📦 *طلب توريد ونواقص قطع غيار - ${dateStr}*\n`;
-    text += `إجمالي الأصناف المطلوبة: ${lowStockParts.length} صنف\n`;
+    text += `إجمالي الأصناف المطلوبة: ${orderParts.length} صنف\n`;
     text += `------------------------------------\n`;
     
-    lowStockParts.forEach((p, idx) => {
-      const needed = Math.max(p.minAlertStock * 2 - p.stockQuantity, 5);
+    orderParts.forEach((p, idx) => {
+      const needed = neededQty(p);
       text += `${idx + 1}. [${p.partNumber}] ${p.name}\n`;
       text += `   - الماركة: ${p.brand} | التوافق: ${p.compatibleModels}\n`;
       text += `   - المتوفر حالياً: ${p.stockQuantity} ${p.unit} (الحد الأدنى: ${p.minAlertStock})\n`;
@@ -208,8 +216,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
-                {lowStockParts.map((p, index) => {
-                  const needed = Math.max(p.minAlertStock * 2 - p.stockQuantity, 5);
+                {orderParts.map((p, index) => {
+                  const needed = neededQty(p);
                   return (
                     <tr key={p.id}>
                       <td className="p-2">{index + 1}</td>
@@ -285,7 +293,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
               <div className="p-3 rounded-2xl bg-surface-1 border border-amber-500/20">
                 <div className="flex items-center justify-between text-neutral-400 text-xs">
-                  <span>القطع المطلوبة للتوريد</span>
+                  <span>القطع المطلوبة للتوريد ({orderParts.length} صنف)</span>
                   <Boxes className="w-4 h-4 text-amber-400" />
                 </div>
                 <div className="text-xl font-black text-amber-400 font-mono mt-1">
@@ -356,6 +364,17 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                {excludedIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setExcludedIds([])}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-neutral-300 transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>إعادة {excludedIds.length} ملغي للطلبية</span>
+                  </button>
+                )}
+
                 <button
                   onClick={handleCopySupplierRequisition}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-3 hover:bg-surface-4 text-xs font-bold text-amber-400 border border-amber-500/30 transition-all active:scale-95"
@@ -409,7 +428,9 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                   return (
                     <div 
                       key={part.id}
-                      className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-neutral-800/20 px-3 rounded-2xl transition-colors"
+                      className={`py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-neutral-800/20 px-3 rounded-2xl transition-colors ${
+                        excludedIds.includes(part.id) ? 'opacity-50' : ''
+                      }`}
                     >
                       <div className="space-y-1.5 flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -492,6 +513,29 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                           />
                           <span className="text-[10px] text-neutral-400 px-1">{part.unit}</span>
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={() => toggleExcluded(part.id)}
+                          title={excludedIds.includes(part.id) ? 'إعادة الصنف إلى طلب التوريد' : 'إلغاء الصنف من طلب التوريد'}
+                          className={`flex items-center gap-1 px-2.5 py-2 rounded-xl text-[11px] font-bold border transition-colors ${
+                            excludedIds.includes(part.id)
+                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25'
+                              : 'bg-rose-500/10 text-rose-300 border-rose-500/30 hover:bg-rose-500/20'
+                          }`}
+                        >
+                          {excludedIds.includes(part.id) ? (
+                            <>
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>إعادة للطلبية</span>
+                            </>
+                          ) : (
+                            <>
+                              <MinusCircle className="w-3.5 h-3.5" />
+                              <span>إلغاء من الطلبية</span>
+                            </>
+                          )}
+                        </button>
 
                         <button
                           type="button"

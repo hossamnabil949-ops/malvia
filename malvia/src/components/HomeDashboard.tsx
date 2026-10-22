@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { TrendingUp, Receipt, Boxes, AlertTriangle, Search, Plus, ShoppingCart, ArrowUpRight, Printer, CheckCircle2, PackageCheck, Calculator, Bell, Truck, Mic, Sparkles } from 'lucide-react';
-import { AutoPart, Invoice, UserSession } from '../types/autoParts';
+import { AutoPart, Invoice, TreasuryTransaction, UserSession } from '../types/autoParts';
+import { TreasuryAccountsWidget } from './TreasuryAccountsReport';
 import { ActiveTab } from './Navigation';
 import { SalesCharts } from './SalesCharts';
 
@@ -8,6 +9,8 @@ interface HomeDashboardProps {
   parts: AutoPart[];
   invoices: Invoice[];
   currentSession?: UserSession | null;
+  treasuryTransactions?: TreasuryTransaction[];
+  onOpenTreasuryReports?: () => void;
   onChangeTab: (tab: ActiveTab) => void;
   onOpenInvoiceModal: (invoice: Invoice) => void;
   onAddNewPart: () => void;
@@ -24,6 +27,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   parts,
   invoices,
   currentSession,
+  treasuryTransactions = [],
+  onOpenTreasuryReports,
   onChangeTab,
   onOpenInvoiceModal,
   onAddNewPart,
@@ -229,6 +234,11 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* أرصدة الخزنة لكل حساب (كاش / إنستاباي / فيزا / محافظ) */}
+      {isOwnerOrManager && (
+        <TreasuryAccountsWidget transactions={treasuryTransactions} onOpenReports={onOpenTreasuryReports} />
+      )}
 
       {/* 3. Sales & Profit Analytics */}
       {isOwnerOrManager && (
