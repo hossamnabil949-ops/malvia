@@ -64,6 +64,7 @@ import {
 } from '../types/autoParts';
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS_LIST } from '../data/autoPartsData';
 import { TreasuryAccountsReport } from './TreasuryAccountsReport';
+import { AuditLogPanel } from './AuditLogPanel';
 
 interface FinanceViewProps {
   invoices: Invoice[];
@@ -74,6 +75,8 @@ interface FinanceViewProps {
   distributions: ProfitDistributionRecord[];
   capitalTransactions?: CapitalTransaction[];
   treasuryTransactions?: TreasuryTransaction[];
+  auditLog?: import('../types/autoParts').AuditEntry[];
+  stockMovements?: import('../types/autoParts').StockMovement[];
   treasuryBalance?: number;
   onAddExpense: (expense: Expense) => void;
   onAddDistribution: (record: ProfitDistributionRecord) => void;
@@ -102,6 +105,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   distributions,
   capitalTransactions = [],
   treasuryTransactions = [],
+  auditLog = [],
+  stockMovements = [],
   treasuryBalance,
   onAddExpense,
   onAddDistribution,
@@ -110,7 +115,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   onInjectCapital,
   onReinvestProfit,
 }) => {
-  const [activeFinanceTab, setActiveFinanceTab] = useState<'income' | 'equity' | 'treasury' | 'expenses'>('equity');
+  const [activeFinanceTab, setActiveFinanceTab] = useState<'income' | 'equity' | 'treasury' | 'expenses' | 'audit'>('equity');
   
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
   const [showDistributeModal, setShowDistributeModal] = useState(false);
@@ -512,6 +517,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           { id: 'income', label: 'قائمة الدخل والأرباح (P&L)', icon: TrendingUp },
           { id: 'treasury', label: 'أنظمة الدفع والخزينة', icon: Banknote },
           { id: 'expenses', label: 'سجل المصروفات التشغيلية', icon: TrendingDown },
+          { id: 'audit', label: 'سجل التدقيق وحركات المخزون', icon: FileText },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeFinanceTab === tab.id;
@@ -928,6 +934,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {activeFinanceTab === 'audit' && (
+        <AuditLogPanel auditLog={auditLog} stockMovements={stockMovements} />
       )}
 
       {activeFinanceTab === 'treasury' && (

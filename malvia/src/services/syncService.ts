@@ -2,7 +2,7 @@
 // والتغييرات تُدمج مع السحابة بدمج ثلاثي حسب id، فلا يضيع عمل جهاز بسبب جهاز آخر.
 
 export const SYNC_RESOURCES = ['parts','invoices','customers','suppliers','supplierPayments','treasury','employees','settings',
-  'salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','carModels','reservations','inventoryErrors'] as const;
+  'salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','carModels','reservations','inventoryErrors','auditLog','stockMovements'] as const;
 
 // حقول رقمية تُدمج بالفرق (delta) بدل الاستبدال، حتى لا يضيع خصم مخزون جهاز آخر.
 export const DELTA_FIELDS: Record<string, string[]> = {
@@ -105,7 +105,12 @@ function readLocal(tenant: string, res: string): unknown | undefined {
   try { const r = localStorage.getItem(lsKey(tenant, res)); return r === null ? undefined : JSON.parse(r); } catch { return undefined; }
 }
 function writeLocal(tenant: string, res: string, data: unknown) {
-  try { localStorage.setItem(lsKey(tenant, res), JSON.stringify(data)); } catch { /* ignore */ }
+  try { localStorage.setItem(lsKey(tenant, res), JSON.stringify(data)); }
+  catch (e) {
+    // كان يُبتلع بصمت: امتلاء مساحة المتصفح يعني ضياع تغييرات. نُظهر الحالة للمستخدم.
+    console.error('تعذّر الحفظ المحلي', res, e);
+    emitStatus('error', 'مساحة التخزين المحلية ممتلئة: خذ نسخة احتياطية الآن');
+  }
 }
 function baseFor(res: string, data: unknown): BaseMap {
   return Array.isArray(data) ? buildBase(res, data as Item[]) : { __single: { h: hashOf(data) } };

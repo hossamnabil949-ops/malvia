@@ -44,6 +44,20 @@ import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
 import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands';
 import { isCreditMethod } from './utils/treasuryAccounts';
 import { nextSalesInvoiceNumber } from './utils/invoiceNumber';
+import { SaleError, deductStock, isCreditPayment } from './utils/saleLogic';
+import type { AuditEntry, StockMovement, InvoicePayment } from './types/autoParts';
+
+const SALE_ERROR_MESSAGES: Record<string, string> = {
+  OUT_OF_STOCK: 'الكمية المطلوبة أكبر من الرصيد المتاح في المخزن',
+  INVALID_QTY: 'كمية غير صالحة',
+  INVALID_PRICE: 'سعر غير صالح',
+  PRICE_BELOW_COST: 'السعر أقل من التكلفة (يحتاج صلاحية المدير)',
+  DISCOUNT_EXCEEDS_SUBTOTAL: 'الخصم أكبر من قيمة الفاتورة',
+  PAYMENT_MISMATCH: 'مجموع المدفوعات لا يساوي إجمالي الفاتورة',
+  CREDIT_REQUIRES_CUSTOMER: 'البيع الآجل يتطلب اختيار أو كتابة اسم العميل',
+  EMPTY_CART: 'السلة فارغة',
+};
+const MAX_LOG_ENTRIES = 5000; // سقف السجلات حتى لا تكبر مساحة التخزين بلا حد
 
 const todayISO = () => new Date().toISOString().split('T')[0];
 const normKey = (v?: string) => (v || '').trim().toLowerCase();
@@ -103,6 +117,8 @@ export default function App() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [carModels, setCarModels] = useState<CarModel[]>([]);
   const [inventoryErrors, setInventoryErrors] = useState<InventoryDiscrepancyError[]>([]);
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
 
   // Cart state for POS
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -175,6 +191,8 @@ export default function App() {
     setPartners(data.partners);
     setCarModels(modelsData);
     setInventoryErrors(data.inventoryErrors);
+    setAuditLog(data.auditLog || []);
+    setStockMovements(data.stockMovements || []);
   }, []);
 
   useEffect(() => {
@@ -256,6 +274,49 @@ export default function App() {
     saveTenantStoreData(activeTenantId, updates);
   }, [activeTenantId]);
 
+  // سجل التدقيق: من فعل ماذا ومتى (يمنع التلاعب ويكشفه)
+  const logAudit = (action: AuditEntry['action'], summary: string, entityId?: string, amount?: number) => {
+    const entry: AuditEntry = {
+      id: `AUD-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      at: new Date().toISOString(),
+      userId: currentUser?.employeeId,
+      userName: currentUser?.employeeName || 'غير معروف',
+      userRole: currentUser?.role,
+      action, summary, entityId, amount,
+    };
+    setAuditLog(prev => {
+      const updated = [entry, ...prev].slice(0, MAX_LOG_ENTRIES);
+      persistChanges({ auditLog: updated });
+      return updated;
+    });
+  };
+
+  // دفتر حركات المخزون: كل زيادة/نقص بسببه ورصيد بعده
+  const logStockMovements = (
+    list: { part: AutoPart; qtyDelta: number; type: StockMovement['type']; refId?: string; refNumber?: string }[]
+  ) => {
+    if (list.length === 0) return;
+    const at = new Date().toISOString();
+    const rows: StockMovement[] = list.map((m, i) => ({
+      id: `MOV-${Date.now()}-${i}-${Math.floor(Math.random() * 1000)}`,
+      at,
+      partId: m.part.id,
+      partNumber: m.part.partNumber,
+      partName: m.part.name,
+      type: m.type,
+      qtyDelta: m.qtyDelta,
+      balanceAfter: m.part.stockQuantity + m.qtyDelta,
+      refId: m.refId,
+      refNumber: m.refNumber,
+      userName: currentUser?.employeeName || 'غير معروف',
+    }));
+    setStockMovements(prev => {
+      const updated = [...rows, ...prev].slice(0, MAX_LOG_ENTRIES);
+      persistChanges({ stockMovements: updated });
+      return updated;
+    });
+  };
+
   // Current calculated treasury balance
   const treasuryBalance = useMemo(() => {
     return treasury.reduce((sum, tx) => {
@@ -312,6 +373,11 @@ export default function App() {
   };
 
   const handleUpdateStock = (partId: string, addedStock: number) => {
+    const target = parts.find(p => p.id === partId);
+    if (target) {
+      logStockMovements([{ part: target, qtyDelta: Math.max(-target.stockQuantity, addedStock), type: 'adjustment' }]);
+      logAudit('stock.adjust', `${addedStock >= 0 ? 'توريد/زيادة' : 'خصم'} ${Math.abs(addedStock)} من ${target.name}`, partId, addedStock);
+    }
     setParts(prev => {
       const updated = prev.map(p => {
         if (p.id === partId) {
@@ -341,6 +407,12 @@ export default function App() {
 
   // Cart Handlers for POS
   const handleAddToCart = (part: AutoPart) => {
+    const live = parts.find(p => p.id === part.id) ?? part;   // الرصيد الحالي وليس نسخة قديمة
+    const inCart = cart.find(item => item.part.id === part.id)?.quantity ?? 0;
+    if (inCart + 1 > live.stockQuantity) {
+      window.alert(`الرصيد المتاح من «${live.name}» هو ${live.stockQuantity} فقط`);
+      return;
+    }
     setCart(prev => {
       const existing = prev.find(item => item.part.id === part.id);
       if (existing) {
@@ -350,7 +422,7 @@ export default function App() {
             : item
         );
       }
-      return [...prev, { part, quantity: 1, customPrice: part.salePrice }];
+      return [...prev, { part: live, quantity: 1, customPrice: live.salePrice }];
     });
   };
 
@@ -359,6 +431,12 @@ export default function App() {
       handleRemoveFromCart(partId);
       return;
     }
+    const live = parts.find(p => p.id === partId);
+    if (live && quantity > live.stockQuantity) {
+      window.alert(`الرصيد المتاح من «${live.name}» هو ${live.stockQuantity} فقط`);
+      quantity = live.stockQuantity;
+      if (quantity <= 0) { handleRemoveFromCart(partId); return; }
+    }
     setCart(prev => prev.map(item => 
       item.part.id === partId ? { ...item, quantity } : item
     ));
@@ -366,7 +444,7 @@ export default function App() {
 
   const handleUpdateCartPrice = (partId: string, price: number) => {
     setCart(prev => prev.map(item => 
-      item.part.id === partId ? { ...item, customPrice: price } : item
+      item.part.id === partId ? { ...item, customPrice: Number.isFinite(price) && price >= 0 ? price : item.customPrice } : item
     ));
   };
 
@@ -379,89 +457,133 @@ export default function App() {
   };
 
   // Handlers for Invoices
-  const handleCreateInvoice = (invoice: Invoice) => {
+  // ترجع true عند النجاح، و false لو رُفضت الفاتورة (رصيد غير كافٍ ...). لا يُخصم شيء عند الرفض.
+  const handleCreateInvoice = (invoice: Invoice): boolean => {
+    // 1) تجهيز السطور بمعرّف الصنف (المطابقة بالمعرّف أولاً، ثم رقم القطعة للفواتير القديمة)
+    const lines = invoice.items.map(item => {
+      const part = (item.partId && parts.find(p => p.id === item.partId))
+        || parts.find(p => p.partNumber === item.partNumber);
+      return { item, part, partId: part?.id ?? '' };
+    });
+
+    // 2) إعادة التحقق من الرصيد على أحدث بيانات (قد يكون جهاز آخر باع في الأثناء)
+    let nextParts: AutoPart[];
+    try {
+      if (lines.some(l => !l.part)) throw new SaleError('INVALID_QTY');
+      nextParts = deductStock<AutoPart>(
+        parts,
+        lines.map(l => ({ partId: l.partId, qty: l.item.quantity, unitPrice: l.item.unitPrice, unitCost: l.item.costPrice ?? 0 }))
+      ).map(p => (lines.some(l => l.partId === p.id) ? { ...p, updatedAt: todayISO() } : p));
+    } catch (e) {
+      const code = e instanceof SaleError ? e.code : 'INVALID_QTY';
+      window.alert(`تعذّر إتمام البيع: ${SALE_ERROR_MESSAGES[code] || code}`);
+      return false;
+    }
+
+    // 3) حفظ الفاتورة (بعد إضافة partId لكل سطر)
+    const finalInvoice: Invoice = {
+      ...invoice,
+      items: invoice.items.map((it, i) => ({ ...it, partId: lines[i].partId })),
+    };
     setInvoices(prev => {
-      const updated = [invoice, ...prev];
+      const updated = [finalInvoice, ...prev];
       persistChanges({ invoices: updated });
       return updated;
     });
 
-    // Deduct stock for sold items
-    setParts(prevParts => {
-      const updated = prevParts.map(part => {
-        const soldItem = invoice.items.find(item => item.partNumber === part.partNumber || item.partName === part.name);
-        if (soldItem) {
-          const newStock = Math.max(0, part.stockQuantity - soldItem.quantity);
-          return { ...part, stockQuantity: newStock, updatedAt: todayISO() };
-        }
-        return part;
-      });
-      persistChanges({ parts: updated });
-      return updated;
-    });
+    // 4) المخزن + دفتر الحركات
+    setParts(nextParts);
+    persistChanges({ parts: nextParts });
+    logStockMovements(lines.map(l => ({
+      part: l.part!, qtyDelta: -l.item.quantity, type: 'sale' as const, refId: finalInvoice.id, refNumber: finalInvoice.invoiceNumber,
+    })));
 
-    if (isCreditMethod(invoice.paymentMethod)) {
-      // البيع الآجل لا يدخل نقدية للخزنة؛ يُسجَّل كمديونية على العميل حتى يسدد.
+    // 5) المدفوعات: كل طريقة دفع في حسابها بالخزنة، والآجل على حساب العميل
+    const payments: InvoicePayment[] = finalInvoice.payments && finalInvoice.payments.length > 0
+      ? finalInvoice.payments
+      : [{ method: finalInvoice.paymentMethod, amount: finalInvoice.grandTotal }];
+    const creditAmount = payments.filter(p => isCreditPayment(String(p.method))).reduce((s, p) => s + p.amount, 0);
+
+    if (creditAmount > 0) {
       setCustomers(prev => {
-        const nameKey = normKey(invoice.customerName);
-        const phoneKey = normKey(invoice.customerPhone);
+        const nameKey = normKey(finalInvoice.customerName);
+        const phoneKey = normKey(finalInvoice.customerPhone);
         const idx = prev.findIndex(c =>
+          (finalInvoice.customerId && c.id === finalInvoice.customerId) ||
           (phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey
         );
         let updated: Customer[];
         if (idx >= 0) {
           updated = prev.map((c, i) => i === idx ? {
             ...c,
-            balance: c.balance + invoice.grandTotal,
-            totalPurchases: (c.totalPurchases || 0) + invoice.grandTotal,
-            monthlyPurchases: (c.monthlyPurchases || 0) + invoice.grandTotal,
+            balance: c.balance + creditAmount,
+            totalPurchases: (c.totalPurchases || 0) + finalInvoice.grandTotal,
+            monthlyPurchases: (c.monthlyPurchases || 0) + finalInvoice.grandTotal,
             invoicesCount: (c.invoicesCount || 0) + 1,
-            lastVisit: invoice.date,
-            phone: c.phone || invoice.customerPhone || '',
+            lastVisit: finalInvoice.date,
+            phone: c.phone || finalInvoice.customerPhone || '',
           } : c);
         } else {
           const created: Customer = {
             id: `cust-${Date.now()}`,
-            name: invoice.customerName || 'عميل آجل',
-            type: invoice.customerType === 'ورشة' ? 'ورشة فنية' : 'عميل تجزئة',
-            phone: invoice.customerPhone || '',
-            balance: invoice.grandTotal,
-            totalPurchases: invoice.grandTotal,
-            monthlyPurchases: invoice.grandTotal,
+            name: finalInvoice.customerName || 'عميل آجل',
+            type: finalInvoice.customerType === 'ورشة' ? 'ورشة فنية' : 'عميل تجزئة',
+            phone: finalInvoice.customerPhone || '',
+            balance: creditAmount,
+            totalPurchases: finalInvoice.grandTotal,
+            monthlyPurchases: finalInvoice.grandTotal,
             invoicesCount: 1,
-            lastVisit: invoice.date,
+            lastVisit: finalInvoice.date,
           };
           updated = [created, ...prev];
         }
         persistChanges({ customers: updated });
         return updated;
       });
-    } else {
-      // Add treasury transaction
-      const newTx: TreasuryTransaction = {
-        id: `TX-SALE-${Date.now()}`,
-        txNumber: `TX-${Math.floor(1000 + Math.random() * 9000)}`,
-        date: invoice.date,
-        time: invoice.time || new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
-        type: 'قبض',
-        category: 'مبيعات كاشير (فواتير بيع)',
-        amount: invoice.grandTotal,
-        paymentMethod: invoice.paymentMethod,
-        balanceAfter: treasuryBalance + invoice.grandTotal,
-        referenceId: invoice.id,
-        description: `مبيعات فاتورة #${invoice.invoiceNumber} - عميل: ${invoice.customerName}`,
-        recordedBy: currentUser?.employeeName || 'الكاشير'
-      };
+    }
 
+    const cashPayments = payments.filter(p => !isCreditPayment(String(p.method)) && p.amount > 0);
+    if (cashPayments.length > 0) {
+      let running = treasuryBalance;
+      const txs: TreasuryTransaction[] = cashPayments.map((p, i) => {
+        running += p.amount;
+        return {
+          id: `TX-SALE-${Date.now()}-${i}`,
+          txNumber: `TX-${Math.floor(1000 + Math.random() * 9000)}`,
+          date: finalInvoice.date,
+          time: finalInvoice.time || new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+          type: 'قبض' as const,
+          category: 'مبيعات كاشير (فواتير بيع)' as const,
+          amount: p.amount,
+          paymentMethod: String(p.method),
+          balanceAfter: running,
+          referenceId: finalInvoice.id,
+          description: `مبيعات فاتورة #${finalInvoice.invoiceNumber} - عميل: ${finalInvoice.customerName}`,
+          recordedBy: currentUser?.employeeName || 'الكاشير',
+        };
+      });
       setTreasury(prev => {
-        const updated = [newTx, ...prev];
+        const updated = [...txs.reverse(), ...prev];
         persistChanges({ treasuryTransactions: updated });
         return updated;
       });
     }
 
+    // 6) تدقيق: من باع، وهل في سعر معدّل أو خصم
+    logAudit('invoice.create', `فاتورة ${finalInvoice.invoiceNumber} - ${finalInvoice.customerName}`, finalInvoice.id, finalInvoice.grandTotal);
+    if ((finalInvoice.discount || 0) > 0) {
+      logAudit('invoice.discount', `خصم ${finalInvoice.discount} ج.م على فاتورة ${finalInvoice.invoiceNumber}`, finalInvoice.id, finalInvoice.discount);
+    }
+    finalInvoice.items.forEach(it => {
+      const original = parts.find(p => p.id === it.partId)?.salePrice;
+      if (original !== undefined && it.unitPrice !== original) {
+        logAudit('invoice.price_override', `سعر ${it.partName}: ${original} ← ${it.unitPrice} (فاتورة ${finalInvoice.invoiceNumber})`, finalInvoice.id, it.unitPrice - original);
+      }
+    });
+
     // Clear cart on completion
     setCart([]);
+    return true;
   };
 
   // Handlers for Sales Returns
@@ -494,18 +616,20 @@ export default function App() {
 
     // Restock parts if returned
     if (salesReturn.items && salesReturn.items.length > 0) {
-      setParts(prevParts => {
-        const updated = prevParts.map(part => {
-          const item = salesReturn.items.find(i => i.partNumber === part.partNumber);
-          if (item) {
-            return { ...part, stockQuantity: part.stockQuantity + item.quantity, updatedAt: todayISO() };
-          }
-          return part;
-        });
-        persistChanges({ parts: updated });
-        return updated;
+      const moves: Parameters<typeof logStockMovements>[0] = [];
+      const updated = parts.map(part => {
+        const item = salesReturn.items.find(i => i.partNumber === part.partNumber);
+        if (item) {
+          moves.push({ part, qtyDelta: item.quantity, type: 'sales_return', refId: salesReturn.id, refNumber: salesReturn.returnNumber });
+          return { ...part, stockQuantity: part.stockQuantity + item.quantity, updatedAt: todayISO() };
+        }
+        return part;
       });
+      setParts(updated);
+      persistChanges({ parts: updated });
+      logStockMovements(moves);
     }
+    logAudit('sales_return.create', `مرتجع مبيعات ${salesReturn.returnNumber || salesReturn.id} - ${salesReturn.customerName}`, salesReturn.id, -salesReturn.totalRefundAmount);
 
     // المرتجع على حساب العميل الآجل: يُخصم من مديونيته (وإن زاد عنها يصبح له رصيد دائن ظاهر بالسالب)
     if (salesReturn.refundMethod === 'خصم من رصيد العميل الآجل') {
@@ -582,14 +706,19 @@ export default function App() {
     });
 
     // عكس المخزن: الكمية التي رجعت بالمرتجع تُسحب مرة أخرى
-    setParts(prev => {
-      const updated = prev.map(part => {
+    {
+      const moves: Parameters<typeof logStockMovements>[0] = [];
+      const updated = parts.map(part => {
         const item = ret.items.find(i => i.partNumber === part.partNumber);
-        return item ? { ...part, stockQuantity: Math.max(0, part.stockQuantity - item.quantity), updatedAt: todayISO() } : part;
+        if (!item) return part;
+        moves.push({ part, qtyDelta: -item.quantity, type: 'sales_return_delete', refId: ret.id, refNumber: ret.returnNumber });
+        return { ...part, stockQuantity: Math.max(0, part.stockQuantity - item.quantity), updatedAt: todayISO() };
       });
+      setParts(updated);
       persistChanges({ parts: updated });
-      return updated;
-    });
+      logStockMovements(moves);
+    }
+    logAudit('sales_return.delete', `حذف مرتجع مبيعات ${ret.returnNumber || ret.id}`, ret.id, ret.totalRefundAmount);
 
     // عكس رصيد العميل الآجل
     if (ret.refundMethod === 'خصم من رصيد العميل الآجل') {
@@ -663,7 +792,7 @@ export default function App() {
     });
 
     // Increase stock for purchased parts — والأصناف الجديدة تُضاف للمخزن تلقائياً بالرصيد
-    setParts(prevParts => {
+    {
       const today = todayISO();
       // تجميع كميات كل صنف في الفاتورة (قد يتكرر الصنف في أكثر من سطر)
       const byKey = new Map<string, { item: typeof invoice.items[number]; qty: number }>();
@@ -675,11 +804,13 @@ export default function App() {
       });
 
       const matched = new Set<string>();
-      const updatedExisting = prevParts.map(part => {
+      const movements: Parameters<typeof logStockMovements>[0] = [];
+      const updatedExisting = parts.map(part => {
         const k1 = normKey(part.partNumber);
         const hit = byKey.get(k1) ?? byKey.get(normKey(part.name));
         if (!hit) return part;
         matched.add(byKey.get(k1) ? k1 : normKey(part.name));
+        movements.push({ part, qtyDelta: hit.qty, type: 'purchase', refId: invoice.id, refNumber: invoice.invoiceNumber });
         return {
           ...part,
           stockQuantity: part.stockQuantity + hit.qty,
@@ -691,7 +822,7 @@ export default function App() {
       const newParts: AutoPart[] = [];
       byKey.forEach(({ item, qty }, key) => {
         if (matched.has(key)) return;
-        newParts.push({
+        const created: AutoPart = {
           id: `p-${Date.now()}-${newParts.length}`,
           partNumber: item.partNumber || `NEW-${Date.now().toString().slice(-6)}-${newParts.length + 1}`,
           name: item.partName,
@@ -707,13 +838,18 @@ export default function App() {
           unit: 'حبة',
           createdAt: today,
           updatedAt: today,
-        });
+        };
+        newParts.push(created);
+        // الصنف الجديد: رصيده بعد الحركة = الكمية الموردة (الرصيد قبلها صفر)
+        movements.push({ part: { ...created, stockQuantity: 0 }, qtyDelta: qty, type: 'purchase', refId: invoice.id, refNumber: invoice.invoiceNumber });
       });
 
-      const updated = [...newParts, ...updatedExisting];
-      persistChanges({ parts: updated });
-      return updated;
-    });
+      const nextParts = [...newParts, ...updatedExisting];
+      setParts(nextParts);
+      persistChanges({ parts: nextParts });
+      logStockMovements(movements);
+    }
+    logAudit('purchase.create', `فاتورة مشتريات ${invoice.invoiceNumber} - ${invoice.supplierName}`, invoice.id, invoice.grandTotal);
 
     // Treasury transaction if paid cash
     if (invoice.amountPaid > 0) {
@@ -815,17 +951,19 @@ export default function App() {
     }
 
     // Reduce stock
-    setParts(prevParts => {
-      const updated = prevParts.map(part => {
+    {
+      const moves: Parameters<typeof logStockMovements>[0] = [];
+      const updated = parts.map(part => {
         const item = purchaseReturn.items.find(i => i.partNumber === part.partNumber);
-        if (item) {
-          return { ...part, stockQuantity: Math.max(0, part.stockQuantity - item.quantity), updatedAt: todayISO() };
-        }
-        return part;
+        if (!item) return part;
+        moves.push({ part, qtyDelta: -item.quantity, type: 'purchase_return', refId: purchaseReturn.id, refNumber: purchaseReturn.returnNumber });
+        return { ...part, stockQuantity: Math.max(0, part.stockQuantity - item.quantity), updatedAt: todayISO() };
       });
+      setParts(updated);
       persistChanges({ parts: updated });
-      return updated;
-    });
+      logStockMovements(moves);
+    }
+    logAudit('purchase_return.create', `مرتجع مشتريات ${purchaseReturn.returnNumber || purchaseReturn.id} - ${purchaseReturn.supplierName}`, purchaseReturn.id, -purchaseReturn.totalReturnAmount);
 
     // If cash refund received to treasury
     if (cashRefund > 0) {
@@ -857,6 +995,7 @@ export default function App() {
     if (!ret || ret.isSettled) return;
 
     const supplier = suppliers.find(s => s.id === ret.supplierId);
+    logAudit('purchase_return.settle', `تسوية مرتجع مشتريات ${ret.returnNumber || ret.id}`, ret.id, ret.totalReturnAmount);
     const cashRefund = Math.min(Math.max(0, ret.cashRefundToTreasury || 0), ret.totalReturnAmount);
     const nonCash = Math.max(0, ret.totalReturnAmount - cashRefund);
     const debtBefore = supplier ? (supplier.deferredDebt ?? supplier.balance ?? 0) : 0;
@@ -987,14 +1126,19 @@ export default function App() {
     });
 
     // عكس المخزن: الكمية المرتجعة للمورد تعود للمخزن
-    setParts(prev => {
-      const updated = prev.map(part => {
+    {
+      const moves: Parameters<typeof logStockMovements>[0] = [];
+      const updated = parts.map(part => {
         const item = ret.items.find(i => i.partNumber === part.partNumber);
-        return item ? { ...part, stockQuantity: part.stockQuantity + item.quantity, updatedAt: todayISO() } : part;
+        if (!item) return part;
+        moves.push({ part, qtyDelta: item.quantity, type: 'purchase_return_delete', refId: ret.id, refNumber: ret.returnNumber });
+        return { ...part, stockQuantity: part.stockQuantity + item.quantity, updatedAt: todayISO() };
       });
+      setParts(updated);
       persistChanges({ parts: updated });
-      return updated;
-    });
+      logStockMovements(moves);
+    }
+    logAudit('purchase_return.delete', `حذف مرتجع مشتريات ${ret.returnNumber || ret.id}`, ret.id, ret.totalReturnAmount);
 
     // عكس الاسترداد النقدي
     if (cashRefund > 0) {
@@ -1089,6 +1233,8 @@ export default function App() {
       const targetPart = parts.find(p => p.id === errorRecord.partId);
       if (targetPart) {
         const adjustedStock = Math.max(0, targetPart.stockQuantity + errorRecord.differenceQty);
+        logStockMovements([{ part: targetPart, qtyDelta: adjustedStock - targetPart.stockQuantity, type: 'adjustment' }]);
+        logAudit('stock.adjust', `تسوية جرد ${targetPart.name}: ${targetPart.stockQuantity} ← ${adjustedStock}`, targetPart.id, adjustedStock - targetPart.stockQuantity);
         handleUpdatePart({ ...targetPart, stockQuantity: adjustedStock, updatedAt: todayISO() });
       }
     }
@@ -1335,6 +1481,10 @@ export default function App() {
             onRemoveFromCart={handleRemoveFromCart}
             onClearCart={handleClearCart}
             onCheckoutComplete={handleCreateInvoice}
+            vatRate={settings.vatRate}
+            canSellBelowCost={currentUser?.role === 'مدير عام'}
+            cashierName={currentUser?.employeeName}
+            cashierId={currentUser?.employeeId}
             onOpenVoiceAssistant={() => setShowVoiceAssistant(true)}
             onOpenReturns={() => setCurrentTab('invoices')}
           />
@@ -1399,6 +1549,7 @@ export default function App() {
             }}
             onSettleBalance={(customerId: string, amount: number) => {
               const cust = customers.find(c => c.id === customerId);
+              logAudit('customer.collect', `تحصيل ${amount} ج.م من ${cust?.name || customerId}`, customerId, amount);
               setCustomers(prev => {
                 const updated = prev.map(c => c.id === customerId ? { ...c, balance: Math.max(0, c.balance - amount) } : c);
                 persistChanges({ customers: updated });
@@ -1487,6 +1638,8 @@ export default function App() {
 
         {currentTab === 'finance' && (
           <FinanceView
+            auditLog={auditLog}
+            stockMovements={stockMovements}
             invoices={invoices}
             parts={parts}
             salesReturns={salesReturns}
@@ -1689,6 +1842,7 @@ export default function App() {
               customerName: custName,
               customerType: 'تجزئة',
               items: [{
+                partId: part.id,
                 partNumber: part.partNumber,
                 partName: part.name,
                 quantity,

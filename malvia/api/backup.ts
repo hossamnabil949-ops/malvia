@@ -4,12 +4,10 @@
 //  - صاحب المنظومة:      (x-admin-token)  GET ?tenant=ID قائمة النسخ | GET ?id=N تفاصيل النسخة (تنزيل)
 //                        POST {action:'create', tenant} نسخة الآن | POST {action:'restore', tenant, id} استرجاع
 import { backupAllChanged, createBackup, getAll, getBackup, getOne, listBackups, restoreBackup } from './_db.js';
+import { ApiError, clientIp, findLicense, rateLimit, safeEqual, sendError } from './_security.js';
 
-async function findLicense(key: string) {
-  const reg = await getOne('_registry', 'licenses');
-  const list = (reg?.data as any[]) || [];
-  return list.find(l => String(l.licenseKey).toUpperCase() === key.toUpperCase()) || null;
-}
+// رسائل الاسترجاع المقصودة للمالك (أي خطأ آخر لا يُسرَّب)
+const SAFE_MESSAGES = new Set(['النسخة غير موجودة', 'هذه النسخة تخص محلاً آخر']);
 
 export default async function handler(req: any, res: any) {
   try {
@@ -18,9 +16,10 @@ export default async function handler(req: any, res: any) {
     // ---- 2) تنزيل نسخة من بيانات المحل الحالية (للعميل) ----
     if (req.method === 'GET' && q.action === 'export') {
       const key = String(req.headers['x-license-key'] || '').trim();
-      if (!key) return res.status(401).json({ error: 'مفتاح الترخيص مطلوب' });
+      if (!key) throw new ApiError('LICENSE_REQUIRED');
+      rateLimit(`export:${clientIp(req)}`, 20, 10 * 60_000);
       const lic = await findLicense(key);
-      if (!lic) return res.status(403).json({ error: 'مفتاح غير مسجل' });
+      if (!lic) throw new ApiError('LICENSE_INVALID');
       const docs = await getAll(String(lic.tenantId));
       return res.status(200).json({
         app: 'MALVIA', format: 1, exportedAt: new Date().toISOString(),
@@ -30,9 +29,8 @@ export default async function handler(req: any, res: any) {
 
     // ---- 3) صاحب المنظومة فقط ----
     const token = String(req.headers['x-admin-token'] || '');
-    if (!process.env.ADMIN_TOKEN || token !== process.env.ADMIN_TOKEN) {
-      return res.status(401).json({ error: 'غير مصرح' });
-    }
+    rateLimit(`admin:${clientIp(req)}`, 30, 10 * 60_000);
+    if (!process.env.ADMIN_TOKEN || !safeEqual(token, process.env.ADMIN_TOKEN)) throw new ApiError('ADMIN_UNAUTHORIZED');
 
     if (req.method === 'GET') {
       if (q.id) {
@@ -65,6 +63,8 @@ export default async function handler(req: any, res: any) {
     }
     return res.status(405).json({ error: 'method not allowed' });
   } catch (e: any) {
-    return res.status(500).json({ error: String(e?.message || e) });
+    const msg = String(e?.message || '');
+    if (SAFE_MESSAGES.has(msg)) return res.status(400).json({ error: msg });
+    return sendError(res, e);
   }
 }

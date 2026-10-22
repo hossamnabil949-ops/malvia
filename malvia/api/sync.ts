@@ -1,42 +1,33 @@
 // نقطة المزامنة: GET يرجّع كل بيانات المحل، POST يكتب مورد واحد بشرط الإصدار.
-// الاعتماد: مفتاح الترخيص (x-license-key) هو سر المحل. سجل التراخيص نفسه محفوظ كمورد داخل tenant "_registry".
+// الاعتماد: مفتاح الترخيص (x-license-key). سجل التراخيص محفوظ كمورد داخل tenant "_registry".
+// التحقق من المدخلات وحد المعدل وأكواد الأخطاء في _security.ts.
 import { getAll, getOne, putIfVersion } from './_db.js';
-
-const REGISTRY = '_registry';
-const ALLOWED = new Set(['parts','invoices','customers','suppliers','supplierPayments','treasury','employees','settings',
-  'salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','carModels','reservations','inventoryErrors']);
-
-async function findLicense(key: string) {
-  const reg = await getOne(REGISTRY, 'licenses');
-  const list = (reg?.data as any[]) || [];
-  return list.find(l => String(l.licenseKey).toUpperCase() === key.toUpperCase()) || null;
-}
+import { ApiError, clientIp, findLicense, rateLimit, sendError, validateSyncBody } from './_security.js';
 
 export default async function handler(req: any, res: any) {
   try {
     const key = String(req.headers['x-license-key'] || '').trim();
-    if (!key) return res.status(401).json({ error: 'مفتاح الترخيص مطلوب' });
+    if (!key) throw new ApiError('LICENSE_REQUIRED');
+    const ip = clientIp(req);
+    rateLimit(`sync:${ip}`, 300, 60_000);
     const lic = await findLicense(key);
-    if (!lic) return res.status(403).json({ error: 'مفتاح غير مسجل' });
-    if (lic.status === 'معلق مؤقتاً') return res.status(403).json({ error: 'الترخيص معلق' });
+    if (!lic) { rateLimit(`bad-key:${ip}`, 10, 10 * 60_000); throw new ApiError('LICENSE_INVALID'); }
+    if (lic.status === 'معلق مؤقتاً') throw new ApiError('LICENSE_SUSPENDED');
     const tenant = String(lic.tenantId);
 
     if (req.method === 'GET') {
-      const docs = await getAll(tenant);
-      return res.status(200).json({ tenant: lic, docs });
+      return res.status(200).json({ tenant: lic, docs: await getAll(tenant) });
     }
     if (req.method === 'POST') {
-      const { resource, data, baseVersion } = req.body || {};
-      if (!ALLOWED.has(resource)) return res.status(400).json({ error: 'مورد غير مسموح' });
-      const v = await putIfVersion(tenant, resource, data, Number(baseVersion) || 0);
+      const { resource, data, baseVersion } = validateSyncBody(req.body);
+      const v = await putIfVersion(tenant, resource, data, baseVersion);
       if (v === null) {
-        const cur = await getOne(tenant, resource);
-        return res.status(409).json({ conflict: true, current: cur });
+        return res.status(409).json({ conflict: true, code: 'VERSION_CONFLICT', current: await getOne(tenant, resource) });
       }
       return res.status(200).json({ version: v });
     }
-    return res.status(405).json({ error: 'method not allowed' });
-  } catch (e: any) {
-    return res.status(500).json({ error: String(e?.message || e) });
+    throw new ApiError('METHOD_NOT_ALLOWED');
+  } catch (e) {
+    return sendError(res, e);
   }
 }

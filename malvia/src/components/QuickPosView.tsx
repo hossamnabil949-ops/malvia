@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { nextSalesInvoiceNumber } from '../utils/invoiceNumber';
+import { SaleError, computeTotals, validateSale, toEgp, isCreditPayment } from '../utils/saleLogic';
 import { AutoPart, CartItem, Customer, Invoice, CarBrand, CarModel, PartCategory, PaymentMethod } from '../types/autoParts';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
 import { BrandBar } from './BrandBar';
@@ -39,7 +40,11 @@ interface QuickPosViewProps {
   onUpdateCartPrice: (partId: string, price: number) => void;
   onRemoveFromCart: (partId: string) => void;
   onClearCart: () => void;
-  onCheckoutComplete: (invoice: Invoice) => void;
+  onCheckoutComplete: (invoice: Invoice) => boolean | void;
+  vatRate?: number;            // نسبة الضريبة من إعدادات المحل (%)
+  canSellBelowCost?: boolean;  // البيع بأقل من التكلفة: للمدير فقط
+  cashierName?: string;
+  cashierId?: string;
   onOpenVoiceAssistant?: () => void;
   onOpenReturns?: () => void;
   carBrands?: string[];
@@ -59,6 +64,10 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   onRemoveFromCart,
   onClearCart,
   onCheckoutComplete,
+  vatRate = 14,
+  canSellBelowCost = false,
+  cashierName,
+  cashierId,
   onOpenVoiceAssistant,
   onOpenReturns,
   carBrands = CAR_BRANDS,
@@ -93,6 +102,10 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('كاش (نقدي)');
   const [cashGiven, setCashGiven] = useState<string>('');
+  const [splitEnabled, setSplitEnabled] = useState<boolean>(false);
+  const [splitMethod, setSplitMethod] = useState<string>('فيزا / بطاقة بنكية');
+  const [splitAmount, setSplitAmount] = useState<string>('');
+  const [saleError, setSaleError] = useState<string>('');
   const [applyVat, setApplyVat] = useState<boolean>(false);
 
   const brandCounts = useMemo(() => {
@@ -128,21 +141,61 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
 
   const discount = Math.min(subtotal, Math.max(0, discountAmount));
   const taxableAmount = Math.max(0, subtotal - discount);
-  const tax = applyVat ? taxableAmount * 0.14 : 0;
-  const grandTotal = taxableAmount + tax;
+  const tax = applyVat ? Math.round((taxableAmount * vatRate) / 100 * 100) / 100 : 0;
+  const grandTotal = Math.round((taxableAmount + tax) * 100) / 100;
 
-  const changeDue = paymentMethod === 'كاش (نقدي)' && Number(cashGiven) > grandTotal
-    ? Number(cashGiven) - grandTotal
+  // الدفع المقسّم: الطريقة الأساسية تغطي الباقي بعد المبلغ الثاني
+  const splitValue = splitEnabled ? Math.min(grandTotal, Math.max(0, Number(splitAmount) || 0)) : 0;
+  const primaryValue = Math.round((grandTotal - splitValue) * 100) / 100;
+
+  const changeDue = paymentMethod === 'كاش (نقدي)' && Number(cashGiven) > primaryValue
+    ? Number(cashGiven) - primaryValue
     : 0;
 
   const handleCompleteSale = () => {
     if (cart.length === 0) return;
+    setSaleError('');
 
-    confetti({
-      particleCount: 50,
-      spread: 60,
-      origin: { y: 0.7 },
-    });
+    const payments = splitEnabled && splitValue > 0
+      ? [{ method: paymentMethod as string, amount: primaryValue }, { method: splitMethod, amount: splitValue }]
+      : [{ method: paymentMethod as string, amount: grandTotal }];
+
+    // تحقق قبل أي تأثير: رصيد، أسعار، خصم، دفع، آجل
+    try {
+      const lines = cart.map((item) => ({
+        partId: item.part.id,
+        qty: item.quantity,
+        unitPrice: item.customPrice !== undefined ? item.customPrice : item.part.salePrice,
+        unitCost: item.part.costPrice,
+      }));
+      const totals = computeTotals(lines, discount, vatRate, applyVat);
+      const hasCredit = payments.some((p) => isCreditPayment(p.method));
+      const hasNewName = selectedCustomerId === 'cash' && customerNameInput.trim().length > 0;
+      validateSale(
+        lines,
+        parts.map((p) => ({ id: p.id, stockQuantity: p.stockQuantity })),
+        totals,
+        payments,
+        {
+          allowBelowCost: canSellBelowCost,
+          customerId: hasCredit ? (selectedCustomerId !== 'cash' ? selectedCustomerId : hasNewName ? 'new' : undefined) : undefined,
+        }
+      );
+    } catch (e) {
+      const code = e instanceof SaleError ? e.code : 'UNKNOWN';
+      const messages: Record<string, string> = {
+        OUT_OF_STOCK: 'الكمية المطلوبة أكبر من الرصيد المتاح لأحد الأصناف',
+        PRICE_BELOW_COST: 'سعر أحد الأصناف أقل من التكلفة (يحتاج صلاحية المدير)',
+        INVALID_QTY: 'كمية غير صالحة في الفاتورة',
+        INVALID_PRICE: 'سعر غير صالح في الفاتورة',
+        DISCOUNT_EXCEEDS_SUBTOTAL: 'الخصم أكبر من قيمة الفاتورة',
+        PAYMENT_MISMATCH: 'مجموع المدفوعات لا يساوي إجمالي الفاتورة',
+        CREDIT_REQUIRES_CUSTOMER: 'البيع الآجل يتطلب اختيار عميل أو كتابة اسمه',
+        EMPTY_CART: 'السلة فارغة',
+      };
+      setSaleError(messages[code] || 'تعذّر إتمام الفاتورة');
+      return;
+    }
 
     const customerObj = customers.find((c) => c.id === selectedCustomerId);
     const finalCustomerName = selectedCustomerId === 'cash' ? customerNameInput : customerObj?.name || customerNameInput;
@@ -160,6 +213,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
       customerName: finalCustomerName,
       customerPhone: phone,
+      customerId: selectedCustomerId !== 'cash' ? selectedCustomerId : undefined,
       customerType: finalCustomerType,
       carDetails: carDetailsFull || undefined,
       carBrand: carBrandInput || undefined,
@@ -168,11 +222,12 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       items: cart.map((item) => {
         const effectivePrice = item.customPrice !== undefined ? item.customPrice : item.part.salePrice;
         return {
+          partId: item.part.id,
           partNumber: item.part.partNumber,
           partName: item.part.name,
           quantity: item.quantity,
           unitPrice: effectivePrice,
-          originalPrice: effectivePrice,
+          originalPrice: item.part.salePrice,
           costPrice: item.part.costPrice,
           total: effectivePrice * item.quantity,
         };
@@ -181,13 +236,20 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       discount,
       tax: Number(tax.toFixed(2)),
       grandTotal: Number(grandTotal.toFixed(2)),
-      paymentMethod,
-      cashierName: 'كاشير المحل',
+      paymentMethod: payments.length > 1 ? 'مختلط (دفع مقسّم)' : paymentMethod,
+      payments: payments.map((p) => ({ method: p.method, amount: p.amount })),
+      cashierId,
+      cashierName: cashierName || 'كاشير المحل',
       status: 'مسددة',
     };
 
-    onCheckoutComplete(newInvoice);
+    const accepted = onCheckoutComplete(newInvoice);
+    if (accepted === false) return; // رُفضت الفاتورة (مثلاً رصيد تغيّر): لا نمسح السلة
+
+    confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
     onClearCart();
+    setSplitEnabled(false);
+    setSplitAmount('');
     setDiscountAmount(0);
     setCashGiven('');
     setCarDetailsInput('');
@@ -609,7 +671,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           <div className="flex items-center justify-between p-2 rounded-xl bg-surface-1 border border-neutral-700/80 text-xs">
             <div className="flex items-center gap-1.5">
               <Percent className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-neutral-300 font-bold">ضريبة القيمة المضافة (14%):</span>
+              <span className="text-neutral-300 font-bold">ضريبة القيمة المضافة ({vatRate}%):</span>
             </div>
             <button
               type="button"
@@ -620,7 +682,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                   : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white'
               }`}
             >
-              {applyVat ? 'مطبقة (+14%) ✓' : 'بدون ضريبة (0%)'}
+              {applyVat ? `مطبقة (+${vatRate}%) ✓` : 'بدون ضريبة (0%)'}
             </button>
           </div>
 
@@ -638,7 +700,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
             <div className="flex justify-between">
               <span>ضريبة القيمة المضافة:</span>
               <span className={`font-mono ${applyVat ? 'text-amber-400 font-bold' : 'text-neutral-500'}`}>
-                {applyVat ? `${tax.toFixed(2)} ج.م (14%)` : 'معفى / 0.00 ج.م'}
+                {applyVat ? `${tax.toFixed(2)} ج.م (${vatRate}%)` : 'معفى / 0.00 ج.م'}
               </span>
             </div>
             <div className="flex justify-between text-base font-black text-white pt-1.5 border-t border-neutral-800">
@@ -678,6 +740,40 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
             </div>
           </div>
 
+          <div className="p-2.5 rounded-xl bg-surface-1 border border-neutral-700 space-y-2 text-xs">
+            <label className="flex items-center justify-between cursor-pointer">
+              <span className="text-neutral-300 font-bold">دفع مقسّم (جزء بطريقة وجزء بأخرى)</span>
+              <input type="checkbox" checked={splitEnabled} onChange={(e) => setSplitEnabled(e.target.checked)} className="w-4 h-4 accent-amber-400" />
+            </label>
+            {splitEnabled && (
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={splitMethod}
+                  onChange={(e) => setSplitMethod(e.target.value)}
+                  className="h-8 px-2 rounded-lg bg-surface-2 border border-neutral-600 text-white text-xs"
+                >
+                  <option value="كاش (نقدي)">كاش (نقدي)</option>
+                  <option value="إنستاباي / InstaPay">إنستاباي</option>
+                  <option value="فودافون كاش ومحافظ إلكترونية">محفظة إلكترونية</option>
+                  <option value="فيزا / بطاقة بنكية">فيزا / بنك</option>
+                  <option value="آجل (شكك / حساب ورشة)">آجل (حساب ورشة)</option>
+                </select>
+                <input
+                  type="number"
+                  min="0"
+                  value={splitAmount}
+                  onChange={(e) => setSplitAmount(e.target.value)}
+                  placeholder="المبلغ بالطريقة الثانية"
+                  className="h-8 px-2 rounded-lg bg-surface-2 border border-neutral-600 text-white text-xs font-mono"
+                />
+                <p className="col-span-2 text-[11px] text-neutral-400">
+                  الطريقة الأولى المختارة أعلاه: <b className="text-amber-400 font-mono">{primaryValue.toFixed(2)}</b> ج.م
+                  {' · '}الثانية: <b className="text-amber-400 font-mono">{splitValue.toFixed(2)}</b> ج.م
+                </p>
+              </div>
+            )}
+          </div>
+
           {paymentMethod === 'كاش (نقدي)' && (
             <div className="p-2.5 rounded-xl bg-surface-1 border border-neutral-700 space-y-1.5 text-xs">
               <div className="flex items-center justify-between">
@@ -696,6 +792,12 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                   <span className="font-mono">{changeDue.toFixed(2)} ج.م</span>
                 </div>
               )}
+            </div>
+          )}
+
+          {saleError && (
+            <div role="alert" className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs font-bold">
+              {saleError}
             </div>
           )}
 

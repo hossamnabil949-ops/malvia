@@ -119,6 +119,7 @@ export type PaymentMethod =
   | string;
 
 export interface InvoiceItem {
+  partId?: string; // معرّف الصنف (المطابقة به أدق من الاسم/الرقم)
   partNumber: string;
   partName: string;
   quantity: number;
@@ -127,6 +128,46 @@ export interface InvoiceItem {
   costPrice?: number; // تكلفة الوحدة وقت البيع (لحساب تكلفة البضاعة المباعة بدقة)
   total: number;
   returnedQuantity?: number;
+}
+
+export interface InvoicePayment {
+  method: PaymentMethod | string;
+  amount: number;
+}
+
+export type AuditAction =
+  | 'invoice.create' | 'invoice.price_override' | 'invoice.discount'
+  | 'sales_return.create' | 'sales_return.delete'
+  | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
+  | 'stock.adjust' | 'customer.collect' | 'supplier.payment';
+
+export interface AuditEntry {
+  id: string;
+  at: string;          // ISO
+  userId?: string;
+  userName: string;
+  userRole?: string;
+  action: AuditAction;
+  entityId?: string;   // رقم المستند
+  summary: string;
+  amount?: number;
+}
+
+export type StockMovementType =
+  | 'sale' | 'sales_return' | 'purchase' | 'purchase_return' | 'adjustment' | 'import' | 'sales_return_delete' | 'purchase_return_delete';
+
+export interface StockMovement {
+  id: string;
+  at: string;          // ISO
+  partId: string;
+  partNumber: string;
+  partName: string;
+  type: StockMovementType;
+  qtyDelta: number;    // موجب وارد / سالب صادر
+  balanceAfter: number;
+  refId?: string;
+  refNumber?: string;
+  userName: string;
 }
 
 export interface Invoice {
@@ -147,6 +188,9 @@ export interface Invoice {
   discount: number;
   grandTotal: number;
   paymentMethod: PaymentMethod | string;
+  payments?: InvoicePayment[]; // الدفع المقسّم (كاش + فيزا ...). غيابه = دفعة واحدة بـ paymentMethod
+  customerId?: string; // ربط الفاتورة بالعميل (بدل المطابقة بالاسم)
+  cashierId?: string;
   cashierName: string;
   status?: 'مسددة' | 'مرتجع جزئي' | 'مرتجع كلي' | 'ملغاة';
   returnedAmount?: number;

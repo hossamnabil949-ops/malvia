@@ -1,4 +1,5 @@
 import { AutoPart, Customer } from '../types/autoParts';
+import { loadDeviceLicenseKey } from './tenantService';
 
 export type AIActionType = 
   | 'EXECUTE_SALE' 
@@ -39,6 +40,7 @@ export async function sendVoiceCommandToServer(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-license-key': loadDeviceLicenseKey(),
       },
       body: JSON.stringify({
         command,
@@ -50,18 +52,14 @@ export async function sendVoiceCommandToServer(
           compatibleModels: p.compatibleModels,
           category: p.category,
           shelfLocation: p.shelfLocation,
-          costPrice: p.costPrice,
           salePrice: p.salePrice,
           stockQuantity: p.stockQuantity,
-          minAlertStock: p.minAlertStock,
           unit: p.unit,
-        })),
+        })), // لا نرسل سعر التكلفة لطرف ثالث
         customers: customers.map((c) => ({
           id: c.id,
           name: c.name,
-          type: c.type,
-          balance: c.balance,
-        })),
+        })), // الاسم فقط (بدون رصيد أو هاتف)
       }),
     });
 

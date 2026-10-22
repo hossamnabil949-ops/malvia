@@ -16,7 +16,9 @@ import {
   UserSession,
   CarModel,
   PartReservation,
-  InventoryDiscrepancyError
+  InventoryDiscrepancyError,
+  AuditEntry,
+  StockMovement
 } from '../types/autoParts';
 
 import { 
@@ -39,7 +41,7 @@ import {
   INITIAL_INVENTORY_ERRORS
 } from '../data/autoPartsData';
 
-import { markDirty } from './syncService';
+import { markDirty, SYNC_STATUS_EVENT } from './syncService';
 
 const LICENSES_KEY = 'malvia_tenant_licenses_v1';
 const ACTIVE_TENANT_KEY = 'malvia_active_tenant_id_v1';
@@ -183,6 +185,8 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     carModels: loadResource<CarModel[]>('carModels', INITIAL_CAR_MODELS),
     reservations: loadResource<PartReservation[]>('reservations', INITIAL_RESERVATIONS),
     inventoryErrors: loadResource<InventoryDiscrepancyError[]>('inventoryErrors', INITIAL_INVENTORY_ERRORS),
+    auditLog: loadResource<AuditEntry[]>('auditLog', []),
+    stockMovements: loadResource<StockMovement[]>('stockMovements', []),
   };
 }
 
@@ -205,6 +209,8 @@ export function saveTenantStoreData(
     carModels?: CarModel[];
     reservations?: PartReservation[];
     inventoryErrors?: InventoryDiscrepancyError[];
+    auditLog?: AuditEntry[];
+    stockMovements?: StockMovement[];
   }
 ) {
   try {
@@ -215,7 +221,11 @@ export function saveTenantStoreData(
     });
     markDirty(tenantId, Object.entries(data).filter(([, v]) => v !== undefined).map(([k]) => k));
   } catch (err) {
-    console.warn('Error saving tenant store data:', err);
+    console.error('Error saving tenant store data:', err);
+    // امتلاء مساحة المتصفح كان يمر بصمت => نبلّغ الواجهة بدل إخفاء ضياع التغييرات
+    try {
+      window.dispatchEvent(new CustomEvent(SYNC_STATUS_EVENT, { detail: { status: 'error', detail: 'تعذّر حفظ التغييرات محلياً (المساحة ممتلئة). خذ نسخة احتياطية الآن.' } }));
+    } catch { /* ignore */ }
   }
 }
 
@@ -235,6 +245,8 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     localStorage.setItem(getTenantKey(tenantId, 'partners'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'reservations'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'inventoryErrors'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'auditLog'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'stockMovements'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'demo_cleared'), 'true');
 
     const rawEmps = localStorage.getItem(getTenantKey(tenantId, 'employees'));
@@ -242,7 +254,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     const ownerAccount = empsList.find(e => e.role === 'مدير عام' || e.username === 'admin') || INITIAL_EMPLOYEES[0];
     const cleanedStaff = [ownerAccount];
     localStorage.setItem(getTenantKey(tenantId, 'employees'), JSON.stringify(cleanedStaff));
-    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','reservations','inventoryErrors','employees']);
+    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','reservations','inventoryErrors','employees','auditLog','stockMovements']);
 
     return cleanedStaff;
   } catch (err) {

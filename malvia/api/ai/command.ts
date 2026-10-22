@@ -1,14 +1,31 @@
 // المساعد الصوتي: يحوّل الأمر العربي إلى إجراء منظم عبر Gemini. المفتاح في متغيرات Vercel فقط.
+import { ApiError, clientIp, findLicense, rateLimit, sendError } from '../_security.js';
+
 const ACTIONS = ['EXECUTE_SALE','INVENTORY_AUDIT','RESTOCK_ITEM','ADD_PURCHASE','SETTLE_SUPPLIER','COLLECT_CUSTOMER',
   'ADD_EXPENSE','QUERY_LOW_STOCK','NAVIGATE_TAB','GENERAL_ANSWER'];
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return res.status(503).json({ error: 'GEMINI_API_KEY غير مضبوط' });
+  if (!apiKey) return res.status(503).json({ error: 'المساعد الصوتي غير مُفعّل' });
   try {
-    const { command, parts = [], customers = [] } = req.body || {};
-    if (!command || typeof command !== 'string') return res.status(400).json({ error: 'command مطلوب' });
+    // كان مفتوحاً للجميع: الآن يتطلب ترخيصاً صالحاً + حد معدل (حماية رصيد Gemini)
+    const key = String(req.headers['x-license-key'] || '').trim();
+    if (!key) throw new ApiError('LICENSE_REQUIRED');
+    const ip = clientIp(req);
+    rateLimit(`ai-ip:${ip}`, 30, 60_000);
+    const lic = await findLicense(key);
+    if (!lic) { rateLimit(`bad-key:${ip}`, 10, 10 * 60_000); throw new ApiError('LICENSE_INVALID'); }
+    if (lic.status === 'معلق مؤقتاً') throw new ApiError('LICENSE_SUSPENDED');
+    rateLimit(`ai-tenant:${lic.tenantId}`, 120, 60 * 60_000);
+
+    const body = req.body || {};
+    const command = body.command;
+    if (!command || typeof command !== 'string' || command.length > 500) throw new ApiError('INVALID_BODY');
+    // أسماء العملاء فقط (بدون أرقام هواتف أو أرصدة) وحد أقصى للقوائم
+    const parts = Array.isArray(body.parts) ? body.parts.slice(0, 2000) : [];
+    const customers = (Array.isArray(body.customers) ? body.customers.slice(0, 500) : [])
+      .map((c: any) => ({ id: c?.id, name: c?.name }));
 
     const prompt = `أنت مساعد صوتي لنظام محل قطع غيار سيارات. حوّل أمر المستخدم إلى JSON فقط بدون أي نص آخر.
 الحقول: action (واحد من: ${ACTIONS.join(', ')}), matchedPartId, matchedPartName, quantity, customerName, paymentMethod,
@@ -32,7 +49,7 @@ targetTab (home|pos|inventory|invoices|purchases|suppliers|customers|finance|rep
         generationConfig: { responseMimeType: 'application/json', temperature: 0.2 },
       }),
     });
-    if (!r.ok) return res.status(502).json({ error: `Gemini ${r.status}` });
+    if (!r.ok) return res.status(502).json({ error: 'تعذّر الاتصال بخدمة المساعد' });
     const j: any = await r.json();
     const text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || '';
     const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
@@ -45,7 +62,7 @@ targetTab (home|pos|inventory|invoices|purchases|suppliers|customers|finance|rep
     }
     if (!parsed.spokenFeedback) parsed.spokenFeedback = 'تم.';
     return res.status(200).json(parsed);
-  } catch (e: any) {
-    return res.status(500).json({ error: String(e?.message || e) });
+  } catch (e) {
+    return sendError(res, e);
   }
 }
