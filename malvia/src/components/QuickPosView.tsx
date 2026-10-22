@@ -25,6 +25,7 @@ import {
   CarFront,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { nextSalesInvoiceNumber } from '../utils/invoiceNumber';
 import { AutoPart, CartItem, Customer, Invoice, CarBrand, CarModel, PartCategory, PaymentMethod } from '../types/autoParts';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
 import { BrandBar } from './BrandBar';
@@ -43,6 +44,7 @@ interface QuickPosViewProps {
   onOpenReturns?: () => void;
   carBrands?: string[];
   carModels?: CarModel[];
+  invoices?: Invoice[];
   onAddBrand?: (brand: string) => void;
   onRemoveBrand?: (brand: string) => void;
 }
@@ -61,6 +63,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   onOpenReturns,
   carBrands = CAR_BRANDS,
   carModels = [],
+  invoices = [],
   onAddBrand,
   onRemoveBrand,
 }) => {
@@ -152,7 +155,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
 
     const newInvoice: Invoice = {
       id: `inv-${Date.now()}`,
-      invoiceNumber: `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      invoiceNumber: nextSalesInvoiceNumber(invoices),
       date: new Date().toISOString().split('T')[0],
       time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
       customerName: finalCustomerName,

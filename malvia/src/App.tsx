@@ -43,6 +43,7 @@ import {
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
 import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands';
 import { isCreditMethod } from './utils/treasuryAccounts';
+import { nextSalesInvoiceNumber } from './utils/invoiceNumber';
 
 const todayISO = () => new Date().toISOString().split('T')[0];
 const normKey = (v?: string) => (v || '').trim().toLowerCase();
@@ -550,11 +551,85 @@ export default function App() {
   };
 
   const handleDeleteSalesReturn = (returnId: string) => {
+    const ret = salesReturns.find(r => r.id === returnId);
     setSalesReturns(prev => {
       const updated = prev.filter(r => r.id !== returnId);
       persistChanges({ salesReturns: updated });
       return updated;
     });
+    if (!ret) return;
+
+    // عكس أثر المرتجع على الفاتورة
+    setInvoices(prev => {
+      const updated = prev.map(inv => {
+        if (inv.id !== ret.invoiceId) return inv;
+        const items = inv.items.map(it => {
+          const r = ret.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
+          return r ? { ...it, returnedQuantity: Math.max(0, (it.returnedQuantity || 0) - r.quantity) } : it;
+        });
+        const returnedAmount = Math.max(0, (inv.returnedAmount || 0) - ret.totalRefundAmount);
+        const anyReturned = items.some(it => (it.returnedQuantity || 0) > 0);
+        const allReturned = items.every(it => (it.returnedQuantity || 0) >= it.quantity);
+        return {
+          ...inv,
+          items,
+          returnedAmount,
+          status: !anyReturned ? 'مسددة' as const : allReturned ? 'مرتجع كلي' as const : 'مرتجع جزئي' as const,
+        };
+      });
+      persistChanges({ invoices: updated });
+      return updated;
+    });
+
+    // عكس المخزن: الكمية التي رجعت بالمرتجع تُسحب مرة أخرى
+    setParts(prev => {
+      const updated = prev.map(part => {
+        const item = ret.items.find(i => i.partNumber === part.partNumber);
+        return item ? { ...part, stockQuantity: Math.max(0, part.stockQuantity - item.quantity), updatedAt: todayISO() } : part;
+      });
+      persistChanges({ parts: updated });
+      return updated;
+    });
+
+    // عكس رصيد العميل الآجل
+    if (ret.refundMethod === 'خصم من رصيد العميل الآجل') {
+      const original = invoices.find(i => i.id === ret.invoiceId);
+      setCustomers(prev => {
+        const nameKey = normKey(ret.customerName);
+        const phoneKey = normKey(original?.customerPhone);
+        const updated = prev.map(c =>
+          ((phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey)
+            ? { ...c, balance: c.balance + ret.totalRefundAmount }
+            : c
+        );
+        persistChanges({ customers: updated });
+        return updated;
+      });
+    }
+
+    // رد المبلغ للخزنة إن كان قد صُرف
+    if (ret.totalRefundAmount > 0 && ret.treasuryDeducted) {
+      const refundTx = treasury.find(t => t.referenceId === ret.id);
+      const tx: TreasuryTransaction = {
+        id: `TX-RETDEL-${Date.now()}`,
+        txNumber: `TX-RD-${Math.floor(1000 + Math.random() * 9000)}`,
+        date: todayISO(),
+        time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        type: 'قبض',
+        category: 'إلغاء مرتجع مبيعات (رد للخزنة)',
+        amount: ret.totalRefundAmount,
+        paymentMethod: refundTx?.paymentMethod || 'نقدي',
+        balanceAfter: treasuryBalance + ret.totalRefundAmount,
+        referenceId: ret.id,
+        description: `حذف مرتجع مبيعات #${ret.returnNumber || ret.id} - عميل: ${ret.customerName}`,
+        recordedBy: currentUser?.employeeName || 'الكاشير'
+      };
+      setTreasury(prev => {
+        const updated = [tx, ...prev];
+        persistChanges({ treasuryTransactions: updated });
+        return updated;
+      });
+    }
   };
 
   // Handlers for Purchases
@@ -848,11 +923,102 @@ export default function App() {
   };
 
   const handleDeletePurchaseReturn = (returnId: string) => {
+    const ret = purchaseReturns.find(r => r.id === returnId);
     setPurchaseReturns(prev => {
       const updated = prev.filter(r => r.id !== returnId);
       persistChanges({ purchaseReturns: updated });
       return updated;
     });
+    if (!ret) return;
+
+    const cashRefund = Math.max(0, ret.cashRefundToTreasury || 0);
+    const deducted = ret.deductedFromDeferredDebt || 0;
+    const credited = ret.creditedToStoreBalance || 0;
+    const wasApplied = Boolean(ret.isSettled) || deducted > 0 || credited > 0;
+
+    // عكس رصيد المورد (فقط إن كان أثر المرتجع قد طُبّق عليه)
+    if (wasApplied) {
+      setSuppliers(prev => {
+        const updated = prev.map(s => {
+          if (s.id !== ret.supplierId) return s;
+          const newDebt = (s.deferredDebt ?? s.balance ?? 0) + deducted;
+          return {
+            ...s,
+            deferredDebt: newDebt,
+            balance: newDebt,
+            storeCredit: Math.max(0, (s.storeCredit || 0) - credited),
+            totalReturned: Math.max(0, (s.totalReturned || 0) - ret.totalReturnAmount),
+          };
+        });
+        persistChanges({ suppliers: updated });
+        return updated;
+      });
+    }
+
+    // عكس أثره على فاتورة المشتريات
+    setPurchaseInvoices(prev => {
+      const updated = prev.map(inv => {
+        if (inv.id !== ret.purchaseInvoiceId) return inv;
+        if ((inv.returnedAmount || 0) < ret.totalReturnAmount) return inv; // لم يُطبَّق على الفاتورة أصلاً
+        const returnedAmount = (inv.returnedAmount || 0) - ret.totalReturnAmount;
+        const original = inv.originalGrandTotal ?? (inv.grandTotal + (inv.returnedAmount || 0));
+        const newGrandTotal = Math.max(0, original - returnedAmount);
+        const newPaid = inv.amountPaid + cashRefund;
+        const items = inv.items.map(it => {
+          const r = ret.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
+          return r ? { ...it, returnedQuantity: Math.max(0, (it.returnedQuantity || 0) - r.quantity) } : it;
+        });
+        const remaining = Math.max(0, newGrandTotal - newPaid);
+        return {
+          ...inv,
+          items,
+          originalGrandTotal: original,
+          returnedAmount,
+          grandTotal: newGrandTotal,
+          amountPaid: newPaid,
+          remainingBalance: remaining,
+          paymentStatus: returnedAmount > 0
+            ? (newGrandTotal === 0 ? 'مرتجع كلي' as const : 'مرتجع جزئي' as const)
+            : (remaining === 0 ? 'مدفوعة نقداً' as const : newPaid > 0 ? 'مسددة جزئياً' as const : 'آجل' as const),
+        };
+      });
+      persistChanges({ purchaseInvoices: updated });
+      return updated;
+    });
+
+    // عكس المخزن: الكمية المرتجعة للمورد تعود للمخزن
+    setParts(prev => {
+      const updated = prev.map(part => {
+        const item = ret.items.find(i => i.partNumber === part.partNumber);
+        return item ? { ...part, stockQuantity: part.stockQuantity + item.quantity, updatedAt: todayISO() } : part;
+      });
+      persistChanges({ parts: updated });
+      return updated;
+    });
+
+    // عكس الاسترداد النقدي
+    if (cashRefund > 0) {
+      const refundTx = treasury.find(t => t.referenceId === ret.id);
+      const tx: TreasuryTransaction = {
+        id: `TX-PRDEL-${Date.now()}`,
+        txNumber: `TX-PD-${Math.floor(1000 + Math.random() * 9000)}`,
+        date: todayISO(),
+        time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        type: 'صرف',
+        category: 'إلغاء مرتجع مشتريات (عكس الاسترداد)',
+        amount: cashRefund,
+        paymentMethod: refundTx?.paymentMethod || 'نقدي',
+        balanceAfter: treasuryBalance - cashRefund,
+        referenceId: ret.id,
+        description: `حذف مرتجع مشتريات من مورد: ${ret.supplierName}`,
+        recordedBy: currentUser?.employeeName || 'مسؤول المشتريات'
+      };
+      setTreasury(prev => {
+        const updated = [tx, ...prev];
+        persistChanges({ treasuryTransactions: updated });
+        return updated;
+      });
+    }
   };
 
   // Handlers for Car Models
@@ -1157,6 +1323,7 @@ export default function App() {
           <QuickPosView
             parts={parts}
             carModels={carModels}
+            invoices={invoices}
             carBrands={carBrands}
             onAddBrand={handleAddBrand}
             onRemoveBrand={handleRemoveBrand}
@@ -1176,6 +1343,10 @@ export default function App() {
         {currentTab === 'inventory' && (
           <InventoryView
             parts={parts}
+            invoices={invoices}
+            purchaseInvoices={purchaseInvoices}
+            salesReturns={salesReturns}
+            purchaseReturns={purchaseReturns}
             carBrands={carBrands}
             onAddBrand={handleAddBrand}
             onRemoveBrand={handleRemoveBrand}
@@ -1512,7 +1683,7 @@ export default function App() {
             const total = part.salePrice * quantity;
             const newInv: Invoice = {
               id: `INV-V-${Date.now()}`,
-              invoiceNumber: `V-${Math.floor(1000 + Math.random() * 9000)}`,
+              invoiceNumber: nextSalesInvoiceNumber(invoices),
               date: new Date().toISOString().split('T')[0],
               time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
               customerName: custName,
@@ -1600,7 +1771,7 @@ export default function App() {
         <InvoiceDetailModal
           isOpen={Boolean(selectedInvoiceForDetail)}
           onClose={() => setSelectedInvoiceForDetail(null)}
-          invoice={selectedInvoiceForDetail}
+          invoice={invoices.find(i => i.id === selectedInvoiceForDetail.id) ?? selectedInvoiceForDetail}
           settings={settings}
         />
       )}

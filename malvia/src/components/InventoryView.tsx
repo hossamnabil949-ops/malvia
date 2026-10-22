@@ -20,7 +20,9 @@ import {
   Camera,
   Image as ImageIcon
 } from 'lucide-react';
-import { AutoPart, CarBrand, PartCategory } from '../types/autoParts';
+import { AutoPart, CarBrand, PartCategory, Invoice, PurchaseInvoice, SalesReturn, PurchaseReturn } from '../types/autoParts';
+import { StockCardModal } from './StockCardModal';
+import { ClipboardList } from 'lucide-react';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
 import { BrandBar } from './BrandBar';
 import { DateRangeFilter } from './DateRangeFilter';
@@ -35,6 +37,10 @@ interface InventoryViewProps {
   onAddBrand?: (brand: string) => void;
   onRemoveBrand?: (brand: string) => void;
   onQuickSalePart: (part: AutoPart) => void;
+  invoices?: Invoice[];
+  purchaseInvoices?: PurchaseInvoice[];
+  salesReturns?: SalesReturn[];
+  purchaseReturns?: PurchaseReturn[];
   onOpenInventoryErrors?: () => void;
   onOpenCarModels?: () => void;
   onOpenPhotoSharing?: () => void;
@@ -51,6 +57,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   onAddBrand,
   onRemoveBrand,
   onQuickSalePart,
+  invoices = [],
+  purchaseInvoices = [],
+  salesReturns = [],
+  purchaseReturns = [],
   onOpenInventoryErrors,
   onOpenCarModels,
   onOpenPhotoSharing,
@@ -58,6 +68,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   isAddModalOpenInitially = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [stockCardPart, setStockCardPart] = useState<AutoPart | null>(null);
   const [selectedBrand, setSelectedBrand] = useState<CarBrand>('شامل');
   const [selectedCategory, setSelectedCategory] = useState<string>('الكل');
   const [stockStatusFilter, setStockStatusFilter] = useState<'all' | 'low' | 'out'>('all');
@@ -387,6 +398,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
                       <td className="p-3.5 text-center">
                         <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => setStockCardPart(part)}
+                            className="p-1.5 rounded-lg bg-neutral-800 hover:bg-sky-500 hover:text-neutral-950 text-sky-300 transition-colors"
+                            title="كارت الصنف (حركة الصنف)"
+                          >
+                            <ClipboardList className="w-3.5 h-3.5" />
+                          </button>
+
                           <button
                             onClick={() => onQuickSalePart(part)}
                             disabled={isOut}
@@ -748,6 +767,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+    
+      {stockCardPart && (
+        <StockCardModal
+          part={parts.find(p => p.id === stockCardPart.id) ?? stockCardPart}
+          invoices={invoices}
+          purchaseInvoices={purchaseInvoices}
+          salesReturns={salesReturns}
+          purchaseReturns={purchaseReturns}
+          onClose={() => setStockCardPart(null)}
+        />
       )}
     </div>
   );

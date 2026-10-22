@@ -773,7 +773,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
                     <td className="py-3 px-4 font-mono text-white">{r.date}</td>
                     <td className="py-3 px-4 font-bold text-white">{r.supplierName}</td>
                     <td className="py-3 px-4 font-black text-amber-400 text-sm">
-                      {r.totalReturnAmount.toLocaleString()} ج.م
+                      -{r.totalReturnAmount.toLocaleString()} ج.م
                     </td>
                     <td className="py-3 px-4">
                       {r.deductedFromDeferredDebt && r.deductedFromDeferredDebt > 0 ? (

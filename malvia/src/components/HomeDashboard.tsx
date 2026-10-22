@@ -44,7 +44,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
   const isOwnerOrManager = !currentSession || currentSession.role === 'مدير عام' || (currentSession.permissions?.canViewReports && currentSession.role !== 'كاشير مبيعات');
 
-  const todaySales = invoices.reduce((sum, inv) => sum + inv.grandTotal, 0);
+  const todaySales = invoices.reduce((sum, inv) => sum + inv.grandTotal - (inv.returnedAmount || 0), 0);
   const totalInvoicesCount = invoices.length;
   const totalPartsInStock = parts.reduce((sum, p) => sum + p.stockQuantity, 0);
   const lowStockParts = parts.filter((p) => p.stockQuantity <= p.minAlertStock);

@@ -39,6 +39,7 @@ import {
 } from '../types/autoParts';
 import { PART_CATEGORIES } from '../data/autoPartsData';
 import { DateRangeFilter } from './DateRangeFilter';
+import { nextPurchaseInvoiceNumber } from '../utils/invoiceNumber';
 import { DateRange, EMPTY_DATE_RANGE, inDateRange } from '../utils/dateRange';
 
 interface PurchasesViewProps {
@@ -73,6 +74,10 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [dateRange, setDateRange] = useState<DateRange>(EMPTY_DATE_RANGE);
   const [selectedInvoiceForModal, setSelectedInvoiceForModal] = useState<PurchaseInvoice | null>(null);
+  // النسخة الحالية من الفاتورة (تتحدث تلقائياً بعد أي مرتجع)
+  const modalInvoice = selectedInvoiceForModal
+    ? (purchaseInvoices.find(i => i.id === selectedInvoiceForModal.id) ?? selectedInvoiceForModal)
+    : null;
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Return modal state
@@ -211,7 +216,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
     const newInvoice: PurchaseInvoice = {
       id: `pur-${Date.now()}`,
-      invoiceNumber: `PUR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      invoiceNumber: nextPurchaseInvoiceNumber(purchaseInvoices),
       supplierInvoiceNumber: supplierInvoiceNumber.trim() || undefined,
       date: invoiceDate,
       time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
@@ -375,7 +380,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       'الخصم': inv.discount,
       'إجمالي الفاتورة الحالي': inv.grandTotal,
       'القيمة الأصلية قبل المرتجع': inv.originalGrandTotal || inv.grandTotal,
-      'إجمالي المرتجع للتاجر': inv.returnedAmount || 0,
+      'إجمالي المرتجع للتاجر (بالسالب)': -(inv.returnedAmount || 0),
       'حالة السداد': inv.paymentStatus,
       'المسدد نقداً من الخزينة': inv.amountPaid,
       'المتبقي آجل (المجدول للتاجر)': Math.max(0, inv.grandTotal - inv.amountPaid),
@@ -604,7 +609,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                           {inv.grandTotal.toLocaleString()} ج.م
                           {hasReturn && (
                             <span className="text-[10px] text-rose-400 block font-normal">
-                              (خصم مرتجع: {inv.returnedAmount?.toLocaleString()} ج.م)
+                              (مرتجع: -{inv.returnedAmount?.toLocaleString()} ج.م)
                             </span>
                           )}
                         </td>
@@ -736,7 +741,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                         </div>
                       </td>
                       <td className="p-3.5 font-mono font-black text-rose-400 text-sm">
-                        {ret.totalReturnAmount.toLocaleString()} ج.م
+                        -{ret.totalReturnAmount.toLocaleString()} ج.م
                       </td>
                       <td className="p-3.5 font-mono text-amber-400 font-bold">
                         {ret.rescheduledDebtReduction > 0 ? (
@@ -1339,13 +1344,22 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         </div>
       )}
 
-      {selectedInvoiceForModal && (
-        <div 
+      {modalInvoice && (() => {
+        const inv = modalInvoice;
+        const returned = inv.returnedAmount || 0;
+        const original = inv.originalGrandTotal ?? (inv.grandTotal + returned);
+        const remaining = Math.max(0, inv.grandTotal - inv.amountPaid);
+        const overpaid = Math.max(0, inv.amountPaid - inv.grandTotal);
+        const totalQty = inv.items.reduce((s, it) => s + it.quantity, 0);
+        const totalReturnedQty = inv.items.reduce((s, it) => s + (it.returnedQuantity || 0), 0);
+        const fmt = (n: number) => n.toLocaleString('ar-EG', { maximumFractionDigits: 2 });
+        return (
+        <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
           onClick={() => setSelectedInvoiceForModal(null)}
         >
-          <div 
-            className="w-full max-w-2xl bg-surface-2 text-white rounded-3xl p-6 shadow-2xl border border-neutral-800 space-y-4"
+          <div
+            className="w-full max-w-3xl bg-surface-2 text-white rounded-3xl p-6 shadow-2xl border border-neutral-800 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -1361,55 +1375,135 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs bg-surface-1 p-3 rounded-2xl">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs bg-surface-1 p-3 rounded-2xl">
               <div>
                 <span className="text-neutral-400 block">رقم الفاتورة:</span>
-                <span className="font-mono font-bold text-white">{selectedInvoiceForModal.invoiceNumber}</span>
+                <span className="font-mono font-bold text-white">{inv.invoiceNumber}</span>
               </div>
               <div>
                 <span className="text-neutral-400 block">المورد:</span>
-                <span className="font-bold text-amber-400">{selectedInvoiceForModal.supplierName}</span>
+                <span className="font-bold text-amber-400">{inv.supplierName}</span>
               </div>
               <div>
                 <span className="text-neutral-400 block">التاريخ والوقت:</span>
-                <span className="font-mono text-neutral-300">{selectedInvoiceForModal.date} · {selectedInvoiceForModal.time}</span>
+                <span className="font-mono text-neutral-300">{inv.date} · {inv.time}</span>
               </div>
               <div>
                 <span className="text-neutral-400 block">رقم فاتورة المورد:</span>
-                <span className="font-mono text-neutral-300">{selectedInvoiceForModal.supplierInvoiceNumber || '—'}</span>
+                <span className="font-mono text-neutral-300">{inv.supplierInvoiceNumber || '—'}</span>
+              </div>
+              <div>
+                <span className="text-neutral-400 block">طريقة الدفع:</span>
+                <span className="text-neutral-300">{inv.paymentMethod}</span>
+              </div>
+              <div>
+                <span className="text-neutral-400 block">المستلم:</span>
+                <span className="text-neutral-300">{inv.receivedBy || '—'}</span>
               </div>
             </div>
 
-            <div className="border border-neutral-800 rounded-2xl overflow-hidden">
+            <div className="border border-neutral-800 rounded-2xl overflow-x-auto">
               <table className="w-full text-right text-xs">
                 <thead className="bg-surface-1 text-neutral-400 text-[11px]">
                   <tr>
+                    <th className="p-2.5">#</th>
                     <th className="p-2.5">الصنف</th>
                     <th className="p-2.5 text-center">الكمية</th>
-                    <th className="p-2.5 text-center">سعر الشراء / التكلفة</th>
-                    <th className="p-2.5 text-left">الإجمالي</th>
+                    <th className="p-2.5 text-center">سعر الشراء</th>
+                    <th className="p-2.5 text-center">القيمة</th>
+                    <th className="p-2.5 text-center">المرتجع</th>
+                    <th className="p-2.5 text-center">الصافي</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-800">
-                  {selectedInvoiceForModal.items.map((it, idx) => (
-                    <tr key={idx}>
-                      <td className="p-2.5 font-bold text-white">{it.partName}</td>
-                      <td className="p-2.5 text-center font-mono">{it.quantity}</td>
-                      <td className="p-2.5 text-center font-mono text-amber-400">{it.costPrice} ج.م</td>
-                      <td className="p-2.5 text-left font-mono font-bold text-white">{it.total.toLocaleString()} ج.م</td>
-                    </tr>
-                  ))}
+                  {inv.items.map((it, idx) => {
+                    const rq = it.returnedQuantity || 0;
+                    const lineValue = it.quantity * it.costPrice;
+                    const lineReturn = rq * it.costPrice;
+                    return (
+                      <tr key={idx} className={rq >= it.quantity ? 'opacity-60' : ''}>
+                        <td className="p-2.5 font-mono text-neutral-500">{idx + 1}</td>
+                        <td className="p-2.5">
+                          <span className="font-bold text-white block">{it.partName}</span>
+                          <span className="text-[10px] font-mono text-neutral-500">{it.partNumber}</span>
+                        </td>
+                        <td className="p-2.5 text-center font-mono">{it.quantity}</td>
+                        <td className="p-2.5 text-center font-mono text-amber-400">{fmt(it.costPrice)}</td>
+                        <td className="p-2.5 text-center font-mono">{fmt(lineValue)}</td>
+                        <td className="p-2.5 text-center font-mono text-rose-400">
+                          {rq > 0 ? `-${rq} (-${fmt(lineReturn)})` : '—'}
+                        </td>
+                        <td className="p-2.5 text-center font-mono font-bold text-white">
+                          {it.quantity - rq} · {fmt(lineValue - lineReturn)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
+                <tfoot className="bg-surface-1 font-bold text-[11px]">
+                  <tr>
+                    <td colSpan={2} className="p-2.5 text-neutral-400">إجمالي القطع</td>
+                    <td className="p-2.5 text-center font-mono">{totalQty}</td>
+                    <td colSpan={2}></td>
+                    <td className="p-2.5 text-center font-mono text-rose-400">{totalReturnedQty > 0 ? `-${totalReturnedQty}` : '—'}</td>
+                    <td className="p-2.5 text-center font-mono text-white">{totalQty - totalReturnedQty}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
 
-            <div className="p-3 bg-surface-1 rounded-2xl flex items-center justify-between text-xs">
-              <span className="text-neutral-400">إجمالي الفاتورة:</span>
-              <span className="text-base font-black text-amber-400 font-mono">{selectedInvoiceForModal.grandTotal.toLocaleString()} ج.م</span>
+            <div className="p-3 bg-surface-1 rounded-2xl text-xs space-y-1.5">
+              <div className="flex justify-between text-neutral-300">
+                <span>مجموع الأصناف:</span>
+                <span className="font-mono">{fmt(inv.subtotal)} ج.م</span>
+              </div>
+              {inv.discount > 0 && (
+                <div className="flex justify-between text-rose-400">
+                  <span>الخصم:</span>
+                  <span className="font-mono">-{fmt(inv.discount)} ج.م</span>
+                </div>
+              )}
+              {inv.tax > 0 && (
+                <div className="flex justify-between text-neutral-300">
+                  <span>الضريبة:</span>
+                  <span className="font-mono">+{fmt(inv.tax)} ج.م</span>
+                </div>
+              )}
+              <div className="flex justify-between font-bold text-white pt-1.5 border-t border-neutral-800">
+                <span>إجمالي الفاتورة الأصلي:</span>
+                <span className="font-mono">{fmt(original)} ج.م</span>
+              </div>
+              {returned > 0 && (
+                <div className="flex justify-between font-bold text-rose-400">
+                  <span>مرتجع للمورد:</span>
+                  <span className="font-mono">-{fmt(returned)} ج.م</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm font-black text-amber-400 pt-1.5 border-t border-neutral-800">
+                <span>الصافي المستحق للمورد:</span>
+                <span className="font-mono">{fmt(inv.grandTotal)} ج.م</span>
+              </div>
+              <div className="flex justify-between text-emerald-400">
+                <span>المسدد:</span>
+                <span className="font-mono">{fmt(inv.amountPaid)} ج.م</span>
+              </div>
+              {overpaid > 0 ? (
+                <div className="flex justify-between font-bold text-emerald-400">
+                  <span>زيادة مسددة (رصيد للمحل عند المورد):</span>
+                  <span className="font-mono">{fmt(overpaid)} ج.م</span>
+                </div>
+              ) : (
+                <div className={`flex justify-between font-bold ${remaining > 0 ? 'text-amber-400' : 'text-neutral-400'}`}>
+                  <span>المتبقي على المحل:</span>
+                  <span className="font-mono">{remaining > 0 ? `${fmt(remaining)} ج.م` : '0 (خالص)'}</span>
+                </div>
+              )}
+              {inv.notes && <p className="text-neutral-400 pt-1.5 border-t border-neutral-800">ملاحظات: {inv.notes}</p>}
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

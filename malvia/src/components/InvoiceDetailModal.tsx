@@ -240,7 +240,12 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                         {it.partNumber}
                       </span>
                     </td>
-                    <td className="py-1.5 text-center font-mono font-bold">{it.quantity}</td>
+                    <td className="py-1.5 text-center font-mono font-bold">
+                      {it.quantity}
+                      {(it.returnedQuantity || 0) > 0 && (
+                        <span className="block text-[9px] text-rose-600 font-bold">مرتجع: {it.returnedQuantity}</span>
+                      )}
+                    </td>
                     <td className="py-1.5 text-center font-mono">{it.unitPrice.toFixed(2)} ج.م</td>
                     <td className="py-1.5 font-mono text-left font-bold text-neutral-950">{it.total.toFixed(2)} ج.م</td>
                   </tr>
@@ -270,6 +275,18 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
               <span>الإجمالي النهائي المستحق:</span>
               <span className="font-mono text-lg text-amber-700">{invoice.grandTotal.toFixed(2)} ج.م</span>
             </div>
+            {(invoice.returnedAmount || 0) > 0 && (
+              <>
+                <div className="flex justify-between text-rose-600 font-bold">
+                  <span>{invoice.status === 'مرتجع كلي' ? 'مرتجع مبيعات (بالكامل):' : 'مرتجع مبيعات (جزئي):'}</span>
+                  <span className="font-mono">-{(invoice.returnedAmount || 0).toFixed(2)} ج.م</span>
+                </div>
+                <div className="flex justify-between text-sm font-black text-neutral-950 pt-1 border-t border-neutral-200">
+                  <span>الصافي بعد المرتجع:</span>
+                  <span className="font-mono">{Math.max(0, invoice.grandTotal - (invoice.returnedAmount || 0)).toFixed(2)} ج.م</span>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="pt-4 text-center space-y-1">

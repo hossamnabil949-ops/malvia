@@ -89,7 +89,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     });
   }, [salesReturns, searchQuery, dateRange]);
 
-  const totalSalesRevenue = useMemo(() => invoices.reduce((acc, inv) => acc + inv.grandTotal, 0), [invoices]);
+  const totalSalesRevenue = useMemo(() => invoices.reduce((acc, inv) => acc + inv.grandTotal - (inv.returnedAmount || 0), 0), [invoices]);
   const totalRefundsFromTreasury = useMemo(() => {
     return salesReturns
       .filter(r => r.treasuryDeducted || r.refundMethod === 'نقدي (خصم من الخزنة)')
@@ -174,7 +174,8 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       'الإجمالي النهائي المستحق': inv.grandTotal,
       'طريقة السداد': inv.paymentMethod,
       'حالة الفاتورة': inv.status || 'مسددة',
-      'إجمالي المرتجع (ج.م)': inv.returnedAmount || 0,
+      'إجمالي المرتجع (ج.م) بالسالب': -(inv.returnedAmount || 0),
+      'الصافي بعد المرتجع (ج.م)': inv.grandTotal - (inv.returnedAmount || 0),
       'الكاشير': inv.cashierName
     }));
 
@@ -341,7 +342,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                             </span>
                           ) : inv.status === 'مرتجع جزئي' ? (
                             <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold text-[10px] border border-amber-500/30">
-                              مرتجع جزئي ({inv.returnedAmount?.toLocaleString()} ج.م)
+                              مرتجع جزئي (-{inv.returnedAmount?.toLocaleString()} ج.م)
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px]">
@@ -351,6 +352,12 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                         </td>
                         <td className="p-3.5 font-mono font-black text-emerald-400 text-sm">
                           {inv.grandTotal.toFixed(2)} ج.م
+                          {(inv.returnedAmount || 0) > 0 && (
+                            <>
+                              <span className="block text-[10px] text-rose-400 font-bold">مرتجع: -{(inv.returnedAmount || 0).toFixed(2)}</span>
+                              <span className="block text-[10px] text-neutral-300 font-bold">الصافي: {Math.max(0, inv.grandTotal - (inv.returnedAmount || 0)).toFixed(2)}</span>
+                            </>
+                          )}
                         </td>
                         <td className="p-3.5 text-center">
                           <div className="flex items-center justify-center gap-1.5">
