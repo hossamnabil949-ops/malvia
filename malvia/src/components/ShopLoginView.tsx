@@ -28,6 +28,9 @@ interface ShopLoginViewProps {
   onLoginSuccess: (session: UserSession, tenant: TenantLicense, employees: Employee[]) => void;
 }
 
+// أزرار الدخول السريع وبيانات الدخول الافتراضية تظهر في وضع التطوير فقط (كانت تعرض admin/123456 لأي زائر)
+const SHOW_DEMO_LOGIN = Boolean((import.meta as any).env?.DEV);
+
 export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
   licenses,
   onLoginSuccess,
@@ -94,7 +97,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
         return;
       }
 
-      const result = authenticateShopUser(key, u, p);
+      const result = await authenticateShopUser(key, u, p);
 
       if (result.success && result.session && result.tenant && result.employees) {
         setSuccessMessage(result.message);
@@ -166,10 +169,11 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
               تسجيل الدخول للنظام
             </h2>
             <p className="text-xs text-neutral-400">
-              يمكنك الدخول بنقرة واحدة كمدير عام، أو كتابة بيانات الحساب
+              {SHOW_DEMO_LOGIN ? 'يمكنك الدخول بنقرة واحدة كمدير عام، أو كتابة بيانات الحساب' : 'أدخل مفتاح الترخيص واسم المستخدم وكلمة المرور'}
             </p>
           </div>
 
+          {SHOW_DEMO_LOGIN && (
           <div className="space-y-2 pt-1">
             <button
               type="button"
@@ -199,7 +203,9 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
               <span className="text-[10px] text-neutral-400 font-mono">user: ahmed</span>
             </button>
           </div>
+          )}
 
+          {SHOW_DEMO_LOGIN && (
           <div className="relative flex items-center justify-center">
             <div className="border-t border-neutral-800 w-full" />
             <span className="bg-surface-2 px-3 text-[11px] text-neutral-500 font-bold whitespace-nowrap">
@@ -207,6 +213,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
             </span>
             <div className="border-t border-neutral-800 w-full" />
           </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
@@ -352,12 +359,13 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
               <span>إرشادات صاحب المحل والموظفين:</span>
             </div>
             <p className="leading-relaxed text-neutral-300">
-              * <strong>لصاحب المحل (أول مرة):</strong> اسم المستخدم هو <code className="text-amber-400 font-mono bg-black/40 px-1.5 py-0.5 rounded">admin</code> وكلمة المرور <code className="text-amber-400 font-mono bg-black/40 px-1.5 py-0.5 rounded">123456</code>.
+              * <strong>لصاحب المحل (أول مرة):</strong> اسم المستخدم هو <code className="text-amber-400 font-mono bg-black/40 px-1.5 py-0.5 rounded">admin</code> وكلمة المرور <code className="text-amber-400 font-mono bg-black/40 px-1.5 py-0.5 rounded">123456</code> — <strong className="text-rose-400">غيّرها فور الدخول من الإعدادات</strong>.
             </p>
             <p className="leading-relaxed text-neutral-400">
               * بعد الدخول، يمكنك من شاشة <strong>"الإعدادات والموظفين"</strong> تسجيل موظفيك (كاشير، أمين مخزن، محاسب) وتعيين كلمة مرور وصلاحيات مخصصة لكل موظف ليدخل بها من الموبايل أو الكمبيوتر.
             </p>
 
+            {SHOW_DEMO_LOGIN && (
             <div className="pt-2 border-t border-neutral-800/80 flex items-center gap-2">
               <span className="text-[10px] text-neutral-500">تجربة سريعة:</span>
               <button
@@ -375,6 +383,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
                 كاشير (ahmed)
               </button>
             </div>
+            )}
           </div>
 
         </div>

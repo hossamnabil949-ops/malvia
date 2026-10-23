@@ -5,14 +5,14 @@ import { DateRangeFilter } from './DateRangeFilter';
 import { DateRange, EMPTY_DATE_RANGE, inDateRange } from '../utils/dateRange';
 
 const AUDIT_LABEL: Record<string, string> = {
-  'invoice.create': 'فاتورة بيع', 'invoice.price_override': 'تعديل سعر', 'invoice.discount': 'خصم',
+  'invoice.create': 'فاتورة بيع', 'invoice.void': 'إلغاء فاتورة', 'invoice.price_override': 'تعديل سعر', 'invoice.discount': 'خصم',
   'sales_return.create': 'مرتجع مبيعات', 'sales_return.delete': 'حذف مرتجع مبيعات',
   'purchase.create': 'فاتورة مشتريات', 'purchase_return.create': 'مرتجع مشتريات',
   'purchase_return.delete': 'حذف مرتجع مشتريات', 'purchase_return.settle': 'تسوية مرتجع',
   'stock.adjust': 'تعديل رصيد', 'customer.collect': 'تحصيل من عميل', 'supplier.payment': 'سداد مورد',
 };
 const MOVE_LABEL: Record<string, string> = {
-  sale: 'بيع', sales_return: 'مرتجع مبيعات', purchase: 'توريد', purchase_return: 'مرتجع مشتريات',
+  sale: 'بيع', sale_void: 'إلغاء فاتورة', sales_return: 'مرتجع مبيعات', purchase: 'توريد', purchase_return: 'مرتجع مشتريات',
   adjustment: 'تعديل/جرد', import: 'استيراد', sales_return_delete: 'حذف مرتجع مبيعات', purchase_return_delete: 'حذف مرتجع مشتريات',
 };
 const dayOf = (iso: string) => (iso || '').slice(0, 10);

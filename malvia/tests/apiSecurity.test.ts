@@ -4,6 +4,7 @@ import { validateSyncBody, rateLimit, safeEqual, ApiError, sendError } from './s
 const code = (fn: () => unknown) => { try { fn(); } catch (e) { return (e as ApiError).code; } return 'OK'; };
 assert.equal(code(() => validateSyncBody({ resource: 'parts', data: [{ id: 'a' }], baseVersion: 0 })), 'OK');
 assert.equal(code(() => validateSyncBody({ resource: 'auditLog', data: [{ id: 'a' }], baseVersion: 0 })), 'OK');
+assert.equal(code(() => validateSyncBody({ resource: 'shifts', data: [{ id: 'SHIFT-1' }], baseVersion: 0 })), 'OK');
 assert.equal(code(() => validateSyncBody({ resource: 'parts', data: [{ name: 'بدون id' }], baseVersion: 0 })), 'OK');
 assert.equal(code(() => validateSyncBody({ resource: '_registry', data: [], baseVersion: 0 })), 'RESOURCE_NOT_ALLOWED');
 assert.equal(code(() => validateSyncBody({ resource: 'parts', data: 'x', baseVersion: 0 })), 'INVALID_BODY');

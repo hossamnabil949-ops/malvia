@@ -212,7 +212,9 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     });
 
     // المرتجعات: تُخصم من الإيراد، وتكلفة القطع المرتجعة تُخصم من التكلفة
+    const voidedIds = new Set(invoices.filter(i => i.status === 'ملغاة').map(i => i.id));
     salesReturns.forEach((ret) => {
+      if (voidedIds.has(ret.invoiceId)) return; // فاتورة ملغاة: خرجت كلها من الإيراد والتكلفة ولا تُخصم مرتجعاتها مرتين
       revenue -= ret.totalRefundAmount || 0;
       ret.items.forEach((it) => {
         const unitCost = costByPart.get(norm(it.partNumber)) ?? it.unitPrice * 0.7;

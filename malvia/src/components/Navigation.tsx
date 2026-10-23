@@ -25,6 +25,7 @@ import {
   ChevronDown,
   BookOpen,
   ClipboardCheck,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { UserSession } from '../types/autoParts';
@@ -32,6 +33,7 @@ import { UserSession } from '../types/autoParts';
 export type ActiveTab =
   | 'dashboard'
   | 'pos'
+  | 'shifts'
   | 'inventory'
   | 'invoices'
   | 'purchases'
@@ -77,6 +79,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: 'dashboard', label: 'الرئيسية', icon: Home },
       { id: 'pos', label: 'الكاشير (POS)', icon: ShoppingCart },
+      { id: 'shifts', label: 'الورديات والدرج', icon: Wallet },
       { id: 'inventory', label: 'المخزون والقطع', icon: Boxes },
       { id: 'invoices', label: 'الفواتير والمرتجعات', icon: Receipt },
     ],

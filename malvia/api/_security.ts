@@ -62,7 +62,7 @@ export function clientIp(req: any): string {
 
 // ---------- التحقق من جسم المزامنة ----------
 const ARRAY_RESOURCES = new Set(['parts','invoices','customers','suppliers','supplierPayments','treasury','employees',
-  'salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','carModels','reservations','inventoryErrors','auditLog','stockMovements']);
+  'salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','carModels','reservations','inventoryErrors','auditLog','stockMovements','shifts']);
 const OBJECT_RESOURCES = new Set(['settings']);
 const MAX_BYTES = 3_000_000;   // أقل من حد جسم الطلب في Vercel (~4.5MB)
 

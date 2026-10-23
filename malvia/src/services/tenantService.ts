@@ -18,7 +18,8 @@ import {
   PartReservation,
   InventoryDiscrepancyError,
   AuditEntry,
-  StockMovement
+  StockMovement,
+  Shift
 } from '../types/autoParts';
 
 import { 
@@ -42,6 +43,7 @@ import {
 } from '../data/autoPartsData';
 
 import { markDirty, SYNC_STATUS_EVENT } from './syncService';
+import { DEFAULT_PASSWORDS, hashPassword, isHashed, verifyPassword } from './passwordService';
 
 const LICENSES_KEY = 'malvia_tenant_licenses_v1';
 const ACTIVE_TENANT_KEY = 'malvia_active_tenant_id_v1';
@@ -187,6 +189,7 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     inventoryErrors: loadResource<InventoryDiscrepancyError[]>('inventoryErrors', INITIAL_INVENTORY_ERRORS),
     auditLog: loadResource<AuditEntry[]>('auditLog', []),
     stockMovements: loadResource<StockMovement[]>('stockMovements', []),
+    shifts: loadResource<Shift[]>('shifts', []),
   };
 }
 
@@ -211,6 +214,7 @@ export function saveTenantStoreData(
     inventoryErrors?: InventoryDiscrepancyError[];
     auditLog?: AuditEntry[];
     stockMovements?: StockMovement[];
+    shifts?: Shift[];
   }
 ) {
   try {
@@ -247,6 +251,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     localStorage.setItem(getTenantKey(tenantId, 'inventoryErrors'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'auditLog'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'stockMovements'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'shifts'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'demo_cleared'), 'true');
 
     const rawEmps = localStorage.getItem(getTenantKey(tenantId, 'employees'));
@@ -254,7 +259,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     const ownerAccount = empsList.find(e => e.role === 'مدير عام' || e.username === 'admin') || INITIAL_EMPLOYEES[0];
     const cleanedStaff = [ownerAccount];
     localStorage.setItem(getTenantKey(tenantId, 'employees'), JSON.stringify(cleanedStaff));
-    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','reservations','inventoryErrors','employees','auditLog','stockMovements']);
+    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts']);
 
     return cleanedStaff;
   } catch (err) {
@@ -263,11 +268,11 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
   }
 }
 
-export function updateOwnerPassword(
+export async function updateOwnerPassword(
   tenantId: string, 
   newPassword: string,
   newOwnerName?: string
-): { success: boolean; message: string; updatedEmployee?: Employee } {
+): Promise<{ success: boolean; message: string; updatedEmployee?: Employee }> {
   try {
     if (!newPassword || newPassword.trim().length < 4) {
       return { success: false, message: 'كلمة المرور يجب أن تكون 4 خانات على الأقل.' };
@@ -280,9 +285,10 @@ export function updateOwnerPassword(
     if (targetIdx < 0 && emps.length > 0) targetIdx = 0;
 
     if (targetIdx >= 0) {
+      const { password: _legacyPlain, ...ownerWithoutPlain } = emps[targetIdx];
       emps[targetIdx] = {
-        ...emps[targetIdx],
-        password: cleanPass,
+        ...ownerWithoutPlain,
+        passwordHash: await hashPassword(cleanPass),
         name: newOwnerName && newOwnerName.trim().length > 0 ? newOwnerName.trim() : emps[targetIdx].name,
       };
       localStorage.setItem(getTenantKey(tenantId, 'employees'), JSON.stringify(emps));
@@ -353,17 +359,17 @@ export function loadDeviceLicenseKey(): string {
 
 export const getDeviceSavedLicenseKey = loadDeviceLicenseKey;
 
-export function authenticateShopUser(
+export async function authenticateShopUser(
   licenseKey: string,
   usernameOrPhone: string,
   passwordInput: string
-): { 
+): Promise<{ 
   success: boolean; 
   message: string; 
   session?: UserSession; 
   tenant?: TenantLicense; 
   employees?: Employee[];
-} {
+}> {
   const cleanKey = licenseKey.trim().toUpperCase();
   const licenses = loadTenantLicenses();
   const tenant = licenses.find(l => l.licenseKey.toUpperCase() === cleanKey);
@@ -418,14 +424,41 @@ export function authenticateShopUser(
     };
   }
 
-  const validPassword = matchedEmp.password || (matchedEmp.role === 'مدير عام' ? '123456' : '1234');
-  if (cleanPass !== validPassword) {
+  // التحقق: الحساب المجزّأ أولاً. الحسابات القديمة (نص) تُقبل مرة واحدة ثم تُحوَّل كلها إلى تجزئة.
+  let passwordOk = false;
+  if (matchedEmp.passwordHash && isHashed(matchedEmp.passwordHash)) {
+    passwordOk = await verifyPassword(cleanPass, matchedEmp.passwordHash);
+  } else {
+    const legacyPlain = matchedEmp.password || (matchedEmp.role === 'مدير عام' ? '123456' : '1234');
+    passwordOk = cleanPass === legacyPlain;
+  }
+  if (!passwordOk) {
     return {
       success: false,
       message: 'كلمة المرور غير صحيحة. يرجى التأكد من كلمة المرور الخاصة بك أو مراجعة مدير المحل.',
       employees
     };
   }
+
+  // ترحيل: أي موظف ما زالت كلمته نصاً (أو بلا كلمة) تُحفظ مجزّأة وتُحذف النسخة النصية من الداتا المتزامنة
+  let migratedEmployees = employees;
+  if (employees.some(e => !e.passwordHash || e.password !== undefined)) {
+    migratedEmployees = await Promise.all(employees.map(async (e) => {
+      if (e.passwordHash && e.password === undefined) return e;
+      const { password: plain, ...rest } = e;
+      const passwordHash = e.passwordHash && isHashed(e.passwordHash)
+        ? e.passwordHash
+        : await hashPassword(plain || (e.role === 'مدير عام' ? '123456' : '1234'));
+      return { ...rest, passwordHash } as Employee;
+    }));
+    try {
+      localStorage.setItem(getTenantKey(tenant.tenantId, 'employees'), JSON.stringify(migratedEmployees));
+      markDirty(tenant.tenantId, ['employees']);
+    } catch (err) {
+      console.error('تعذّر حفظ ترحيل كلمات المرور', err);
+    }
+  }
+  const usingDefaultPassword = DEFAULT_PASSWORDS.includes(cleanPass);
 
   const session: UserSession = {
     tenantId: tenant.tenantId,
@@ -444,10 +477,11 @@ export function authenticateShopUser(
 
   return {
     success: true,
-    message: `مرحباً بك يا ${matchedEmp.name} (${matchedEmp.role}) في نظام ${tenant.companyName}!`,
+    message: `مرحباً بك يا ${matchedEmp.name} (${matchedEmp.role}) في نظام ${tenant.companyName}!` +
+      (usingDefaultPassword ? ' ⚠ كلمة المرور افتراضية: غيّرها من الإعدادات.' : ''),
     session,
     tenant,
-    employees
+    employees: migratedEmployees
   };
 }
 

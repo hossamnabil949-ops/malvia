@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { hashPassword } from '../services/passwordService';
 import { 
   Settings, 
   Users, 
@@ -58,7 +59,7 @@ interface SettingsViewProps {
   onOpenExcelModal?: () => void;
   currentTheme?: AppTheme;
   onSelectTheme?: (theme: AppTheme) => void;
-  onChangeOwnerPassword?: (newPassword: string, ownerName?: string) => { success: boolean; message: string };
+  onChangeOwnerPassword?: (newPassword: string, ownerName?: string) => Promise<{ success: boolean; message: string }>;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -172,7 +173,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTimeout(() => setSavedSuccess(false), 3000);
   };
 
-  const handleOwnerPasswordSubmit = (e: React.FormEvent) => {
+  const handleOwnerPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setOwnerPasswordMsg(null);
 
@@ -190,7 +191,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
 
     if (onChangeOwnerPassword) {
-      const res = onChangeOwnerPassword(newOwnerPassword.trim(), ownerDisplayName.trim());
+      const res = await onChangeOwnerPassword(newOwnerPassword.trim(), ownerDisplayName.trim());
       if (res.success) {
         setOwnerPasswordMsg({ type: 'success', text: res.message });
         setNewOwnerPassword('');
@@ -213,9 +214,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handleCreateEmployee = (e: React.FormEvent) => {
+  const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!empName.trim() || !empPhone.trim()) return;
+    const passwordHash = await hashPassword(empPassword.trim() || '1234');
 
     const newEmp: Employee = {
       id: `emp-${Date.now()}`,
@@ -223,7 +225,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       role: empRole,
       phone: empPhone.trim(),
       username: empUsername.trim().toLowerCase() || `user${Date.now().toString().slice(-4)}`,
-      password: empPassword.trim() || '1234',
+      passwordHash,
       email: empEmail.trim() || undefined,
       shift: empShift,
       salary: Number(empSalary) || 0,
@@ -243,11 +245,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setEmpSalary(4500);
   };
 
-  const handleSaveEditedEmployee = (e: React.FormEvent) => {
+  const handleSaveEditedEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingEmployee) return;
 
-    onUpdateEmployee(editingEmployee);
+    // كلمة المرور الجديدة (إن كُتبت) تُحفظ مجزّأة؛ تركها فارغة يُبقي الحالية
+    const { password: newPlain, ...rest } = editingEmployee;
+    const updated: Employee = newPlain && newPlain.trim()
+      ? { ...rest, passwordHash: await hashPassword(newPlain.trim()) }
+      : rest;
+    onUpdateEmployee(updated);
     setEditingEmployee(null);
   };
 
@@ -1190,7 +1197,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    required
+                    placeholder="اتركه فارغاً للإبقاء على كلمة المرور الحالية"
+                    autoComplete="new-password"
                     value={editingEmployee.password || ''}
                     onChange={(e) => setEditingEmployee({ ...editingEmployee, password: e.target.value })}
                     className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"

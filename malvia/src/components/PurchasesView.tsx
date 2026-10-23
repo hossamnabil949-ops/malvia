@@ -95,6 +95,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | string>('كاش (نقدي)');
   const [amountPaid, setAmountPaid] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
+  const [applyTax, setApplyTax] = useState<boolean>(false); // الضريبة اختيارية (الافتراضي: بدون)
   const [taxPercent, setTaxPercent] = useState<number>(14);
   const [notes, setNotes] = useState<string>('');
   const [receivedBy, setReceivedBy] = useState<string>('أمين المخزن');
@@ -120,8 +121,9 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   }, [invoiceItems]);
 
   const taxAmount = useMemo(() => {
-    return Math.round((subtotal - discount) * (taxPercent / 100));
-  }, [subtotal, discount, taxPercent]);
+    if (!applyTax) return 0;
+    return Math.round(Math.max(0, subtotal - discount) * (Math.min(100, Math.max(0, taxPercent)) / 100));
+  }, [subtotal, discount, taxPercent, applyTax]);
 
   const grandTotal = useMemo(() => {
     return Math.max(0, subtotal - discount + taxAmount);
@@ -240,6 +242,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     setShowCreateModal(false);
 
     setSupplierInvoiceNumber('');
+    setApplyTax(false);
+    setDiscount(0);
     setInvoiceItems([
       {
         partNumber: '',
@@ -1051,7 +1055,31 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   <div className="flex items-center gap-4 text-xs text-neutral-400">
                     <span>المجموع: <strong className="text-white font-mono">{subtotal.toLocaleString()} ج.م</strong></span>
                     <span>·</span>
-                    <span>الضريبة (14%): <strong className="text-white font-mono">{taxAmount.toLocaleString()} ج.م</strong></span>
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={applyTax}
+                        onChange={(e) => setApplyTax(e.target.checked)}
+                        className="w-3.5 h-3.5 accent-amber-400"
+                      />
+                      <span>إضافة ضريبة</span>
+                    </label>
+                    {applyTax ? (
+                      <span className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={taxPercent}
+                          onChange={(e) => setTaxPercent(Number(e.target.value))}
+                          className="w-14 h-6 px-1.5 rounded bg-surface-2 border border-neutral-600 text-white font-mono text-xs"
+                        />
+                        <span>% =</span>
+                        <strong className="text-white font-mono">{taxAmount.toLocaleString()} ج.م</strong>
+                      </span>
+                    ) : (
+                      <span className="text-neutral-500">بدون ضريبة</span>
+                    )}
                   </div>
                   <div className="flex items-baseline gap-2">
                     <span className="text-xs text-neutral-400 font-bold">إجمالي الفاتورة النهائي:</span>

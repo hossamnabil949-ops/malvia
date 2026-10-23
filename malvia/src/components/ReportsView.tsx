@@ -94,7 +94,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const filteredTreasury = useMemo(() => treasuryTransactions.filter(t => isDateInFilter(t.date)), [treasuryTransactions, dateFilter]);
   const filteredExpenses = useMemo(() => expenses.filter(e => isDateInFilter(e.date)), [expenses, dateFilter]);
 
-  const totalSalesVal = useMemo(() => filteredSales.reduce((acc, i) => acc + i.grandTotal - (i.returnedAmount || 0), 0), [filteredSales]);
+  const totalSalesVal = useMemo(() => filteredSales.reduce((acc, i) => i.status === 'ملغاة' ? acc : acc + i.grandTotal - (i.returnedAmount || 0), 0), [filteredSales]);
   const totalPurchasesVal = useMemo(() => filteredPurchases.reduce((acc, i) => acc + i.grandTotal, 0), [filteredPurchases]);
   const totalInventoryCost = useMemo(() => parts.reduce((acc, p) => acc + (p.stockQuantity * p.costPrice), 0), [parts]);
   const totalSuppliersDebts = useMemo(() => suppliers.reduce((acc, s) => acc + s.balance, 0), [suppliers]);
@@ -119,7 +119,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       'الإجمالي النهائي': inv.grandTotal,
       'حالة الفاتورة': inv.status || 'مسددة',
       'المرتجع (ج.م) بالسالب': -(inv.returnedAmount || 0),
-      'الصافي بعد المرتجع': inv.grandTotal - (inv.returnedAmount || 0),
+      'الحالة': inv.status || 'مسددة',
+      'الصافي بعد المرتجع': inv.status === 'ملغاة' ? 0 : inv.grandTotal - (inv.returnedAmount || 0),
       'طريقة الدفع': inv.paymentMethod,
       'الكاشير المسؤول': inv.cashierName
     }));

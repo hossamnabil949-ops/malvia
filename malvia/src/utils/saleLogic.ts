@@ -92,3 +92,32 @@ export function refundForLine(lineTotalEgp: number, lineQty: number, returnQty: 
   if (returnQty <= 0 || returnQty + alreadyReturnedQty > lineQty) throw new SaleError('INVALID_QTY', { returnQty, remaining: lineQty - alreadyReturnedQty });
   return toEgp(Math.round((toPiasters(lineTotalEgp) * returnQty) / lineQty));
 }
+
+// ---------- إلغاء فاتورة (Void) ----------
+export interface VoidInput {
+  grandTotal: number;
+  returnedAmount?: number;
+  items: { partId?: string; partNumber: string; quantity: number; returnedQuantity?: number }[];
+  payments: PaymentLine[];
+}
+export interface VoidPlan {
+  fraction: number;                                                   // نسبة ما لم يُرتجع من الفاتورة (0..1)
+  restock: { partId?: string; partNumber: string; qty: number }[];    // الكميات المتبقية للإرجاع للمخزن
+  creditAmount: number;                                               // تخفيض مديونية العميل
+  refunds: { method: string; amount: number }[];                      // رد كل طريقة دفع من حسابها
+}
+
+/** خطة عكس فاتورة: المرتجع السابق رُدّت قيمته وقتها، فنعكس فقط المتبقي. */
+export function computeVoidPlan(inv: VoidInput): VoidPlan {
+  const fraction = inv.grandTotal > 0 ? Math.max(0, (inv.grandTotal - (inv.returnedAmount || 0)) / inv.grandTotal) : 0;
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const restock = inv.items
+    .map(it => ({ partId: it.partId, partNumber: it.partNumber, qty: Math.max(0, it.quantity - (it.returnedQuantity || 0)) }))
+    .filter(r => r.qty > 0);
+  const creditAmount = round2(inv.payments.filter(p => isCreditPayment(p.method)).reduce((s, p) => s + p.amount, 0) * fraction);
+  const refunds = inv.payments
+    .filter(p => !isCreditPayment(p.method))
+    .map(p => ({ method: p.method, amount: round2(p.amount * fraction) }))
+    .filter(r => r.amount > 0);
+  return { fraction, restock, creditAmount, refunds };
+}

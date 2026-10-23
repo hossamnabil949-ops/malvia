@@ -37,14 +37,16 @@ import {
   CarModel,
   InventoryDiscrepancyError,
   PaymentMethod,
-  ProfitDistributionRecord
+  ProfitDistributionRecord,
+  Shift
 } from './types/autoParts';
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
 import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands';
 import { isCreditMethod } from './utils/treasuryAccounts';
+import { findOpenShift, findOpenShifts, summarizeShift, stampNewTreasury, nextShiftNumber, countTotal, round2, varianceOf } from './utils/shiftLogic';
 import { nextSalesInvoiceNumber } from './utils/invoiceNumber';
-import { SaleError, deductStock, isCreditPayment } from './utils/saleLogic';
+import { SaleError, computeVoidPlan, deductStock, isCreditPayment } from './utils/saleLogic';
 import type { AuditEntry, StockMovement, InvoicePayment } from './types/autoParts';
 
 const SALE_ERROR_MESSAGES: Record<string, string> = {
@@ -74,6 +76,7 @@ import { SuppliersView } from './components/SuppliersView';
 import { FinanceView } from './components/FinanceView';
 import { ReportsView } from './components/ReportsView';
 import { SettingsView } from './components/SettingsView';
+import { ShiftsView } from './components/ShiftsView';
 
 // Modals
 import { InventoryErrorsModal } from './components/InventoryErrorsModal';
@@ -119,6 +122,9 @@ export default function App() {
   const [inventoryErrors, setInventoryErrors] = useState<InventoryDiscrepancyError[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  // معرّفات حركات الخزنة المعروفة (المحمّلة) — أي حركة جديدة خارجها تُختم بوقتها ووردية الدرج
+  const knownTreasuryIds = useRef<Set<string>>(new Set());
 
   // Cart state for POS
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -181,7 +187,9 @@ export default function App() {
     setCustomers(data.customers);
     setSuppliers(data.suppliers);
     setSupplierPayments(data.supplierPayments || []);
+    data.treasuryTransactions.forEach(t => knownTreasuryIds.current.add(t.id));
     setTreasury(data.treasuryTransactions);
+    setShifts(data.shifts || []);
     setEmployees(data.employees);
     setSettings(nextSettings);
     setSalesReturns(data.salesReturns);
@@ -324,6 +332,129 @@ export default function App() {
     }, 0);
   }, [treasury]);
 
+  // ---------- الورديات وجرد الدرج ----------
+  const openShift = useMemo(() => findOpenShift(shifts), [shifts]);
+  const openShiftsCount = useMemo(() => findOpenShifts(shifts).length, [shifts]);
+
+  // أي حركة خزنة جديدة تُختم بوقتها ورقم الوردية المفتوحة (الحركات القديمة لا تُمسّ)
+  useEffect(() => {
+    if (!activeTenantId) return;
+    const { list, changed } = stampNewTreasury(treasury, knownTreasuryIds.current, openShift?.id, new Date().toISOString());
+    if (changed) {
+      setTreasury(list);
+      persistChanges({ treasuryTransactions: list });
+    }
+  }, [treasury, openShift?.id, activeTenantId, persistChanges]);
+
+  const handleOpenShift = (p: { openingCash: number; denominations?: Record<string, number>; note?: string; carryOverDiff?: number }): boolean => {
+    if (findOpenShift(shifts)) { window.alert('فيه وردية مفتوحة بالفعل. اقفلها الأول قبل فتح وردية جديدة.'); return false; }
+    if (!Number.isFinite(p.openingCash) || p.openingCash < 0) { window.alert('كاش الافتتاح غير صالح'); return false; }
+    const shift: Shift = {
+      id: `SHIFT-${Date.now()}`,
+      shiftNumber: nextShiftNumber(shifts),
+      status: 'مفتوحة',
+      openedAt: new Date().toISOString(),
+      openedBy: currentUser?.employeeName || 'غير معروف',
+      openedById: currentUser?.employeeId,
+      openingCash: round2(p.openingCash),
+      ...(p.denominations ? { openingDenominations: p.denominations } : {}),
+      ...(p.carryOverDiff ? { carryOverDiff: round2(p.carryOverDiff) } : {}),
+      ...(p.note?.trim() ? { openingNote: p.note.trim() } : {}),
+    };
+    setShifts(prev => {
+      const updated = [shift, ...prev];
+      persistChanges({ shifts: updated });
+      return updated;
+    });
+    logAudit('shift.open', `فتح وردية ${shift.shiftNumber} بكاش افتتاح ${shift.openingCash} ج.م`, shift.id, shift.openingCash);
+    if (shift.carryOverDiff) {
+      logAudit('shift.variance', `فرق افتتاح ${shift.shiftNumber} عن إقفال الوردية السابقة: ${shift.carryOverDiff > 0 ? 'زيادة' : 'عجز'} ${Math.abs(shift.carryOverDiff)} ج.م`, shift.id, shift.carryOverDiff);
+    }
+    return true;
+  };
+
+  const handleCloseShift = (
+    shiftId: string,
+    p: { countedCash: number; denominations?: Record<string, number>; note?: string; postVariance: boolean }
+  ): boolean => {
+    const shift = shifts.find(s => s.id === shiftId);
+    if (!shift || shift.status !== 'مفتوحة') { window.alert('الوردية دي مقفولة بالفعل أو غير موجودة.'); return false; }
+    if (!Number.isFinite(p.countedCash) || p.countedCash < 0) { window.alert('الكاش المعدود غير صالح'); return false; }
+
+    const sum = summarizeShift(shift, treasury);
+    const counted = round2(p.countedCash);
+    const variance = varianceOf(counted, sum.expectedCash);
+    if (variance !== 0 && !(p.note || '').trim()) { window.alert('فيه فرق في الدرج — اكتب سبب الفرق قبل الإقفال.'); return false; }
+
+    const nowISO = new Date().toISOString();
+    let posted = false;
+    if (variance !== 0 && p.postVariance) {
+      const isShort = variance < 0;
+      const amt = Math.abs(variance);
+      const tx: TreasuryTransaction = {
+        id: `TX-SHV-${Date.now()}`,
+        txNumber: `TX-SV-${Math.floor(1000 + Math.random() * 9000)}`,
+        date: nowISO.split('T')[0],
+        time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        type: isShort ? 'صرف' : 'قبض',
+        category: isShort ? 'عجز درج (تسوية وردية)' : 'زيادة درج (تسوية وردية)',
+        amount: amt,
+        paymentMethod: 'نقدي',
+        balanceAfter: isShort ? treasuryBalance - amt : treasuryBalance + amt,
+        referenceId: shift.id,
+        description: `${isShort ? 'عجز' : 'زيادة'} درج وردية ${shift.shiftNumber} — ${(p.note || '').trim()}`,
+        recordedBy: currentUser?.employeeName || 'غير معروف',
+        at: nowISO,
+        shiftId: shift.id,
+      };
+      knownTreasuryIds.current.add(tx.id);
+      setTreasury(prev => {
+        const updated = [tx, ...prev];
+        persistChanges({ treasuryTransactions: updated });
+        return updated;
+      });
+      posted = true;
+    }
+
+    const closed: Shift = {
+      ...shift,
+      status: 'مغلقة',
+      closedAt: nowISO,
+      closedBy: currentUser?.employeeName || 'غير معروف',
+      closedById: currentUser?.employeeId,
+      expectedCash: sum.expectedCash,
+      countedCash: counted,
+      ...(p.denominations && countTotal(p.denominations) > 0 ? { closingDenominations: p.denominations } : {}),
+      variance,
+      ...(p.note?.trim() ? { varianceNote: p.note.trim() } : {}),
+      variancePosted: posted,
+      cashIn: sum.cashIn,
+      cashOut: sum.cashOut,
+      cashSales: sum.cashSales,
+      nonCash: sum.nonCash,
+      invoiceCount: sum.invoiceCount,
+      breakdown: sum.breakdown,
+    };
+    setShifts(prev => {
+      const updated = prev.map(s => (s.id === shiftId ? closed : s));
+      persistChanges({ shifts: updated });
+      return updated;
+    });
+    logAudit('shift.close', `إقفال وردية ${shift.shiftNumber}: متوقع ${sum.expectedCash} / فعلي ${counted}`, shift.id, counted);
+    if (variance !== 0) {
+      logAudit('shift.variance', `${variance < 0 ? 'عجز' : 'زيادة'} درج ${Math.abs(variance)} ج.م في ${shift.shiftNumber} — ${(p.note || '').trim()}`, shift.id, variance);
+    }
+    return true;
+  };
+
+  const handleToggleRequireShift = (value: boolean) => {
+    setSettings(prev => {
+      const next = { ...prev, requireShiftForSales: value };
+      persistChanges({ settings: next });
+      return next;
+    });
+  };
+
   // ماركات السيارات التي يتعامل بها المحل («شامل» دائماً أولاً)
   const carBrands = useMemo(
     () => [GENERAL_BRAND, ...(settings.carBrands ?? DEFAULT_CAR_BRANDS).filter(b => b !== GENERAL_BRAND)],
@@ -459,6 +590,12 @@ export default function App() {
   // Handlers for Invoices
   // ترجع true عند النجاح، و false لو رُفضت الفاتورة (رصيد غير كافٍ ...). لا يُخصم شيء عند الرفض.
   const handleCreateInvoice = (invoice: Invoice): boolean => {
+    // إلزام الوردية: لا بيع بدون وردية مفتوحة (لو الإعداد مفعّل) حتى يكون الدرج محسوباً
+    if (settings.requireShiftForSales && !findOpenShift(shifts)) {
+      window.alert('لازم تفتح وردية الأول (وتعدّ كاش الدرج) قبل ما تبيع.');
+      setCurrentTab('shifts');
+      return false;
+    }
     // 1) تجهيز السطور بمعرّف الصنف (المطابقة بالمعرّف أولاً، ثم رقم القطعة للفواتير القديمة)
     const lines = invoice.items.map(item => {
       const part = (item.partId && parts.find(p => p.id === item.partId))
@@ -583,6 +720,108 @@ export default function App() {
 
     // Clear cart on completion
     setCart([]);
+    return true;
+  };
+
+  // إلغاء فاتورة بيع (Void): لا تُحذف الفاتورة (يبقى الترقيم متصلاً)، وتُعكس آثارها:
+  // المخزون (المتبقي بعد أي مرتجع سابق) + الخزنة + حساب العميل الآجل. يتطلب سبباً وموافقة مدير.
+  const handleVoidInvoice = (invoiceId: string, reason: string, approvedBy: string): boolean => {
+    const inv = invoices.find(i => i.id === invoiceId);
+    if (!inv || inv.status === 'ملغاة') return false;
+    const cleanReason = reason.trim();
+    if (cleanReason.length < 3) return false;
+
+    const payments: InvoicePayment[] = inv.payments && inv.payments.length > 0
+      ? inv.payments
+      : [{ method: inv.paymentMethod, amount: inv.grandTotal }];
+    // خطة العكس (دالة نقية مُختبرة): المرتجع السابق رُدّت قيمته وقته، فنعكس المتبقي فقط
+    const plan = computeVoidPlan({
+      grandTotal: inv.grandTotal,
+      returnedAmount: inv.returnedAmount,
+      items: inv.items,
+      payments: payments.map(p => ({ method: String(p.method), amount: p.amount })),
+    });
+    const fraction = plan.fraction;
+
+    // 1) المخزون: إعادة الكميات المتبقية
+    const moves: Parameters<typeof logStockMovements>[0] = [];
+    const nextParts = parts.map(part => {
+      const qty = plan.restock
+        .filter(r => (r.partId ? r.partId === part.id : r.partNumber === part.partNumber))
+        .reduce((sum, r) => sum + r.qty, 0);
+      if (qty <= 0) return part;
+      moves.push({ part, qtyDelta: qty, type: 'sale_void', refId: inv.id, refNumber: inv.invoiceNumber });
+      return { ...part, stockQuantity: part.stockQuantity + qty, updatedAt: todayISO() };
+    });
+    setParts(nextParts);
+    persistChanges({ parts: nextParts });
+    logStockMovements(moves);
+
+    // 2) الفاتورة
+    setInvoices(prev => {
+      const updated = prev.map(i => i.id === invoiceId ? {
+        ...i,
+        status: 'ملغاة' as const,
+        voidedAt: new Date().toISOString(),
+        voidedBy: currentUser?.employeeName || 'غير معروف',
+        voidApprovedBy: approvedBy,
+        voidReason: cleanReason,
+      } : i);
+      persistChanges({ invoices: updated });
+      return updated;
+    });
+
+    // 3) المدفوعات: رد كل طريقة دفع من حسابها، وتخفيض مديونية العميل الآجل
+    const creditAmount = plan.creditAmount;
+
+    if (creditAmount > 0) {
+      setCustomers(prev => {
+        const nameKey = normKey(inv.customerName);
+        const phoneKey = normKey(inv.customerPhone);
+        const updated = prev.map(c =>
+          ((inv.customerId && c.id === inv.customerId) || (phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey)
+            ? {
+                ...c,
+                balance: c.balance - creditAmount,
+                totalPurchases: Math.max(0, (c.totalPurchases || 0) - inv.grandTotal * fraction),
+                monthlyPurchases: Math.max(0, (c.monthlyPurchases || 0) - inv.grandTotal * fraction),
+                invoicesCount: Math.max(0, (c.invoicesCount || 0) - 1),
+              }
+            : c
+        );
+        persistChanges({ customers: updated });
+        return updated;
+      });
+    }
+
+    const refunds = plan.refunds;
+    if (refunds.length > 0) {
+      let running = treasuryBalance;
+      const txs: TreasuryTransaction[] = refunds.map((r, i) => {
+        running -= r.amount;
+        return {
+          id: `TX-VOID-${Date.now()}-${i}`,
+          txNumber: `TX-V-${Math.floor(1000 + Math.random() * 9000)}`,
+          date: todayISO(),
+          time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+          type: 'صرف' as const,
+          category: 'إلغاء فاتورة بيع (رد للخزنة)' as const,
+          amount: r.amount,
+          paymentMethod: r.method,
+          balanceAfter: running,
+          referenceId: inv.id,
+          description: `إلغاء فاتورة #${inv.invoiceNumber} - ${cleanReason}`,
+          recordedBy: currentUser?.employeeName || 'الكاشير',
+        };
+      });
+      setTreasury(prev => {
+        const updated = [...txs.reverse(), ...prev];
+        persistChanges({ treasuryTransactions: updated });
+        return updated;
+      });
+    }
+
+    logAudit('invoice.void', `إلغاء فاتورة ${inv.invoiceNumber} — السبب: ${cleanReason} — بموافقة: ${approvedBy}`, inv.id, inv.grandTotal * fraction);
     return true;
   };
 
@@ -1487,6 +1726,23 @@ export default function App() {
             cashierId={currentUser?.employeeId}
             onOpenVoiceAssistant={() => setShowVoiceAssistant(true)}
             onOpenReturns={() => setCurrentTab('invoices')}
+            shiftOpen={Boolean(openShift)}
+            shiftRequired={Boolean(settings.requireShiftForSales)}
+            onOpenShifts={() => setCurrentTab('shifts')}
+          />
+        )}
+
+        {currentTab === 'shifts' && (
+          <ShiftsView
+            shifts={shifts}
+            treasury={treasury}
+            isManager={currentUser?.role === 'مدير عام' || Boolean(currentUser?.permissions?.canManageTreasury)}
+            currentUserName={currentUser?.employeeName || ''}
+            requireShiftForSales={Boolean(settings.requireShiftForSales)}
+            openShiftsCount={openShiftsCount}
+            onOpenShift={handleOpenShift}
+            onCloseShift={handleCloseShift}
+            onToggleRequireShift={handleToggleRequireShift}
           />
         )}
 
@@ -1515,6 +1771,10 @@ export default function App() {
 
         {currentTab === 'invoices' && (
           <InvoicesView
+            employees={employees}
+            currentUserRole={currentUser?.role}
+            currentUserName={currentUser?.employeeName}
+            onVoidInvoice={handleVoidInvoice}
             invoices={invoices}
             salesReturns={salesReturns}
             onOpenInvoiceModal={(inv: Invoice) => setSelectedInvoiceForDetail(inv)}

@@ -47,6 +47,9 @@ interface QuickPosViewProps {
   cashierId?: string;
   onOpenVoiceAssistant?: () => void;
   onOpenReturns?: () => void;
+  shiftOpen?: boolean;         // هل توجد وردية مفتوحة؟
+  shiftRequired?: boolean;     // هل فتح الوردية إلزامي قبل البيع؟
+  onOpenShifts?: () => void;
   carBrands?: string[];
   carModels?: CarModel[];
   invoices?: Invoice[];
@@ -70,6 +73,9 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   cashierId,
   onOpenVoiceAssistant,
   onOpenReturns,
+  shiftOpen = true,
+  shiftRequired = false,
+  onOpenShifts,
   carBrands = CAR_BRANDS,
   carModels = [],
   invoices = [],
@@ -262,6 +268,23 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pb-12">
       <div className="lg:col-span-7 space-y-4">
+        {!shiftOpen && onOpenShifts && (
+          <button
+            onClick={onOpenShifts}
+            className={`w-full p-3 rounded-2xl border text-xs font-bold flex items-center justify-between gap-2 text-right transition-all ${
+              shiftRequired
+                ? 'bg-rose-500/15 border-rose-500/40 text-rose-200 hover:bg-rose-500/25'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-200 hover:bg-amber-500/20'
+            }`}
+          >
+            <span>
+              {shiftRequired
+                ? 'مفيش وردية مفتوحة — لازم تفتح وردية وتعدّ كاش الدرج قبل البيع'
+                : 'مفيش وردية مفتوحة — المبيعات مش هتتحسب على درج وردية. افتح وردية'}
+            </span>
+            <span className="shrink-0 underline">فتح وردية ›</span>
+          </button>
+        )}
         <div className="p-3.5 rounded-2xl bg-surface-2 border border-neutral-800 shadow-md flex items-center gap-3">
           <div className="relative flex-grow">
             <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />

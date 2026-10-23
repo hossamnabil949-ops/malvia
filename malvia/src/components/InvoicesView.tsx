@@ -23,6 +23,8 @@ import {
 import * as XLSX from 'xlsx';
 import { Invoice, SalesReturn, SalesReturnItem, PaymentMethod } from '../types/autoParts';
 import { DateRangeFilter } from './DateRangeFilter';
+import { verifyManagerApproval } from '../services/approvalService';
+import { Employee } from '../types/autoParts';
 import { DateRange, EMPTY_DATE_RANGE, inDateRange } from '../utils/dateRange';
 
 interface InvoicesViewProps {
@@ -31,7 +33,19 @@ interface InvoicesViewProps {
   onOpenInvoiceModal: (invoice: Invoice) => void;
   onSalesReturn: (returnData: SalesReturn) => void;
   onDeleteSalesReturn?: (returnId: string) => void;
+  employees?: Employee[];
+  currentUserRole?: string;
+  currentUserName?: string;
+  onVoidInvoice?: (invoiceId: string, reason: string, approvedBy: string) => boolean;
 }
+
+const VOID_REASONS = [
+  'خطأ في إدخال الفاتورة',
+  'خطأ في الأسعار أو الأصناف',
+  'العميل غيّر رأيه / لم يدفع',
+  'فاتورة مكررة',
+  'أخرى',
+];
 
 export const InvoicesView: React.FC<InvoicesViewProps> = ({
   invoices,
@@ -39,7 +53,52 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
   onOpenInvoiceModal,
   onSalesReturn,
   onDeleteSalesReturn,
+  employees = [],
+  currentUserRole,
+  currentUserName,
+  onVoidInvoice,
 }) => {
+  // ---- إلغاء الفاتورة (Void) ----
+  const [voidTarget, setVoidTarget] = useState<Invoice | null>(null);
+  const [voidReasonChoice, setVoidReasonChoice] = useState(VOID_REASONS[0]);
+  const [voidReasonText, setVoidReasonText] = useState('');
+  const [mgrUser, setMgrUser] = useState('');
+  const [mgrPass, setMgrPass] = useState('');
+  const [voidError, setVoidError] = useState('');
+  const [voidBusy, setVoidBusy] = useState(false);
+  const isManager = currentUserRole === 'مدير عام';
+
+  const openVoid = (inv: Invoice) => {
+    setVoidTarget(inv);
+    setVoidReasonChoice(VOID_REASONS[0]);
+    setVoidReasonText('');
+    setMgrUser('');
+    setMgrPass('');
+    setVoidError('');
+  };
+
+  const confirmVoid = async () => {
+    if (!voidTarget || !onVoidInvoice || voidBusy) return;
+    const reason = voidReasonChoice === 'أخرى' ? voidReasonText.trim() : `${voidReasonChoice}${voidReasonText.trim() ? ' — ' + voidReasonText.trim() : ''}`;
+    if (reason.length < 3) { setVoidError('اكتب سبب الإلغاء (3 أحرف على الأقل).'); return; }
+    setVoidBusy(true);
+    setVoidError('');
+    try {
+      // المدير المسجّل دخوله يعتمد بنفسه؛ غيره يحتاج بيانات مدير عام نشط
+      let approver = currentUserName || 'المدير';
+      if (!isManager) {
+        const mgr = await verifyManagerApproval(employees, mgrUser, mgrPass);
+        if (!mgr) { setVoidError('بيانات المدير غير صحيحة أو الحساب ليس مدير عام نشط.'); return; }
+        approver = mgr.name;
+      }
+      const ok = onVoidInvoice(voidTarget.id, reason, approver);
+      if (!ok) { setVoidError('تعذّر إلغاء الفاتورة (ملغاة بالفعل؟).'); return; }
+      setVoidTarget(null);
+    } finally {
+      setVoidBusy(false);
+    }
+  };
+
   const [currentView, setCurrentView] = useState<'invoices' | 'returns'>('invoices');
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
@@ -89,7 +148,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     });
   }, [salesReturns, searchQuery, dateRange]);
 
-  const totalSalesRevenue = useMemo(() => invoices.reduce((acc, inv) => acc + inv.grandTotal - (inv.returnedAmount || 0), 0), [invoices]);
+  const totalSalesRevenue = useMemo(() => invoices.reduce((acc, inv) => inv.status === 'ملغاة' ? acc : acc + inv.grandTotal - (inv.returnedAmount || 0), 0), [invoices]);
   const totalRefundsFromTreasury = useMemo(() => {
     return salesReturns
       .filter(r => r.treasuryDeducted || r.refundMethod === 'نقدي (خصم من الخزنة)')
@@ -175,7 +234,8 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       'طريقة السداد': inv.paymentMethod,
       'حالة الفاتورة': inv.status || 'مسددة',
       'إجمالي المرتجع (ج.م) بالسالب': -(inv.returnedAmount || 0),
-      'الصافي بعد المرتجع (ج.م)': inv.grandTotal - (inv.returnedAmount || 0),
+      'الحالة': inv.status || 'مسددة',
+      'الصافي بعد المرتجع (ج.م)': inv.status === 'ملغاة' ? 0 : inv.grandTotal - (inv.returnedAmount || 0),
       'الكاشير': inv.cashierName
     }));
 
@@ -265,6 +325,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
               <option value="مسددة">مسددة بالكامل</option>
               <option value="مرتجع جزئي">مرتجع جزئي</option>
               <option value="مرتجع كلي">مرتجع بالكامل</option>
+              <option value="ملغاة">ملغاة</option>
             </select>
 
             <select
@@ -309,9 +370,10 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                   </tr>
                 ) : (
                   filteredInvoices.map((inv) => {
-                    const isFullyReturned = inv.status === 'مرتجع كلي';
+                    const isVoided = inv.status === 'ملغاة';
+                    const isFullyReturned = inv.status === 'مرتجع كلي' || isVoided;
                     return (
-                      <tr key={inv.id} className="hover:bg-surface-3 transition-colors">
+                      <tr key={inv.id} className={`hover:bg-surface-3 transition-colors ${isVoided ? 'opacity-50 line-through decoration-neutral-500' : ''}`}>
                         <td className="p-3.5 font-mono font-bold text-white">
                           {inv.invoiceNumber}
                         </td>
@@ -336,7 +398,11 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                           </span>
                         </td>
                         <td className="p-3.5">
-                          {inv.status === 'مرتجع كلي' ? (
+                          {inv.status === 'ملغاة' ? (
+                            <span className="px-2 py-0.5 rounded-full bg-neutral-700/60 text-neutral-300 font-bold text-[10px] border border-neutral-600" title={`${inv.voidReason || ''} — بموافقة: ${inv.voidApprovedBy || ''}`}>
+                              ملغاة
+                            </span>
+                          ) : inv.status === 'مرتجع كلي' ? (
                             <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 font-bold text-[10px] border border-rose-500/30">
                               مرتجع بالكامل
                             </span>
@@ -369,6 +435,17 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                               >
                                 <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
                                 <span>مرتجع</span>
+                              </button>
+                            )}
+
+                            {!isVoided && onVoidInvoice && (
+                              <button
+                                onClick={() => openVoid(inv)}
+                                className="px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-rose-600 hover:text-white text-neutral-300 border border-neutral-700 transition-all text-xs font-bold flex items-center gap-1"
+                                title="إلغاء الفاتورة (يتطلب سبباً وموافقة مدير)"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                <span>إلغاء</span>
                               </button>
                             )}
 
@@ -710,6 +787,53 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+    
+      {voidTarget && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto" onClick={() => !voidBusy && setVoidTarget(null)}>
+          <div className="w-full max-w-md bg-surface-2 rounded-3xl p-5 border border-rose-500/30 shadow-2xl space-y-3 text-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black text-white">إلغاء الفاتورة {voidTarget.invoiceNumber}</h3>
+              <button onClick={() => setVoidTarget(null)} className="w-8 h-8 rounded-full bg-neutral-800 text-neutral-400 hover:text-white flex items-center justify-center"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-200 leading-relaxed">
+              سيتم إرجاع الكميات للمخزن، ورد المبلغ المدفوع من الخزنة (كل طريقة من حسابها)، وتخفيض مديونية العميل إن كانت آجلة. الفاتورة تبقى في السجل بحالة «ملغاة» ولا تُحذف.
+              <div className="mt-1 font-mono font-bold">الإجمالي: {voidTarget.grandTotal.toFixed(2)} ج.م{(voidTarget.returnedAmount || 0) > 0 ? ` — منه مرتجع سابقاً ${(voidTarget.returnedAmount || 0).toFixed(2)}` : ''}</div>
+            </div>
+
+            <label className="block text-neutral-300 font-bold">سبب الإلغاء (إلزامي):</label>
+            <select value={voidReasonChoice} onChange={(e) => setVoidReasonChoice(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white">
+              {VOID_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <input
+              value={voidReasonText}
+              onChange={(e) => setVoidReasonText(e.target.value)}
+              placeholder={voidReasonChoice === 'أخرى' ? 'اكتب السبب...' : 'تفاصيل إضافية (اختياري)'}
+              className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
+            />
+
+            {isManager ? (
+              <p className="text-emerald-400 font-bold">أنت مدير عام: سيُسجَّل الإلغاء باعتمادك ({currentUserName}).</p>
+            ) : (
+              <div className="space-y-2 p-3 rounded-2xl bg-surface-1 border border-neutral-700">
+                <p className="text-amber-400 font-bold">موافقة المدير مطلوبة — اطلب من المدير إدخال بياناته:</p>
+                <input value={mgrUser} onChange={(e) => setMgrUser(e.target.value)} placeholder="اسم مستخدم المدير" autoComplete="off"
+                  className="w-full h-10 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white font-mono" />
+                <input type="password" value={mgrPass} onChange={(e) => setMgrPass(e.target.value)} placeholder="كلمة مرور المدير" autoComplete="new-password"
+                  className="w-full h-10 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white font-mono" />
+              </div>
+            )}
+
+            {voidError && <div role="alert" className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 font-bold">{voidError}</div>}
+
+            <div className="flex gap-2 pt-1">
+              <button onClick={confirmVoid} disabled={voidBusy} className="flex-1 h-11 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black disabled:opacity-50">
+                {voidBusy ? 'جارٍ التنفيذ...' : 'تأكيد الإلغاء'}
+              </button>
+              <button onClick={() => setVoidTarget(null)} disabled={voidBusy} className="px-4 h-11 rounded-xl bg-neutral-800 text-neutral-300 font-bold">تراجع</button>
+            </div>
           </div>
         </div>
       )}

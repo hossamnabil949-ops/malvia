@@ -275,6 +275,13 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
               <span>الإجمالي النهائي المستحق:</span>
               <span className="font-mono text-lg text-amber-700">{invoice.grandTotal.toFixed(2)} ج.م</span>
             </div>
+            {invoice.status === 'ملغاة' && (
+              <div className="mt-2 p-2 text-center border-2 border-rose-600 rounded-lg text-rose-700 font-black text-xs leading-relaxed">
+                فاتورة ملغاة{invoice.voidedAt ? ` بتاريخ ${invoice.voidedAt.slice(0, 10)}` : ''}
+                {invoice.voidReason ? ` — السبب: ${invoice.voidReason}` : ''}
+                {invoice.voidApprovedBy ? ` — بموافقة: ${invoice.voidApprovedBy}` : ''}
+              </div>
+            )}
             {(invoice.returnedAmount || 0) > 0 && (
               <>
                 <div className="flex justify-between text-rose-600 font-bold">

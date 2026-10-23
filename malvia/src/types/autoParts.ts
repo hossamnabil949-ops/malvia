@@ -136,10 +136,11 @@ export interface InvoicePayment {
 }
 
 export type AuditAction =
-  | 'invoice.create' | 'invoice.price_override' | 'invoice.discount'
+  | 'invoice.create' | 'invoice.price_override' | 'invoice.discount' | 'invoice.void'
   | 'sales_return.create' | 'sales_return.delete'
   | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
-  | 'stock.adjust' | 'customer.collect' | 'supplier.payment';
+  | 'stock.adjust' | 'customer.collect' | 'supplier.payment'
+  | 'shift.open' | 'shift.close' | 'shift.variance';
 
 export interface AuditEntry {
   id: string;
@@ -154,7 +155,7 @@ export interface AuditEntry {
 }
 
 export type StockMovementType =
-  | 'sale' | 'sales_return' | 'purchase' | 'purchase_return' | 'adjustment' | 'import' | 'sales_return_delete' | 'purchase_return_delete';
+  | 'sale' | 'sale_void' | 'sales_return' | 'purchase' | 'purchase_return' | 'adjustment' | 'import' | 'sales_return_delete' | 'purchase_return_delete';
 
 export interface StockMovement {
   id: string;
@@ -194,6 +195,10 @@ export interface Invoice {
   cashierName: string;
   status?: 'مسددة' | 'مرتجع جزئي' | 'مرتجع كلي' | 'ملغاة';
   returnedAmount?: number;
+  voidedAt?: string;        // ISO — وقت الإلغاء
+  voidedBy?: string;        // من نفّذ الإلغاء
+  voidApprovedBy?: string;  // المدير الذي وافق
+  voidReason?: string;
   notes?: string;
 }
 
@@ -437,6 +442,7 @@ export interface TreasuryTransaction {
     | 'مرتجع مبيعات نقدي (صرف من الخزنة)'
     | 'مرتجع مشتريات نقدي (توريد للخزنة)'
     | 'إلغاء مرتجع مبيعات (رد للخزنة)'
+    | 'إلغاء فاتورة بيع (رد للخزنة)'
     | 'إلغاء مرتجع مشتريات (عكس الاسترداد)'
     | 'استرداد إلغاء مرتجع مبيعات'
     | 'تسوية خطأ مخزني'
@@ -445,13 +451,49 @@ export interface TreasuryTransaction {
     | 'ضخ رأس مال من شريك'
     | 'توزيع أرباح'
     | 'إيداع نقدي إضافي'
-    | 'سحب نقدي';
+    | 'سحب نقدي'
+    | 'عجز درج (تسوية وردية)'
+    | 'زيادة درج (تسوية وردية)';
   amount: number;
   paymentMethod: PaymentMethod | string;
   balanceAfter: number;
   referenceId?: string;
   description: string;
   recordedBy: string;
+  at?: string;       // وقت التسجيل الفعلي (ISO) — يُختم تلقائياً للحركات الجديدة
+  shiftId?: string;  // الوردية المفتوحة وقت الحركة (إن وجدت)
+}
+
+// ---------- الورديات وجرد الدرج ----------
+export interface ShiftCashLine { label: string; amount: number; }
+
+export interface Shift {
+  id: string;
+  shiftNumber: string;            // مثال: SH-0007
+  status: 'مفتوحة' | 'مغلقة';
+  openedAt: string;               // ISO
+  openedBy: string;
+  openedById?: string;
+  openingCash: number;            // الكاش الذي بدأت به الوردية (معدود)
+  openingDenominations?: Record<string, number>;
+  carryOverDiff?: number;         // فرق بين عدّ الافتتاح وكاش إقفال الوردية السابقة (+ زيادة / - عجز)
+  openingNote?: string;
+  // ---- تُملأ عند الإقفال ----
+  closedAt?: string;
+  closedBy?: string;
+  closedById?: string;
+  expectedCash?: number;          // الكاش المتوقع في الدرج وقت الإقفال
+  countedCash?: number;           // الكاش الفعلي المعدود
+  closingDenominations?: Record<string, number>;
+  variance?: number;              // الفعلي - المتوقع: سالب = عجز، موجب = زيادة
+  varianceNote?: string;
+  variancePosted?: boolean;       // هل سُجلت التسوية في الخزنة
+  cashIn?: number;                // إجمالي القبض النقدي خلال الوردية
+  cashOut?: number;               // إجمالي الصرف النقدي خلال الوردية
+  cashSales?: number;
+  nonCash?: { instapay: number; visa: number; wallet: number };
+  invoiceCount?: number;
+  breakdown?: ShiftCashLine[];    // تفصيل الحركات النقدية حسب البند
 }
 
 export interface EmployeePermissions {
@@ -470,7 +512,8 @@ export interface Employee {
   role: 'مدير عام' | 'كاشير مبيعات' | 'أمين مستودع' | 'محاسب مالي' | 'مسؤول مشتريات' | 'مشرف ورشة';
   phone: string;
   username?: string;
-  password?: string;
+  password?: string;      // قديم (نص): يُحوَّل تلقائياً إلى passwordHash عند أول دخول
+  passwordHash?: string;  // PBKDF2 (انظر services/passwordService.ts)
   email?: string;
   shift: 'صباحي' | 'مسائي' | 'شامل';
   salary: number;
@@ -504,6 +547,7 @@ export interface ShopSettings {
   vatRate: number;
   invoiceFooterNotes: string;
   activeEmployeeId: string;
+  requireShiftForSales?: boolean; // إلزام فتح وردية قبل أي بيع في الكاشير
   carBrands?: string[]; // قائمة ماركات السيارات التي يتعامل معها المحل (بدون «شامل»)
 }
 
