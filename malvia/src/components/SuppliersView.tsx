@@ -1062,7 +1062,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
               <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-amber-300">إجمالي قيمة المرتجع المحتسب:</span>
-                  <span className="text-sm font-black text-amber-400">{returnAllocation.totalReturn.toLocaleString()} ج.م</span>
+                  <span className="text-sm font-black text-amber-400">{(returnAllocation.totalReturn ?? 0).toLocaleString()} ج.م</span>
                 </div>
 
                 <div className="text-[11px] text-slate-300 space-y-1 pt-1 border-t border-amber-500/20">
@@ -1082,7 +1082,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
 
                   {returnAllocation.deductedFromDebt === 0 && (
                     <div className="text-emerald-300 text-[10px]">
-                      * لا توجد فواتير مؤجلة للمورد، سيتم إضافة كامل قيمة المرتجع ({returnAllocation.totalReturn.toLocaleString()} ج.م) كرصيد دائن للمحل للاستفادة به في طلبيات قادمة.
+                      * لا توجد فواتير مؤجلة للمورد، سيتم إضافة كامل قيمة المرتجع ({(returnAllocation.totalReturn ?? 0).toLocaleString()} ج.م) كرصيد دائن للمحل للاستفادة به في طلبيات قادمة.
                     </div>
                   )}
                 </div>

@@ -784,10 +784,10 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                         -{ret.totalReturnAmount.toLocaleString()} ج.م
                       </td>
                       <td className="p-3.5 font-mono text-amber-400 font-bold">
-                        {ret.rescheduledDebtReduction > 0 ? (
+                        {(ret.rescheduledDebtReduction ?? 0) > 0 ? (
                           <span className="flex items-center gap-1">
                             <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
-                            <span>تخفيض {ret.rescheduledDebtReduction.toLocaleString()} ج.م</span>
+                            <span>تخفيض {(ret.rescheduledDebtReduction ?? 0).toLocaleString()} ج.م</span>
                           </span>
                         ) : (
                           <span className="text-neutral-500">—</span>
