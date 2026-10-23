@@ -1794,6 +1794,13 @@ export default function App() {
             onAddPurchaseInvoice={handleAddPurchaseInvoice}
             onPurchaseReturn={handleAddPurchaseReturn}
             onDeletePurchaseReturn={handleDeletePurchaseReturn}
+            onAddSupplier={(newSup: Supplier) => {
+              setSuppliers(prev => {
+                const updated = [newSup, ...prev];
+                persistChanges({ suppliers: updated });
+                return updated;
+              });
+            }}
           />
         )}
 

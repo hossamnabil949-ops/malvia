@@ -53,6 +53,7 @@ interface PurchasesViewProps {
   onPurchaseReturn: (returnData: PurchaseReturn) => void;
   onDeletePurchaseReturn?: (returnId: string) => void;
   onAddNewPart?: (part: AutoPart) => void;
+  onAddSupplier?: (supplier: Supplier) => void;
   carBrands?: string[];
 }
 
@@ -67,6 +68,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   onPurchaseReturn,
   onDeletePurchaseReturn,
   onAddNewPart,
+  onAddSupplier,
   carBrands = [],
 }) => {
   const [currentTab, setCurrentTab] = useState<'invoices' | 'returns'>('invoices');
@@ -99,6 +101,40 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const [taxPercent, setTaxPercent] = useState<number>(14);
   const [notes, setNotes] = useState<string>('');
   const [receivedBy, setReceivedBy] = useState<string>('أمين المخزن');
+
+  // إضافة مورد/تاجر جديد من داخل الفاتورة
+  const [showQuickSupplier, setShowQuickSupplier] = useState(false);
+  const [quickSupName, setQuickSupName] = useState('');
+  const [quickSupPhone, setQuickSupPhone] = useState('');
+  const [quickSupContact, setQuickSupContact] = useState('');
+
+  const handleQuickAddSupplier = () => {
+    const name = quickSupName.trim();
+    if (!name || !onAddSupplier) return;
+    const created: Supplier = {
+      id: `sup-${Date.now()}`,
+      code: `SUP-${String(suppliers.length + 1).padStart(3, '0')}`,
+      name,
+      category: 'قطع غيار ياباني وكوري',
+      contactPerson: quickSupContact.trim(),
+      phone: quickSupPhone.trim(),
+      address: 'القاهرة',
+      balance: 0,
+      deferredDebt: 0,
+      storeCredit: 0,
+      totalSupplied: 0,
+      totalPaid: 0,
+      totalReturned: 0,
+      lastPaymentDate: new Date().toISOString().split('T')[0],
+      notes: '',
+    };
+    onAddSupplier(created);
+    setSelectedSupplierId(created.id);
+    setQuickSupName('');
+    setQuickSupPhone('');
+    setQuickSupContact('');
+    setShowQuickSupplier(false);
+  };
 
   const [invoiceItems, setInvoiceItems] = useState<PurchaseInvoiceItem[]>([
     {
@@ -820,18 +856,67 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             <form onSubmit={handleSubmitInvoice} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-surface-1 p-4 rounded-2xl border border-neutral-800">
                 <div>
-                  <label className="text-xs font-bold text-neutral-400 block mb-1">المورد / التاجر:</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-neutral-400">المورد / التاجر:</label>
+                    {onAddSupplier && (
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickSupplier(v => !v)}
+                        className="text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        {showQuickSupplier ? 'إلغاء' : 'مورد جديد'}
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={selectedSupplierId}
                     onChange={(e) => setSelectedSupplierId(e.target.value)}
                     className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none focus:border-amber-400"
                   >
+                    {suppliers.length === 0 && <option value="">— لا يوجد موردين، أضف مورداً —</option>}
                     {suppliers.map(s => (
                       <option key={s.id} value={s.id}>
                         {s.name} (رصيده: {s.balance.toLocaleString()} ج.م)
                       </option>
                     ))}
                   </select>
+
+                  {showQuickSupplier && (
+                    <div className="mt-2 p-3 rounded-xl bg-surface-2 border border-amber-500/40 space-y-2">
+                      <input
+                        type="text"
+                        value={quickSupName}
+                        onChange={(e) => setQuickSupName(e.target.value)}
+                        placeholder="اسم المورد / التاجر *"
+                        className="w-full h-8 px-3 rounded-lg bg-surface-1 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={quickSupPhone}
+                          onChange={(e) => setQuickSupPhone(e.target.value)}
+                          placeholder="التليفون"
+                          className="h-8 px-3 rounded-lg bg-surface-1 border border-neutral-700 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none focus:border-amber-400"
+                        />
+                        <input
+                          type="text"
+                          value={quickSupContact}
+                          onChange={(e) => setQuickSupContact(e.target.value)}
+                          placeholder="اسم المسؤول"
+                          className="h-8 px-3 rounded-lg bg-surface-1 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleQuickAddSupplier}
+                        disabled={!quickSupName.trim()}
+                        className="w-full h-8 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-xs font-black"
+                      >
+                        حفظ واختيار المورد
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div>
