@@ -1816,6 +1816,15 @@ export default function App() {
                 return updated;
               });
             }}
+            onUpdateCreditLimit={(customerId: string, limit: number) => {
+              const cust = customers.find(c => c.id === customerId);
+              logAudit('customer.credit_limit', `حد ائتمان ${cust?.name || customerId}: ${limit > 0 ? limit + ' ج.م' : 'غير محدود'}`, customerId, limit);
+              setCustomers(prev => {
+                const updated = prev.map(c => c.id === customerId ? { ...c, creditLimit: limit } : c);
+                persistChanges({ customers: updated });
+                return updated;
+              });
+            }}
             onSettleBalance={(customerId: string, amount: number) => {
               const cust = customers.find(c => c.id === customerId);
               logAudit('customer.collect', `تحصيل ${amount} ج.م من ${cust?.name || customerId}`, customerId, amount);

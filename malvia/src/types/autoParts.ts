@@ -139,7 +139,7 @@ export type AuditAction =
   | 'invoice.create' | 'invoice.price_override' | 'invoice.discount' | 'invoice.void'
   | 'sales_return.create' | 'sales_return.delete'
   | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
-  | 'stock.adjust' | 'customer.collect' | 'supplier.payment'
+  | 'stock.adjust' | 'customer.collect' | 'customer.credit_limit' | 'supplier.payment'
   | 'shift.open' | 'shift.close' | 'shift.variance';
 
 export interface AuditEntry {
@@ -212,6 +212,7 @@ export interface Customer {
   monthlyPurchases: number; // مشتريات الشهر الحالي
   invoicesCount?: number;
   lastVisit: string;
+  creditLimit?: number; // حد الائتمان (ج.م) — 0 أو بدون قيمة = غير محدود
 }
 
 export type ExpenseCategory = 

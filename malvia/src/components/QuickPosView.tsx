@@ -95,6 +95,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const [selectedBrand, setSelectedBrand] = useState<CarBrand>('شامل');
   const [selectedCategory, setSelectedCategory] = useState<string>('الكل');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('cash');
+  const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
   const [customerNameInput, setCustomerNameInput] = useState('زبون نقدي (قطاعي)');
   const [carDetailsInput, setCarDetailsInput] = useState('');
   const [customerPhoneInput, setCustomerPhoneInput] = useState('');
@@ -247,6 +248,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         {
           allowBelowCost: false, // سياسة المحل: لا بيع بأقل من التكلفة لأي مستخدم
           customerId: hasCredit ? (selectedCustomerId !== 'cash' ? selectedCustomerId : hasNewName ? 'new' : undefined) : undefined,
+          customerBalance: selectedCustomer?.balance ?? 0,
+          customerCreditLimit: selectedCustomer?.creditLimit ?? 0,
         }
       );
     } catch (e) {
@@ -260,6 +263,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         DISCOUNT_EXCEEDS_SUBTOTAL: 'الخصم أكبر من قيمة الفاتورة',
         PAYMENT_MISMATCH: 'مجموع المدفوعات لا يساوي إجمالي الفاتورة',
         CREDIT_REQUIRES_CUSTOMER: 'البيع الآجل يتطلب اختيار عميل أو كتابة اسمه',
+        CREDIT_LIMIT_EXCEEDED: `البيع الآجل يتجاوز حد ائتمان العميل (الحد ${(selectedCustomer?.creditLimit ?? 0).toLocaleString()} ج.م، مديونيته الحالية ${Math.max(0, selectedCustomer?.balance ?? 0).toLocaleString()} ج.م)`,
         EMPTY_CART: 'السلة فارغة',
       };
       setSaleError(messages[code] || 'تعذّر إتمام الفاتورة');
@@ -576,6 +580,14 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                 <span>رصيد الحساب الآجل (شكك):</span>
                 <span className="font-bold">
                   {customers.find((c) => c.id === selectedCustomerId)?.balance.toLocaleString()} ج.م
+                </span>
+              </div>
+            )}
+            {selectedCustomer && (selectedCustomer.creditLimit ?? 0) > 0 && (
+              <div className="p-2 rounded-lg bg-surface-1 text-[11px] text-sky-300 flex justify-between">
+                <span>حد الائتمان / المتاح:</span>
+                <span className="font-bold font-mono">
+                  {(selectedCustomer.creditLimit as number).toLocaleString()} / {Math.max(0, (selectedCustomer.creditLimit as number) - Math.max(0, selectedCustomer.balance)).toLocaleString()} ج.م
                 </span>
               </div>
             )}

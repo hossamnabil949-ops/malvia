@@ -35,6 +35,19 @@ import { validateDiscountPolicy } from '../src/utils/saleLogic.ts';
   assert.equal(code(() => validateDiscountPolicy([{ ...L, unitCost: 100, unitPrice: 99 }], 0)), 'PRICE_BELOW_COST');
   validateDiscountPolicy([{ ...L, unitPrice: 120 }], 0);                       // رفع السعر مسموح (للمالك فقط عبر الباسورد)
 }
+
+// ---------- حد الائتمان ----------
+{
+  const L = { partId: 'p1', qty: 1, unitPrice: 100, unitCost: 60 };
+  const tt = computeTotals([L], 0, 0, false);
+  const stock = [{ id: 'p1', stockQuantity: 5 }];
+  const credit = [{ method: 'آجل', amount: 100 }];
+  const base = { allowBelowCost: false, customerId: 'c1' };
+  validateSale([L], stock, tt, credit, { ...base, customerBalance: 400, customerCreditLimit: 500 });                 // 400+100 = الحد بالضبط: مقبول
+  assert.equal(code(() => validateSale([L], stock, tt, credit, { ...base, customerBalance: 401, customerCreditLimit: 500 })), 'CREDIT_LIMIT_EXCEEDED');
+  validateSale([L], stock, tt, credit, { ...base, customerBalance: 99999, customerCreditLimit: 0 });                 // بدون حد = غير محدود
+  validateSale([L], stock, tt, [{ method: 'كاش', amount: 100 }], { ...base, customerBalance: 99999, customerCreditLimit: 500 }); // الدفع النقدي لا يتأثر
+}
 console.log('كل الاختبارات نجحت');
 
 // ---------- إلغاء فاتورة ----------

@@ -34,6 +34,7 @@ interface CustomersViewProps {
   customers: Customer[];
   onAddCustomer: (customer: Customer) => void;
   onSettleBalance: (customerId: string, amount: number) => void;
+  onUpdateCreditLimit?: (customerId: string, limit: number) => void;
 }
 
 const COLORS = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'];
@@ -42,6 +43,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   customers,
   onAddCustomer,
   onSettleBalance,
+  onUpdateCreditLimit,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [settleModalCustomer, setSettleModalCustomer] = useState<Customer | null>(null);
@@ -50,6 +52,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [type, setType] = useState<'ورشة فنية' | 'عميل تجزئة' | 'أسطول شركات'>('ورشة فنية');
+  const [newCreditLimit, setNewCreditLimit] = useState('');
+  const [limitModalCustomer, setLimitModalCustomer] = useState<Customer | null>(null);
+  const [limitValue, setLimitValue] = useState('');
 
   const handleSaveCustomer = (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,11 +70,19 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       monthlyPurchases: 0,
       invoicesCount: 0,
       lastVisit: 'اليوم',
+      creditLimit: Math.max(0, Number(newCreditLimit) || 0),
     });
 
     setName('');
     setPhone('');
+    setNewCreditLimit('');
     setShowAddModal(false);
+  };
+
+  const handleConfirmLimit = () => {
+    if (!limitModalCustomer || !onUpdateCreditLimit) return;
+    onUpdateCreditLimit(limitModalCustomer.id, Math.max(0, Number(limitValue) || 0));
+    setLimitModalCustomer(null);
   };
 
   const handleConfirmSettle = () => {
@@ -392,6 +405,25 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     {c.balance < 0 ? `رصيد له: ${Math.abs(c.balance).toLocaleString()}` : c.balance.toLocaleString()} ج.م
                   </span>
                 </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-neutral-400">حد الائتمان:</span>
+                  <span className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-sky-300">
+                      {c.creditLimit && c.creditLimit > 0
+                        ? `${c.creditLimit.toLocaleString()} ج.م (المتاح ${Math.max(0, c.creditLimit - Math.max(0, c.balance)).toLocaleString()})`
+                        : 'غير محدود'}
+                    </span>
+                    {onUpdateCreditLimit && (
+                      <button
+                        type="button"
+                        onClick={() => { setLimitModalCustomer(c); setLimitValue(String(c.creditLimit || '')); }}
+                        className="text-[10px] text-amber-400 hover:text-amber-300 font-bold"
+                      >
+                        تعديل
+                      </button>
+                    )}
+                  </span>
+                </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-400">إجمالي المشتريات التراكمية:</span>
                   <span className="font-mono text-white">
@@ -529,6 +561,18 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 </select>
               </div>
 
+              <div>
+                <label className="text-neutral-300 font-bold block mb-1">حد الائتمان (ج.م) — اتركه فارغاً لغير محدود</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={newCreditLimit}
+                  onChange={(e) => setNewCreditLimit(e.target.value)}
+                  placeholder="مثال: 20000"
+                  className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
+                />
+              </div>
+
               <button
                 type="submit"
                 className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs shadow-lg mt-4"
@@ -536,6 +580,36 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 تسجيل العميل
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {limitModalCustomer && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setLimitModalCustomer(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-surface-1 border border-neutral-700 p-5 space-y-3 text-xs"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4 className="font-black text-white text-sm">حد الائتمان — {limitModalCustomer.name}</h4>
+            <p className="text-neutral-400">
+              المديونية الحالية: {Math.max(0, limitModalCustomer.balance).toLocaleString()} ج.م. أي بيع آجل يتجاوز الحد سيُرفض في الكاشير. اكتب 0 لإلغاء الحد.
+            </p>
+            <input
+              type="number"
+              min="0"
+              autoFocus
+              value={limitValue}
+              onChange={(e) => setLimitValue(e.target.value)}
+              placeholder="حد الائتمان بالجنيه"
+              className="w-full h-10 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white font-mono"
+            />
+            <div className="flex gap-2">
+              <button type="button" onClick={handleConfirmLimit} className="flex-1 h-9 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black">حفظ</button>
+              <button type="button" onClick={() => setLimitModalCustomer(null)} className="px-4 h-9 rounded-xl bg-neutral-800 text-neutral-300 font-bold">إلغاء</button>
+            </div>
           </div>
         </div>
       )}

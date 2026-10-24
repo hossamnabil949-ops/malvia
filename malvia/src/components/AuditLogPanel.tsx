@@ -9,7 +9,7 @@ const AUDIT_LABEL: Record<string, string> = {
   'sales_return.create': 'مرتجع مبيعات', 'sales_return.delete': 'حذف مرتجع مبيعات',
   'purchase.create': 'فاتورة مشتريات', 'purchase_return.create': 'مرتجع مشتريات',
   'purchase_return.delete': 'حذف مرتجع مشتريات', 'purchase_return.settle': 'تسوية مرتجع',
-  'stock.adjust': 'تعديل رصيد', 'customer.collect': 'تحصيل من عميل', 'supplier.payment': 'سداد مورد',
+  'stock.adjust': 'تعديل رصيد', 'customer.collect': 'تحصيل من عميل', 'customer.credit_limit': 'تعديل حد ائتمان', 'supplier.payment': 'سداد مورد',
 };
 const MOVE_LABEL: Record<string, string> = {
   sale: 'بيع', sale_void: 'إلغاء فاتورة', sales_return: 'مرتجع مبيعات', purchase: 'توريد', purchase_return: 'مرتجع مشتريات',
