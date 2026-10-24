@@ -25,3 +25,18 @@ export async function verifyManagerApproval(
   const legacy = manager.password || '123456';
   return pass === legacy ? manager : null;
 }
+
+/** يتحقق من باسورد المالك فقط (أي حساب مدير عام نشط). يرجع المدير عند النجاح أو null. */
+export async function verifyOwnerPassword(employees: Employee[], password: string): Promise<Employee | null> {
+  const pass = password.trim();
+  if (!pass) return null;
+  const managers = employees.filter(e => e.role === 'مدير عام' && e.status === 'نشط');
+  for (const m of managers) {
+    if (m.passwordHash && isHashed(m.passwordHash)) {
+      if (await verifyPassword(pass, m.passwordHash)) return m;
+    } else if (pass === (m.password || '123456')) {
+      return m;
+    }
+  }
+  return null;
+}

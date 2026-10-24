@@ -1722,6 +1722,8 @@ export default function App() {
             onCheckoutComplete={handleCreateInvoice}
             vatRate={settings.vatRate}
             canSellBelowCost={currentUser?.role === 'مدير عام'}
+            employees={employees}
+            maxDiscountPercent={10}
             cashierName={currentUser?.employeeName}
             cashierId={currentUser?.employeeId}
             onOpenVoiceAssistant={() => setShowVoiceAssistant(true)}

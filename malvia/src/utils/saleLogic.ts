@@ -3,7 +3,7 @@
 
 export type SaleErrorCode =
   | 'EMPTY_CART' | 'INVALID_QTY' | 'INVALID_PRICE' | 'OUT_OF_STOCK' | 'PRICE_BELOW_COST'
-  | 'DISCOUNT_EXCEEDS_SUBTOTAL' | 'PAYMENT_MISMATCH' | 'CREDIT_REQUIRES_CUSTOMER' | 'CREDIT_LIMIT_EXCEEDED';
+  | 'DISCOUNT_EXCEEDS_SUBTOTAL' | 'DISCOUNT_OVER_LIMIT' | 'PAYMENT_MISMATCH' | 'CREDIT_REQUIRES_CUSTOMER' | 'CREDIT_LIMIT_EXCEEDED';
 
 export class SaleError extends Error {
   code: SaleErrorCode;
@@ -35,6 +35,28 @@ export function computeTotals(lines: CartLine[], discountEgp: number, vatRatePer
   const taxable = subtotal - discount;
   const tax = applyVat ? Math.round((taxable * vatRatePercent) / 100) : 0;
   return { subtotal, discount, tax, grandTotal: taxable + tax };
+}
+
+export interface DiscountPolicyLine { qty: number; listPrice: number; unitPrice: number; unitCost: number }
+
+/**
+ * سياسة الخصم: (1) لا يزيد خصم أي صنف عن maxPercent% من سعره الأصلي،
+ * (2) إجمالي التخفيض (تعديل أسعار + خصم الفاتورة) لا يزيد عن maxPercent% من إجمالي الأسعار الأصلية،
+ * (3) لا يقل السعر عن التكلفة لا للصنف ولا لإجمالي الفاتورة بعد الخصم. بالقروش لتفادي الكسور.
+ */
+export function validateDiscountPolicy(lines: DiscountPolicyLine[], invoiceDiscountEgp: number, maxPercent = 10): void {
+  let listTotal = 0, soldTotal = 0, costTotal = 0;
+  for (const l of lines) {
+    const list = toPiasters(l.listPrice), price = toPiasters(l.unitPrice), cost = toPiasters(l.unitCost);
+    if (price < cost) throw new SaleError('PRICE_BELOW_COST', { unitPrice: l.unitPrice, unitCost: l.unitCost });
+    if (price * 100 < list * (100 - maxPercent)) throw new SaleError('DISCOUNT_OVER_LIMIT', { maxPercent, listPrice: l.listPrice, unitPrice: l.unitPrice });
+    listTotal += Math.round(l.qty * list);
+    soldTotal += Math.round(l.qty * price);
+    costTotal += Math.round(l.qty * cost);
+  }
+  const net = soldTotal - toPiasters(invoiceDiscountEgp);
+  if (net < costTotal) throw new SaleError('PRICE_BELOW_COST', { net, costTotal });
+  if ((listTotal - net) * 100 > listTotal * maxPercent) throw new SaleError('DISCOUNT_OVER_LIMIT', { maxPercent, listTotal, net });
 }
 
 export interface ValidateOptions {

@@ -20,6 +20,21 @@ assert.equal(deductStock([{ id: 'p1', stockQuantity: 5 }], [line])[0].stockQuant
 // مرتجع: سطر إجماليه 205.20 لكمية 2 => رجوع قطعة = 102.60 (وليس 100 = سعر الوحدة)
 assert.equal(refundForLine(205.2, 2, 1, 0), 102.6);
 assert.equal(code(() => { refundForLine(205.2, 2, 2, 1); }), 'INVALID_QTY');
+
+// ---------- سياسة الخصم (10% كحد أقصى، ولا أقل من التكلفة) ----------
+import { validateDiscountPolicy } from '../src/utils/saleLogic.ts';
+{
+  const L = { qty: 2, listPrice: 100, unitPrice: 100, unitCost: 60 };
+  validateDiscountPolicy([L], 0);                                              // بدون خصم
+  validateDiscountPolicy([L], 20);                                             // 10% بالضبط مقبول
+  validateDiscountPolicy([{ ...L, unitPrice: 90 }], 0);                        // سعر الصنف -10% مقبول
+  assert.equal(code(() => validateDiscountPolicy([L], 20.01)), 'DISCOUNT_OVER_LIMIT');
+  assert.equal(code(() => validateDiscountPolicy([{ ...L, unitPrice: 89 }], 0)), 'DISCOUNT_OVER_LIMIT');
+  assert.equal(code(() => validateDiscountPolicy([{ ...L, unitPrice: 90 }], 10)), 'DISCOUNT_OVER_LIMIT'); // تراكم تعديل السعر + خصم الفاتورة
+  assert.equal(code(() => validateDiscountPolicy([{ ...L, unitCost: 95, unitPrice: 100 }], 15)), 'PRICE_BELOW_COST'); // الصافي أقل من التكلفة
+  assert.equal(code(() => validateDiscountPolicy([{ ...L, unitCost: 100, unitPrice: 99 }], 0)), 'PRICE_BELOW_COST');
+  validateDiscountPolicy([{ ...L, unitPrice: 120 }], 0);                       // رفع السعر مسموح (للمالك فقط عبر الباسورد)
+}
 console.log('كل الاختبارات نجحت');
 
 // ---------- إلغاء فاتورة ----------

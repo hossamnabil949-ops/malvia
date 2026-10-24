@@ -6,6 +6,10 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    define: {
+      // رقم إصدار البناء: يظهر في شاشة الكاشير لمعرفة هل النسخة المنشورة هي الأحدث
+      __APP_BUILD__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ')),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

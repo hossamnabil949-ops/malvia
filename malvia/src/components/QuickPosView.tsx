@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
   Plus, 
@@ -23,11 +23,16 @@ import {
   CheckCircle2,
   Tag,
   CarFront,
+  Lock,
+  Unlock,
+  ShieldCheck,
+  X,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { nextSalesInvoiceNumber } from '../utils/invoiceNumber';
-import { SaleError, computeTotals, validateSale, toEgp, isCreditPayment } from '../utils/saleLogic';
-import { AutoPart, CartItem, Customer, Invoice, CarBrand, CarModel, PartCategory, PaymentMethod } from '../types/autoParts';
+import { SaleError, computeTotals, validateSale, validateDiscountPolicy, toEgp, isCreditPayment } from '../utils/saleLogic';
+import { AutoPart, CartItem, Customer, Invoice, CarBrand, CarModel, PartCategory, PaymentMethod, Employee } from '../types/autoParts';
+import { verifyOwnerPassword } from '../services/approvalService';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
 import { BrandBar } from './BrandBar';
 
@@ -42,7 +47,9 @@ interface QuickPosViewProps {
   onClearCart: () => void;
   onCheckoutComplete: (invoice: Invoice) => boolean | void;
   vatRate?: number;            // نسبة الضريبة من إعدادات المحل (%)
-  canSellBelowCost?: boolean;  // البيع بأقل من التكلفة: للمدير فقط
+  canSellBelowCost?: boolean;  // (غير مستخدم) البيع بأقل من التكلفة ممنوع للجميع حسب سياسة الخصم
+  employees?: Employee[];      // للتحقق من باسورد المالك عند فتح تعديل السعر
+  maxDiscountPercent?: number; // الحد الأقصى للخصم % (افتراضي 10)
   cashierName?: string;
   cashierId?: string;
   onOpenVoiceAssistant?: () => void;
@@ -69,6 +76,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   onCheckoutComplete,
   vatRate = 14,
   canSellBelowCost = false,
+  employees = [],
+  maxDiscountPercent = 10,
   cashierName,
   cashierId,
   onOpenVoiceAssistant,
@@ -106,6 +115,40 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
     return list;
   }, [modelsForBrand, carModelInput]);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
+
+  // قفل تعديل السعر: يُفتح بباسورد المالك لفاتورة واحدة فقط ثم يُقفل تلقائياً
+  const [priceUnlocked, setPriceUnlocked] = useState(false);
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [ownerPass, setOwnerPass] = useState('');
+  const [unlockError, setUnlockError] = useState('');
+  const [unlockBusy, setUnlockBusy] = useState(false);
+
+  useEffect(() => {
+    if (cart.length === 0) setPriceUnlocked(false);
+  }, [cart.length]);
+
+  const closeUnlockModal = () => {
+    setShowUnlockModal(false);
+    setOwnerPass('');
+    setUnlockError('');
+  };
+
+  const handleUnlockPrices = async () => {
+    setUnlockBusy(true);
+    setUnlockError('');
+    try {
+      const owner = await verifyOwnerPassword(employees, ownerPass);
+      if (!owner) { setUnlockError('باسورد المالك غير صحيح'); return; }
+      setPriceUnlocked(true);
+      closeUnlockModal();
+    } finally {
+      setUnlockBusy(false);
+    }
+  };
+
+  // أقل سعر مسموح للقطعة: لا يقل عن التكلفة ولا عن (100 - الحد الأقصى للخصم)% من سعرها الأصلي
+  const minAllowedPrice = (part: AutoPart): number =>
+    Math.max(part.costPrice, Math.ceil(part.salePrice * (100 - maxDiscountPercent)) / 100);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('كاش (نقدي)');
   const [cashGiven, setCashGiven] = useState<string>('');
   const [splitEnabled, setSplitEnabled] = useState<boolean>(false);
@@ -145,6 +188,15 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
     }, 0);
   }, [cart]);
 
+  // أقصى خصم للفاتورة: ضمن حد الخصم الكلي (شامل أي تخفيض في أسعار الأصناف) ولا يهبط بالصافي تحت إجمالي التكلفة
+  const maxInvoiceDiscount = useMemo(() => {
+    const listTotal = cart.reduce((a, i) => a + i.part.salePrice * i.quantity, 0);
+    const costTotal = cart.reduce((a, i) => a + i.part.costPrice * i.quantity, 0);
+    const byPercent = listTotal * (maxDiscountPercent / 100) - (listTotal - subtotal);
+    const byCost = subtotal - costTotal;
+    return Math.max(0, Math.floor(Math.min(byPercent, byCost) * 100) / 100);
+  }, [cart, subtotal, maxDiscountPercent]);
+
   const discount = Math.min(subtotal, Math.max(0, discountAmount));
   const taxableAmount = Math.max(0, subtotal - discount);
   const tax = applyVat ? Math.round((taxableAmount * vatRate) / 100 * 100) / 100 : 0;
@@ -174,6 +226,16 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         unitPrice: item.customPrice !== undefined ? item.customPrice : item.part.salePrice,
         unitCost: item.part.costPrice,
       }));
+      validateDiscountPolicy(
+        cart.map((item) => ({
+          qty: item.quantity,
+          listPrice: item.part.salePrice,
+          unitPrice: item.customPrice !== undefined ? item.customPrice : item.part.salePrice,
+          unitCost: item.part.costPrice,
+        })),
+        discount,
+        maxDiscountPercent
+      );
       const totals = computeTotals(lines, discount, vatRate, applyVat);
       const hasCredit = payments.some((p) => isCreditPayment(p.method));
       const hasNewName = selectedCustomerId === 'cash' && customerNameInput.trim().length > 0;
@@ -183,7 +245,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         totals,
         payments,
         {
-          allowBelowCost: canSellBelowCost,
+          allowBelowCost: false, // سياسة المحل: لا بيع بأقل من التكلفة لأي مستخدم
           customerId: hasCredit ? (selectedCustomerId !== 'cash' ? selectedCustomerId : hasNewName ? 'new' : undefined) : undefined,
         }
       );
@@ -191,7 +253,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       const code = e instanceof SaleError ? e.code : 'UNKNOWN';
       const messages: Record<string, string> = {
         OUT_OF_STOCK: 'الكمية المطلوبة أكبر من الرصيد المتاح لأحد الأصناف',
-        PRICE_BELOW_COST: 'سعر أحد الأصناف أقل من التكلفة (يحتاج صلاحية المدير)',
+        PRICE_BELOW_COST: 'لا يمكن البيع بأقل من سعر التكلفة',
+        DISCOUNT_OVER_LIMIT: `الخصم أكبر من الحد المسموح (${maxDiscountPercent}%)`,
         INVALID_QTY: 'كمية غير صالحة في الفاتورة',
         INVALID_PRICE: 'سعر غير صالح في الفاتورة',
         DISCOUNT_EXCEEDS_SUBTOTAL: 'الخصم أكبر من قيمة الفاتورة',
@@ -254,6 +317,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
 
     confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
     onClearCart();
+    setPriceUnlocked(false);
     setSplitEnabled(false);
     setSplitAmount('');
     setDiscountAmount(0);
@@ -265,8 +329,14 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
     setCarYearInput('');
   };
 
+  const buildLabel = typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : 'dev';
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pb-12">
+      <div className="lg:col-span-12 -mb-3 text-[10px] text-neutral-600 flex items-center gap-1.5">
+        <Lock className="w-3 h-3" />
+        <span>قفل الأسعار مفعّل · حد الخصم {maxDiscountPercent}% · إصدار {buildLabel}</span>
+      </div>
       <div className="lg:col-span-7 space-y-4">
         {!shiftOpen && onOpenShifts && (
           <button
@@ -632,24 +702,55 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                             min="0"
                             step="1"
                             value={effectivePrice}
+                            readOnly={!priceUnlocked}
                             onChange={(e) => {
+                              if (!priceUnlocked) return;
                               const val = parseFloat(e.target.value);
                               onUpdateCartPrice(item.part.id, isNaN(val) ? 0 : val);
                             }}
-                            className="w-20 h-6 px-1.5 text-center text-xs font-mono font-bold text-amber-300 bg-surface-2 border border-amber-500/50 rounded focus:border-amber-400 focus:bg-surface-3 focus:outline-none"
-                            title="تعديل سعر البيع مباشرة لهذه الفاتورة"
+                            onBlur={() => {
+                              // لا نسمح بالخروج من الحقل بسعر أقل من الحد الأدنى المسموح
+                              const floor = minAllowedPrice(item.part);
+                              if (priceUnlocked && effectivePrice < floor) onUpdateCartPrice(item.part.id, floor);
+                            }}
+                            className={`w-20 h-6 px-1.5 text-center text-xs font-mono font-bold rounded focus:outline-none ${
+                              priceUnlocked
+                                ? 'text-amber-300 bg-surface-2 border border-amber-500/50 focus:border-amber-400 focus:bg-surface-3'
+                                : 'text-neutral-300 bg-surface-1 border border-neutral-700 cursor-not-allowed'
+                            }`}
+                            title={priceUnlocked ? 'تعديل سعر البيع (لا يقل عن الحد الأدنى المسموح)' : 'السعر مقفول — يحتاج باسورد المالك'}
                           />
                           <span className="text-[10px] text-neutral-400 font-bold">ج.م</span>
+                          {priceUnlocked ? (
+                            <button
+                              type="button"
+                              onClick={() => setPriceUnlocked(false)}
+                              className="p-1 rounded text-emerald-400 hover:text-emerald-300"
+                              title="إعادة قفل تعديل الأسعار"
+                            >
+                              <Unlock className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setShowUnlockModal(true)}
+                              className="p-1 rounded text-amber-400 hover:text-amber-300"
+                              title="فتح تعديل السعر بباسورد المالك"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
-                            onClick={() => onUpdateCartPrice(item.part.id, Math.round(item.part.salePrice * 0.9))}
-                            className="px-1.5 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-[9px] text-neutral-300 font-medium"
-                            title="خصم 10% جملة ورش"
+                            disabled={!priceUnlocked}
+                            onClick={() => onUpdateCartPrice(item.part.id, minAllowedPrice(item.part))}
+                            className="px-1.5 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed text-[9px] text-neutral-300 font-medium"
+                            title={priceUnlocked ? 'أقصى خصم مسموح' : 'مقفول — يحتاج باسورد المالك'}
                           >
-                            -10% ورش
+                            -{maxDiscountPercent}% ورش
                           </button>
                           <button
                             type="button"
@@ -682,14 +783,20 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               <input
                 type="number"
                 min="0"
+                max={maxInvoiceDiscount}
                 value={discountAmount || ''}
-                onChange={(e) => setDiscountAmount(Number(e.target.value))}
+                onChange={(e) => setDiscountAmount(Math.min(Math.max(0, Number(e.target.value) || 0), maxInvoiceDiscount))}
                 placeholder="0"
                 className="w-20 h-7 px-2 text-left rtl:text-right rounded bg-surface-1 border border-neutral-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
               />
               <span className="text-[10px] text-neutral-400">ج.م</span>
             </div>
           </div>
+          {cart.length > 0 && (
+            <div className="text-[10px] text-neutral-500 -mt-1">
+              الحد الأقصى المسموح للخصم: {maxInvoiceDiscount.toLocaleString()} ج.م ({maxDiscountPercent}% كحد أقصى، ولا يقل عن التكلفة)
+            </div>
+          )}
 
           <div className="flex items-center justify-between p-2 rounded-xl bg-surface-1 border border-neutral-700/80 text-xs">
             <div className="flex items-center gap-1.5">
@@ -834,6 +941,56 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           </button>
         </div>
       </div>
+
+      {showUnlockModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={closeUnlockModal}>
+          <div
+            className="w-full max-w-sm rounded-2xl bg-surface-1 border border-amber-500/40 p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+            dir="rtl"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-amber-400 font-black text-sm">
+                <ShieldCheck className="w-5 h-5" />
+                <span>تعديل السعر — باسورد المالك</span>
+              </div>
+              <button type="button" onClick={closeUnlockModal} className="text-neutral-500 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-[11px] text-neutral-400">
+              أدخل باسورد المالك لفتح تعديل السعر لهذه الفاتورة. بعد إتمام الفاتورة يُقفل التعديل تلقائياً.
+            </p>
+            <input
+              type="password"
+              autoFocus
+              value={ownerPass}
+              onChange={(e) => { setOwnerPass(e.target.value); setUnlockError(''); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && ownerPass.trim() && !unlockBusy) handleUnlockPrices(); }}
+              placeholder="باسورد المالك"
+              className="w-full h-10 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-sm text-white focus:outline-none focus:border-amber-400"
+            />
+            {unlockError && <div className="text-[11px] font-bold text-rose-400">{unlockError}</div>}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleUnlockPrices}
+                disabled={!ownerPass.trim() || unlockBusy}
+                className="flex-1 h-9 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-xs font-black"
+              >
+                {unlockBusy ? 'جارٍ التحقق...' : 'فتح التعديل'}
+              </button>
+              <button
+                type="button"
+                onClick={closeUnlockModal}
+                className="px-4 h-9 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-bold"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
