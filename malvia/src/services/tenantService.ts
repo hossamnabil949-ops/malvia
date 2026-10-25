@@ -19,6 +19,9 @@ import {
   InventoryDiscrepancyError,
   AuditEntry,
   StockMovement,
+  Warehouse,
+  StockLevel,
+  StockTransfer,
   Shift
 } from '../types/autoParts';
 
@@ -190,6 +193,9 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     auditLog: loadResource<AuditEntry[]>('auditLog', []),
     stockMovements: loadResource<StockMovement[]>('stockMovements', []),
     shifts: loadResource<Shift[]>('shifts', []),
+    warehouses: loadResource<Warehouse[]>('warehouses', []),
+    stockLevels: loadResource<StockLevel[]>('stockLevels', []),
+    stockTransfers: loadResource<StockTransfer[]>('stockTransfers', []),
   };
 }
 
@@ -215,6 +221,9 @@ export function saveTenantStoreData(
     auditLog?: AuditEntry[];
     stockMovements?: StockMovement[];
     shifts?: Shift[];
+    warehouses?: Warehouse[];
+    stockLevels?: StockLevel[];
+    stockTransfers?: StockTransfer[];
   }
 ) {
   try {
@@ -252,6 +261,9 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     localStorage.setItem(getTenantKey(tenantId, 'auditLog'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'stockMovements'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'shifts'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'warehouses'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'stockLevels'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'stockTransfers'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'demo_cleared'), 'true');
 
     const rawEmps = localStorage.getItem(getTenantKey(tenantId, 'employees'));
@@ -259,7 +271,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     const ownerAccount = empsList.find(e => e.role === 'مدير عام' || e.username === 'admin') || INITIAL_EMPLOYEES[0];
     const cleanedStaff = [ownerAccount];
     localStorage.setItem(getTenantKey(tenantId, 'employees'), JSON.stringify(cleanedStaff));
-    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts']);
+    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers']);
 
     return cleanedStaff;
   } catch (err) {

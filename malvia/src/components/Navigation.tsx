@@ -26,6 +26,7 @@ import {
   BookOpen,
   ClipboardCheck,
   Wallet,
+  Warehouse,
   type LucideIcon,
 } from 'lucide-react';
 import { UserSession } from '../types/autoParts';
@@ -35,6 +36,7 @@ export type ActiveTab =
   | 'pos'
   | 'shifts'
   | 'inventory'
+  | 'warehouses'
   | 'invoices'
   | 'purchases'
   | 'suppliers'
@@ -58,6 +60,10 @@ interface NavigationProps {
   onLogout: () => void;
   currentUser: UserSession | null;
   shopName: string;
+  /** هل يملك المستخدم صلاحية فتح الشاشة؟ (غير ممرَّر = الكل مسموح) */
+  canAccessTab?: (tab: string) => boolean;
+  /** صلاحية أدوات المخزون (إكسيل، جرد، موديلات، أخطاء المخزون) */
+  canManageInventory?: boolean;
   /** Page content: rendered next to the sidebar, below the top bar. */
   children?: React.ReactNode;
 }
@@ -81,6 +87,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: 'pos', label: 'الكاشير (POS)', icon: ShoppingCart },
       { id: 'shifts', label: 'الورديات والدرج', icon: Wallet },
       { id: 'inventory', label: 'المخزون والقطع', icon: Boxes },
+      { id: 'warehouses', label: 'المخازن والفروع', icon: Warehouse },
       { id: 'invoices', label: 'الفواتير والمرتجعات', icon: Receipt },
     ],
   },
@@ -118,6 +125,7 @@ interface SidebarBodyProps {
   shopName: string;
   collapsed: boolean;
   onLogoClick: () => void;
+  canAccessTab: (tab: string) => boolean;
 }
 
 const SidebarBody: React.FC<SidebarBodyProps> = ({
@@ -126,6 +134,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
   shopName,
   collapsed,
   onLogoClick,
+  canAccessTab,
 }) => (
   <>
     {/* Brand */}
@@ -155,7 +164,9 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
 
     {/* Navigation groups */}
     <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2.5 space-y-4">
-      {NAV_GROUPS.map((group, gi) => (
+      {NAV_GROUPS.map(g => ({ ...g, items: g.items.filter(i => canAccessTab(i.id)) }))
+        .filter(g => g.items.length > 0)
+        .map((group, gi) => (
         <div key={group.title}>
           {collapsed ? (
             gi > 0 && <div className="mx-2 mb-2 border-t border-nav-line" />
@@ -241,6 +252,8 @@ export const Navigation: React.FC<NavigationProps> = ({
   onLogout,
   currentUser,
   shopName,
+  canAccessTab = () => true,
+  canManageInventory = true,
   children,
 }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -278,12 +291,12 @@ export const Navigation: React.FC<NavigationProps> = ({
   const currentLabel = ALL_ITEMS.find(i => i.id === currentTab)?.label ?? '';
 
   const toolItems = [
-    { label: 'موديلات السيارات', icon: CarFront, color: 'text-amber-400', onClick: onOpenCarModels },
-    { label: 'مشاركة صور القطع', icon: Camera, color: 'text-amber-300', onClick: onOpenPhotoSharing },
-    { label: 'استيراد / تصدير إكسيل', icon: FileSpreadsheet, color: 'text-emerald-400', onClick: onOpenExcelModal },
-    { label: 'جرد المخزون', icon: ClipboardCheck, color: 'text-amber-300', onClick: onOpenInventoryAudit },
-    { label: 'دليل النشر والتشغيل', icon: BookOpen, color: 'text-slate-300', onClick: onOpenDeploymentGuide },
-  ].filter(t => typeof t.onClick === 'function');
+    { label: 'موديلات السيارات', icon: CarFront, color: 'text-amber-400', onClick: onOpenCarModels, needsInventory: true },
+    { label: 'مشاركة صور القطع', icon: Camera, color: 'text-amber-300', onClick: onOpenPhotoSharing, needsInventory: false },
+    { label: 'استيراد / تصدير إكسيل', icon: FileSpreadsheet, color: 'text-emerald-400', onClick: onOpenExcelModal, needsInventory: true },
+    { label: 'جرد المخزون', icon: ClipboardCheck, color: 'text-amber-300', onClick: onOpenInventoryAudit, needsInventory: true },
+    { label: 'دليل النشر والتشغيل', icon: BookOpen, color: 'text-slate-300', onClick: onOpenDeploymentGuide, needsInventory: false },
+  ].filter(t => typeof t.onClick === 'function' && (!t.needsInventory || canManageInventory));
 
   return (
     <div className="min-h-screen flex">
@@ -294,6 +307,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         }`}
       >
         <SidebarBody
+          canAccessTab={canAccessTab}
           currentTab={currentTab}
           onSelect={onTabChange}
           shopName={shopName}
@@ -328,6 +342,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               <X className="w-4 h-4" />
             </button>
             <SidebarBody
+              canAccessTab={canAccessTab}
               currentTab={currentTab}
               onSelect={tab => {
                 onTabChange(tab);
@@ -375,6 +390,7 @@ export const Navigation: React.FC<NavigationProps> = ({
 
             {/* End side: quick actions */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {canManageInventory && (
               <button
                 onClick={onOpenInventoryErrors}
                 title="أخطاء وتصحيح المخزون"
@@ -383,6 +399,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 <AlertTriangle className="w-4 h-4" />
                 <span className="hidden md:inline">أخطاء المخزون</span>
               </button>
+              )}
 
               {/* Tools dropdown */}
               {toolItems.length > 0 && (
@@ -479,6 +496,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       {/* ===== Mobile bottom bar ===== */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-1 text-white shadow-2xl">
         <div className="flex items-center justify-around">
+          {canAccessTab('dashboard') && (
           <button
             onClick={() => onTabChange('dashboard')}
             className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${
@@ -488,7 +506,9 @@ export const Navigation: React.FC<NavigationProps> = ({
             <Home className="w-5 h-5" />
             <span className="text-[10px] mt-0.5">الرئيسية</span>
           </button>
+          )}
 
+          {canAccessTab('pos') && (
           <button
             onClick={() => onTabChange('pos')}
             className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${
@@ -498,7 +518,9 @@ export const Navigation: React.FC<NavigationProps> = ({
             <ShoppingCart className="w-5 h-5" />
             <span className="text-[10px] mt-0.5">الكاشير</span>
           </button>
+          )}
 
+          {canAccessTab('suppliers') && (
           <button
             onClick={() => onTabChange('suppliers')}
             className="flex flex-col items-center -mt-4 bg-gradient-to-tr from-amber-500 to-amber-600 text-slate-950 p-3 rounded-2xl shadow-lg shadow-amber-500/30 border-2 border-slate-900 active:scale-95 transition"
@@ -507,7 +529,9 @@ export const Navigation: React.FC<NavigationProps> = ({
             <Truck className="w-5 h-5 stroke-[2.5]" />
             <span className="text-[9px] font-black mt-0.5">الموردين</span>
           </button>
+          )}
 
+          {canAccessTab('inventory') && (
           <button
             onClick={() => onTabChange('inventory')}
             className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${
@@ -517,7 +541,9 @@ export const Navigation: React.FC<NavigationProps> = ({
             <Boxes className="w-5 h-5" />
             <span className="text-[10px] mt-0.5">المخزون</span>
           </button>
+          )}
 
+          {canAccessTab('invoices') && (
           <button
             onClick={() => onTabChange('invoices')}
             className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${
@@ -527,6 +553,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             <Receipt className="w-5 h-5" />
             <span className="text-[10px] mt-0.5">الفواتير</span>
           </button>
+          )}
         </div>
       </nav>
     </div>

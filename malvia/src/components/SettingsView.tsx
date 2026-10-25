@@ -40,6 +40,7 @@ import {
   FileSpreadsheet,
   Link as LinkIcon
 } from 'lucide-react';
+import { ROLE_PRESETS } from '../utils/permissions';
 import { ShopSettings, Employee, EmployeePermissions, TenantLicense } from '../types/autoParts';
 import { AppTheme, getAppTheme, setAppTheme } from '../services/tenantService';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -1014,7 +1015,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <label className="block text-neutral-300 font-bold mb-1">المسمى الوظيفي</label>
                   <select
                     value={empRole}
-                    onChange={(e) => setEmpRole(e.target.value as Employee['role'])}
+                    onChange={(e) => {
+                      const r = e.target.value as Employee['role'];
+                      setEmpRole(r);
+                      setEmpPermissions({ ...ROLE_PRESETS[r] }); // صلاحيات مقترحة للوظيفة، تُعدَّل يدوياً بعدها
+                    }}
                     className="w-full bg-surface-2 border border-neutral-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
                   >
                     <option value="كاشير مبيعات">كاشير مبيعات</option>
@@ -1207,7 +1212,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
 
               <div className="p-3 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-2">
-                <span className="block text-xs font-black text-amber-400">الصلاحيات المتاحة:</span>
+                <div className="flex items-center justify-between">
+                  <span className="block text-xs font-black text-amber-400">الصلاحيات المتاحة:</span>
+                  <button
+                    type="button"
+                    onClick={() => setEditingEmployee({ ...editingEmployee, permissions: { ...ROLE_PRESETS[editingEmployee.role] } })}
+                    className="text-[11px] font-bold text-sky-300 hover:text-sky-200"
+                    title="يستبدل الصلاحيات الحالية بالصلاحيات المقترحة لهذه الوظيفة"
+                  >
+                    تطبيق صلاحيات الوظيفة الافتراضية
+                  </button>
+                </div>
                 <div className="space-y-2">
                   {permissionLabels.map((perm) => (
                     <label

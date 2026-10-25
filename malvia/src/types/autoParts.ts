@@ -139,7 +139,7 @@ export type AuditAction =
   | 'invoice.create' | 'invoice.price_override' | 'invoice.discount' | 'invoice.void'
   | 'sales_return.create' | 'sales_return.delete'
   | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
-  | 'stock.adjust' | 'customer.collect' | 'customer.credit_limit' | 'supplier.payment'
+  | 'stock.adjust' | 'customer.collect' | 'customer.credit_limit' | 'stock.transfer' | 'supplier.payment'
   | 'shift.open' | 'shift.close' | 'shift.variance';
 
 export interface AuditEntry {
@@ -193,6 +193,7 @@ export interface Invoice {
   customerId?: string; // ربط الفاتورة بالعميل (بدل المطابقة بالاسم)
   cashierId?: string;
   cashierName: string;
+  warehouseId?: string; // المخزن/الفرع الذي خرجت منه البضاعة (غير موجود = المخزن الرئيسي)
   status?: 'مسددة' | 'مرتجع جزئي' | 'مرتجع كلي' | 'ملغاة';
   returnedAmount?: number;
   voidedAt?: string;        // ISO — وقت الإلغاء
@@ -348,6 +349,7 @@ export interface PurchaseInvoiceItem {
 
 export interface PurchaseInvoice {
   id: string;
+  warehouseId?: string; // المخزن/الفرع المستلِم للبضاعة (غير موجود = المخزن الرئيسي)
   invoiceNumber: string;
   supplierInvoiceNumber?: string;
   date: string;
@@ -587,4 +589,36 @@ export interface TenantLicense {
   notes?: string;
   devicesCount?: number;
   lastActiveDate?: string;
+}
+
+// ---------- المخازن والفروع ----------
+// المخزن الرئيسي (id = 'main') ضمني دائماً ورصيده = إجمالي رصيد الصنف ناقص أرصدة باقي المخازن،
+// فلا تتأثر أي شاشة قديمة: stockQuantity يظل «إجمالي الرصيد في كل المخازن».
+export interface Warehouse {
+  id: string;
+  name: string;      // مثال: فرع مدينة نصر
+  branch?: string;   // وصف/عنوان اختياري
+  active: boolean;
+  createdAt: string;
+}
+
+/** رصيد صنف في مخزن غير رئيسي (يُدمج بالفرق على السحابة مثل stockQuantity). */
+export interface StockLevel {
+  id: string;        // `${partId}|${warehouseId}`
+  partId: string;
+  warehouseId: string;
+  quantity: number;
+}
+
+export interface StockTransferLine { partId: string; partNumber: string; partName: string; quantity: number }
+export interface StockTransfer {
+  id: string;
+  transferNumber: string;
+  date: string;
+  time: string;
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  items: StockTransferLine[];
+  note?: string;
+  createdBy: string;
 }

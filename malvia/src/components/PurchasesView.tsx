@@ -49,6 +49,7 @@ interface PurchasesViewProps {
   parts: AutoPart[];
   treasuryBalance: number;
   onAddPurchaseInvoice: (invoice: PurchaseInvoice) => void;
+  warehouses?: import('../types/autoParts').Warehouse[]; // لو فيه مخازن/فروع يظهر اختيار «استلام في مخزن»
   onEditPurchaseInvoice?: (invoice: PurchaseInvoice) => void;
   onPurchaseReturn: (returnData: PurchaseReturn) => void;
   onDeletePurchaseReturn?: (returnId: string) => void;
@@ -64,6 +65,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   parts,
   treasuryBalance,
   onAddPurchaseInvoice,
+  warehouses = [],
   onEditPurchaseInvoice,
   onPurchaseReturn,
   onDeletePurchaseReturn,
@@ -92,6 +94,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   // New Invoice Form State
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>(suppliers[0]?.id || '');
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState('');
+  const [receiveWarehouseId, setReceiveWarehouseId] = useState<string>('main');
+  const activeWarehouses = warehouses.filter((w) => w.active);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentStatus, setPaymentStatus] = useState<'مدفوعة نقداً' | 'آجل' | 'مسددة جزئياً'>('مدفوعة نقداً');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | string>('كاش (نقدي)');
@@ -255,6 +259,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     const newInvoice: PurchaseInvoice = {
       id: `pur-${Date.now()}`,
       invoiceNumber: nextPurchaseInvoiceNumber(purchaseInvoices),
+      warehouseId: receiveWarehouseId !== 'main' && activeWarehouses.some((w) => w.id === receiveWarehouseId) ? receiveWarehouseId : undefined,
       supplierInvoiceNumber: supplierInvoiceNumber.trim() || undefined,
       date: invoiceDate,
       time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
@@ -278,6 +283,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     setShowCreateModal(false);
 
     setSupplierInvoiceNumber('');
+    setReceiveWarehouseId('main');
     setApplyTax(false);
     setDiscount(0);
     setInvoiceItems([
@@ -929,6 +935,20 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                     className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400 font-mono"
                   />
                 </div>
+
+                {activeWarehouses.length > 0 && (
+                  <div>
+                    <label className="text-xs font-bold text-neutral-400 block mb-1">استلام في مخزن / فرع:</label>
+                    <select
+                      value={receiveWarehouseId}
+                      onChange={(e) => setReceiveWarehouseId(e.target.value)}
+                      className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none focus:border-amber-400"
+                    >
+                      <option value="main">المخزن الرئيسي</option>
+                      {activeWarehouses.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className="text-xs font-bold text-neutral-400 block mb-1">تاريخ الفاتورة:</label>

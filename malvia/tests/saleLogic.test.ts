@@ -48,6 +48,45 @@ import { validateDiscountPolicy } from '../src/utils/saleLogic.ts';
   validateSale([L], stock, tt, credit, { ...base, customerBalance: 99999, customerCreditLimit: 0 });                 // بدون حد = غير محدود
   validateSale([L], stock, tt, [{ method: 'كاش', amount: 100 }], { ...base, customerBalance: 99999, customerCreditLimit: 500 }); // الدفع النقدي لا يتأثر
 }
+
+// ---------- المخازن والفروع ----------
+import { availableIn, adjustLevel, adjustLevels, validateTransfer, applyTransfer, TransferError, MAIN_WAREHOUSE_ID } from '../src/utils/warehouseLogic.ts';
+{
+  const tcode = (fn: () => void) => { try { fn(); } catch (e) { return (e as TransferError).code; } return 'NO_ERROR'; };
+  const parts = [{ id: 'p1', stockQuantity: 10 }, { id: 'p2', stockQuantity: 4 }];
+  let lv: any[] = [];
+  assert.equal(availableIn(10, lv, 'p1', 'main'), 10);                                 // بدون مخازن: الكل في الرئيسي
+  validateTransfer('main', 'w1', [{ partId: 'p1', qty: 6 }], parts, lv);
+  lv = applyTransfer(lv, 'main', 'w1', [{ partId: 'p1', qty: 6 }]);
+  assert.equal(availableIn(10, lv, 'p1', 'w1'), 6);
+  assert.equal(availableIn(10, lv, 'p1', 'main'), 4);                                  // الرئيسي = 10 - 6
+  assert.equal(availableIn(4, lv, 'p2', 'w1'), 0);                                     // صنف لم يُحوَّل
+  assert.equal(tcode(() => validateTransfer('main', 'w1', [{ partId: 'p1', qty: 5 }], parts, lv)), 'INSUFFICIENT_STOCK'); // الرئيسي فيه 4 فقط
+  assert.equal(tcode(() => validateTransfer('w1', 'w2', [{ partId: 'p1', qty: 7 }], parts, lv)), 'INSUFFICIENT_STOCK');
+  assert.equal(tcode(() => validateTransfer('w1', 'w1', [{ partId: 'p1', qty: 1 }], parts, lv)), 'SAME_WAREHOUSE');
+  assert.equal(tcode(() => validateTransfer(undefined, MAIN_WAREHOUSE_ID, [{ partId: 'p1', qty: 1 }], parts, lv)), 'SAME_WAREHOUSE');
+  assert.equal(tcode(() => validateTransfer('main', 'w1', [], parts, lv)), 'EMPTY');
+  assert.equal(tcode(() => validateTransfer('main', 'w1', [{ partId: 'p1', qty: 0 }], parts, lv)), 'INVALID_QTY');
+  assert.equal(tcode(() => validateTransfer('main', 'w1', [{ partId: 'p1', qty: 1.5 }], parts, lv)), 'INVALID_QTY');
+  assert.equal(tcode(() => validateTransfer('main', 'w1', [{ partId: 'p1', qty: 3 }, { partId: 'p1', qty: 2 }], parts, lv)), 'INSUFFICIENT_STOCK'); // تجميع نفس الصنف
+  // فرع ← فرع: الإجمالي لا يتغير
+  lv = applyTransfer(lv, 'w1', 'w2', [{ partId: 'p1', qty: 2 }]);
+  assert.equal(availableIn(10, lv, 'p1', 'w1'), 4);
+  assert.equal(availableIn(10, lv, 'p1', 'w2'), 2);
+  assert.equal(availableIn(10, lv, 'p1', 'main'), 4);
+  // فرع ← رئيسي
+  lv = applyTransfer(lv, 'w1', 'main', [{ partId: 'p1', qty: 4 }]);
+  assert.equal(availableIn(10, lv, 'p1', 'main'), 8);
+  // بيع 3 من فرع w2 (الإجمالي ينقص 3 عبر المسار القديم + رصيد الفرع ينقص 3) => الرئيسي لا يتأثر
+  const after = adjustLevel(lv, 'p1', 'w2', -2);
+  assert.equal(availableIn(7, after, 'p1', 'w2'), 0);
+  assert.equal(availableIn(8, after, 'p1', 'main'), 8);
+  // استلام مشتريات في فرع جديد ثم عكسها
+  const recv = adjustLevels([], 'w9', [{ partId: 'p2', qty: 5 }], 1);
+  assert.equal(availableIn(9, recv, 'p2', 'w9'), 5);
+  assert.equal(availableIn(9, adjustLevels(recv, 'w9', [{ partId: 'p2', qty: 5 }], -1), 'p2', 'w9'), 0);
+  assert.deepEqual(adjustLevel([], 'p1', 'main', 5), []);                              // الرئيسي مشتق: لا سطور
+}
 console.log('كل الاختبارات نجحت');
 
 // ---------- إلغاء فاتورة ----------

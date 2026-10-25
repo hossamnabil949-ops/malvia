@@ -2,13 +2,14 @@
 // والتغييرات تُدمج مع السحابة بدمج ثلاثي حسب id، فلا يضيع عمل جهاز بسبب جهاز آخر.
 
 export const SYNC_RESOURCES = ['parts','invoices','customers','suppliers','supplierPayments','treasury','employees','settings',
-  'salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','carModels','reservations','inventoryErrors','auditLog','stockMovements','shifts'] as const;
+  'salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','carModels','reservations','inventoryErrors','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers'] as const;
 
 // حقول رقمية تُدمج بالفرق (delta) بدل الاستبدال، حتى لا يضيع خصم مخزون جهاز آخر.
 export const DELTA_FIELDS: Record<string, string[]> = {
   parts: ['stockQuantity'],
   customers: ['balance'],
   suppliers: ['balance'],
+  stockLevels: ['quantity'],
 };
 
 type Item = Record<string, any>;

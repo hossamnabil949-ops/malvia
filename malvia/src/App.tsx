@@ -47,7 +47,10 @@ import { isCreditMethod } from './utils/treasuryAccounts';
 import { findOpenShift, findOpenShifts, summarizeShift, stampNewTreasury, nextShiftNumber, countTotal, round2, varianceOf } from './utils/shiftLogic';
 import { nextSalesInvoiceNumber } from './utils/invoiceNumber';
 import { SaleError, computeVoidPlan, deductStock, isCreditPayment } from './utils/saleLogic';
-import type { AuditEntry, StockMovement, InvoicePayment } from './types/autoParts';
+import type { AuditEntry, StockMovement, InvoicePayment, Warehouse, StockLevel, StockTransfer } from './types/autoParts';
+import { MAIN_WAREHOUSE_ID, normalizeWarehouseId, availableIn, adjustLevels, validateTransfer, applyTransfer, TransferError } from './utils/warehouseLogic';
+import { WarehousesView } from './components/WarehousesView';
+import { hasTabAccess, firstAllowedTab } from './utils/permissions';
 
 const SALE_ERROR_MESSAGES: Record<string, string> = {
   OUT_OF_STOCK: 'الكمية المطلوبة أكبر من الرصيد المتاح في المخزن',
@@ -122,6 +125,9 @@ export default function App() {
   const [inventoryErrors, setInventoryErrors] = useState<InventoryDiscrepancyError[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [stockLevels, setStockLevels] = useState<StockLevel[]>([]);
+  const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   // معرّفات حركات الخزنة المعروفة (المحمّلة) — أي حركة جديدة خارجها تُختم بوقتها ووردية الدرج
   const knownTreasuryIds = useRef<Set<string>>(new Set());
@@ -131,6 +137,18 @@ export default function App() {
 
   // Navigation & View State
   const [currentTab, setCurrentTab] = useState<ActiveTab>('dashboard');
+
+  // الصلاحيات تُقرأ من سجل الموظف الحالي (تسري فوراً عند تعديلها) وليس من لقطة وقت الدخول
+  const liveEmployee = currentUser ? employees.find(e => e.id === currentUser.employeeId) : undefined;
+  const effectiveRole = liveEmployee?.role ?? currentUser?.role;
+  const effectivePermissions = liveEmployee?.permissions ?? currentUser?.permissions;
+  const canAccessTab = (tab: string): boolean => !currentUser || hasTabAccess(effectiveRole, effectivePermissions, tab);
+  const canManageInventoryNow = !currentUser || hasTabAccess(effectiveRole, effectivePermissions, 'inventory');
+  const viewTab: ActiveTab | null = canAccessTab(currentTab) ? currentTab : null;
+  useEffect(() => {
+    // أي تحويل برمجي (بحث صوتي، أزرار سريعة...) لشاشة ممنوعة يرجع لأول شاشة مسموحة
+    if (currentUser && !canAccessTab(currentTab)) setCurrentTab(firstAllowedTab(effectiveRole, effectivePermissions) as ActiveTab);
+  }, [currentTab, currentUser, effectiveRole, effectivePermissions]);
 
   // Modals state
   const [showInventoryErrors, setShowInventoryErrors] = useState<boolean>(false);
@@ -201,6 +219,9 @@ export default function App() {
     setInventoryErrors(data.inventoryErrors);
     setAuditLog(data.auditLog || []);
     setStockMovements(data.stockMovements || []);
+    setWarehouses(data.warehouses || []);
+    setStockLevels(data.stockLevels || []);
+    setStockTransfers(data.stockTransfers || []);
   }, []);
 
   useEffect(() => {
@@ -589,6 +610,77 @@ export default function App() {
 
   // Handlers for Invoices
   // ترجع true عند النجاح، و false لو رُفضت الفاتورة (رصيد غير كافٍ ...). لا يُخصم شيء عند الرفض.
+  // ---------- المخازن والفروع ----------
+  // المخزن الرئيسي مشتق (الإجمالي - باقي المخازن)، فنحرّك فقط أرصدة المخازن غير الرئيسية.
+  const shiftWarehouseStock = (
+    warehouseId: string | undefined,
+    rows: { partId?: string; partNumber?: string; qty: number }[],
+    sign: 1 | -1
+  ) => {
+    if (normalizeWarehouseId(warehouseId) === MAIN_WAREHOUSE_ID) return;
+    const lines = rows
+      .map(r => ({ partId: r.partId || parts.find(p => p.partNumber === r.partNumber)?.id || '', qty: r.qty }))
+      .filter(l => l.partId && l.qty > 0);
+    if (lines.length === 0) return;
+    setStockLevels(prev => {
+      const updated = adjustLevels(prev, warehouseId, lines, sign);
+      persistChanges({ stockLevels: updated });
+      return updated;
+    });
+  };
+
+  const handleSaveWarehouse = (w: Warehouse) => {
+    setWarehouses(prev => {
+      const updated = prev.some(x => x.id === w.id) ? prev.map(x => (x.id === w.id ? w : x)) : [...prev, w];
+      persistChanges({ warehouses: updated });
+      return updated;
+    });
+  };
+
+  const handleCreateTransfer = (input: {
+    fromWarehouseId: string; toWarehouseId: string; items: { partId: string; quantity: number }[]; note?: string;
+  }): { ok: boolean; message?: string } => {
+    const lines = input.items.map(i => ({ partId: i.partId, qty: i.quantity }));
+    try {
+      validateTransfer(input.fromWarehouseId, input.toWarehouseId, lines, parts, stockLevels);
+    } catch (e) {
+      const code = e instanceof TransferError ? e.code : 'UNKNOWN';
+      const messages: Record<string, string> = {
+        EMPTY: 'أضف صنفاً واحداً على الأقل',
+        SAME_WAREHOUSE: 'المخزن المحوَّل منه والمحوَّل إليه متطابقان',
+        INVALID_QTY: 'الكمية يجب أن تكون عدداً صحيحاً أكبر من صفر',
+        INSUFFICIENT_STOCK: 'الكمية المطلوبة أكبر من رصيد المخزن المحوَّل منه لأحد الأصناف',
+      };
+      return { ok: false, message: messages[code] || 'تعذّر تنفيذ التحويل' };
+    }
+    const nextLevels = applyTransfer(stockLevels, input.fromWarehouseId, input.toWarehouseId, lines);
+    setStockLevels(nextLevels);
+    persistChanges({ stockLevels: nextLevels });
+
+    const now = new Date();
+    const transfer: StockTransfer = {
+      id: `TRF-${Date.now()}`,
+      transferNumber: `TRF-${String(stockTransfers.length + 1).padStart(4, '0')}`,
+      date: todayISO(),
+      time: now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+      fromWarehouseId: normalizeWarehouseId(input.fromWarehouseId),
+      toWarehouseId: normalizeWarehouseId(input.toWarehouseId),
+      items: input.items.map(i => {
+        const part = parts.find(p => p.id === i.partId);
+        return { partId: i.partId, partNumber: part?.partNumber || '', partName: part?.name || '', quantity: i.quantity };
+      }),
+      note: input.note?.trim() || undefined,
+      createdBy: currentUser?.employeeName || 'غير معروف',
+    };
+    setStockTransfers(prev => {
+      const updated = [transfer, ...prev];
+      persistChanges({ stockTransfers: updated });
+      return updated;
+    });
+    logAudit('stock.transfer', `تحويل مخزني ${transfer.transferNumber} (${input.items.length} صنف)`, transfer.id);
+    return { ok: true, message: transfer.transferNumber };
+  };
+
   const handleCreateInvoice = (invoice: Invoice): boolean => {
     // إلزام الوردية: لا بيع بدون وردية مفتوحة (لو الإعداد مفعّل) حتى يكون الدرج محسوباً
     if (settings.requireShiftForSales && !findOpenShift(shifts)) {
@@ -607,6 +699,14 @@ export default function App() {
     let nextParts: AutoPart[];
     try {
       if (lines.some(l => !l.part)) throw new SaleError('INVALID_QTY');
+      // الرصيد المتاح في مخزن البيع (قد يكون أقل من إجمالي الرصيد لو جزء منه في فرع آخر)
+      const needByPart = new Map<string, number>();
+      lines.forEach(l => needByPart.set(l.partId, (needByPart.get(l.partId) ?? 0) + l.item.quantity));
+      for (const [pid, qty] of needByPart) {
+        const total = parts.find(p => p.id === pid)?.stockQuantity ?? 0;
+        const available = availableIn(total, stockLevels, pid, invoice.warehouseId);
+        if (qty > available) throw new SaleError('OUT_OF_STOCK', { partId: pid, requested: qty, available });
+      }
       nextParts = deductStock<AutoPart>(
         parts,
         lines.map(l => ({ partId: l.partId, qty: l.item.quantity, unitPrice: l.item.unitPrice, unitCost: l.item.costPrice ?? 0 }))
@@ -631,6 +731,7 @@ export default function App() {
     // 4) المخزن + دفتر الحركات
     setParts(nextParts);
     persistChanges({ parts: nextParts });
+    shiftWarehouseStock(finalInvoice.warehouseId, lines.map(l => ({ partId: l.partId, qty: l.item.quantity })), -1);
     logStockMovements(lines.map(l => ({
       part: l.part!, qtyDelta: -l.item.quantity, type: 'sale' as const, refId: finalInvoice.id, refNumber: finalInvoice.invoiceNumber,
     })));
@@ -755,6 +856,7 @@ export default function App() {
     });
     setParts(nextParts);
     persistChanges({ parts: nextParts });
+    shiftWarehouseStock(inv.warehouseId, plan.restock.map(r => ({ partId: r.partId, partNumber: r.partNumber, qty: r.qty })), 1);
     logStockMovements(moves);
 
     // 2) الفاتورة
@@ -868,6 +970,8 @@ export default function App() {
       persistChanges({ parts: updated });
       logStockMovements(moves);
     }
+    shiftWarehouseStock(invoices.find(i => i.id === salesReturn.invoiceId)?.warehouseId,
+      (salesReturn.items || []).map(i => ({ partNumber: i.partNumber, qty: i.quantity })), 1);
     logAudit('sales_return.create', `مرتجع مبيعات ${salesReturn.returnNumber || salesReturn.id} - ${salesReturn.customerName}`, salesReturn.id, -salesReturn.totalRefundAmount);
 
     // المرتجع على حساب العميل الآجل: يُخصم من مديونيته (وإن زاد عنها يصبح له رصيد دائن ظاهر بالسالب)
@@ -957,6 +1061,8 @@ export default function App() {
       persistChanges({ parts: updated });
       logStockMovements(moves);
     }
+    shiftWarehouseStock(invoices.find(i => i.id === ret.invoiceId)?.warehouseId,
+      ret.items.map(i => ({ partNumber: i.partNumber, qty: i.quantity })), -1);
     logAudit('sales_return.delete', `حذف مرتجع مبيعات ${ret.returnNumber || ret.id}`, ret.id, ret.totalRefundAmount);
 
     // عكس رصيد العميل الآجل
@@ -1087,6 +1193,8 @@ export default function App() {
       setParts(nextParts);
       persistChanges({ parts: nextParts });
       logStockMovements(movements);
+      // الاستلام في مخزن/فرع غير رئيسي: نحرّك رصيده بمعرّفات الأصناف (تشمل الأصناف الجديدة)
+      shiftWarehouseStock(invoice.warehouseId, movements.map(m => ({ partId: m.part.id, qty: m.qtyDelta })), 1);
     }
     logAudit('purchase.create', `فاتورة مشتريات ${invoice.invoiceNumber} - ${invoice.supplierName}`, invoice.id, invoice.grandTotal);
 
@@ -1202,6 +1310,8 @@ export default function App() {
       persistChanges({ parts: updated });
       logStockMovements(moves);
     }
+    shiftWarehouseStock(originalInvoice?.warehouseId,
+      purchaseReturn.items.map(i => ({ partNumber: i.partNumber, qty: i.quantity })), -1);
     logAudit('purchase_return.create', `مرتجع مشتريات ${purchaseReturn.returnNumber || purchaseReturn.id} - ${purchaseReturn.supplierName}`, purchaseReturn.id, -purchaseReturn.totalReturnAmount);
 
     // If cash refund received to treasury
@@ -1377,6 +1487,8 @@ export default function App() {
       persistChanges({ parts: updated });
       logStockMovements(moves);
     }
+    shiftWarehouseStock(purchaseInvoices.find(i => i.id === ret.purchaseInvoiceId)?.warehouseId,
+      ret.items.map(i => ({ partNumber: i.partNumber, qty: i.quantity })), 1);
     logAudit('purchase_return.delete', `حذف مرتجع مشتريات ${ret.returnNumber || ret.id}`, ret.id, ret.totalReturnAmount);
 
     // عكس الاسترداد النقدي
@@ -1666,6 +1778,8 @@ export default function App() {
       
       {/* Sidebar + Top Bar + Mobile Bottom Bar (wraps the page content) */}
       <Navigation
+        canAccessTab={canAccessTab}
+        canManageInventory={canManageInventoryNow}
         currentTab={currentTab}
         onTabChange={setCurrentTab}
         activeNotificationsCount={activeNotificationsCount}
@@ -1682,13 +1796,19 @@ export default function App() {
         shopName={activeTenant.companyName}
       >
         {/* Main View Router */}
-        {currentTab === 'dashboard' && (
+        {!viewTab && (
+          <div className="p-6 rounded-2xl bg-surface-1 border border-rose-500/30 text-sm text-rose-300 font-bold">
+            ليس لديك صلاحية فتح هذه الشاشة. تواصل مع المدير لتعديل صلاحياتك.
+          </div>
+        )}
+
+        {viewTab === 'dashboard' && (
           <HomeDashboard
             parts={parts}
             invoices={invoices}
             treasuryTransactions={treasury}
             onOpenTreasuryReports={() => setCurrentTab('finance')}
-            currentSession={currentUser}
+            currentSession={currentUser && effectiveRole && effectivePermissions ? { ...currentUser, role: effectiveRole, permissions: effectivePermissions } : currentUser}
             onChangeTab={setCurrentTab}
             onOpenInvoiceModal={(inv) => setSelectedInvoiceForDetail(inv)}
             onAddNewPart={() => setCurrentTab('inventory')}
@@ -1704,7 +1824,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'pos' && (
+        {viewTab === 'pos' && (
           <QuickPosView
             parts={parts}
             carModels={carModels}
@@ -1724,6 +1844,8 @@ export default function App() {
             canSellBelowCost={currentUser?.role === 'مدير عام'}
             employees={employees}
             maxDiscountPercent={10}
+            warehouses={warehouses}
+            stockLevels={stockLevels}
             cashierName={currentUser?.employeeName}
             cashierId={currentUser?.employeeId}
             onOpenVoiceAssistant={() => setShowVoiceAssistant(true)}
@@ -1734,7 +1856,19 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'shifts' && (
+        {viewTab === 'warehouses' && (
+          <WarehousesView
+            warehouses={warehouses}
+            parts={parts}
+            stockLevels={stockLevels}
+            transfers={stockTransfers}
+            canManage={currentUser?.role === 'مدير عام' || Boolean(currentUser?.permissions?.canManageInventory)}
+            onSaveWarehouse={handleSaveWarehouse}
+            onTransfer={handleCreateTransfer}
+          />
+        )}
+
+        {viewTab === 'shifts' && (
           <ShiftsView
             shifts={shifts}
             treasury={treasury}
@@ -1748,7 +1882,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'inventory' && (
+        {viewTab === 'inventory' && (
           <InventoryView
             parts={parts}
             invoices={invoices}
@@ -1771,7 +1905,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'invoices' && (
+        {viewTab === 'invoices' && (
           <InvoicesView
             employees={employees}
             currentUserRole={currentUser?.role}
@@ -1785,12 +1919,13 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'purchases' && (
+        {viewTab === 'purchases' && (
           <PurchasesView
             carBrands={carBrands.filter(b => b !== GENERAL_BRAND)}
             purchaseInvoices={purchaseInvoices}
             purchaseReturns={purchaseReturns}
             suppliers={suppliers}
+            warehouses={warehouses}
             parts={parts}
             treasuryBalance={treasuryBalance}
             onAddPurchaseInvoice={handleAddPurchaseInvoice}
@@ -1806,7 +1941,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'customers' && (
+        {viewTab === 'customers' && (
           <CustomersView
             customers={customers}
             onAddCustomer={(newCust: Customer) => {
@@ -1857,7 +1992,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'suppliers' && (
+        {viewTab === 'suppliers' && (
           <SuppliersView
             suppliers={suppliers}
             supplierPayments={supplierPayments}
@@ -1914,7 +2049,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'finance' && (
+        {viewTab === 'finance' && (
           <FinanceView
             auditLog={auditLog}
             stockMovements={stockMovements}
@@ -1950,7 +2085,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'reports' && (
+        {viewTab === 'reports' && (
           <ReportsView
             invoices={invoices}
             purchaseInvoices={purchaseInvoices}
@@ -1966,7 +2101,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'settings' && (
+        {viewTab === 'settings' && (
           <SettingsView
             settings={settings}
             employees={employees}

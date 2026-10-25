@@ -31,7 +31,8 @@ import {
 import confetti from 'canvas-confetti';
 import { nextSalesInvoiceNumber } from '../utils/invoiceNumber';
 import { SaleError, computeTotals, validateSale, validateDiscountPolicy, toEgp, isCreditPayment } from '../utils/saleLogic';
-import { AutoPart, CartItem, Customer, Invoice, CarBrand, CarModel, PartCategory, PaymentMethod, Employee } from '../types/autoParts';
+import { AutoPart, CartItem, Customer, Invoice, CarBrand, CarModel, PartCategory, PaymentMethod, Employee, Warehouse, StockLevel } from '../types/autoParts';
+import { MAIN_WAREHOUSE_ID, MAIN_WAREHOUSE_NAME, availableIn } from '../utils/warehouseLogic';
 import { verifyOwnerPassword } from '../services/approvalService';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
 import { BrandBar } from './BrandBar';
@@ -49,6 +50,8 @@ interface QuickPosViewProps {
   vatRate?: number;            // نسبة الضريبة من إعدادات المحل (%)
   canSellBelowCost?: boolean;  // (غير مستخدم) البيع بأقل من التكلفة ممنوع للجميع حسب سياسة الخصم
   employees?: Employee[];      // للتحقق من باسورد المالك عند فتح تعديل السعر
+  warehouses?: Warehouse[];    // المخازن/الفروع (لو فيه أكثر من مخزن يظهر اختيار مخزن البيع)
+  stockLevels?: StockLevel[];
   maxDiscountPercent?: number; // الحد الأقصى للخصم % (افتراضي 10)
   cashierName?: string;
   cashierId?: string;
@@ -77,6 +80,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   vatRate = 14,
   canSellBelowCost = false,
   employees = [],
+  warehouses = [],
+  stockLevels = [],
   maxDiscountPercent = 10,
   cashierName,
   cashierId,
@@ -95,6 +100,19 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const [selectedBrand, setSelectedBrand] = useState<CarBrand>('شامل');
   const [selectedCategory, setSelectedCategory] = useState<string>('الكل');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('cash');
+
+  // مخزن البيع: يُحفظ على هذا الجهاز (كاشير كل فرع يبيع من مخزنه)
+  const activeWarehouses = useMemo(() => warehouses.filter((w) => w.active), [warehouses]);
+  const [warehouseChoice, setWarehouseChoice] = useState<string>(() => {
+    try { return localStorage.getItem('malvia.pos.warehouse') || MAIN_WAREHOUSE_ID; } catch { return MAIN_WAREHOUSE_ID; }
+  });
+  const saleWarehouseId =
+    warehouseChoice === MAIN_WAREHOUSE_ID || activeWarehouses.some((w) => w.id === warehouseChoice) ? warehouseChoice : MAIN_WAREHOUSE_ID;
+  const chooseWarehouse = (id: string) => {
+    setWarehouseChoice(id);
+    try { localStorage.setItem('malvia.pos.warehouse', id); } catch { /* ignore */ }
+  };
+  const stockHere = (p: AutoPart): number => availableIn(p.stockQuantity, stockLevels, p.id, saleWarehouseId);
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
   const [customerNameInput, setCustomerNameInput] = useState('زبون نقدي (قطاعي)');
   const [carDetailsInput, setCarDetailsInput] = useState('');
@@ -242,7 +260,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       const hasNewName = selectedCustomerId === 'cash' && customerNameInput.trim().length > 0;
       validateSale(
         lines,
-        parts.map((p) => ({ id: p.id, stockQuantity: p.stockQuantity })),
+        parts.map((p) => ({ id: p.id, stockQuantity: stockHere(p) })),
         totals,
         payments,
         {
@@ -255,7 +273,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
     } catch (e) {
       const code = e instanceof SaleError ? e.code : 'UNKNOWN';
       const messages: Record<string, string> = {
-        OUT_OF_STOCK: 'الكمية المطلوبة أكبر من الرصيد المتاح لأحد الأصناف',
+        OUT_OF_STOCK: activeWarehouses.length > 0 ? 'الكمية المطلوبة أكبر من الرصيد المتاح في هذا المخزن لأحد الأصناف' : 'الكمية المطلوبة أكبر من الرصيد المتاح لأحد الأصناف',
         PRICE_BELOW_COST: 'لا يمكن البيع بأقل من سعر التكلفة',
         DISCOUNT_OVER_LIMIT: `الخصم أكبر من الحد المسموح (${maxDiscountPercent}%)`,
         INVALID_QTY: 'كمية غير صالحة في الفاتورة',
@@ -282,6 +300,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
     const newInvoice: Invoice = {
       id: `inv-${Date.now()}`,
       invoiceNumber: nextSalesInvoiceNumber(invoices),
+      warehouseId: saleWarehouseId === MAIN_WAREHOUSE_ID ? undefined : saleWarehouseId,
       date: new Date().toISOString().split('T')[0],
       time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
       customerName: finalCustomerName,
@@ -337,6 +356,19 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pb-12">
+      {activeWarehouses.length > 0 && (
+        <div className="lg:col-span-12 flex items-center gap-2 text-xs">
+          <span className="font-bold text-neutral-400">البيع من:</span>
+          <select
+            value={saleWarehouseId}
+            onChange={(e) => chooseWarehouse(e.target.value)}
+            className="h-8 px-3 rounded-xl bg-surface-1 border border-amber-500/40 text-xs font-bold text-amber-300 focus:outline-none focus:border-amber-400"
+          >
+            <option value={MAIN_WAREHOUSE_ID}>{MAIN_WAREHOUSE_NAME}</option>
+            {activeWarehouses.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
+          </select>
+        </div>
+      )}
       <div className="lg:col-span-12 -mb-3 text-[10px] text-neutral-600 flex items-center gap-1.5">
         <Lock className="w-3 h-3" />
         <span>قفل الأسعار مفعّل · حد الخصم {maxDiscountPercent}% · إصدار {buildLabel}</span>
@@ -488,12 +520,12 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                     <div className="flex items-center gap-2">
                       <span
                         className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                          part.stockQuantity <= part.minAlertStock
+                          stockHere(part) <= part.minAlertStock
                             ? 'bg-rose-500/20 text-rose-400'
                             : 'bg-emerald-500/20 text-emerald-400'
                         }`}
                       >
-                        {part.stockQuantity} {part.unit}
+                        {stockHere(part)} {part.unit}
                       </span>
 
                       <button
