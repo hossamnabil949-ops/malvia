@@ -7,7 +7,7 @@ export const SYNC_RESOURCES = ['parts','invoices','customers','suppliers','suppl
 // حقول رقمية تُدمج بالفرق (delta) بدل الاستبدال، حتى لا يضيع خصم مخزون جهاز آخر.
 export const DELTA_FIELDS: Record<string, string[]> = {
   parts: ['stockQuantity'],
-  customers: ['balance'],
+  customers: ['balance', 'loyaltyPoints'],
   suppliers: ['balance'],
   stockLevels: ['quantity'],
 };

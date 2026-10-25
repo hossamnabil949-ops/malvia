@@ -51,6 +51,7 @@ import type { AuditEntry, StockMovement, InvoicePayment, Warehouse, StockLevel, 
 import { MAIN_WAREHOUSE_ID, normalizeWarehouseId, availableIn, adjustLevels, validateTransfer, applyTransfer, TransferError } from './utils/warehouseLogic';
 import { WarehousesView } from './components/WarehousesView';
 import { hasTabAccess, firstAllowedTab } from './utils/permissions';
+import { resolveLoyalty, earnedPoints, loyaltyAfterReturn } from './utils/loyaltyLogic';
 
 const SALE_ERROR_MESSAGES: Record<string, string> = {
   OUT_OF_STOCK: 'الكمية المطلوبة أكبر من الرصيد المتاح في المخزن',
@@ -610,6 +611,24 @@ export default function App() {
 
   // Handlers for Invoices
   // ترجع true عند النجاح، و false لو رُفضت الفاتورة (رصيد غير كافٍ ...). لا يُخصم شيء عند الرفض.
+  // ---------- نقاط الولاء ----------
+  const adjustLoyalty = (customerId: string | undefined, delta: number) => {
+    if (!customerId || !delta) return;
+    setCustomers(prev => {
+      if (!prev.some(c => c.id === customerId)) return prev;
+      const updated = prev.map(c => (c.id === customerId ? { ...c, loyaltyPoints: (c.loyaltyPoints || 0) + delta } : c));
+      persistChanges({ customers: updated });
+      return updated;
+    });
+  };
+
+  const handleAdjustLoyalty = (customerId: string, delta: number, reason: string) => {
+    const cust = customers.find(c => c.id === customerId);
+    if (!cust || !delta) return;
+    adjustLoyalty(customerId, delta);
+    logAudit('loyalty.adjust', `نقاط ${cust.name}: ${delta > 0 ? '+' : ''}${delta} (${reason})`, customerId, delta);
+  };
+
   // ---------- المخازن والفروع ----------
   // المخزن الرئيسي مشتق (الإجمالي - باقي المخازن)، فنحرّك فقط أرصدة المخازن غير الرئيسية.
   const shiftWarehouseStock = (
@@ -688,6 +707,16 @@ export default function App() {
       setCurrentTab('shifts');
       return false;
     }
+    // نقاط الولاء: إعادة التحقق من الرصيد على أحدث بيانات (قد يكون جهاز آخر استبدلها)
+    const loyaltyCfg = resolveLoyalty(settings.loyalty);
+    const loyaltyCustomer = invoice.customerId ? customers.find(c => c.id === invoice.customerId) : undefined;
+    const redeemedPts = invoice.loyaltyRedeemedPoints || 0;
+    if (redeemedPts > 0 && (!loyaltyCfg.enabled || !loyaltyCustomer || (loyaltyCustomer.loyaltyPoints || 0) < redeemedPts)) {
+      window.alert('تعذّر إتمام البيع: رصيد نقاط الولاء للعميل لا يكفي لهذا الاستبدال (ربما استُخدمت النقاط من جهاز آخر).');
+      return false;
+    }
+    const earnedPts = loyaltyCfg.enabled && loyaltyCustomer ? earnedPoints(invoice.grandTotal, loyaltyCfg.egpPerPoint) : 0;
+
     // 1) تجهيز السطور بمعرّف الصنف (المطابقة بالمعرّف أولاً، ثم رقم القطعة للفواتير القديمة)
     const lines = invoice.items.map(item => {
       const part = (item.partId && parts.find(p => p.id === item.partId))
@@ -721,7 +750,9 @@ export default function App() {
     const finalInvoice: Invoice = {
       ...invoice,
       items: invoice.items.map((it, i) => ({ ...it, partId: lines[i].partId })),
+      loyaltyEarned: earnedPts > 0 ? earnedPts : undefined,
     };
+    adjustLoyalty(finalInvoice.customerId, earnedPts - redeemedPts);
     setInvoices(prev => {
       const updated = [finalInvoice, ...prev];
       persistChanges({ invoices: updated });
@@ -843,6 +874,8 @@ export default function App() {
       payments: payments.map(p => ({ method: String(p.method), amount: p.amount })),
     });
     const fraction = plan.fraction;
+    // عكس الولاء: تُسحب النقاط المتبقية من الفاتورة وتُرد النقاط المستبدلة
+    adjustLoyalty(inv.customerId, (inv.loyaltyRedeemedPoints || 0) - loyaltyAfterReturn(inv.loyaltyEarned || 0, inv.grandTotal, inv.returnedAmount || 0));
 
     // 1) المخزون: إعادة الكميات المتبقية
     const moves: Parameters<typeof logStockMovements>[0] = [];
@@ -972,6 +1005,14 @@ export default function App() {
     }
     shiftWarehouseStock(invoices.find(i => i.id === salesReturn.invoiceId)?.warehouseId,
       (salesReturn.items || []).map(i => ({ partNumber: i.partNumber, qty: i.quantity })), 1);
+    {
+      const inv = invoices.find(i => i.id === salesReturn.invoiceId);
+      if (inv) {
+        const before = loyaltyAfterReturn(inv.loyaltyEarned || 0, inv.grandTotal, inv.returnedAmount || 0);
+        const after = loyaltyAfterReturn(inv.loyaltyEarned || 0, inv.grandTotal, (inv.returnedAmount || 0) + salesReturn.totalRefundAmount);
+        adjustLoyalty(inv.customerId, -(before - after));
+      }
+    }
     logAudit('sales_return.create', `مرتجع مبيعات ${salesReturn.returnNumber || salesReturn.id} - ${salesReturn.customerName}`, salesReturn.id, -salesReturn.totalRefundAmount);
 
     // المرتجع على حساب العميل الآجل: يُخصم من مديونيته (وإن زاد عنها يصبح له رصيد دائن ظاهر بالسالب)
@@ -1063,6 +1104,15 @@ export default function App() {
     }
     shiftWarehouseStock(invoices.find(i => i.id === ret.invoiceId)?.warehouseId,
       ret.items.map(i => ({ partNumber: i.partNumber, qty: i.quantity })), -1);
+    {
+      const inv = invoices.find(i => i.id === ret.invoiceId);
+      if (inv) {
+        const cur = inv.returnedAmount || 0;
+        const before = loyaltyAfterReturn(inv.loyaltyEarned || 0, inv.grandTotal, cur);
+        const after = loyaltyAfterReturn(inv.loyaltyEarned || 0, inv.grandTotal, Math.max(0, cur - ret.totalRefundAmount));
+        adjustLoyalty(inv.customerId, after - before);
+      }
+    }
     logAudit('sales_return.delete', `حذف مرتجع مبيعات ${ret.returnNumber || ret.id}`, ret.id, ret.totalRefundAmount);
 
     // عكس رصيد العميل الآجل
@@ -1846,6 +1896,7 @@ export default function App() {
             maxDiscountPercent={10}
             warehouses={warehouses}
             stockLevels={stockLevels}
+            loyalty={resolveLoyalty(settings.loyalty)}
             cashierName={currentUser?.employeeName}
             cashierId={currentUser?.employeeId}
             onOpenVoiceAssistant={() => setShowVoiceAssistant(true)}
@@ -1951,6 +2002,8 @@ export default function App() {
                 return updated;
               });
             }}
+            loyaltyEnabled={resolveLoyalty(settings.loyalty).enabled}
+            onAdjustLoyalty={handleAdjustLoyalty}
             onUpdateCreditLimit={(customerId: string, limit: number) => {
               const cust = customers.find(c => c.id === customerId);
               logAudit('customer.credit_limit', `حد ائتمان ${cust?.name || customerId}: ${limit > 0 ? limit + ' ج.م' : 'غير محدود'}`, customerId, limit);

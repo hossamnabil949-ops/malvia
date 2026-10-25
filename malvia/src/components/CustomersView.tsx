@@ -35,6 +35,8 @@ interface CustomersViewProps {
   onAddCustomer: (customer: Customer) => void;
   onSettleBalance: (customerId: string, amount: number) => void;
   onUpdateCreditLimit?: (customerId: string, limit: number) => void;
+  loyaltyEnabled?: boolean;
+  onAdjustLoyalty?: (customerId: string, delta: number, reason: string) => void;
 }
 
 const COLORS = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'];
@@ -44,6 +46,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   onAddCustomer,
   onSettleBalance,
   onUpdateCreditLimit,
+  loyaltyEnabled = false,
+  onAdjustLoyalty,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [settleModalCustomer, setSettleModalCustomer] = useState<Customer | null>(null);
@@ -55,6 +59,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [newCreditLimit, setNewCreditLimit] = useState('');
   const [limitModalCustomer, setLimitModalCustomer] = useState<Customer | null>(null);
   const [limitValue, setLimitValue] = useState('');
+  const [pointsModalCustomer, setPointsModalCustomer] = useState<Customer | null>(null);
+  const [pointsDelta, setPointsDelta] = useState('');
+  const [pointsReason, setPointsReason] = useState('');
 
   const handleSaveCustomer = (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,6 +84,15 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     setPhone('');
     setNewCreditLimit('');
     setShowAddModal(false);
+  };
+
+  const handleConfirmPoints = () => {
+    const delta = Math.trunc(Number(pointsDelta) || 0);
+    if (!pointsModalCustomer || !onAdjustLoyalty || delta === 0 || pointsReason.trim().length < 3) return;
+    onAdjustLoyalty(pointsModalCustomer.id, delta, pointsReason.trim());
+    setPointsModalCustomer(null);
+    setPointsDelta('');
+    setPointsReason('');
   };
 
   const handleConfirmLimit = () => {
@@ -424,6 +440,23 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     )}
                   </span>
                 </div>
+                {loyaltyEnabled && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-neutral-400">نقاط الولاء:</span>
+                    <span className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-sky-300">{(c.loyaltyPoints || 0).toLocaleString()} نقطة</span>
+                      {onAdjustLoyalty && (
+                        <button
+                          type="button"
+                          onClick={() => { setPointsModalCustomer(c); setPointsDelta(''); setPointsReason(''); }}
+                          className="text-[10px] text-amber-400 hover:text-amber-300 font-bold"
+                        >
+                          تعديل
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-neutral-400">إجمالي المشتريات التراكمية:</span>
                   <span className="font-mono text-white">
@@ -609,6 +642,50 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             <div className="flex gap-2">
               <button type="button" onClick={handleConfirmLimit} className="flex-1 h-9 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black">حفظ</button>
               <button type="button" onClick={() => setLimitModalCustomer(null)} className="px-4 h-9 rounded-xl bg-neutral-800 text-neutral-300 font-bold">إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pointsModalCustomer && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setPointsModalCustomer(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-surface-1 border border-neutral-700 p-5 space-y-3 text-xs"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4 className="font-black text-white text-sm">تعديل نقاط الولاء — {pointsModalCustomer.name}</h4>
+            <p className="text-neutral-400">
+              الرصيد الحالي: {(pointsModalCustomer.loyaltyPoints || 0).toLocaleString()} نقطة. اكتب رقماً موجباً للإضافة أو سالباً للخصم، مع سبب واضح (يُسجَّل في سجل التدقيق).
+            </p>
+            <input
+              type="number"
+              step="1"
+              autoFocus
+              value={pointsDelta}
+              onChange={(e) => setPointsDelta(e.target.value)}
+              placeholder="مثال: 100 أو -50"
+              className="w-full h-10 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white font-mono"
+            />
+            <input
+              type="text"
+              value={pointsReason}
+              onChange={(e) => setPointsReason(e.target.value)}
+              placeholder="السبب (إجباري)"
+              className="w-full h-10 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleConfirmPoints}
+                disabled={!Math.trunc(Number(pointsDelta) || 0) || pointsReason.trim().length < 3}
+                className="flex-1 h-9 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-black"
+              >
+                حفظ
+              </button>
+              <button type="button" onClick={() => setPointsModalCustomer(null)} className="px-4 h-9 rounded-xl bg-neutral-800 text-neutral-300 font-bold">إلغاء</button>
             </div>
           </div>
         </div>

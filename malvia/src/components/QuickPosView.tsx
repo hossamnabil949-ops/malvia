@@ -33,6 +33,7 @@ import { nextSalesInvoiceNumber } from '../utils/invoiceNumber';
 import { SaleError, computeTotals, validateSale, validateDiscountPolicy, toEgp, isCreditPayment } from '../utils/saleLogic';
 import { AutoPart, CartItem, Customer, Invoice, CarBrand, CarModel, PartCategory, PaymentMethod, Employee, Warehouse, StockLevel } from '../types/autoParts';
 import { MAIN_WAREHOUSE_ID, MAIN_WAREHOUSE_NAME, availableIn } from '../utils/warehouseLogic';
+import { LoyaltySettings, resolveLoyalty, earnedPoints, pointsValue, maxRedeemablePoints } from '../utils/loyaltyLogic';
 import { verifyOwnerPassword } from '../services/approvalService';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
 import { BrandBar } from './BrandBar';
@@ -52,6 +53,7 @@ interface QuickPosViewProps {
   employees?: Employee[];      // للتحقق من باسورد المالك عند فتح تعديل السعر
   warehouses?: Warehouse[];    // المخازن/الفروع (لو فيه أكثر من مخزن يظهر اختيار مخزن البيع)
   stockLevels?: StockLevel[];
+  loyalty?: LoyaltySettings;   // برنامج الولاء (غير ممرَّر أو مغلق = لا يظهر)
   maxDiscountPercent?: number; // الحد الأقصى للخصم % (افتراضي 10)
   cashierName?: string;
   cashierId?: string;
@@ -82,6 +84,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   employees = [],
   warehouses = [],
   stockLevels = [],
+  loyalty,
   maxDiscountPercent = 10,
   cashierName,
   cashierId,
@@ -114,6 +117,9 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   };
   const stockHere = (p: AutoPart): number => availableIn(p.stockQuantity, stockLevels, p.id, saleWarehouseId);
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
+  const [redeemPoints, setRedeemPoints] = useState(0);
+  const loyaltyCfg = resolveLoyalty(loyalty);
+  useEffect(() => { setRedeemPoints(0); }, [selectedCustomerId, cart.length]);
   const [customerNameInput, setCustomerNameInput] = useState('زبون نقدي (قطاعي)');
   const [carDetailsInput, setCarDetailsInput] = useState('');
   const [customerPhoneInput, setCustomerPhoneInput] = useState('');
@@ -217,7 +223,18 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   }, [cart, subtotal, maxDiscountPercent]);
 
   const discount = Math.min(subtotal, Math.max(0, discountAmount));
-  const taxableAmount = Math.max(0, subtotal - discount);
+
+  // استبدال نقاط الولاء: جزء من إجمالي الخصم، فيخضع لنفس سقف الخصم وحد التكلفة
+  const customerPoints = Math.max(0, selectedCustomer?.loyaltyPoints ?? 0);
+  const loyaltyActive = loyaltyCfg.enabled && Boolean(selectedCustomer);
+  const maxPts = loyaltyActive
+    ? maxRedeemablePoints({ balance: customerPoints, pointValueEgp: loyaltyCfg.pointValueEgp, minRedeemPoints: loyaltyCfg.minRedeemPoints, capEgp: Math.max(0, maxInvoiceDiscount - discount) })
+    : 0;
+  const redeemUsed = loyaltyActive && redeemPoints >= loyaltyCfg.minRedeemPoints ? Math.min(Math.floor(redeemPoints), maxPts) : 0;
+  const loyaltyDiscount = pointsValue(redeemUsed, loyaltyCfg.pointValueEgp);
+  const discountAll = Math.min(subtotal, Math.round((discount + loyaltyDiscount) * 100) / 100);
+
+  const taxableAmount = Math.max(0, subtotal - discountAll);
   const tax = applyVat ? Math.round((taxableAmount * vatRate) / 100 * 100) / 100 : 0;
   const grandTotal = Math.round((taxableAmount + tax) * 100) / 100;
 
@@ -252,10 +269,10 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           unitPrice: item.customPrice !== undefined ? item.customPrice : item.part.salePrice,
           unitCost: item.part.costPrice,
         })),
-        discount,
+        discountAll,
         maxDiscountPercent
       );
-      const totals = computeTotals(lines, discount, vatRate, applyVat);
+      const totals = computeTotals(lines, discountAll, vatRate, applyVat);
       const hasCredit = payments.some((p) => isCreditPayment(p.method));
       const hasNewName = selectedCustomerId === 'cash' && customerNameInput.trim().length > 0;
       validateSale(
@@ -325,7 +342,9 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         };
       }),
       subtotal,
-      discount,
+      discount: discountAll,
+      loyaltyRedeemedPoints: redeemUsed > 0 ? redeemUsed : undefined,
+      loyaltyDiscount: loyaltyDiscount > 0 ? loyaltyDiscount : undefined,
       tax: Number(tax.toFixed(2)),
       grandTotal: Number(grandTotal.toFixed(2)),
       paymentMethod: payments.length > 1 ? 'مختلط (دفع مقسّم)' : paymentMethod,
@@ -827,9 +846,9 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               <input
                 type="number"
                 min="0"
-                max={maxInvoiceDiscount}
+                max={Math.max(0, maxInvoiceDiscount - loyaltyDiscount)}
                 value={discountAmount || ''}
-                onChange={(e) => setDiscountAmount(Math.min(Math.max(0, Number(e.target.value) || 0), maxInvoiceDiscount))}
+                onChange={(e) => setDiscountAmount(Math.min(Math.max(0, Number(e.target.value) || 0), Math.max(0, maxInvoiceDiscount - loyaltyDiscount)))}
                 placeholder="0"
                 className="w-20 h-7 px-2 text-left rtl:text-right rounded bg-surface-1 border border-neutral-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
               />
@@ -839,6 +858,45 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           {cart.length > 0 && (
             <div className="text-[10px] text-neutral-500 -mt-1">
               الحد الأقصى المسموح للخصم: {maxInvoiceDiscount.toLocaleString()} ج.م ({maxDiscountPercent}% كحد أقصى، ولا يقل عن التكلفة)
+            </div>
+          )}
+
+          {loyaltyCfg.enabled && selectedCustomer && cart.length > 0 && (
+            <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/30 space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sky-300">نقاط الولاء: {customerPoints.toLocaleString()} نقطة</span>
+                <span className="text-[10px] text-neutral-400">≈ {pointsValue(customerPoints, loyaltyCfg.pointValueEgp).toLocaleString()} ج.م</span>
+              </div>
+              {maxPts > 0 ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max={maxPts}
+                    step="1"
+                    value={redeemPoints || ''}
+                    onChange={(e) => setRedeemPoints(Math.min(Math.max(0, Math.floor(Number(e.target.value) || 0)), maxPts))}
+                    placeholder="نقاط للاستبدال"
+                    className="flex-1 h-7 px-2 rounded bg-surface-1 border border-neutral-700 text-white text-xs font-mono focus:outline-none focus:border-sky-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setRedeemPoints(maxPts)}
+                    className="px-2 h-7 rounded bg-sky-500/20 hover:bg-sky-500/30 text-sky-200 text-[10px] font-bold whitespace-nowrap"
+                  >
+                    الحد الأقصى ({maxPts})
+                  </button>
+                </div>
+              ) : (
+                customerPoints > 0 && (
+                  <div className="text-[10px] text-neutral-500">
+                    الاستبدال يحتاج {loyaltyCfg.minRedeemPoints} نقطة على الأقل، وفي حدود سقف الخصم المتاح للفاتورة.
+                  </div>
+                )
+              )}
+              <div className="text-[10px] text-emerald-400">
+                سيكسب العميل {earnedPoints(grandTotal, loyaltyCfg.egpPerPoint)} نقطة من هذه الفاتورة
+              </div>
             </div>
           )}
 
@@ -869,6 +927,12 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               <div className="flex justify-between text-rose-400">
                 <span>الخصم / التخفيض:</span>
                 <span className="font-mono">-{discount.toFixed(2)} ج.م</span>
+              </div>
+            )}
+            {loyaltyDiscount > 0 && (
+              <div className="flex justify-between text-sky-300">
+                <span>خصم نقاط الولاء ({redeemUsed} نقطة):</span>
+                <span className="font-mono">-{loyaltyDiscount.toFixed(2)} ج.م</span>
               </div>
             )}
             <div className="flex justify-between">

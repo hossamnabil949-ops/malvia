@@ -139,7 +139,7 @@ export type AuditAction =
   | 'invoice.create' | 'invoice.price_override' | 'invoice.discount' | 'invoice.void'
   | 'sales_return.create' | 'sales_return.delete'
   | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
-  | 'stock.adjust' | 'customer.collect' | 'customer.credit_limit' | 'stock.transfer' | 'supplier.payment'
+  | 'stock.adjust' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'stock.transfer' | 'supplier.payment'
   | 'shift.open' | 'shift.close' | 'shift.variance';
 
 export interface AuditEntry {
@@ -194,6 +194,9 @@ export interface Invoice {
   cashierId?: string;
   cashierName: string;
   warehouseId?: string; // المخزن/الفرع الذي خرجت منه البضاعة (غير موجود = المخزن الرئيسي)
+  loyaltyEarned?: number;         // نقاط ولاء اكتسبها العميل من هذه الفاتورة
+  loyaltyRedeemedPoints?: number; // نقاط استبدلها العميل كخصم في هذه الفاتورة
+  loyaltyDiscount?: number;       // قيمة الخصم الناتج عن النقاط (ج.م) وهو جزء من discount
   status?: 'مسددة' | 'مرتجع جزئي' | 'مرتجع كلي' | 'ملغاة';
   returnedAmount?: number;
   voidedAt?: string;        // ISO — وقت الإلغاء
@@ -214,6 +217,7 @@ export interface Customer {
   invoicesCount?: number;
   lastVisit: string;
   creditLimit?: number; // حد الائتمان (ج.م) — 0 أو بدون قيمة = غير محدود
+  loyaltyPoints?: number; // رصيد نقاط الولاء (يُدمج بالفرق على السحابة)
 }
 
 export type ExpenseCategory = 
@@ -552,6 +556,7 @@ export interface ShopSettings {
   activeEmployeeId: string;
   requireShiftForSales?: boolean; // إلزام فتح وردية قبل أي بيع في الكاشير
   carBrands?: string[]; // قائمة ماركات السيارات التي يتعامل معها المحل (بدون «شامل»)
+  loyalty?: import('../utils/loyaltyLogic').LoyaltySettings; // برنامج الولاء (مغلق افتراضياً)
 }
 
 export type TenantPlan = 

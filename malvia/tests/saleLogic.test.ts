@@ -87,6 +87,36 @@ import { availableIn, adjustLevel, adjustLevels, validateTransfer, applyTransfer
   assert.equal(availableIn(9, adjustLevels(recv, 'w9', [{ partId: 'p2', qty: 5 }], -1), 'p2', 'w9'), 0);
   assert.deepEqual(adjustLevel([], 'p1', 'main', 5), []);                              // الرئيسي مشتق: لا سطور
 }
+
+// ---------- برنامج الولاء ----------
+import { earnedPoints, pointsValue, maxRedeemablePoints, loyaltyAfterReturn, resolveLoyalty } from '../src/utils/loyaltyLogic.ts';
+{
+  assert.equal(earnedPoints(1000, 10), 100);
+  assert.equal(earnedPoints(99.99, 10), 9);                       // تقريب لأسفل
+  assert.equal(earnedPoints(0, 10), 0);
+  assert.equal(earnedPoints(-5, 10), 0);
+  assert.equal(earnedPoints(100, 0), 0);                          // إعداد غير صالح لا يكسر
+  assert.equal(pointsValue(100, 0.5), 50);
+  assert.equal(pointsValue(3, 0.1), 0.3);                         // لا كسور عائمة
+  // أقصى استبدال: رصيد 500 نقطة، قيمة النقطة 0.5، سقف الخصم 40 ج => 80 نقطة
+  assert.equal(maxRedeemablePoints({ balance: 500, pointValueEgp: 0.5, minRedeemPoints: 50, capEgp: 40 }), 80);
+  assert.equal(maxRedeemablePoints({ balance: 60, pointValueEgp: 0.5, minRedeemPoints: 50, capEgp: 1000 }), 60);   // الرصيد هو القيد
+  assert.equal(maxRedeemablePoints({ balance: 40, pointValueEgp: 0.5, minRedeemPoints: 50, capEgp: 1000 }), 0);    // أقل من الحد الأدنى
+  assert.equal(maxRedeemablePoints({ balance: 500, pointValueEgp: 0.5, minRedeemPoints: 50, capEgp: 10 }), 0);     // السقف يسمح بـ20 فقط (< الحد الأدنى)
+  assert.equal(maxRedeemablePoints({ balance: 500, pointValueEgp: 0.5, minRedeemPoints: 50, capEgp: 0 }), 0);
+  // مرتجع: نقاط الفاتورة 100، إجمالي 1000، مرتجع 250 => يبقى 75
+  assert.equal(loyaltyAfterReturn(100, 1000, 250), 75);
+  assert.equal(loyaltyAfterReturn(100, 1000, 0), 100);
+  assert.equal(loyaltyAfterReturn(100, 1000, 1000), 0);
+  assert.equal(loyaltyAfterReturn(100, 1000, 5000), 0);           // مرتجع أكبر من الفاتورة لا يعطي سالب
+  assert.equal(loyaltyAfterReturn(0, 1000, 100), 0);
+  // مرتجعان متتاليان = نفس نتيجة مرتجع واحد بمجموعهما (لا انحراف تراكمي)
+  const step = (loyaltyAfterReturn(100, 1000, 0) - loyaltyAfterReturn(100, 1000, 250)) + (loyaltyAfterReturn(100, 1000, 250) - loyaltyAfterReturn(100, 1000, 600));
+  assert.equal(step, 100 - loyaltyAfterReturn(100, 1000, 600));
+  // الإعدادات الافتراضية: مغلق
+  assert.equal(resolveLoyalty(undefined).enabled, false);
+  assert.equal(resolveLoyalty({ enabled: true, egpPerPoint: -1 }).egpPerPoint, 10);
+}
 console.log('كل الاختبارات نجحت');
 
 // ---------- إلغاء فاتورة ----------

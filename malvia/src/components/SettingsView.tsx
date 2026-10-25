@@ -41,6 +41,7 @@ import {
   Link as LinkIcon
 } from 'lucide-react';
 import { ROLE_PRESETS } from '../utils/permissions';
+import { resolveLoyalty } from '../utils/loyaltyLogic';
 import { ShopSettings, Employee, EmployeePermissions, TenantLicense } from '../types/autoParts';
 import { AppTheme, getAppTheme, setAppTheme } from '../services/tenantService';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -130,6 +131,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [empEmail, setEmpEmail] = useState('');
   const [empShift, setEmpShift] = useState<Employee['shift']>('صباحي');
   const [empSalary, setEmpSalary] = useState(4500);
+  const [loyEnabled, setLoyEnabled] = useState(resolveLoyalty(settings.loyalty).enabled);
+  const [loyEgpPerPoint, setLoyEgpPerPoint] = useState(String(resolveLoyalty(settings.loyalty).egpPerPoint));
+  const [loyPointValue, setLoyPointValue] = useState(String(resolveLoyalty(settings.loyalty).pointValueEgp));
+  const [loyMin, setLoyMin] = useState(String(resolveLoyalty(settings.loyalty).minRedeemPoints));
+  const [loySaved, setLoySaved] = useState(false);
+  const handleSaveLoyalty = () => {
+    const cfg = resolveLoyalty({
+      enabled: loyEnabled,
+      egpPerPoint: Number(loyEgpPerPoint),
+      pointValueEgp: Number(loyPointValue),
+      minRedeemPoints: Number(loyMin),
+    });
+    onUpdateSettings({ ...settings, loyalty: cfg });
+    setLoyEgpPerPoint(String(cfg.egpPerPoint));
+    setLoyPointValue(String(cfg.pointValueEgp));
+    setLoyMin(String(cfg.minRedeemPoints));
+    setLoySaved(true);
+    setTimeout(() => setLoySaved(false), 3000);
+  };
   const [empPermissions, setEmpPermissions] = useState<EmployeePermissions>({
     canSellPos: true,
     canManageInventory: false,
@@ -393,6 +413,38 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             licenseKey={activeLicense?.licenseKey}
             companyName={activeLicense?.companyName}
           />
+
+          <div className="bg-surface-2 border border-neutral-800 p-6 rounded-3xl shadow-lg space-y-4">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
+              <div>
+                <h3 className="text-sm font-black text-white">برنامج ولاء العملاء</h3>
+                <p className="text-[11px] text-neutral-400">العميل المسجّل يكسب نقاطاً على مشترياته ويستبدلها بخصم في الكاشير (ضمن سقف الخصم المسموح).</p>
+              </div>
+              <label className="flex items-center gap-2 text-xs font-bold text-neutral-200 cursor-pointer">
+                <input type="checkbox" checked={loyEnabled} onChange={(e) => setLoyEnabled(e.target.checked)} className="w-4 h-4 accent-amber-500" />
+                تفعيل
+              </label>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div>
+                <label className="block text-neutral-300 font-bold mb-1">كل كم جنيه = نقطة؟</label>
+                <input type="number" min="1" step="any" value={loyEgpPerPoint} onChange={(e) => setLoyEgpPerPoint(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono" />
+              </div>
+              <div>
+                <label className="block text-neutral-300 font-bold mb-1">قيمة النقطة عند الاستبدال (ج.م)</label>
+                <input type="number" min="0.01" step="any" value={loyPointValue} onChange={(e) => setLoyPointValue(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono" />
+              </div>
+              <div>
+                <label className="block text-neutral-300 font-bold mb-1">أقل نقاط للاستبدال</label>
+                <input type="number" min="1" step="1" value={loyMin} onChange={(e) => setLoyMin(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono" />
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={handleSaveLoyalty} className="h-9 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-black">حفظ إعدادات الولاء</button>
+              {loySaved && <span className="text-xs font-bold text-emerald-400">تم الحفظ</span>}
+              <span className="text-[11px] text-neutral-500">مثال: 1 نقطة لكل 10 ج.م، والنقطة بنصف جنيه ≈ 5% مكافأة.</span>
+            </div>
+          </div>
 
           <div className="bg-surface-2 border border-neutral-800 p-6 rounded-3xl shadow-lg space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-800 pb-3">
