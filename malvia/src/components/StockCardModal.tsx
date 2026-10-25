@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { AutoPart, Invoice, PurchaseInvoice, SalesReturn, PurchaseReturn } from '../types/autoParts';
 import { DateRangeFilter } from './DateRangeFilter';
 import { DateRange, EMPTY_DATE_RANGE, inDateRange, todayISO } from '../utils/dateRange';
+import { MovementKind, compareMovements, timestampFromId } from '../utils/stockCardOrder';
 
 interface StockCardModalProps {
   part: AutoPart;
@@ -14,8 +15,6 @@ interface StockCardModalProps {
   onClose: () => void;
 }
 
-type MovementKind = 'purchase' | 'sale' | 'sales_return' | 'purchase_return';
-
 interface Movement {
   date: string;
   kind: MovementKind;
@@ -25,6 +24,7 @@ interface Movement {
   qtyOut: number;
   unitValue: number; // تكلفة للشراء / سعر للبيع
   balance: number;
+  ts?: number;       // وقت إنشاء المستند (لترتيب نفس اليوم)
 }
 
 const KIND_LABEL: Record<MovementKind, { label: string; cls: string }> = {
@@ -33,8 +33,6 @@ const KIND_LABEL: Record<MovementKind, { label: string; cls: string }> = {
   sale: { label: 'بيع', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
   purchase_return: { label: 'مرتجع مشتريات (خروج للمورد)', cls: 'bg-rose-500/15 text-rose-300 border-rose-500/30' },
 };
-// داخل نفس اليوم: الواردات قبل الصادرات حتى لا يظهر رصيد سالب وهمي
-const KIND_RANK: Record<MovementKind, number> = { purchase: 0, sales_return: 1, sale: 2, purchase_return: 3 };
 
 const norm = (v?: string) => (v || '').trim().toLowerCase();
 const fmt = (n: number) => n.toLocaleString('ar-EG', { maximumFractionDigits: 2 });
@@ -51,22 +49,22 @@ export const StockCardModal: React.FC<StockCardModalProps> = ({
     const list: Omit<Movement, 'balance'>[] = [];
 
     purchaseInvoices.forEach(inv => inv.items.forEach(it => {
-      if (same(it.partNumber, it.partName)) list.push({ date: inv.date, kind: 'purchase', doc: inv.invoiceNumber, party: inv.supplierName, qtyIn: it.quantity, qtyOut: 0, unitValue: it.costPrice });
+      if (same(it.partNumber, it.partName)) list.push({ date: inv.date, kind: 'purchase', ts: timestampFromId(inv.id), doc: inv.invoiceNumber, party: inv.supplierName, qtyIn: it.quantity, qtyOut: 0, unitValue: it.costPrice });
     }));
     salesReturns.forEach(r => r.items.forEach(it => {
-      if (same(it.partNumber, it.partName)) list.push({ date: r.date, kind: 'sales_return', doc: r.returnNumber || r.id, party: r.customerName, qtyIn: it.quantity, qtyOut: 0, unitValue: it.unitPrice });
+      if (same(it.partNumber, it.partName)) list.push({ date: r.date, kind: 'sales_return', ts: timestampFromId(r.id), doc: r.returnNumber || r.id, party: r.customerName, qtyIn: it.quantity, qtyOut: 0, unitValue: it.unitPrice });
     }));
     invoices.forEach(inv => {
       if (inv.status === 'ملغاة') return;
       inv.items.forEach(it => {
-        if (same(it.partNumber, it.partName)) list.push({ date: inv.date, kind: 'sale', doc: inv.invoiceNumber, party: inv.customerName, qtyIn: 0, qtyOut: it.quantity, unitValue: it.unitPrice });
+        if (same(it.partNumber, it.partName)) list.push({ date: inv.date, kind: 'sale', ts: timestampFromId(inv.id), doc: inv.invoiceNumber, party: inv.customerName, qtyIn: 0, qtyOut: it.quantity, unitValue: it.unitPrice });
       });
     });
     purchaseReturns.forEach(r => r.items.forEach(it => {
-      if (same(it.partNumber, it.partName)) list.push({ date: r.date, kind: 'purchase_return', doc: r.returnNumber || r.id, party: r.supplierName, qtyIn: 0, qtyOut: it.quantity, unitValue: it.unitCost });
+      if (same(it.partNumber, it.partName)) list.push({ date: r.date, kind: 'purchase_return', ts: timestampFromId(r.id), doc: r.returnNumber || r.id, party: r.supplierName, qtyIn: 0, qtyOut: it.quantity, unitValue: it.unitCost });
     }));
 
-    list.sort((a, b) => a.date.localeCompare(b.date) || KIND_RANK[a.kind] - KIND_RANK[b.kind]);
+    list.sort(compareMovements); // الأقدم فوق: توريد، ثم بيع، ثم المرتجع بعده
 
     // الرصيد الافتتاحي = الرصيد الحالي - صافي كل الحركات المسجلة (رصيد ما قبل أول حركة)
     const net = list.reduce((s, m) => s + m.qtyIn - m.qtyOut, 0);

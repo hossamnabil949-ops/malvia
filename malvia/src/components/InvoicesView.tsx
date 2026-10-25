@@ -21,6 +21,7 @@ import {
   Edit3
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { paymentLines } from '../utils/paymentLines';
 import { Invoice, SalesReturn, SalesReturnItem, PaymentMethod } from '../types/autoParts';
 import { DateRangeFilter } from './DateRangeFilter';
 import { verifyManagerApproval } from '../services/approvalService';
@@ -231,7 +232,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       'ضريبة القيمة المضافة': inv.tax,
       'الخصم': inv.discount,
       'الإجمالي النهائي المستحق': inv.grandTotal,
-      'طريقة السداد': inv.paymentMethod,
+      'طريقة السداد': paymentLines(inv).length > 1 ? paymentLines(inv).map(p => `${p.method}: ${p.amount}`).join(' + ') : inv.paymentMethod,
       'حالة الفاتورة': inv.status || 'مسددة',
       'إجمالي المرتجع (ج.م) بالسالب': -(inv.returnedAmount || 0),
       'الحالة': inv.status || 'مسددة',
@@ -393,9 +394,20 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                           {inv.items.length} أصناف
                         </td>
                         <td className="p-3.5">
-                          <span className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-semibold text-[11px]">
-                            {inv.paymentMethod}
-                          </span>
+                          {paymentLines(inv).length > 1 ? (
+                            <div className="space-y-1">
+                              {paymentLines(inv).map((p, i) => (
+                                <div key={i} className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-semibold text-[11px] flex justify-between gap-2 whitespace-nowrap">
+                                  <span>{p.method}</span>
+                                  <span className="font-mono">{p.amount.toLocaleString()}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-semibold text-[11px]">
+                              {inv.paymentMethod}
+                            </span>
+                          )}
                         </td>
                         <td className="p-3.5">
                           {inv.status === 'ملغاة' ? (

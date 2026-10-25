@@ -28,6 +28,7 @@ import {
   Pie, 
   Legend 
 } from 'recharts';
+import { LoyaltyEntry, LOYALTY_TYPE_LABEL, analyzeLoyalty, withRunningBalance } from '../utils/loyaltyLogic';
 import { Customer } from '../types/autoParts';
 
 interface CustomersViewProps {
@@ -36,6 +37,8 @@ interface CustomersViewProps {
   onSettleBalance: (customerId: string, amount: number) => void;
   onUpdateCreditLimit?: (customerId: string, limit: number) => void;
   loyaltyEnabled?: boolean;
+  canAdjustLoyalty?: boolean;            // التعديل اليدوي للنقاط: المدير العام فقط
+  loyaltyEntries?: LoyaltyEntry[];       // سجل حركات النقاط
   onAdjustLoyalty?: (customerId: string, delta: number, reason: string) => void;
 }
 
@@ -47,6 +50,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   onSettleBalance,
   onUpdateCreditLimit,
   loyaltyEnabled = false,
+  canAdjustLoyalty = false,
+  loyaltyEntries = [],
   onAdjustLoyalty,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -59,6 +64,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [newCreditLimit, setNewCreditLimit] = useState('');
   const [limitModalCustomer, setLimitModalCustomer] = useState<Customer | null>(null);
   const [limitValue, setLimitValue] = useState('');
+  const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
   const [pointsModalCustomer, setPointsModalCustomer] = useState<Customer | null>(null);
   const [pointsDelta, setPointsDelta] = useState('');
   const [pointsReason, setPointsReason] = useState('');
@@ -445,7 +451,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     <span className="text-neutral-400">نقاط الولاء:</span>
                     <span className="flex items-center gap-2">
                       <span className="font-mono font-bold text-sky-300">{(c.loyaltyPoints || 0).toLocaleString()} نقطة</span>
-                      {onAdjustLoyalty && (
+                      <button
+                        type="button"
+                        onClick={() => setHistoryCustomer(c)}
+                        className="text-[10px] text-sky-300 hover:text-sky-200 font-bold"
+                      >
+                        السجل
+                      </button>
+                      {canAdjustLoyalty && onAdjustLoyalty && (
                         <button
                           type="button"
                           onClick={() => { setPointsModalCustomer(c); setPointsDelta(''); setPointsReason(''); }}
@@ -690,6 +703,73 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           </div>
         </div>
       )}
+
+      {historyCustomer && (() => {
+        const mine = loyaltyEntries.filter((e) => e.customerId === historyCustomer.id);
+        const nowISO = new Date().toISOString();
+        const an = analyzeLoyalty(mine, nowISO);
+        const rows = withRunningBalance(mine).reverse();
+        const fmt = (iso: string) => new Date(iso).toLocaleString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const day = (iso: string) => new Date(iso).toLocaleDateString('ar-EG');
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setHistoryCustomer(null)}>
+            <div className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl bg-surface-1 border border-neutral-700 text-xs" onClick={(e) => e.stopPropagation()}>
+              <div className="p-4 border-b border-neutral-800 flex items-center justify-between">
+                <h4 className="font-black text-white text-sm">سجل نقاط الولاء — {historyCustomer.name}</h4>
+                <button type="button" onClick={() => setHistoryCustomer(null)} className="text-neutral-400 hover:text-white font-bold">إغلاق</button>
+              </div>
+              <div className="p-4 grid grid-cols-3 gap-3 border-b border-neutral-800">
+                <div className="p-2 rounded-xl bg-surface-2 text-center">
+                  <div className="text-[10px] text-neutral-400">الرصيد القابل للاستبدال</div>
+                  <div className="font-mono font-black text-sky-300 text-base">{an.available.toLocaleString()}</div>
+                </div>
+                <div className="p-2 rounded-xl bg-surface-2 text-center">
+                  <div className="text-[10px] text-neutral-400">تنتهي خلال 30 يوماً</div>
+                  <div className="font-mono font-black text-amber-300 text-base">{an.expiringWithin(30).toLocaleString()}</div>
+                </div>
+                <div className="p-2 rounded-xl bg-surface-2 text-center">
+                  <div className="text-[10px] text-neutral-400">أقرب انتهاء</div>
+                  <div className="font-bold text-white text-sm">{an.nextExpiryAt ? day(an.nextExpiryAt) : '—'}</div>
+                </div>
+              </div>
+              <div className="overflow-auto">
+                <table className="w-full">
+                  <thead className="bg-surface-2 text-neutral-400 sticky top-0">
+                    <tr>
+                      <th className="p-2 text-right">التاريخ</th>
+                      <th className="p-2 text-right">الحركة</th>
+                      <th className="p-2 text-center">النقاط</th>
+                      <th className="p-2 text-center">الرصيد بعدها</th>
+                      <th className="p-2 text-right">المرجع / ملاحظة</th>
+                      <th className="p-2 text-right">بواسطة</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((e) => (
+                      <tr key={e.id} className="border-t border-neutral-800 align-top">
+                        <td className="p-2 whitespace-nowrap text-neutral-300">{e.type === 'opening' ? '—' : fmt(e.at)}</td>
+                        <td className="p-2 text-white font-bold">
+                          {LOYALTY_TYPE_LABEL[e.type]}
+                          {e.expiresAt && e.points > 0 && <div className="text-[10px] font-normal text-neutral-500">تنتهي {day(e.expiresAt)}</div>}
+                        </td>
+                        <td className={`p-2 text-center font-mono font-black ${e.points > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {e.points > 0 ? '+' : ''}{e.points.toLocaleString()}
+                        </td>
+                        <td className="p-2 text-center font-mono text-neutral-200">{e.balanceAfter.toLocaleString()}</td>
+                        <td className="p-2 text-neutral-400">{[e.refNumber, e.note].filter(Boolean).join(' · ') || '—'}</td>
+                        <td className="p-2 text-neutral-500">{e.userName}</td>
+                      </tr>
+                    ))}
+                    {rows.length === 0 && (
+                      <tr><td colSpan={6} className="p-8 text-center text-neutral-500">لا توجد حركات نقاط لهذا العميل بعد</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

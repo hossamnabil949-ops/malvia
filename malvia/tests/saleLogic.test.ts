@@ -117,6 +117,93 @@ import { earnedPoints, pointsValue, maxRedeemablePoints, loyaltyAfterReturn, res
   assert.equal(resolveLoyalty(undefined).enabled, false);
   assert.equal(resolveLoyalty({ enabled: true, egpPerPoint: -1 }).egpPerPoint, 10);
 }
+
+// ---------- سجل النقاط وصلاحيتها ----------
+import { analyzeLoyalty, pendingExpiryEntries, availableBalances, withRunningBalance, addMonths } from '../src/utils/loyaltyLogic.ts';
+{
+  const E = (id: string, at: string, points: number, extra: any = {}) => ({ id, at, customerId: 'c1', customerName: 'عميل', type: points > 0 ? 'earn' : 'redeem', points, userName: 'u', ...extra });
+  assert.equal(addMonths('2026-01-31T00:00:00.000Z', 1), '2026-02-28T00:00:00.000Z');          // قص نهاية الشهر
+  assert.equal(addMonths('2026-03-15T10:00:00.000Z', 12), '2027-03-15T10:00:00.000Z');
+  // بدون انتهاء: الرصيد = المجموع
+  let es: any[] = [E('a', '2026-01-01T00:00:00.000Z', 100), E('b', '2026-01-02T00:00:00.000Z', -30)];
+  assert.equal(analyzeLoyalty(es, '2030-01-01T00:00:00.000Z').available, 70);
+  // دفعتان بتواريخ انتهاء: الاستبدال يستهلك الأقرب انتهاءً أولاً
+  es = [
+    E('l1', '2026-01-01T00:00:00.000Z', 100, { expiresAt: '2026-07-01T00:00:00.000Z' }),
+    E('l2', '2026-03-01T00:00:00.000Z', 100, { expiresAt: '2026-09-01T00:00:00.000Z' }),
+    E('r1', '2026-04-01T00:00:00.000Z', -60),                                                 // يخصم من l1
+  ];
+  let an = analyzeLoyalty(es, '2026-05-01T00:00:00.000Z');
+  assert.equal(an.available, 140);
+  assert.equal(an.pendingExpiry.length, 0);
+  assert.equal(an.nextExpiryAt, '2026-07-01T00:00:00.000Z');
+  assert.equal(an.expiringWithin(70), 40);                                                    // l1 المتبقي 40 خلال 61 يوماً
+  // بعد انتهاء l1: المتبقي منها (40) ينتهي، ولا يمكن استبداله ولو لم يُسجَّل انتهاؤه بعد
+  an = analyzeLoyalty(es, '2026-07-02T00:00:00.000Z');
+  assert.equal(an.available, 100);
+  assert.deepEqual(an.pendingExpiry.map(p => [p.lotId, p.points]), [['l1', 40]]);
+  const exp = pendingExpiryEntries(es, '2026-07-02T00:00:00.000Z');
+  assert.equal(exp.length, 1);
+  assert.equal(exp[0].id, 'LYE-l1');                                                          // رقم ثابت
+  assert.equal(exp[0].at, '2026-07-01T00:00:00.000Z');                                        // وقت الانتهاء نفسه
+  assert.equal(exp[0].points, -40);
+  // بعد تسجيل حركة الانتهاء: لا حركات مستحقة جديدة (لا تكرار) والرصيد ثابت
+  const es2 = [...es, exp[0]];
+  assert.equal(pendingExpiryEntries(es2, '2026-07-02T00:00:00.000Z').length, 0);
+  assert.equal(analyzeLoyalty(es2, '2026-07-02T00:00:00.000Z').available, 100);
+  assert.equal(analyzeLoyalty(es2, '2026-07-02T00:00:00.000Z').balance, 100);
+  // استبدال بعد انتهاء دفعة مسجّلة لا يلمسها: يستهلك l2 فقط
+  const es3 = [...es2, E('r2', '2026-08-01T00:00:00.000Z', -30)];
+  assert.equal(analyzeLoyalty(es3, '2026-08-02T00:00:00.000Z').available, 70);
+  // استبدال في الفترة بين الانتهاء والتسجيل لا يستهلك الدفعة المنتهية
+  const es4 = [...es, E('r3', '2026-07-05T00:00:00.000Z', -30)];
+  an = analyzeLoyalty(es4, '2026-07-06T00:00:00.000Z');
+  assert.equal(an.available, 70);                                                             // l2: 100-30
+  assert.deepEqual(an.pendingExpiry.map(p => p.points), [40]);
+  // رصيد لكل عميل + رصيد جارٍ مرتب زمنياً
+  const two = [E('x', '2026-01-01T00:00:00.000Z', 50), { ...E('y', '2026-01-01T00:00:00.000Z', 20), customerId: 'c2' }];
+  const bal = availableBalances(two as any, '2026-02-01T00:00:00.000Z');
+  assert.equal(bal.get('c1'), 50); assert.equal(bal.get('c2'), 20);
+  assert.deepEqual(withRunningBalance([E('b', '2026-01-02T00:00:00.000Z', -30), E('a', '2026-01-01T00:00:00.000Z', 100)] as any).map(e => e.balanceAfter), [100, 70]);
+  // الإعداد الافتراضي: بدون انتهاء
+  assert.equal(resolveLoyalty({ enabled: true }).expiryMonths, 0);
+  assert.equal(resolveLoyalty({ enabled: true, expiryMonths: 12.7 }).expiryMonths, 12);
+}
+
+// ---------- ترتيب حركات نفس الفاتورة (استبدال ثم اكتساب بفارق مللي ثانية) ----------
+{
+  const E2 = (id: string, at: string, points: number, extra: any = {}) => ({ id, at, customerId: 'c1', customerName: 'ع', type: points > 0 ? 'earn' : 'redeem', points, userName: 'u', ...extra });
+  const old = E2('old', '2026-01-01T00:00:00.000Z', 50, { expiresAt: '2026-06-01T00:00:00.000Z' });
+  const redeem = E2('r', '2026-05-01T00:00:00.000Z', -40);
+  const earn = E2('n', '2026-05-01T00:00:00.001Z', 18, { expiresAt: '2027-05-01T00:00:00.000Z' });
+  const an = analyzeLoyalty([earn, redeem, old] as any, '2026-05-02T00:00:00.000Z');         // الترتيب في المصفوفة لا يهم
+  assert.equal(an.available, 28);                                                            // 50-40+18
+  assert.equal(an.expiringWithin(40), 10);                                                   // المتبقي من القديمة فقط (الاستبدال لم يلمس الجديدة)
+}
+
+// ---------- ترتيب كارت الصنف وسطور السداد ----------
+import { compareMovements, timestampFromId } from '../src/utils/stockCardOrder.ts';
+import { paymentLines, isSplitInvoice } from '../src/utils/paymentLines.ts';
+{
+  const mv = (kind: any, date: string, doc: string, id?: string) => ({ date, kind, doc, ts: timestampFromId(id) });
+  const sorted = [
+    mv('sales_return', '2026-10-22', 'RET', 'ret-1761100005000'),
+    mv('sale', '2026-10-22', 'INV', 'inv-1761100000000'),
+    mv('purchase', '2026-10-22', 'PUR', 'pur-1761099000000'),
+    mv('sale', '2026-10-21', 'OLD'),
+    mv('sale', '2026-10-22', 'INV2', 'inv-1761100002000'),
+  ].sort(compareMovements).map(m => m.doc);
+  assert.deepEqual(sorted, ['OLD', 'PUR', 'INV', 'INV2', 'RET']);                             // البيع قبل مرتجعه، والأقدم أولاً
+  assert.equal(timestampFromId('inv-1761100000000'), 1761100000000);
+  assert.equal(timestampFromId('inv-12'), undefined);
+
+  const split = { paymentMethod: 'مختلط (دفع مقسّم)', grandTotal: 600, payments: [{ method: 'آجل (شكك / حساب ورشة)', amount: 300 }, { method: 'كاش (نقدي)', amount: 300 }] };
+  assert.deepEqual(paymentLines(split).map(p => [p.method, p.amount, p.isCredit]), [['آجل (شكك / حساب ورشة)', 300, true], ['كاش (نقدي)', 300, false]]);
+  assert.equal(isSplitInvoice(split), true);
+  const legacy = { paymentMethod: 'كاش (نقدي)', grandTotal: 120 };                           // فاتورة قديمة بلا payments
+  assert.deepEqual(paymentLines(legacy).map(p => [p.method, p.amount]), [['كاش (نقدي)', 120]]);
+  assert.equal(isSplitInvoice(legacy), false);
+}
 console.log('كل الاختبارات نجحت');
 
 // ---------- إلغاء فاتورة ----------

@@ -54,6 +54,7 @@ interface QuickPosViewProps {
   warehouses?: Warehouse[];    // المخازن/الفروع (لو فيه أكثر من مخزن يظهر اختيار مخزن البيع)
   stockLevels?: StockLevel[];
   loyalty?: LoyaltySettings;   // برنامج الولاء (غير ممرَّر أو مغلق = لا يظهر)
+  onAddCustomer?: (customer: Customer) => void; // إضافة عميل جديد من داخل الكاشير
   maxDiscountPercent?: number; // الحد الأقصى للخصم % (افتراضي 10)
   cashierName?: string;
   cashierId?: string;
@@ -85,6 +86,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   warehouses = [],
   stockLevels = [],
   loyalty,
+  onAddCustomer,
   maxDiscountPercent = 10,
   cashierName,
   cashierId,
@@ -118,6 +120,50 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const stockHere = (p: AutoPart): number => availableIn(p.stockQuantity, stockLevels, p.id, saleWarehouseId);
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
   const [redeemPoints, setRedeemPoints] = useState(0);
+
+  // إضافة عميل جديد من الكاشير
+  const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [newCustName, setNewCustName] = useState('');
+  const [newCustPhone, setNewCustPhone] = useState('');
+  const [newCustType, setNewCustType] = useState<Customer['type']>('عميل تجزئة');
+  const [newCustNote, setNewCustNote] = useState('');
+
+  const normText = (v: string) => v.replace(/[\s\u064B-\u065F]+/g, '').toLowerCase();
+  const normPhone = (v: string) => v.replace(/[^0-9]/g, '');
+
+  const handleQuickAddCustomer = () => {
+    const name = newCustName.trim();
+    if (!name || !onAddCustomer) return;
+    // منع التكرار: نفس الموبايل أو نفس الاسم => نختار العميل الموجود بدل إنشاء نسخة ثانية
+    const phone = normPhone(newCustPhone);
+    const existing = customers.find(
+      (c) => (phone.length >= 7 && normPhone(c.phone) === phone) || normText(c.name) === normText(name)
+    );
+    if (existing) {
+      setSelectedCustomerId(existing.id);
+      setCustomerPhoneInput(existing.phone || '');
+      setNewCustNote(`العميل «${existing.name}» موجود بالفعل — تم اختياره`);
+      return;
+    }
+    const created: Customer = {
+      id: `cust-${Date.now()}`,
+      name,
+      type: newCustType,
+      phone: newCustPhone.trim(),
+      balance: 0,
+      totalPurchases: 0,
+      monthlyPurchases: 0,
+      invoicesCount: 0,
+      lastVisit: new Date().toISOString().split('T')[0],
+    };
+    onAddCustomer(created);
+    setSelectedCustomerId(created.id);
+    setCustomerPhoneInput(created.phone);
+    setNewCustName('');
+    setNewCustPhone('');
+    setNewCustNote('');
+    setShowNewCustomer(false);
+  };
   const loyaltyCfg = resolveLoyalty(loyalty);
   useEffect(() => { setRedeemPoints(0); }, [selectedCustomerId, cart.length]);
   const [customerNameInput, setCustomerNameInput] = useState('زبون نقدي (قطاعي)');
@@ -598,7 +644,18 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
 
           <div className="py-3 space-y-2 border-b border-neutral-800/80">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-neutral-400 font-bold">الزبون / الورشة:</span>
+              <span className="text-neutral-400 font-bold flex items-center gap-2">
+                الزبون / الورشة:
+                {onAddCustomer && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowNewCustomer((v) => !v); setNewCustNote(''); }}
+                    className="text-[11px] font-bold text-amber-400 hover:text-amber-300"
+                  >
+                    {showNewCustomer ? 'إلغاء' : '+ عميل جديد'}
+                  </button>
+                )}
+              </span>
               <select
                 value={selectedCustomerId}
                 onChange={(e) => {
@@ -617,6 +674,46 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                 ))}
               </select>
             </div>
+
+            {showNewCustomer && onAddCustomer && (
+              <div className="p-2.5 rounded-xl bg-surface-1 border border-amber-500/40 space-y-2">
+                <input
+                  type="text"
+                  value={newCustName}
+                  onChange={(e) => { setNewCustName(e.target.value); setNewCustNote(''); }}
+                  placeholder="اسم العميل / الورشة *"
+                  className="w-full h-8 px-3 rounded-lg bg-surface-2 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    value={newCustPhone}
+                    onChange={(e) => { setNewCustPhone(e.target.value); setNewCustNote(''); }}
+                    placeholder="التليفون"
+                    className="h-8 px-3 rounded-lg bg-surface-2 border border-neutral-700 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none focus:border-amber-400"
+                  />
+                  <select
+                    value={newCustType}
+                    onChange={(e) => setNewCustType(e.target.value as Customer['type'])}
+                    className="h-8 px-2 rounded-lg bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none focus:border-amber-400"
+                  >
+                    <option value="عميل تجزئة">عميل تجزئة</option>
+                    <option value="ورشة فنية">ورشة فنية</option>
+                    <option value="أسطول شركات">أسطول شركات</option>
+                  </select>
+                </div>
+                {newCustNote && <div className="text-[11px] font-bold text-sky-300">{newCustNote}</div>}
+                <button
+                  type="button"
+                  onClick={handleQuickAddCustomer}
+                  disabled={!newCustName.trim()}
+                  className="w-full h-8 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-xs font-black"
+                >
+                  حفظ واختيار العميل
+                </button>
+              </div>
+            )}
 
             {selectedCustomerId === 'cash' ? (
               <input

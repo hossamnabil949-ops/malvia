@@ -51,7 +51,8 @@ import type { AuditEntry, StockMovement, InvoicePayment, Warehouse, StockLevel, 
 import { MAIN_WAREHOUSE_ID, normalizeWarehouseId, availableIn, adjustLevels, validateTransfer, applyTransfer, TransferError } from './utils/warehouseLogic';
 import { WarehousesView } from './components/WarehousesView';
 import { hasTabAccess, firstAllowedTab } from './utils/permissions';
-import { resolveLoyalty, earnedPoints, loyaltyAfterReturn } from './utils/loyaltyLogic';
+import { resolveLoyalty, earnedPoints, loyaltyAfterReturn, addMonths, availableBalances, pendingExpiryEntries } from './utils/loyaltyLogic';
+import type { LoyaltyEntry, LoyaltyEntryType } from './utils/loyaltyLogic';
 
 const SALE_ERROR_MESSAGES: Record<string, string> = {
   OUT_OF_STOCK: 'الكمية المطلوبة أكبر من الرصيد المتاح في المخزن',
@@ -129,6 +130,8 @@ export default function App() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [stockLevels, setStockLevels] = useState<StockLevel[]>([]);
   const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>([]);
+  const [loyaltyLedger, setLoyaltyLedger] = useState<LoyaltyEntry[]>([]);
+  const [loyaltyTick, setLoyaltyTick] = useState(0);
   const [shifts, setShifts] = useState<Shift[]>([]);
   // معرّفات حركات الخزنة المعروفة (المحمّلة) — أي حركة جديدة خارجها تُختم بوقتها ووردية الدرج
   const knownTreasuryIds = useRef<Set<string>>(new Set());
@@ -223,6 +226,7 @@ export default function App() {
     setWarehouses(data.warehouses || []);
     setStockLevels(data.stockLevels || []);
     setStockTransfers(data.stockTransfers || []);
+    setLoyaltyLedger(data.loyaltyLedger || []);
   }, []);
 
   useEffect(() => {
@@ -611,23 +615,101 @@ export default function App() {
 
   // Handlers for Invoices
   // ترجع true عند النجاح، و false لو رُفضت الفاتورة (رصيد غير كافٍ ...). لا يُخصم شيء عند الرفض.
-  // ---------- نقاط الولاء ----------
-  const adjustLoyalty = (customerId: string | undefined, delta: number) => {
-    if (!customerId || !delta) return;
+  const handleAddCustomer = (newCust: Customer) => {
     setCustomers(prev => {
-      if (!prev.some(c => c.id === customerId)) return prev;
-      const updated = prev.map(c => (c.id === customerId ? { ...c, loyaltyPoints: (c.loyaltyPoints || 0) + delta } : c));
+      const updated = [newCust, ...prev];
       persistChanges({ customers: updated });
       return updated;
     });
   };
 
+  // ---------- نقاط الولاء (دفتر حركات هو مصدر الرصيد) ----------
+  const appendLoyalty = (
+    customerId: string | undefined,
+    specs: { type: LoyaltyEntryType; points: number; refId?: string; refNumber?: string; note?: string; expires?: boolean }[]
+  ) => {
+    const cust = customerId ? customers.find(c => c.id === customerId) : undefined;
+    if (!customerId || !cust) return;
+    const cfg = resolveLoyalty(settings.loyalty);
+    const base = Date.now();
+    // فارق مللي ثانية بين حركات نفس العملية يضمن ترتيباً ثابتاً (الاستبدال قبل الاكتساب)
+    const entries: LoyaltyEntry[] = specs
+      .filter(s => s.points !== 0)
+      .map((s, i) => {
+        const at = new Date(base + i).toISOString();
+        return {
+          id: `LY-${base}-${i}-${Math.floor(Math.random() * 1000)}`,
+          at,
+          customerId,
+          customerName: cust.name,
+          type: s.type,
+          points: s.points,
+          refId: s.refId,
+          refNumber: s.refNumber,
+          note: s.note,
+          userName: currentUser?.employeeName || 'غير معروف',
+          expiresAt: s.expires && s.points > 0 && cfg.expiryMonths > 0 ? addMonths(at, cfg.expiryMonths) : undefined,
+        };
+      });
+    if (entries.length === 0) return;
+    setLoyaltyLedger(prev => {
+      const updated = [...entries, ...prev];
+      persistChanges({ loyaltyLedger: updated });
+      return updated;
+    });
+  };
+
   const handleAdjustLoyalty = (customerId: string, delta: number, reason: string) => {
+    if (effectiveRole !== 'مدير عام') {
+      window.alert('تعديل نقاط الولاء يدوياً متاح للمدير العام فقط.');
+      return;
+    }
     const cust = customers.find(c => c.id === customerId);
     if (!cust || !delta) return;
-    adjustLoyalty(customerId, delta);
+    appendLoyalty(customerId, [{ type: 'adjust', points: delta, note: reason, expires: true }]);
     logAudit('loyalty.adjust', `نقاط ${cust.name}: ${delta > 0 ? '+' : ''}${delta} (${reason})`, customerId, delta);
   };
+
+  // رصيد النقاط القابل للاستبدال لكل عميل (يستبعد المنتهي) — يُمرَّر للشاشات بدل الحقل القديم
+  const loyaltyAvailable = useMemo(
+    () => availableBalances(loyaltyLedger, new Date().toISOString()),
+    [loyaltyLedger, loyaltyTick]
+  );
+  const customersWithPoints = useMemo(
+    () => customers.map(c => ({ ...c, loyaltyPoints: loyaltyAvailable.get(c.id) ?? 0 })),
+    [customers, loyaltyAvailable]
+  );
+
+  useEffect(() => {
+    const t = setInterval(() => setLoyaltyTick(x => x + 1), 60 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // (1) ترحيل أرصدة النسخة القديمة إلى السجل مرة واحدة (رقم ثابت => لا يتكرر)
+  // (2) تسجيل انتهاء صلاحية الدفعات المستحقة (رقم وتاريخ ثابتان => آمن لو اشتغل جهازان معاً)
+  useEffect(() => {
+    if (!activeTenantId) return;
+    const nowISO = new Date().toISOString();
+    const have = new Set(loyaltyLedger.map(e => e.customerId));
+    const openings: LoyaltyEntry[] = customers
+      .filter(c => (c.loyaltyPoints || 0) > 0 && !have.has(c.id))
+      .map(c => ({
+        id: `LYO-${c.id}`, at: '2000-01-01T00:00:00.000Z', customerId: c.id, customerName: c.name, type: 'opening' as const,
+        points: Math.floor(c.loyaltyPoints || 0), note: 'رصيد قبل تفعيل سجل النقاط', userName: 'النظام',
+      }));
+    const expiries = pendingExpiryEntries([...openings, ...loyaltyLedger], nowISO);
+    const known = new Set(loyaltyLedger.map(e => e.id));
+    const adds = [...openings, ...expiries].filter(e => !known.has(e.id));
+    if (adds.length === 0) return;
+    setLoyaltyLedger(prev => {
+      const ids = new Set(prev.map(e => e.id));
+      const fresh = adds.filter(e => !ids.has(e.id));
+      if (fresh.length === 0) return prev;
+      const updated = [...fresh, ...prev];
+      persistChanges({ loyaltyLedger: updated });
+      return updated;
+    });
+  }, [customers, loyaltyLedger, loyaltyTick, activeTenantId]);
 
   // ---------- المخازن والفروع ----------
   // المخزن الرئيسي مشتق (الإجمالي - باقي المخازن)، فنحرّك فقط أرصدة المخازن غير الرئيسية.
@@ -711,7 +793,8 @@ export default function App() {
     const loyaltyCfg = resolveLoyalty(settings.loyalty);
     const loyaltyCustomer = invoice.customerId ? customers.find(c => c.id === invoice.customerId) : undefined;
     const redeemedPts = invoice.loyaltyRedeemedPoints || 0;
-    if (redeemedPts > 0 && (!loyaltyCfg.enabled || !loyaltyCustomer || (loyaltyCustomer.loyaltyPoints || 0) < redeemedPts)) {
+    const liveAvailable = invoice.customerId ? (availableBalances(loyaltyLedger, new Date().toISOString()).get(invoice.customerId) ?? 0) : 0;
+    if (redeemedPts > 0 && (!loyaltyCfg.enabled || !loyaltyCustomer || liveAvailable < redeemedPts)) {
       window.alert('تعذّر إتمام البيع: رصيد نقاط الولاء للعميل لا يكفي لهذا الاستبدال (ربما استُخدمت النقاط من جهاز آخر).');
       return false;
     }
@@ -752,7 +835,10 @@ export default function App() {
       items: invoice.items.map((it, i) => ({ ...it, partId: lines[i].partId })),
       loyaltyEarned: earnedPts > 0 ? earnedPts : undefined,
     };
-    adjustLoyalty(finalInvoice.customerId, earnedPts - redeemedPts);
+    appendLoyalty(finalInvoice.customerId, [
+      { type: 'redeem', points: -redeemedPts, refId: finalInvoice.id, refNumber: finalInvoice.invoiceNumber },
+      { type: 'earn', points: earnedPts, refId: finalInvoice.id, refNumber: finalInvoice.invoiceNumber, expires: true },
+    ]);
     setInvoices(prev => {
       const updated = [finalInvoice, ...prev];
       persistChanges({ invoices: updated });
@@ -875,7 +961,10 @@ export default function App() {
     });
     const fraction = plan.fraction;
     // عكس الولاء: تُسحب النقاط المتبقية من الفاتورة وتُرد النقاط المستبدلة
-    adjustLoyalty(inv.customerId, (inv.loyaltyRedeemedPoints || 0) - loyaltyAfterReturn(inv.loyaltyEarned || 0, inv.grandTotal, inv.returnedAmount || 0));
+    appendLoyalty(inv.customerId, [
+      { type: 'reverse_earn', points: -loyaltyAfterReturn(inv.loyaltyEarned || 0, inv.grandTotal, inv.returnedAmount || 0), refId: inv.id, refNumber: inv.invoiceNumber, note: cleanReason },
+      { type: 'reverse_redeem', points: inv.loyaltyRedeemedPoints || 0, refId: inv.id, refNumber: inv.invoiceNumber, note: cleanReason, expires: true },
+    ]);
 
     // 1) المخزون: إعادة الكميات المتبقية
     const moves: Parameters<typeof logStockMovements>[0] = [];
@@ -1010,7 +1099,7 @@ export default function App() {
       if (inv) {
         const before = loyaltyAfterReturn(inv.loyaltyEarned || 0, inv.grandTotal, inv.returnedAmount || 0);
         const after = loyaltyAfterReturn(inv.loyaltyEarned || 0, inv.grandTotal, (inv.returnedAmount || 0) + salesReturn.totalRefundAmount);
-        adjustLoyalty(inv.customerId, -(before - after));
+        appendLoyalty(inv.customerId, [{ type: 'return', points: -(before - after), refId: salesReturn.id, refNumber: salesReturn.returnNumber }]);
       }
     }
     logAudit('sales_return.create', `مرتجع مبيعات ${salesReturn.returnNumber || salesReturn.id} - ${salesReturn.customerName}`, salesReturn.id, -salesReturn.totalRefundAmount);
@@ -1110,7 +1199,7 @@ export default function App() {
         const cur = inv.returnedAmount || 0;
         const before = loyaltyAfterReturn(inv.loyaltyEarned || 0, inv.grandTotal, cur);
         const after = loyaltyAfterReturn(inv.loyaltyEarned || 0, inv.grandTotal, Math.max(0, cur - ret.totalRefundAmount));
-        adjustLoyalty(inv.customerId, after - before);
+        appendLoyalty(inv.customerId, [{ type: 'return_undo', points: after - before, refId: ret.id, refNumber: ret.returnNumber, expires: true }]);
       }
     }
     logAudit('sales_return.delete', `حذف مرتجع مبيعات ${ret.returnNumber || ret.id}`, ret.id, ret.totalRefundAmount);
@@ -1882,7 +1971,7 @@ export default function App() {
             carBrands={carBrands}
             onAddBrand={handleAddBrand}
             onRemoveBrand={handleRemoveBrand}
-            customers={customers}
+            customers={customersWithPoints}
             cart={cart}
             onAddToCart={handleAddToCart}
             onUpdateCartQuantity={handleUpdateCartQuantity}
@@ -1897,6 +1986,7 @@ export default function App() {
             warehouses={warehouses}
             stockLevels={stockLevels}
             loyalty={resolveLoyalty(settings.loyalty)}
+            onAddCustomer={handleAddCustomer}
             cashierName={currentUser?.employeeName}
             cashierId={currentUser?.employeeId}
             onOpenVoiceAssistant={() => setShowVoiceAssistant(true)}
@@ -1994,15 +2084,11 @@ export default function App() {
 
         {viewTab === 'customers' && (
           <CustomersView
-            customers={customers}
-            onAddCustomer={(newCust: Customer) => {
-              setCustomers(prev => {
-                const updated = [newCust, ...prev];
-                persistChanges({ customers: updated });
-                return updated;
-              });
-            }}
+            customers={customersWithPoints}
+            onAddCustomer={handleAddCustomer}
             loyaltyEnabled={resolveLoyalty(settings.loyalty).enabled}
+            canAdjustLoyalty={effectiveRole === 'مدير عام'}
+            loyaltyEntries={loyaltyLedger}
             onAdjustLoyalty={handleAdjustLoyalty}
             onUpdateCreditLimit={(customerId: string, limit: number) => {
               const cust = customers.find(c => c.id === customerId);

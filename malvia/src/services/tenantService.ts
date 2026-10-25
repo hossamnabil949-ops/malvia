@@ -46,6 +46,7 @@ import {
 } from '../data/autoPartsData';
 
 import { markDirty, SYNC_STATUS_EVENT } from './syncService';
+import type { LoyaltyEntry } from '../utils/loyaltyLogic';
 import { DEFAULT_PASSWORDS, hashPassword, isHashed, verifyPassword } from './passwordService';
 
 const LICENSES_KEY = 'malvia_tenant_licenses_v1';
@@ -196,6 +197,7 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     warehouses: loadResource<Warehouse[]>('warehouses', []),
     stockLevels: loadResource<StockLevel[]>('stockLevels', []),
     stockTransfers: loadResource<StockTransfer[]>('stockTransfers', []),
+    loyaltyLedger: loadResource<LoyaltyEntry[]>('loyaltyLedger', []),
   };
 }
 
@@ -224,6 +226,7 @@ export function saveTenantStoreData(
     warehouses?: Warehouse[];
     stockLevels?: StockLevel[];
     stockTransfers?: StockTransfer[];
+    loyaltyLedger?: LoyaltyEntry[];
   }
 ) {
   try {
@@ -264,6 +267,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     localStorage.setItem(getTenantKey(tenantId, 'warehouses'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'stockLevels'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'stockTransfers'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'loyaltyLedger'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'demo_cleared'), 'true');
 
     const rawEmps = localStorage.getItem(getTenantKey(tenantId, 'employees'));
@@ -271,7 +275,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     const ownerAccount = empsList.find(e => e.role === 'مدير عام' || e.username === 'admin') || INITIAL_EMPLOYEES[0];
     const cleanedStaff = [ownerAccount];
     localStorage.setItem(getTenantKey(tenantId, 'employees'), JSON.stringify(cleanedStaff));
-    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers']);
+    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers','loyaltyLedger']);
 
     return cleanedStaff;
   } catch (err) {

@@ -135,6 +135,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [loyEgpPerPoint, setLoyEgpPerPoint] = useState(String(resolveLoyalty(settings.loyalty).egpPerPoint));
   const [loyPointValue, setLoyPointValue] = useState(String(resolveLoyalty(settings.loyalty).pointValueEgp));
   const [loyMin, setLoyMin] = useState(String(resolveLoyalty(settings.loyalty).minRedeemPoints));
+  const [loyExpiry, setLoyExpiry] = useState(String(resolveLoyalty(settings.loyalty).expiryMonths));
   const [loySaved, setLoySaved] = useState(false);
   const handleSaveLoyalty = () => {
     const cfg = resolveLoyalty({
@@ -142,11 +143,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       egpPerPoint: Number(loyEgpPerPoint),
       pointValueEgp: Number(loyPointValue),
       minRedeemPoints: Number(loyMin),
+      expiryMonths: Number(loyExpiry),
     });
     onUpdateSettings({ ...settings, loyalty: cfg });
     setLoyEgpPerPoint(String(cfg.egpPerPoint));
     setLoyPointValue(String(cfg.pointValueEgp));
     setLoyMin(String(cfg.minRedeemPoints));
+    setLoyExpiry(String(cfg.expiryMonths));
     setLoySaved(true);
     setTimeout(() => setLoySaved(false), 3000);
   };
@@ -425,7 +428,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 تفعيل
               </label>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
               <div>
                 <label className="block text-neutral-300 font-bold mb-1">كل كم جنيه = نقطة؟</label>
                 <input type="number" min="1" step="any" value={loyEgpPerPoint} onChange={(e) => setLoyEgpPerPoint(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono" />
@@ -438,11 +441,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <label className="block text-neutral-300 font-bold mb-1">أقل نقاط للاستبدال</label>
                 <input type="number" min="1" step="1" value={loyMin} onChange={(e) => setLoyMin(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono" />
               </div>
+              <div>
+                <label className="block text-neutral-300 font-bold mb-1">صلاحية النقاط (بالشهور)</label>
+                <input type="number" min="0" step="1" value={loyExpiry} onChange={(e) => setLoyExpiry(e.target.value)} placeholder="0 = بدون انتهاء" className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono" />
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <button type="button" onClick={handleSaveLoyalty} className="h-9 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-black">حفظ إعدادات الولاء</button>
               {loySaved && <span className="text-xs font-bold text-emerald-400">تم الحفظ</span>}
-              <span className="text-[11px] text-neutral-500">مثال: 1 نقطة لكل 10 ج.م، والنقطة بنصف جنيه ≈ 5% مكافأة.</span>
+              <span className="text-[11px] text-neutral-500">مثال: 1 نقطة لكل 10 ج.م، والنقطة بنصف جنيه ≈ 5% مكافأة. الصلاحية تسري على النقاط الجديدة فقط (0 = بدون انتهاء).</span>
             </div>
           </div>
 

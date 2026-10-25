@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { paymentLines } from '../utils/paymentLines';
 import { Invoice, ShopSettings } from '../types/autoParts';
 
 interface InvoiceDetailModalProps {
@@ -74,7 +75,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
   const handleShareWhatsApp = () => {
     const text = encodeURIComponent(
-      `مرحباً ${invoice.customerName}،\nإليك تفاصيل فاتورتك من ${settings.shopName || 'المحل'}:\nرقم الفاتورة: ${invoice.invoiceNumber}\nالتاريخ: ${invoice.date}\nالإجمالي: ${invoice.grandTotal.toFixed(2)} ج.م\nطريقة السداد: ${invoice.paymentMethod}\nشكراً لتعاملكم معنا!`
+      `مرحباً ${invoice.customerName}،\nإليك تفاصيل فاتورتك من ${settings.shopName || 'المحل'}:\nرقم الفاتورة: ${invoice.invoiceNumber}\nالتاريخ: ${invoice.date}\nالإجمالي: ${invoice.grandTotal.toFixed(2)} ج.م\n${paymentLines(invoice).length > 1 ? 'السداد:\n' + paymentLines(invoice).map(p => `- ${p.method}: ${p.amount.toFixed(2)} ج.م`).join('\n') : 'طريقة السداد: ' + invoice.paymentMethod}\nشكراً لتعاملكم معنا!`
     );
     const phone = invoice.customerPhone ? invoice.customerPhone.replace(/[^0-9]/g, '') : '';
     const url = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`;
@@ -213,10 +214,25 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 <span className="text-neutral-800 font-medium">{invoice.carDetails}</span>
               </div>
             )}
-            <div className="flex justify-between">
-              <span className="text-neutral-500">طريقة السداد:</span>
-              <span className="font-bold text-neutral-900">{invoice.paymentMethod}</span>
-            </div>
+            {paymentLines(invoice).length > 1 ? (
+              <div className="space-y-1">
+                <span className="text-neutral-500 block">طريقة السداد (دفع مقسّم):</span>
+                {paymentLines(invoice).map((p, i) => (
+                  <div key={i} className="flex justify-between pr-3">
+                    <span className="font-bold text-neutral-900">
+                      {p.method}
+                      {p.isCredit && <span className="mr-1 text-[10px] font-normal text-amber-700">(يُضاف على حساب العميل)</span>}
+                    </span>
+                    <span className="font-mono font-bold text-neutral-900">{p.amount.toFixed(2)} ج.م</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex justify-between">
+                <span className="text-neutral-500">طريقة السداد:</span>
+                <span className="font-bold text-neutral-900">{invoice.paymentMethod}</span>
+              </div>
+            )}
           </div>
 
           <div className="py-3 border-b border-neutral-200">
