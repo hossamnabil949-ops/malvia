@@ -329,7 +329,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         {
           allowBelowCost: false, // سياسة المحل: لا بيع بأقل من التكلفة لأي مستخدم
           customerId: hasCredit ? (selectedCustomerId !== 'cash' ? selectedCustomerId : hasNewName ? 'new' : undefined) : undefined,
-          customerBalance: selectedCustomer?.balance ?? 0,
+          customerBalance: (selectedCustomer?.balance ?? 0) + (selectedCustomer?.chequesPending ?? 0),
           customerCreditLimit: selectedCustomer?.creditLimit ?? 0,
         }
       );
@@ -735,7 +735,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               <div className="p-2 rounded-lg bg-surface-1 text-[11px] text-sky-300 flex justify-between">
                 <span>حد الائتمان / المتاح:</span>
                 <span className="font-bold font-mono">
-                  {(selectedCustomer.creditLimit as number).toLocaleString()} / {Math.max(0, (selectedCustomer.creditLimit as number) - Math.max(0, selectedCustomer.balance)).toLocaleString()} ج.م
+                  {(selectedCustomer.creditLimit as number).toLocaleString()} / {Math.max(0, (selectedCustomer.creditLimit as number) - Math.max(0, selectedCustomer.balance) - (selectedCustomer.chequesPending ?? 0)).toLocaleString()} ج.م
                 </span>
               </div>
             )}

@@ -28,6 +28,8 @@ interface NotificationsModalProps {
   onUpdateStock: (partId: string, addedStock: number) => void;
   onQuickSalePart: (part: AutoPart) => void;
   onNavigateToInventory: () => void;
+  chequesAttention?: { count: number; overdue: number };  // شيكات تستحق خلال 3 أيام أو متأخرة
+  onNavigateToCheques?: () => void;
 }
 
 export const NotificationsModal: React.FC<NotificationsModalProps> = ({
@@ -37,6 +39,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   onUpdateStock,
   onQuickSalePart,
   onNavigateToInventory,
+  chequesAttention,
+  onNavigateToCheques,
 }) => {
   const [activeFilter, setActiveFilter] = useState<'all' | 'out' | 'critical'>('all');
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
@@ -185,6 +189,18 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
             </button>
           </div>
         </div>
+
+        {chequesAttention && chequesAttention.count > 0 && onNavigateToCheques && !showPrintView && (
+          <div className="px-5 sm:px-6 py-3 border-b border-neutral-800 bg-indigo-500/10 flex items-center justify-between gap-3">
+            <div className="text-xs font-bold text-indigo-200">
+              {chequesAttention.count} شيك يستحق خلال 3 أيام أو متأخر
+              {chequesAttention.overdue > 0 && <span className="text-rose-300"> (منها {chequesAttention.overdue} متأخر)</span>}
+            </div>
+            <button type="button" onClick={onNavigateToCheques} className="px-3 h-8 rounded-xl bg-indigo-500/25 hover:bg-indigo-500/40 text-indigo-100 text-xs font-bold">
+              فتح الشيكات
+            </button>
+          </div>
+        )}
 
         {showPrintView ? (
           <div className="flex-1 overflow-y-auto p-6 space-y-6 paper bg-white text-neutral-900 font-sans">

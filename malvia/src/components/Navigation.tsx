@@ -27,6 +27,7 @@ import {
   ClipboardCheck,
   Wallet,
   Warehouse,
+  Landmark,
   type LucideIcon,
 } from 'lucide-react';
 import { UserSession } from '../types/autoParts';
@@ -37,6 +38,7 @@ export type ActiveTab =
   | 'shifts'
   | 'inventory'
   | 'warehouses'
+  | 'cheques'
   | 'invoices'
   | 'purchases'
   | 'suppliers'
@@ -103,6 +105,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'المالية والتقارير',
     items: [
       { id: 'finance', label: 'المالية والخزينة', icon: DollarSign },
+      { id: 'cheques', label: 'الشيكات', icon: Landmark },
       { id: 'reports', label: 'التقارير الشاملة', icon: TrendingUp },
     ],
   },

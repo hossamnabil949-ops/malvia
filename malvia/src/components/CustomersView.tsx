@@ -427,12 +427,18 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     {c.balance < 0 ? `رصيد له: ${Math.abs(c.balance).toLocaleString()}` : c.balance.toLocaleString()} ج.م
                   </span>
                 </div>
+                {(c.chequesPending ?? 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-neutral-400">شيكات واردة تحت التحصيل:</span>
+                    <span className="font-mono font-bold text-indigo-300">{(c.chequesPending ?? 0).toLocaleString()} ج.م</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center">
                   <span className="text-neutral-400">حد الائتمان:</span>
                   <span className="flex items-center gap-2">
                     <span className="font-mono font-bold text-sky-300">
                       {c.creditLimit && c.creditLimit > 0
-                        ? `${c.creditLimit.toLocaleString()} ج.م (المتاح ${Math.max(0, c.creditLimit - Math.max(0, c.balance)).toLocaleString()})`
+                        ? `${c.creditLimit.toLocaleString()} ج.م (المتاح ${Math.max(0, c.creditLimit - Math.max(0, c.balance) - (c.chequesPending ?? 0)).toLocaleString()})`
                         : 'غير محدود'}
                     </span>
                     {onUpdateCreditLimit && (

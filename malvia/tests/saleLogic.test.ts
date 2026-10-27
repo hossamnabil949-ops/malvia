@@ -204,6 +204,87 @@ import { paymentLines, isSplitInvoice } from '../src/utils/paymentLines.ts';
   assert.deepEqual(paymentLines(legacy).map(p => [p.method, p.amount]), [['كاش (نقدي)', 120]]);
   assert.equal(isSplitInvoice(legacy), false);
 }
+
+// ---------- الشيكات ----------
+import { availableActions, nextStatus, registrationEffect, actionEffect, applyAction, validateCheque, dueState, summarize, pendingIncomingByCustomer, attentionCount, initialStatus } from '../src/utils/chequeLogic.ts';
+{
+  const mk = (over: any = {}) => ({
+    id: 'ch1', number: '1001', direction: 'incoming', status: 'في الحافظة', amount: 1000, bankName: 'CIB', dueDate: '2026-11-10', receivedDate: '2026-10-24',
+    partyType: 'customer', partyId: 'c1', partyName: 'ورشة', createdBy: 'u', createdAt: '2026-10-24T10:00:00.000Z', history: [], ...over,
+  });
+  // مسارات الحالة
+  assert.deepEqual(availableActions(mk()), ['deposit', 'clear', 'bounce', 'cancel']);
+  assert.deepEqual(availableActions(mk({ status: 'مودع بالبنك' })), ['clear', 'bounce']);
+  assert.deepEqual(availableActions(mk({ status: 'محصّل' })), []);
+  assert.deepEqual(availableActions(mk({ status: 'مرتد' })), []);
+  assert.deepEqual(availableActions(mk({ direction: 'outgoing', status: 'صادر' })), ['clear', 'bounce', 'cancel']);
+  assert.equal(nextStatus(mk({ status: 'مودع بالبنك' }), 'deposit'), null);              // لا إيداع مرتين
+  assert.equal(nextStatus(mk({ status: 'مودع بالبنك' }), 'cancel'), null);               // بعد الإيداع لا إلغاء
+  assert.equal(nextStatus(mk({ direction: 'outgoing', status: 'صادر' }), 'clear'), 'مصروف');
+  assert.equal(applyAction(mk({ status: 'محصّل' }), 'bounce', 'u', '2026-11-11T00:00:00.000Z'), null); // المحصّل لا يرتد
+  assert.equal(initialStatus('incoming'), 'في الحافظة'); assert.equal(initialStatus('outgoing'), 'صادر');
+  const dep = applyAction(mk(), 'deposit', 'أحمد', '2026-11-01T09:00:00.000Z', ' إيداع صباحي ')!;
+  assert.equal(dep.status, 'مودع بالبنك'); assert.equal(dep.history.length, 1); assert.equal(dep.history[0].note, 'إيداع صباحي');
+
+  // واردة: العميل مديون 1500 والشيك 1000 => يُخصم 1000 ثم يعود عند الارتداد
+  let r = registrationEffect('incoming', 1000, { balance: 1500 });
+  assert.equal(r.effect.customerBalanceDelta, -1000); assert.equal(r.applied.appliedAmount, 1000);
+  const incoming = mk({ appliedAmount: 1000 });
+  assert.equal(actionEffect(incoming, 'bounce').customerBalanceDelta, 1000);
+  assert.equal(actionEffect(incoming, 'cancel').customerBalanceDelta, 1000);
+  assert.deepEqual(actionEffect(incoming, 'clear').treasury, { type: 'قبض', amount: 1000, category: 'تحصيل من عميل / ورشة' });
+  assert.equal(actionEffect(incoming, 'clear').customerBalanceDelta, 0);                  // التحصيل لا يمس الحساب ثانية
+  assert.equal(actionEffect(incoming, 'deposit').treasury, undefined);
+  // شيك أكبر من المديونية: يُخصم المتاح فقط ويعود نفس المخصوم (لا تضخيم عند الارتداد)
+  r = registrationEffect('incoming', 1000, { balance: 300 });
+  assert.equal(r.applied.appliedAmount, 300);
+  assert.equal(actionEffect(mk({ appliedAmount: 300 }), 'bounce').customerBalanceDelta, 300);
+  r = registrationEffect('incoming', 1000, { balance: 0 });
+  assert.equal(r.applied.appliedAmount, 0);
+
+  // صادرة: مستحقات المورد 700 والشيك 1000 => خصم 700 + رصيد دائن 300، والعكس عند الارتداد
+  const o = registrationEffect('outgoing', 1000, { balance: 700, deferredDebt: 700 });
+  assert.deepEqual(o.effect.supplier, { debtDelta: -700, creditDelta: 300, paidDelta: 1000 });
+  const outgoing = mk({ direction: 'outgoing', status: 'صادر', partyType: 'supplier', appliedDebt: 700, appliedCredit: 300 });
+  assert.deepEqual(actionEffect(outgoing, 'bounce').supplier, { debtDelta: 700, creditDelta: -300, paidDelta: -1000 });
+  assert.deepEqual(actionEffect(outgoing, 'clear').treasury, { type: 'صرف', amount: 1000, category: 'سداد دفعة لمورد' });
+  assert.equal(actionEffect(outgoing, 'clear').supplier, undefined);
+
+  // التحقق من الإدخال
+  const base = { number: '1001', amount: 500, dueDate: '2026-11-10', partyId: 'c1', bankName: 'CIB', direction: 'incoming' as const };
+  assert.equal(validateCheque(base, []), null);
+  assert.equal(validateCheque({ ...base, number: ' ' }, []), 'NUMBER_REQUIRED');
+  assert.equal(validateCheque({ ...base, amount: 0 }, []), 'AMOUNT_INVALID');
+  assert.equal(validateCheque({ ...base, dueDate: '10/11/2026' }, []), 'DUE_DATE_INVALID');
+  assert.equal(validateCheque({ ...base, partyId: '' }, []), 'PARTY_REQUIRED');
+  assert.equal(validateCheque({ ...base, bankName: '' }, []), 'BANK_REQUIRED');
+  assert.equal(validateCheque(base, [mk()]), 'DUPLICATE');
+  assert.equal(validateCheque({ ...base, number: '10 01', bankName: 'cib' }, [mk()]), 'DUPLICATE');       // تجاهل المسافات والحروف
+  assert.equal(validateCheque(base, [mk({ status: 'ملغي' })]), null);                                     // الملغي لا يمنع إعادة الإدخال
+  assert.equal(validateCheque({ ...base, direction: 'outgoing' }, [mk()]), null);                         // اتجاه مختلف
+
+  // الاستحقاق والملخصات (اليوم 2026-10-24)
+  const today = '2026-10-24';
+  assert.equal(dueState(mk({ dueDate: '2026-10-23' }), today), 'overdue');
+  assert.equal(dueState(mk({ dueDate: '2026-10-24' }), today), 'due_soon');                               // يستحق اليوم ليس متأخراً
+  assert.equal(dueState(mk({ dueDate: '2026-10-31' }), today), 'due_soon');
+  assert.equal(dueState(mk({ dueDate: '2026-11-01' }), today), 'upcoming');
+  assert.equal(dueState(mk({ dueDate: '2026-10-01', status: 'محصّل' }), today), 'closed');
+  const all = [
+    mk({ id: 'a', amount: 100, dueDate: '2026-10-20' }),                                                   // متأخر
+    mk({ id: 'b', amount: 200, dueDate: '2026-10-26', status: 'مودع بالبنك' }),                            // قريب
+    mk({ id: 'c', amount: 400, dueDate: '2026-12-01' }),                                                   // لاحق
+    mk({ id: 'd', amount: 50, status: 'محصّل' }),
+    mk({ id: 'e', amount: 70, status: 'مرتد' }),
+    mk({ id: 'f', amount: 999, direction: 'outgoing', status: 'صادر', partyType: 'supplier', dueDate: '2026-10-25' }),
+  ];
+  const s = summarize(all as any, 'incoming', today);
+  assert.deepEqual([s.pending.count, s.pending.amount, s.overdue.amount, s.dueSoon.amount, s.bounced.amount], [3, 700, 100, 200, 70]);
+  assert.equal(summarize(all as any, 'outgoing', today).dueSoon.amount, 999);
+  assert.equal(attentionCount(all as any, today, 3), 3);                                                   // a متأخر + b + f خلال 3 أيام
+  const exposure = pendingIncomingByCustomer([mk({ appliedAmount: 300 }), mk({ id: 'z', appliedAmount: 200 }), mk({ id: 'y', status: 'محصّل', appliedAmount: 900 })] as any);
+  assert.equal(exposure.get('c1'), 500);                                                                   // المفتوحة فقط
+}
 console.log('كل الاختبارات نجحت');
 
 // ---------- إلغاء فاتورة ----------

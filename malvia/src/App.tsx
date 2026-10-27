@@ -53,6 +53,11 @@ import { WarehousesView } from './components/WarehousesView';
 import { hasTabAccess, firstAllowedTab } from './utils/permissions';
 import { resolveLoyalty, earnedPoints, loyaltyAfterReturn, addMonths, availableBalances, pendingExpiryEntries } from './utils/loyaltyLogic';
 import type { LoyaltyEntry, LoyaltyEntryType } from './utils/loyaltyLogic';
+import { ChequesView, NewChequeInput } from './components/ChequesView';
+import {
+  Cheque, ChequeAction, ChequeEffect, ChequeError, CHEQUE_PAYMENT_METHOD, ACTION_LABEL as CHEQUE_ACTION_LABEL, clearLabel as chequeClearLabel,
+  registrationEffect, actionEffect, applyAction, validateCheque, initialStatus, pendingIncomingByCustomer, attentionCount, dueState,
+} from './utils/chequeLogic';
 
 const SALE_ERROR_MESSAGES: Record<string, string> = {
   OUT_OF_STOCK: 'الكمية المطلوبة أكبر من الرصيد المتاح في المخزن',
@@ -132,6 +137,7 @@ export default function App() {
   const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>([]);
   const [loyaltyLedger, setLoyaltyLedger] = useState<LoyaltyEntry[]>([]);
   const [loyaltyTick, setLoyaltyTick] = useState(0);
+  const [cheques, setCheques] = useState<Cheque[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   // معرّفات حركات الخزنة المعروفة (المحمّلة) — أي حركة جديدة خارجها تُختم بوقتها ووردية الدرج
   const knownTreasuryIds = useRef<Set<string>>(new Set());
@@ -227,6 +233,7 @@ export default function App() {
     setStockLevels(data.stockLevels || []);
     setStockTransfers(data.stockTransfers || []);
     setLoyaltyLedger(data.loyaltyLedger || []);
+    setCheques(data.cheques || []);
   }, []);
 
   useEffect(() => {
@@ -675,9 +682,10 @@ export default function App() {
     () => availableBalances(loyaltyLedger, new Date().toISOString()),
     [loyaltyLedger, loyaltyTick]
   );
+  const chequesExposure = useMemo(() => pendingIncomingByCustomer(cheques), [cheques]);
   const customersWithPoints = useMemo(
-    () => customers.map(c => ({ ...c, loyaltyPoints: loyaltyAvailable.get(c.id) ?? 0 })),
-    [customers, loyaltyAvailable]
+    () => customers.map(c => ({ ...c, loyaltyPoints: loyaltyAvailable.get(c.id) ?? 0, chequesPending: chequesExposure.get(c.id) ?? 0 })),
+    [customers, loyaltyAvailable, chequesExposure]
   );
 
   useEffect(() => {
@@ -710,6 +718,119 @@ export default function App() {
       return updated;
     });
   }, [customers, loyaltyLedger, loyaltyTick, activeTenantId]);
+
+  // ---------- الشيكات ----------
+  // يطبّق أثر الشيك على حساب العميل/المورد. التسجيل يخصم من الحساب، والارتداد/الإلغاء يعيده كما كان.
+  const applyChequeEffectToParty = (cheque: Cheque, effect: ChequeEffect, isRegistration: boolean) => {
+    if (cheque.partyType === 'customer' && effect.customerBalanceDelta) {
+      setCustomers(prev => {
+        const updated = prev.map(c => (c.id === cheque.partyId ? { ...c, balance: Math.max(0, c.balance + effect.customerBalanceDelta) } : c));
+        persistChanges({ customers: updated });
+        return updated;
+      });
+    }
+    if (effect.supplier) {
+      const sp = effect.supplier;
+      setSuppliers(prev => {
+        const updated = prev.map(s => {
+          if (s.id !== cheque.partyId) return s;
+          const debt = s.deferredDebt ?? s.balance ?? 0;
+          const newDebt = Math.max(0, debt + sp.debtDelta);
+          return {
+            ...s,
+            balance: newDebt,
+            deferredDebt: newDebt,
+            storeCredit: Math.max(0, (s.storeCredit || 0) + sp.creditDelta),
+            totalPaid: Math.max(0, (s.totalPaid || 0) + sp.paidDelta),
+            ...(isRegistration ? { lastPaymentDate: todayISO() } : {}),
+          };
+        });
+        persistChanges({ suppliers: updated });
+        return updated;
+      });
+    }
+  };
+
+  const handleAddCheque = (input: NewChequeInput): { ok: boolean; error?: ChequeError } => {
+    const err = validateCheque(
+      { number: input.number, amount: input.amount, dueDate: input.dueDate, partyId: input.partyId, bankName: input.bankName, direction: input.direction },
+      cheques
+    );
+    if (err) return { ok: false, error: err };
+    const isIncoming = input.direction === 'incoming';
+    const party = isIncoming ? customers.find(c => c.id === input.partyId) : suppliers.find(s => s.id === input.partyId);
+    if (!party) return { ok: false, error: 'PARTY_REQUIRED' };
+    const { effect, applied } = registrationEffect(input.direction, input.amount, party as { balance: number; deferredDebt?: number });
+    const nowISO = new Date().toISOString();
+    const by = currentUser?.employeeName || 'غير معروف';
+    const cheque: Cheque = {
+      id: `CHQ-${Date.now()}`,
+      number: input.number,
+      direction: input.direction,
+      status: initialStatus(input.direction),
+      amount: input.amount,
+      bankName: input.bankName,
+      dueDate: input.dueDate,
+      receivedDate: input.receivedDate || todayISO(),
+      partyType: isIncoming ? 'customer' : 'supplier',
+      partyId: input.partyId,
+      partyName: party.name,
+      drawerName: input.drawerName,
+      notes: input.notes,
+      createdBy: by,
+      createdAt: nowISO,
+      ...applied,
+      history: [{ at: nowISO, status: initialStatus(input.direction), by, note: 'تسجيل الشيك' }],
+    };
+    applyChequeEffectToParty(cheque, effect, true);
+    setCheques(prev => {
+      const updated = [cheque, ...prev];
+      persistChanges({ cheques: updated });
+      return updated;
+    });
+    logAudit('cheque.create', `تسجيل شيك ${isIncoming ? 'وارد' : 'صادر'} رقم ${cheque.number} بمبلغ ${cheque.amount} (${party.name})`, cheque.id, cheque.amount);
+    return { ok: true };
+  };
+
+  const handleChequeAction = (id: string, action: ChequeAction, note?: string): { ok: boolean; message?: string } => {
+    const cur = cheques.find(c => c.id === id);
+    if (!cur) return { ok: false, message: 'الشيك غير موجود' };
+    const by = currentUser?.employeeName || 'غير معروف';
+    const updated = applyAction(cur, action, by, new Date().toISOString(), note);
+    if (!updated) return { ok: false, message: 'هذا الإجراء غير مسموح في حالة الشيك الحالية (ربما تغيّرت من جهاز آخر)' };
+    const effect = actionEffect(cur, action);
+    applyChequeEffectToParty(cur, effect, false);
+    if (effect.treasury) {
+      const t = effect.treasury;
+      const tx: TreasuryTransaction = {
+        id: `TX-CHQ-${Date.now()}`,
+        txNumber: `TX-Q-${Math.floor(1000 + Math.random() * 9000)}`,
+        date: todayISO(),
+        time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        type: t.type,
+        category: t.category,
+        amount: t.amount,
+        paymentMethod: CHEQUE_PAYMENT_METHOD,
+        balanceAfter: treasuryBalance + (t.type === 'قبض' ? t.amount : -t.amount),
+        referenceId: cur.id,
+        description: `${cur.direction === 'incoming' ? 'تحصيل شيك' : 'صرف شيك'} رقم ${cur.number} (${cur.partyName})`,
+        recordedBy: by,
+      };
+      setTreasury(prev => {
+        const list = [tx, ...prev];
+        persistChanges({ treasuryTransactions: list });
+        return list;
+      });
+    }
+    setCheques(prev => {
+      const list = prev.map(c => (c.id === id ? updated : c));
+      persistChanges({ cheques: list });
+      return list;
+    });
+    const label = action === 'clear' ? chequeClearLabel(cur.direction) : CHEQUE_ACTION_LABEL[action];
+    logAudit('cheque.action', `${label}: شيك ${cur.number} (${cur.partyName}) ${cur.amount} ج.م`, cur.id, cur.amount);
+    return { ok: true, message: `${label} — شيك ${cur.number}` };
+  };
 
   // ---------- المخازن والفروع ----------
   // المخزن الرئيسي مشتق (الإجمالي - باقي المخازن)، فنحرّك فقط أرصدة المخازن غير الرئيسية.
@@ -1784,8 +1905,9 @@ export default function App() {
   const activeNotificationsCount = useMemo(() => {
     const lowStockCount = parts.filter(p => p.stockQuantity <= p.minAlertStock).length;
     const unresolvedErrors = inventoryErrors.filter(e => !e.isCorrected).length;
-    return lowStockCount + unresolvedErrors;
-  }, [parts, inventoryErrors]);
+    const chequeAlerts = canAccessTab('cheques') ? attentionCount(cheques, todayISO(), 3) : 0; // يظهر فقط لمن يملك صلاحية الشيكات
+    return lowStockCount + unresolvedErrors + chequeAlerts;
+  }, [parts, inventoryErrors, cheques, effectiveRole, effectivePermissions]);
 
   // Auth / Login Handler
   const handleLoginSuccess = (session: UserSession, tenant: TenantLicense, emps: Employee[]) => {
@@ -2006,6 +2128,16 @@ export default function App() {
             canManage={currentUser?.role === 'مدير عام' || Boolean(currentUser?.permissions?.canManageInventory)}
             onSaveWarehouse={handleSaveWarehouse}
             onTransfer={handleCreateTransfer}
+          />
+        )}
+
+        {viewTab === 'cheques' && (
+          <ChequesView
+            cheques={cheques}
+            customers={customers}
+            suppliers={suppliers}
+            onAdd={handleAddCheque}
+            onAction={handleChequeAction}
           />
         )}
 
@@ -2372,6 +2504,14 @@ export default function App() {
           }}
           onNavigateToInventory={() => {
             setCurrentTab('inventory');
+            setShowNotifications(false);
+          }}
+          chequesAttention={canAccessTab('cheques') ? {
+            count: attentionCount(cheques, todayISO(), 3),
+            overdue: cheques.filter(c => dueState(c, todayISO(), 3) === 'overdue').length,
+          } : undefined}
+          onNavigateToCheques={() => {
+            setCurrentTab('cheques');
             setShowNotifications(false);
           }}
         />

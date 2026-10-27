@@ -16,12 +16,13 @@ export const TAB_ACCESS: Record<string, PermKey[]> = {
   suppliers: ['canManagePurchases', 'canManageTreasury'],
   customers: ['canSellPos', 'canManageTreasury'],
   finance: ['canManageTreasury', 'canManagePartners'],
+  cheques: ['canManageTreasury'],
   reports: ['canViewReports'],
   settings: ['canManageSettings'],
 };
 
 /** ترتيب اختيار أول شاشة مسموحة عند التحويل من شاشة ممنوعة. */
-export const TAB_ORDER = ['dashboard', 'pos', 'shifts', 'invoices', 'customers', 'inventory', 'warehouses', 'purchases', 'suppliers', 'finance', 'reports', 'settings'];
+export const TAB_ORDER = ['dashboard', 'pos', 'shifts', 'invoices', 'customers', 'inventory', 'warehouses', 'purchases', 'suppliers', 'finance', 'cheques', 'reports', 'settings'];
 
 export function hasTabAccess(role: string | undefined, permissions: Partial<EmployeePermissions> | undefined, tab: string): boolean {
   if (role === OWNER_ROLE) return true;

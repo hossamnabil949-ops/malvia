@@ -139,7 +139,7 @@ export type AuditAction =
   | 'invoice.create' | 'invoice.price_override' | 'invoice.discount' | 'invoice.void'
   | 'sales_return.create' | 'sales_return.delete'
   | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
-  | 'stock.adjust' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'stock.transfer' | 'supplier.payment'
+  | 'stock.adjust' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'cheque.create' | 'cheque.action' | 'stock.transfer' | 'supplier.payment'
   | 'shift.open' | 'shift.close' | 'shift.variance';
 
 export interface AuditEntry {
@@ -218,6 +218,7 @@ export interface Customer {
   lastVisit: string;
   creditLimit?: number; // حد الائتمان (ج.م) — 0 أو بدون قيمة = غير محدود
   loyaltyPoints?: number; // رصيد نقاط الولاء (يُدمج بالفرق على السحابة)
+  chequesPending?: number; // (محسوب وغير محفوظ) شيكات واردة مفتوحة تُحتسب ضمن مخاطر الائتمان
 }
 
 export type ExpenseCategory = 
