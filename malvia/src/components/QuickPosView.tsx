@@ -38,6 +38,8 @@ import { LoyaltySettings, resolveLoyalty, earnedPoints, pointsValue, maxRedeemab
 import { verifyOwnerPassword } from '../services/approvalService';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
 import { BrandBar } from './BrandBar';
+import { BarcodeScanButton, useBarcodeWedge } from './BarcodeScanner';
+import { beep, findPartByBarcode } from '../utils/barcodeLookup';
 
 interface QuickPosViewProps {
   parts: AutoPart[];
@@ -266,6 +268,19 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const [splitMethod, setSplitMethod] = useState<string>('فيزا / بطاقة بنكية');
   const [splitAmount, setSplitAmount] = useState<string>('');
   const [saleError, setSaleError] = useState<string>('');
+  // مسح الباركود (كاميرا أو قارئ USB): كل مسحة تضيف القطعة للسلة
+  const [scanStatus, setScanStatus] = useState('');
+  const handleBarcodeScan = (code: string) => {
+    const part = findPartByBarcode(parts, code);
+    if (!part) { beep(false); setScanStatus(`❌ الكود ${code} غير مسجّل`); setSaleError(`الباركود ${code} غير مسجّل لأي قطعة`); return; }
+    if (stockHere(part) <= 0) { beep(false); setScanStatus(`⚠️ ${part.name} — نفد من المخزن`); setSaleError(`«${part.name}» رصيده صفر في المخزن المختار`); return; }
+    beep(true);
+    setSaleError('');
+    setScanStatus(`✅ ${part.name}`);
+    onAddToCart(part);
+  };
+  useBarcodeWedge(handleBarcodeScan, true);
+
   const [applyVat, setApplyVat] = useState<boolean>(false);
 
   const brandCounts = useMemo(() => {
@@ -518,6 +533,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               className="w-full h-11 pr-10 pl-4 rounded-xl bg-surface-1 border border-neutral-700 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400"
             />
           </div>
+
+          <BarcodeScanButton onScan={handleBarcodeScan} label="مسح" status={scanStatus} />
 
           {onOpenVoiceAssistant && (
             <button

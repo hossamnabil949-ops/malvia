@@ -23,7 +23,7 @@ import {
 import { TrackingMode, TRACKING_LABEL } from '../utils/trackingLogic';
 import { AutoPart, CarBrand, PartCategory, Invoice, PurchaseInvoice, SalesReturn, PurchaseReturn } from '../types/autoParts';
 import { StockCardModal } from './StockCardModal';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, ScanBarcode as ScanBarcodeIcon } from 'lucide-react';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
 import { BrandBar } from './BrandBar';
 import { DateRangeFilter } from './DateRangeFilter';
@@ -43,6 +43,7 @@ interface InventoryViewProps {
   salesReturns?: SalesReturn[];
   purchaseReturns?: PurchaseReturn[];
   onOpenInventoryErrors?: () => void;
+  onOpenBarcodeStocktake?: () => void;
   onOpenCarModels?: () => void;
   onOpenPhotoSharing?: () => void;
   onOpenExcelModal?: () => void;
@@ -63,6 +64,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   salesReturns = [],
   purchaseReturns = [],
   onOpenInventoryErrors,
+  onOpenBarcodeStocktake,
   onOpenCarModels,
   onOpenPhotoSharing,
   onOpenExcelModal,
@@ -228,6 +230,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           )}
 
 
+
+          {onOpenBarcodeStocktake && (
+            <button
+              onClick={onOpenBarcodeStocktake}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-bold transition-all shadow-sm"
+              title="جرد المخزون بمسح باركود القطع"
+            >
+              <ScanBarcodeIcon className="w-4 h-4 text-amber-400" />
+              <span>جرد بالباركود</span>
+            </button>
+          )}
 
           {onOpenInventoryErrors && (
             <button

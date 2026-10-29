@@ -40,6 +40,8 @@ import {
 import { parseSerialList, validateSerialIntake, TRACKING_LABEL, TrackingMode, SerialUnit } from '../utils/trackingLogic';
 import { PART_CATEGORIES } from '../data/autoPartsData';
 import { DateRangeFilter } from './DateRangeFilter';
+import { BarcodeScanButton, useBarcodeWedge } from './BarcodeScanner';
+import { beep, findPartByBarcode } from '../utils/barcodeLookup';
 import { nextPurchaseInvoiceNumber } from '../utils/invoiceNumber';
 import { DateRange, EMPTY_DATE_RANGE, inDateRange } from '../utils/dateRange';
 
@@ -222,6 +224,29 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       return updated;
     });
   };
+
+  // مسح الباركود داخل فاتورة الشراء: القطعة موجودة بالفاتورة → +1، وإلا تُملأ أول سطر فاضي أو سطر جديد
+  const [scanStatus, setScanStatus] = useState('');
+  const handleBarcodeScan = (code: string) => {
+    const part = findPartByBarcode(parts, code);
+    if (!part) { beep(false); setScanStatus(`❌ الكود ${code} غير مسجّل — سجّله على القطعة من المخزون أولاً`); return; }
+    beep(true);
+    setScanStatus(`✅ ${part.name}`);
+    setInvoiceItems((prev) => {
+      const idx = prev.findIndex((it) => it.partId === part.id || (it.partNumber && it.partNumber === part.partNumber));
+      if (idx >= 0) {
+        return prev.map((it, i) => i === idx ? { ...it, quantity: Number(it.quantity) + 1, total: Math.round((Number(it.quantity) + 1) * it.costPrice) } : it);
+      }
+      const row: PurchaseInvoiceItem = {
+        partId: part.id, partNumber: part.partNumber, partName: part.name, category: part.category, brand: part.brand,
+        quantity: 1, costPrice: part.costPrice, salePrice: part.salePrice, total: Math.round(part.costPrice),
+      } as PurchaseInvoiceItem;
+      const emptyIdx = prev.findIndex((it) => !it.partName.trim());
+      if (emptyIdx >= 0) return prev.map((it, i) => (i === emptyIdx ? { ...it, ...row } : it));
+      return [...prev, row];
+    });
+  };
+  useBarcodeWedge(handleBarcodeScan, showCreateModal);
 
   const handleAddItemRow = () => {
     setInvoiceItems(prev => [
@@ -1006,6 +1031,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                     <span>أصناف البضاعة الموردة (متاح تعديل سعر الشراء مباشرة):</span>
                   </span>
 
+                  <BarcodeScanButton onScan={handleBarcodeScan} label="مسح باركود" status={scanStatus} className="!h-8 !px-3" />
                   <button
                     type="button"
                     onClick={handleAddItemRow}

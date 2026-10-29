@@ -106,6 +106,7 @@ import { SystemDeploymentGuideModal } from './components/SystemDeploymentGuideMo
 import { NotificationsModal } from './components/NotificationsModal';
 import { VoiceAssistantModal } from './components/VoiceAssistantModal';
 import { InventoryAuditModal } from './components/InventoryAuditModal';
+import { BarcodeStocktakeModal } from './components/BarcodeStocktakeModal';
 import { InvoiceDetailModal } from './components/InvoiceDetailModal';
 
 export default function App() {
@@ -184,6 +185,7 @@ export default function App() {
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
   const [showVoiceAssistant, setShowVoiceAssistant] = useState<boolean>(false);
   const [showInventoryAudit, setShowInventoryAudit] = useState<boolean>(false);
+  const [showBarcodeStocktake, setShowBarcodeStocktake] = useState<boolean>(false);
   const [selectedAuditPart, setSelectedAuditPart] = useState<AutoPart | null>(null);
   const [selectedInvoiceForDetail, setSelectedInvoiceForDetail] = useState<Invoice | null>(null);
 
@@ -2448,6 +2450,7 @@ export default function App() {
             onOpenPhotoSharing={() => setShowPhotoSharing(true)}
             onOpenExcelModal={() => setShowExcelModal(true)}
             onOpenInventoryErrors={() => setShowInventoryErrors(true)}
+            onOpenBarcodeStocktake={() => setShowBarcodeStocktake(true)}
           />
         )}
 
@@ -2722,6 +2725,16 @@ export default function App() {
           onAddError={handleAddInventoryError}
           onCorrectError={handleCorrectInventoryError}
           onDeleteError={handleDeleteInventoryError}
+        />
+      )}
+
+      {/* 1b. جرد بالباركود */}
+      {showBarcodeStocktake && (
+        <BarcodeStocktakeModal
+          isOpen={showBarcodeStocktake}
+          onClose={() => setShowBarcodeStocktake(false)}
+          parts={parts}
+          onAddError={handleAddInventoryError}
         />
       )}
 
