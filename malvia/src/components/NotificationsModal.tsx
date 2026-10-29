@@ -56,8 +56,9 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const [excludedIds, setExcludedIds] = useState<string[]>([]);
 
 const lowStockParts = useMemo(() => {
+  // إظهار الصنف عند وصول المخزون إلى الحد الأدنى أو النزول عنه
   return parts.filter(
-    (p) => p.stockQuantity < p.minAlertStock
+    (p) => p.stockQuantity <= p.minAlertStock
   );
 }, [parts]);
 
@@ -72,13 +73,19 @@ const criticalParts = useMemo(() => {
 }, [parts]);
 
   const filteredParts = useMemo(() => {
-    return lowStockParts.filter((p) => {
-      if (activeFilter === 'out' && p.stockQuantity !== 0) return false;
-      if (activeFilter === 'critical' && (p.stockQuantity === 0 || p.stockQuantity > Math.ceil(p.minAlertStock / 2))) return false;
+    // كل تصنيف يعرض القائمة نفسها التي يُحسب منها عداده
+    const sourceParts =
+      activeFilter === 'out'
+        ? outOfStockParts
+        : activeFilter === 'critical'
+          ? criticalParts
+          : lowStockParts;
+
+    return sourceParts.filter((p) => {
       if (selectedBrand !== 'all' && p.brand !== selectedBrand) return false;
       return true;
     });
-  }, [lowStockParts, activeFilter, selectedBrand]);
+  }, [lowStockParts, outOfStockParts, criticalParts, activeFilter, selectedBrand]);
 
   const availableBrands = useMemo(() => {
     const brands = new Set(lowStockParts.map((p) => p.brand));
@@ -110,7 +117,7 @@ const neededQty = (p: AutoPart) =>
   if (!isOpen) return null;
 
   const handleRestock = (part: AutoPart) => {
-    const qty = restockInputs[part.id] || 10;
+    const qty = restockInputs[part.id] ?? neededQty(part);
     if (qty <= 0) return;
     onUpdateStock(part.id, qty);
     setSuccessRestockId(part.id);
