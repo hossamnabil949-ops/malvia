@@ -5,12 +5,12 @@ import { getOne } from './_db.js';
 
 // ---------- أخطاء موحدة: الكود للآلة، والترجمة العربية في الواجهة ----------
 export type ApiErrorCode =
-  | 'LICENSE_REQUIRED' | 'LICENSE_INVALID' | 'LICENSE_SUSPENDED' | 'ADMIN_UNAUTHORIZED'
+  | 'LICENSE_REQUIRED' | 'LICENSE_INVALID' | 'LICENSE_SUSPENDED' | 'LICENSE_EXPIRED' | 'ADMIN_UNAUTHORIZED'
   | 'RESOURCE_NOT_ALLOWED' | 'INVALID_BODY' | 'PAYLOAD_TOO_LARGE' | 'RATE_LIMITED'
   | 'VERSION_CONFLICT' | 'METHOD_NOT_ALLOWED' | 'INTERNAL';
 
 const STATUS: Record<ApiErrorCode, number> = {
-  LICENSE_REQUIRED: 401, LICENSE_INVALID: 403, LICENSE_SUSPENDED: 403, ADMIN_UNAUTHORIZED: 401,
+  LICENSE_REQUIRED: 401, LICENSE_INVALID: 403, LICENSE_SUSPENDED: 403, LICENSE_EXPIRED: 403, ADMIN_UNAUTHORIZED: 401,
   RESOURCE_NOT_ALLOWED: 400, INVALID_BODY: 400, PAYLOAD_TOO_LARGE: 413, RATE_LIMITED: 429,
   VERSION_CONFLICT: 409, METHOD_NOT_ALLOWED: 405, INTERNAL: 500,
 };
@@ -22,7 +22,7 @@ export class ApiError extends Error {
 
 // رسائل للمستخدم (الواجهة الحالية تعرض حقل error كنص). الكود في حقل code للتعامل البرمجي.
 const MESSAGES: Record<ApiErrorCode, string> = {
-  LICENSE_REQUIRED: 'مفتاح الترخيص مطلوب', LICENSE_INVALID: 'مفتاح غير مسجل', LICENSE_SUSPENDED: 'الترخيص معلق',
+  LICENSE_REQUIRED: 'مفتاح الترخيص مطلوب', LICENSE_INVALID: 'مفتاح غير مسجل', LICENSE_SUSPENDED: 'الترخيص معلق', LICENSE_EXPIRED: 'انتهت صلاحية الترخيص',
   ADMIN_UNAUTHORIZED: 'غير مصرح', RESOURCE_NOT_ALLOWED: 'مورد غير مسموح', INVALID_BODY: 'بيانات غير صالحة',
   PAYLOAD_TOO_LARGE: 'حجم البيانات كبير جداً', RATE_LIMITED: 'محاولات كثيرة، حاول بعد قليل',
   VERSION_CONFLICT: 'تعارض في الإصدار', METHOD_NOT_ALLOWED: 'method not allowed', INTERNAL: 'خطأ داخلي في الخادم',
@@ -54,6 +54,19 @@ export async function findLicense(key: string): Promise<any | null> {
   const reg = await getOne('_registry', 'licenses');
   const list = (reg?.data as any[]) || [];
   return list.find(l => safeEqual(String(l.licenseKey).toUpperCase(), key.toUpperCase())) || null;
+}
+
+/** تحقق موحد من صلاحية الترخيص؛ تاريخ الانتهاء يُحسب حتى نهاية يومه بالتوقيت UTC. */
+export function assertLicenseUsable(lic: any): void {
+  if (lic?.status === 'معلق مؤقتاً') throw new ApiError('LICENSE_SUSPENDED');
+  if (lic?.expiryDate) {
+    const raw = String(lic.expiryDate).trim();
+    const expiryMs = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+      ? Date.parse(`${raw}T23:59:59.999Z`)
+      : Date.parse(raw);
+    if (!Number.isFinite(expiryMs)) throw new ApiError('LICENSE_INVALID');
+    if (Date.now() > expiryMs) throw new ApiError('LICENSE_EXPIRED');
+  }
 }
 
 export function clientIp(req: any): string {

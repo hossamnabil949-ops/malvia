@@ -212,9 +212,26 @@ async function flush() {
     // أول اتصال بالسحابة: ارفع كل ما هو محلي وغير موجود في السحابة
     const meta = readMeta(tenantId);
     for (const res of SYNC_RESOURCES) if (meta.versions[res] === undefined && readLocal(tenantId, res) !== undefined) dirty.add(res);
-    const list = [...dirty]; dirty.clear();
+    const list = [...dirty];
+    dirty.clear();
     for (const res of list) {
-      try { await pushResource(tenantId, licenseKey, res); } catch (e) { dirty.add(res); throw e; }
+      try {
+        const pushed = await pushResource(tenantId, licenseKey, res);
+        if (!pushed) {
+          // لا نعلن نجاح المزامنة إذا انتهت محاولات فضّ التعارض دون حفظ المورد.
+          dirty.add(res);
+          throw new Error(`تعذر حفظ المورد ${res} بعد عدة محاولات؛ ستتم إعادة المحاولة`);
+        }
+      } catch (e) {
+        dirty.add(res);
+        throw e;
+      }
+    }
+    // إذا وُجدت تغييرات جديدة أثناء المزامنة، لا نعرض الحالة على أنها مكتملة.
+    if (dirty.size > 0) {
+      emitStatus('syncing');
+      schedule(1500);
+      return;
     }
     emitStatus('synced');
   } catch (e: any) {

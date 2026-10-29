@@ -2160,7 +2160,7 @@ export default function App() {
 
   // Active Notifications Count
   const activeNotificationsCount = useMemo(() => {
-    const lowStockCount = parts.filter(p => p.stockQuantity < p.minAlertStock).length;
+    const lowStockCount = parts.filter(p => p.stockQuantity <= p.minAlertStock).length;
     const unresolvedErrors = inventoryErrors.filter(e => !e.isCorrected).length;
     const chequeAlerts = canAccessTab('cheques') ? attentionCount(cheques, todayISO(), 3) : 0; // يظهر فقط لمن يملك صلاحية الشيكات
     const bk = expiryBuckets(stockBatches, todayISO());

@@ -55,31 +55,25 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   // أصناف أُلغيت من طلب التوريد (لا تظهر في الطلب المنسوخ أو المطبوع ولا في الإجماليات)
   const [excludedIds, setExcludedIds] = useState<string[]>([]);
 
-const lowStockParts = useMemo(() => {
-  // إظهار الصنف عند وصول المخزون إلى الحد الأدنى أو النزول عنه
-  return parts.filter(
-    (p) => p.stockQuantity <= p.minAlertStock
-  );
-}, [parts]);
+  const lowStockParts = useMemo(() => {
+    return parts.filter((p) => p.stockQuantity <= p.minAlertStock);
+  }, [parts]);
 
   const outOfStockParts = useMemo(() => {
     return parts.filter((p) => p.stockQuantity === 0);
   }, [parts]);
 
-const criticalParts = useMemo(() => {
-  return parts.filter(
-    (p) => p.stockQuantity <= p.minAlertStock
-  );
-}, [parts]);
+  const criticalParts = useMemo(() => {
+    return parts.filter((p) => p.stockQuantity <= Math.ceil(p.minAlertStock / 2));
+  }, [parts]);
 
   const filteredParts = useMemo(() => {
-    // كل تصنيف يعرض القائمة نفسها التي يُحسب منها عداده
-    const sourceParts =
-      activeFilter === 'out'
-        ? outOfStockParts
-        : activeFilter === 'critical'
-          ? criticalParts
-          : lowStockParts;
+    // كل تصنيف يعرض نفس مجموعة الأصناف التي يُحسب منها عداده.
+    const sourceParts = activeFilter === 'out'
+      ? outOfStockParts
+      : activeFilter === 'critical'
+        ? criticalParts
+        : lowStockParts;
 
     return sourceParts.filter((p) => {
       if (selectedBrand !== 'all' && p.brand !== selectedBrand) return false;
@@ -92,9 +86,7 @@ const criticalParts = useMemo(() => {
     return Array.from(brands);
   }, [lowStockParts]);
 
-const neededQty = (p: AutoPart) =>
-  restockInputs[p.id] ??
-  Math.max(p.minAlertStock - p.stockQuantity, 1);
+  const neededQty = (p: AutoPart) => restockInputs[p.id] ?? Math.max(p.minAlertStock - p.stockQuantity, 1);
 
   // الأصناف المطلوبة فعلاً في طلب التوريد (بعد استبعاد الملغي منها)
   const orderParts = useMemo(
@@ -466,7 +458,7 @@ const neededQty = (p: AutoPart) =>
                 filteredParts.map((part) => {
                   const isOutOfStock = part.stockQuantity === 0;
                   const isCritical = !isOutOfStock && part.stockQuantity <= Math.ceil(part.minAlertStock / 2);
-                  const recommendedRestock = Math.max(part.minAlertStock  - part.stockQuantity, 1);
+                  const recommendedRestock = Math.max(part.minAlertStock * 2 - part.stockQuantity, 5);
                   const currentRestockInput = restockInputs[part.id] ?? recommendedRestock;
                   const isSuccess = successRestockId === part.id;
                   const progressPct = Math.min(100, (part.stockQuantity / (part.minAlertStock || 1)) * 100);
@@ -536,7 +528,20 @@ const neededQty = (p: AutoPart) =>
 
                       <div className="flex items-center gap-2 self-end md:self-center flex-shrink-0">
                         <div className="flex items-center gap-1 bg-surface-2 p-1 rounded-xl border border-neutral-700/80">
-                          
+                          <button
+                            type="button"
+                            onClick={() => handleSetRestockQty(part.id, 5)}
+                            className="px-2 py-1 rounded-lg text-[11px] font-bold text-neutral-300 hover:text-white hover:bg-neutral-700/60 transition-colors"
+                          >
+                            +5
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSetRestockQty(part.id, 10)}
+                            className="px-2 py-1 rounded-lg text-[11px] font-bold text-neutral-300 hover:text-white hover:bg-neutral-700/60 transition-colors"
+                          >
+                            +10
+                          </button>
                           <input
                             type="number"
                             min="1"

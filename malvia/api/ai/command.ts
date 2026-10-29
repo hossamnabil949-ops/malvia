@@ -1,5 +1,5 @@
 // المساعد الصوتي: يحوّل الأمر العربي إلى إجراء منظم عبر Gemini. المفتاح في متغيرات Vercel فقط.
-import { ApiError, clientIp, findLicense, rateLimit, sendError } from '../_security.js';
+import { ApiError, assertLicenseUsable, clientIp, findLicense, rateLimit, sendError } from '../_security.js';
 
 const ACTIONS = ['EXECUTE_SALE','INVENTORY_AUDIT','RESTOCK_ITEM','ADD_PURCHASE','SETTLE_SUPPLIER','COLLECT_CUSTOMER',
   'ADD_EXPENSE','QUERY_LOW_STOCK','NAVIGATE_TAB','GENERAL_ANSWER'];
@@ -16,7 +16,7 @@ export default async function handler(req: any, res: any) {
     rateLimit(`ai-ip:${ip}`, 30, 60_000);
     const lic = await findLicense(key);
     if (!lic) { rateLimit(`bad-key:${ip}`, 10, 10 * 60_000); throw new ApiError('LICENSE_INVALID'); }
-    if (lic.status === 'معلق مؤقتاً') throw new ApiError('LICENSE_SUSPENDED');
+    assertLicenseUsable(lic);
     rateLimit(`ai-tenant:${lic.tenantId}`, 120, 60 * 60_000);
 
     const body = req.body || {};
