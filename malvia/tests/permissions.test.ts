@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { hasTabAccess, firstAllowedTab, ROLE_PRESETS, TAB_ACCESS } from '../src/utils/permissions.ts';
+import { hasTabAccess, firstAllowedTab, ROLE_PRESETS, TAB_ACCESS, isSimpleCashier, SIMPLE_MODE_TABS } from '../src/utils/permissions.ts';
 
 const cashier = ROLE_PRESETS['كاشير مبيعات'];
 // الكاشير: بيع وعملاء وفواتير ووردية فقط
 for (const t of ['dashboard', 'pos', 'shifts', 'invoices', 'customers']) assert.equal(hasTabAccess('كاشير مبيعات', cashier, t), true, t);
-for (const t of ['inventory', 'warehouses', 'purchases', 'suppliers', 'finance', 'cheques', 'reports', 'settings']) assert.equal(hasTabAccess('كاشير مبيعات', cashier, t), false, t);
+for (const t of ['inventory', 'warehouses', 'tracking', 'purchases', 'suppliers', 'finance', 'cheques', 'reports', 'settings']) assert.equal(hasTabAccess('كاشير مبيعات', cashier, t), false, t);
 // المدير العام يفتح كل شيء حتى شاشة غير معرّفة، وحتى لو صلاحياته فارغة
 assert.equal(hasTabAccess('مدير عام', undefined, 'settings'), true);
 assert.equal(hasTabAccess('مدير عام', {}, 'شاشة-مستقبلية'), true);
@@ -23,5 +23,11 @@ assert.equal(hasTabAccess('x' as any, { canManageTreasury: true }, 'suppliers'),
 assert.equal(firstAllowedTab('كاشير مبيعات', {}), 'dashboard');
 assert.equal(firstAllowedTab('مدير عام', {}), 'dashboard');
 // كل شاشات التنقل معرّفة في الخريطة (لا شاشة تُنسى فتبقى للمدير فقط بدون قصد)
-for (const t of ['dashboard','pos','shifts','inventory','warehouses','invoices','purchases','suppliers','customers','finance','cheques','reports','settings']) assert.ok(t in TAB_ACCESS, t);
+for (const t of ['dashboard','pos','shifts','inventory','warehouses','tracking','invoices','purchases','suppliers','customers','finance','cheques','reports','settings']) assert.ok(t in TAB_ACCESS, t);
+// وضع الكاشير المبسط
+assert.equal(isSimpleCashier('كاشير مبيعات', ROLE_PRESETS['كاشير مبيعات']), true);
+assert.equal(isSimpleCashier('مدير عام', { ...ROLE_PRESETS['مدير عام'], simpleCashierMode: true }), false);   // المدير لا يُحصَر أبداً
+assert.equal(isSimpleCashier('محاسب مالي', { ...ROLE_PRESETS['محاسب مالي'], simpleCashierMode: true }), false);  // بدون صلاحية بيع لا معنى له
+assert.equal(isSimpleCashier('كاشير مبيعات', { canSellPos: true }), false);                                      // لم يُفعَّل
+assert.deepEqual(SIMPLE_MODE_TABS, ['pos', 'shifts', 'invoices', 'customers']);
 console.log('permissions: كل الاختبارات نجحت');

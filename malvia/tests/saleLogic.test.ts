@@ -285,6 +285,230 @@ import { availableActions, nextStatus, registrationEffect, actionEffect, applyAc
   const exposure = pendingIncomingByCustomer([mk({ appliedAmount: 300 }), mk({ id: 'z', appliedAmount: 200 }), mk({ id: 'y', status: 'محصّل', appliedAmount: 900 })] as any);
   assert.equal(exposure.get('c1'), 500);                                                                   // المفتوحة فقط
 }
+
+// ---------- الدفعات والصلاحية والسيريال ----------
+import { expiryState, daysToExpiry, allocateFefo, applyBatchOps, distributeRestored, shiftRestored, restoredTotal, unassignedStock, expiryBuckets, parseSerialList, validateSerialIntake, validateSerialSale, autoBatchNo, inStockUnits } from '../src/utils/trackingLogic.ts';
+{
+  const today = '2026-10-24';
+  const B = (id: string, qty: number, expiryDate?: string, receivedDate = '2026-01-01') => ({ id, partId: 'p1', batchNo: id.toUpperCase(), expiryDate, receivedDate, quantity: qty, initialQuantity: qty });
+  // حالات الصلاحية: آخر يوم صالح، منتهي، قريب، فارغ، بلا تاريخ
+  assert.equal(expiryState(B('a', 5, '2026-10-24'), today), 'soon');                       // ينتهي اليوم = ما زال صالحاً
+  assert.equal(expiryState(B('a', 5, '2026-10-23'), today), 'expired');
+  assert.equal(expiryState(B('a', 5, '2026-11-23'), today), 'soon');                       // 30 يوماً
+  assert.equal(expiryState(B('a', 5, '2026-11-24'), today), 'ok');
+  assert.equal(expiryState(B('a', 0, '2026-12-01'), today), 'empty');
+  assert.equal(expiryState(B('a', 5), today), 'none');
+  assert.equal(daysToExpiry(B('a', 1, '2026-10-27'), today), 3);
+
+  // FEFO: الأقرب انتهاءً أولاً، وبلا تاريخ آخراً، والمنتهي لا يُسحب
+  const batches = [B('late', 10, '2027-06-01'), B('soon', 4, '2026-11-01'), B('none', 6), B('dead', 9, '2026-10-01')];
+  let r = allocateFefo(batches, 6, 29, today);                      // مجموع الدفعات 29 = إجمالي الرصيد
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.allocations.map(a => [a.batchId, a.qty]), [['soon', 4], ['late', 2]]);
+  assert.equal(r.expiredQty, 9);
+  r = allocateFefo(batches, 20, 29, today);                         // 4+10+6 = 20 صالح بالضبط
+  assert.deepEqual(r.allocations.map(a => [a.batchId, a.qty]), [['soon', 4], ['late', 10], ['none', 6]]);
+  r = allocateFefo(batches, 21, 29, today);                         // لا يكفي إلا بالمنتهي => رفض
+  assert.equal(r.ok, false); assert.equal(r.shortBy, 1); assert.equal(r.expiredQty, 9); assert.deepEqual(r.allocations, []);
+  // رصيد بلا دفعة (قديم) يُباع بعد الدفعات الصالحة
+  assert.equal(unassignedStock(35, batches), 6);
+  r = allocateFefo(batches, 24, 35, today);
+  assert.equal(r.ok, true); assert.equal(r.unassigned, 4); assert.deepEqual(r.allocations.map(a => a.qty), [4, 10, 6]);
+  assert.equal(allocateFefo([], 3, 5, today).unassigned, 3);        // صنف بلا دفعات يعمل كالمعتاد
+  assert.equal(allocateFefo([], 6, 5, today).ok, false);
+
+  // تطبيق السحب ثم الاسترجاع
+  const after = applyBatchOps(batches, [{ batchId: 'soon', qty: 4 }, { batchId: 'late', qty: 2 }], -1);
+  assert.deepEqual(after.map(b => b.quantity), [8, 0, 6, 9]);
+  assert.deepEqual(applyBatchOps(after, [{ batchId: 'soon', qty: 4 }, { batchId: 'late', qty: 2 }], 1).map(b => b.quantity), [10, 4, 6, 9]);
+
+  // مرتجعات جزئية متتالية ثم حذف مرتجع: التوزيع دقيق وقابل للعكس
+  const alloc = [{ batchId: 'soon', batchNo: 'SOON', qty: 4 }, { batchId: 'late', batchNo: 'LATE', qty: 2 }];
+  let s1 = shiftRestored(alloc, 1);
+  assert.deepEqual(s1.ops, [{ batchId: 'late', qty: 1 }]);                                   // يملأ من الأخيرة
+  let s2 = shiftRestored(s1.allocations, 2);                                                 // إجمالي 3 => late 2 + soon 1
+  assert.deepEqual(s2.ops.sort((a, b) => a.batchId.localeCompare(b.batchId)), [{ batchId: 'late', qty: 1 }, { batchId: 'soon', qty: 1 }]);
+  assert.equal(restoredTotal(s2.allocations), 3);
+  let s3 = shiftRestored(s2.allocations, -2);                                                // حذف مرتجع بكمية 2 => يبقى 1
+  assert.equal(restoredTotal(s3.allocations), 1);
+  assert.deepEqual(s3.allocations.map(a => a.restored), [0, 1]);
+  assert.equal(restoredTotal(shiftRestored(alloc, 99).allocations), 6);                      // لا يتجاوز المسحوب
+  assert.equal(restoredTotal(shiftRestored(alloc, -5).allocations), 0);                      // ولا ينزل تحت الصفر
+  assert.deepEqual(distributeRestored(alloc, 6).map(a => a.restored), [4, 2]);
+
+  // سلال الصلاحية
+  const bk = expiryBuckets([...batches, B('z', 0, '2026-10-30')], today);
+  assert.deepEqual([bk.expired.length, bk.within30.length, bk.later.length, bk.noExpiry.length], [1, 1, 1, 1]);
+  assert.equal(autoBatchNo('2026-10-24', 3), 'B-20261024-03');
+
+  // السيريال
+  assert.deepEqual(parseSerialList('SN1, SN2\nSN3،SN4  SN5;SN6\n\n'), ['SN1', 'SN2', 'SN3', 'SN4', 'SN5', 'SN6']);
+  const U = (serial: string, status: any = 'in_stock', partId = 'p1', receivedDate = '2026-01-01') => ({ id: serial, partId, serial, status, receivedDate });
+  assert.equal(validateSerialIntake(['A', 'B'], 2, 'p1', []).error, null);
+  assert.equal(validateSerialIntake(['A'], 2, 'p1', []).error, 'COUNT_MISMATCH');
+  assert.equal(validateSerialIntake(['A', 'a'], 2, 'p1', []).error, 'DUPLICATE_IN_LIST');           // تجاهل حالة الأحرف
+  assert.equal(validateSerialIntake(['A', 'B'], 2, 'p1', [U('b')]).error, 'ALREADY_EXISTS');
+  assert.equal(validateSerialIntake(['A', 'B'], 2, 'p2', [U('b')]).error, null);                    // نفس السيريال لصنف آخر مسموح
+  assert.equal(validateSerialIntake(['A', 'B'], 2, undefined, [U('b')]).error, null);               // صنف جديد
+  const units = [U('S1'), U('S2', 'sold'), U('S3'), U('S4', 'in_stock', 'p2')];
+  assert.equal(validateSerialSale(['S1', 'S3'], 2, 'p1', units).error, null);
+  assert.equal(validateSerialSale(['S1'], 2, 'p1', units).error, 'COUNT_MISMATCH');
+  assert.equal(validateSerialSale(['S1', 'S2'], 2, 'p1', units).error, 'NOT_IN_STOCK');             // مباع
+  assert.equal(validateSerialSale(['S1', 's1'], 2, 'p1', units).error, 'DUPLICATE_IN_LIST');
+  assert.equal(validateSerialSale(['S4'], 1, 'p1', units).error, 'NOT_IN_STOCK');                   // وحدة صنف آخر
+  assert.equal(validateSerialSale(['ZZ'], 1, 'p1', units).error, 'NOT_IN_STOCK');
+  assert.deepEqual(inStockUnits(units, 'p1').map(u => u.serial), ['S1', 'S3']);
+}
+
+// ---------- أثر المرتجع على الدفعات والسيريال ----------
+import { trackReturn } from '../src/utils/returnTracking.ts';
+{
+  const base: any = { partId: 'p1', partNumber: 'X', partName: 'زيت', quantity: 6, unitPrice: 10, total: 60 };
+  const withBatches = { ...base, batchAllocations: [{ batchId: 'b1', batchNo: 'B1', qty: 4 }, { batchId: 'b2', batchNo: 'B2', qty: 2 }] };
+  let r = trackReturn(withBatches, 3, undefined, 1);
+  assert.deepEqual(r.batchOps.sort((a, b) => a.batchId.localeCompare(b.batchId)), [{ batchId: 'b1', qty: 1 }, { batchId: 'b2', qty: 2 }]);
+  assert.equal(r.unitsToStock.length, 0);
+  const r2 = trackReturn(r.item, 3, undefined, -1);                                    // حذف نفس المرتجع => يعود كل شيء كما كان
+  assert.deepEqual(r2.batchOps.sort((a, b) => a.batchId.localeCompare(b.batchId)), [{ batchId: 'b1', qty: -1 }, { batchId: 'b2', qty: -2 }]);
+  assert.deepEqual(r2.item.batchAllocations!.map(a => a.restored), [0, 0]);
+
+  const withSerials = { ...base, quantity: 3, serials: ['S1', 'S2', 'S3'] };
+  r = trackReturn(withSerials, 1, ['S2'], 1);                                          // المستخدم اختار S2
+  assert.deepEqual(r.unitsToStock, ['S2']); assert.deepEqual(r.item.returnedSerials, ['S2']);
+  r = trackReturn(r.item, 2, undefined, 1);                                            // بلا اختيار: يأخذ المتبقي تلقائياً
+  assert.deepEqual(r.unitsToStock, ['S1', 'S3']); assert.deepEqual(r.item.returnedSerials, ['S2', 'S1', 'S3']);
+  assert.equal(trackReturn(r.item, 1, undefined, 1).unitsToStock.length, 0);           // كله مرتجع: لا يوجد ما يُرجَع
+  const del = trackReturn(r.item, 2, ['S1', 'S3'], -1);                                // حذف مرتجع S1,S3 => تعود «مباعة»
+  assert.deepEqual(del.unitsToSold, ['S1', 'S3']); assert.deepEqual(del.item.returnedSerials, ['S2']);
+  assert.deepEqual(trackReturn({ ...withSerials, returnedSerials: ['S1', 'S2'] }, 1, undefined, -1).unitsToSold, ['S2']); // بلا تحديد: آخر مرتجع
+  const plain = trackReturn(base, 2, undefined, 1);                                    // صنف بلا تتبع لا يتأثر
+  assert.deepEqual([plain.batchOps, plain.unitsToStock, plain.item], [[], [], base]);
+}
+
+// ---------- التقارير التحليلية ----------
+import * as RP from '../src/utils/reportsLogic.ts';
+{
+  const today = '2026-10-24';
+  const R = { from: '', to: '' };
+  const it = (partId: string, qty: number, price: number, cost: number, returned = 0) => ({ partId, partNumber: partId.toUpperCase(), partName: 'صنف ' + partId, quantity: qty, unitPrice: price, costPrice: cost, total: qty * price, returnedQuantity: returned });
+  const inv = (id: string, date: string, items: any[], extra: any = {}) => {
+    const subtotal = items.reduce((s, x) => s + x.total, 0);
+    return { id, invoiceNumber: id, date, time: '', customerName: 'ز', customerPhone: '', items, subtotal, discount: 0, tax: 0, grandTotal: subtotal, paymentMethod: 'كاش (نقدي)', cashierName: 'أحمد', status: 'مسددة', ...extra };
+  };
+  const data: any = {
+    invoices: [
+      inv('i1', '2026-10-20', [it('a', 4, 100, 60, 1), it('b', 2, 50, 30)], { discount: 20, grandTotal: 480 }),            // مرتجع وحدة من a
+      inv('i2', '2026-10-21', [it('a', 1, 100, 60)], { cashierName: 'منى' }),
+      inv('i3', '2026-10-21', [it('a', 9, 100, 60)], { status: 'ملغاة', cashierName: 'منى' }),                              // ملغاة: تُستبعد
+      inv('i4', '2026-07-01', [it('c', 1, 200, 150)], { customerId: 'c1', customerName: 'ورشة', paymentMethod: 'مختلط (دفع مقسّم)', payments: [{ method: 'آجل (شكك / حساب ورشة)', amount: 120 }, { method: 'كاش (نقدي)', amount: 80 }] }),
+      inv('i5', '2026-10-10', [it('c', 1, 500, 300)], { customerId: 'c1', customerName: 'ورشة', paymentMethod: 'آجل (شكك / حساب ورشة)' }),
+    ],
+    salesReturns: [{ id: 'r1', date: '2026-10-20', totalRefundAmount: 100, items: [{ partNumber: 'A', partName: 'صنف a', quantity: 1, unitPrice: 100, total: 100 }] }],
+    purchaseInvoices: [{ id: 'p1', date: '2026-10-05', supplierName: 'مورد', grandTotal: 1000, amountPaid: 400 }, { id: 'p2', date: '2026-10-06', supplierName: 'مورد', grandTotal: 500, amountPaid: 500 }],
+    parts: [
+      { id: 'a', partNumber: 'A', name: 'صنف a', category: 'فلاتر وزيوت', stockQuantity: 10, minAlertStock: 3, costPrice: 60, salePrice: 100 },
+      { id: 'b', partNumber: 'B', name: 'صنف b', category: 'فلاتر وزيوت', stockQuantity: 2, minAlertStock: 5, costPrice: 30, salePrice: 50 },
+      { id: 'c', partNumber: 'C', name: 'صنف c', category: 'فرامل ومكابح', stockQuantity: 4, minAlertStock: 1, costPrice: 150, salePrice: 200 },
+      { id: 'd', partNumber: 'D', name: 'صنف d', category: 'فرامل ومكابح', stockQuantity: 5, minAlertStock: 1, costPrice: 10, salePrice: 20 },
+    ],
+    customers: [{ id: 'c1', name: 'ورشة', balance: 1000 }, { id: 'c2', name: 'عميل بدون فواتير', balance: 300 }],
+    suppliers: [{ id: 's1', name: 'مورد', balance: 700, storeCredit: 0, totalPaid: 900, lastPaymentDate: '2026-10-01' }, { id: 's2', name: 'مسدد', balance: 0, storeCredit: 0, totalPaid: 5 }],
+    expenses: [{ id: 'e1', title: 'إيجار', category: 'إيجار', amount: 300, date: '2026-10-15' }, { id: 'e2', title: 'كهرباء', category: 'كهرباء ومياه', amount: 100, date: '2026-10-16' }, { id: 'e3', title: 'قديم', category: 'إيجار', amount: 999, date: '2026-01-01' }],
+    treasury: [{ id: 't1', date: '2026-10-20', type: 'قبض', category: 'مبيعات كاشير (فواتير بيع)', amount: 500 }, { id: 't2', date: '2026-10-21', type: 'صرف', category: 'سداد دفعة لمورد', amount: 200 }],
+    cheques: [
+      { id: 'q1', direction: 'incoming', status: 'في الحافظة', partyName: 'ورشة', number: '1', bankName: 'CIB', dueDate: '2026-10-22', amount: 700 },
+      { id: 'q2', direction: 'outgoing', status: 'صادر', partyName: 'مورد', number: '2', bankName: 'NBE', dueDate: '2026-10-27', amount: 300 },
+      { id: 'q3', direction: 'incoming', status: 'محصّل', partyName: 'ورشة', number: '3', bankName: 'CIB', dueDate: '2026-10-01', amount: 50 },
+    ],
+    batches: [
+      { id: 'b2', partId: 'a', batchNo: 'LATE', expiryDate: '2027-01-01', receivedDate: '2026-01-01', quantity: 3, initialQuantity: 3 },
+      { id: 'b1', partId: 'a', batchNo: 'OLD', expiryDate: '2026-10-01', receivedDate: '2026-01-01', quantity: 2, initialQuantity: 2 },
+      { id: 'b0', partId: 'a', batchNo: 'EMPTY', expiryDate: '2026-12-01', receivedDate: '2026-01-01', quantity: 0, initialQuantity: 2 },
+    ],
+    loyaltyLedger: [{ id: 'l1', at: '2026-10-01T00:00:00.000Z', customerId: 'c1', customerName: 'ورشة', type: 'earn', points: 200, userName: 'u' }],
+    loyaltyPointValue: 0.5,
+  };
+
+  // المبيعات اليومية: الملغاة مستبعدة، والمرتجع يخصم من يومه
+  let tb = RP.reportDailySales(data, R);
+  assert.deepEqual(tb.rows.map(x => [x.date, x.count, x.total, x.returns, x.net]), [['2026-07-01', 1, 200, 0, 200], ['2026-10-10', 1, 500, 0, 500], ['2026-10-20', 1, 480, 100, 380], ['2026-10-21', 1, 100, 0, 100]]);
+  assert.equal(tb.totals!.net, 1180);
+  tb = RP.reportDailySales(data, { from: '2026-10-20', to: '2026-10-21' });                  // نطاق التاريخ
+  assert.deepEqual([tb.rows.length, tb.totals!.total], [2, 580]);
+
+  // أرباح الأصناف: الكمية الصافية بعد المرتجع، والملغاة خارج الحساب
+  tb = RP.reportSalesByItem(data, R);
+  const a = tb.rows.find(x => x.number === 'A')!;
+  assert.deepEqual([a.qty, a.revenue, a.cost, a.profit, a.margin], [4, 400, 240, 160, 40]);       // (3 من i1 + 1 من i2) لا 9 الملغاة
+  assert.deepEqual(tb.rows.map(x => [x.number, x.profit]), [['C', 250], ['A', 160], ['B', 40]]);   // الأعلى ربحاً أولاً
+  assert.equal(tb.totals!.profit, 450);
+
+  // الدفع المقسّم يُحسب بكل طريقة
+  tb = RP.reportSalesByPayment(data, R);
+  const pay = Object.fromEntries(tb.rows.map(x => [x.method, x.amount]));
+  assert.equal(pay['آجل (شكك / حساب ورشة)'], 120 + 500); assert.equal(pay['كاش (نقدي)'], 480 + 100 + 80);
+
+  // حسب الموظف: الملغاة تظهر في عمود الملغاة فقط
+  tb = RP.reportSalesByCashier(data, R);
+  const mona = tb.rows.find(x => x.name === 'منى')!;
+  assert.deepEqual([mona.count, mona.total, mona.voided], [1, 100, 1]);
+
+  // الأرباح والخسائر لشهر أكتوبر (المحسوبة يدوياً): مبيعات 480+100+500 = 1080
+  tb = RP.reportProfitLoss(data, { from: '2026-10-01', to: '2026-10-31' });
+  const pl = Object.fromEntries(tb.rows.map(x => [x.item, x.amount]));
+  assert.deepEqual(
+    [pl['المبيعات (قبل الضريبة وبعد الخصم)'], pl['يخصم: المرتجعات'], pl['صافي المبيعات'], pl['يخصم: تكلفة البضاعة المباعة'], pl['مجمل الربح'], pl['يخصم: المصروفات'], pl['صافي الربح']],
+    [1080, -100, 980, -600, 380, -400, -20]
+  );
+  assert.equal(RP.reportExpensesByCategory(data, { from: '2026-10-01', to: '2026-10-31' }).totals!.amount, 400);   // القديم خارج الفترة
+  tb = RP.reportTreasury(data, R);
+  assert.deepEqual([tb.totals!.inn, tb.totals!.out, tb.totals!.net], [500, 200, 300]);
+  tb = RP.reportPurchasesBySupplier(data, R);
+  assert.deepEqual([tb.totals!.total, tb.totals!.paid, tb.totals!.remaining], [1500, 900, 600]);
+
+  // المخزون
+  tb = RP.reportInventoryValuation(data);
+  assert.deepEqual([tb.totals!.cost, tb.totals!.units], [1310, 21]);
+  tb = RP.reportLowStock(data);
+  assert.deepEqual(tb.rows.map(x => [x.number, x.suggest]), [['B', 8]]);
+  assert.deepEqual(RP.reportSlowMoving(data, today, 90).rows.map(x => x.number), ['D']);           // لم يُبع قط
+  assert.equal(RP.reportSlowMoving(data, today, 90).rows[0].idle, 'بدون مبيعات');
+  assert.deepEqual(RP.reportSlowMoving(data, today, 10).rows.map(x => x.number), ['C', 'D']);      // c آخر بيع قبل 14 يوماً، مرتبة بالتكلفة المجمّدة
+  tb = RP.reportExpiry(data, today);
+  assert.deepEqual(tb.rows.map(x => [x.batch, x.state, x.qty, x.value]), [['OLD', 'منتهية', 2, 120], ['LATE', 'سليمة', 3, 180]]);   // الفارغة مستبعدة والأقدم أولاً
+  assert.deepEqual([tb.totals!.qty, tb.totals!.value], [5, 300]);
+
+  // الذمم
+  tb = RP.reportCustomerAging(data, today);
+  assert.deepEqual(tb.rows.map(x => [x.name, x.b0, x.b30, x.b60, x.b90, x.total]), [['ورشة', 500, 0, 0, 500, 1000], ['عميل بدون فواتير', 0, 0, 0, 300, 300]]);
+  assert.deepEqual([tb.totals!.b0, tb.totals!.b90, tb.totals!.total], [500, 800, 1300]);
+  tb = RP.reportSupplierPayables(data);
+  assert.deepEqual(tb.rows.map(x => [x.name, x.dues, x.paid]), [['مورد', 700, 900]]);
+  tb = RP.reportCheques(data, today);
+  assert.deepEqual(tb.rows.map(x => [x.dir, x.number, x.days, x.state, x.amount]), [['وارد', '1', -2, 'متأخر', 700], ['صادر', '2', 3, 'يستحق قريباً', 300]]);
+  assert.deepEqual([tb.totals!.amount, tb.totals!.party], [1000, 'واردة 700 · صادرة 300']);
+  tb = RP.reportLoyalty(data, '2026-10-24T23:59:59.000Z');
+  assert.deepEqual(tb.rows.map(x => [x.name, x.points, x.value]), [['ورشة', 200, 100]]);
+  tb = RP.reportSalesByCustomer(data, R);
+  assert.deepEqual(tb.rows.map(x => [x.name, x.count, x.total, x.balance]), [['ورشة', 2, 700, 1000], ['ز', 2, 580, 0]]);
+  tb = RP.reportReturns(data, R);
+  assert.deepEqual(tb.rows.map(x => [x.number, x.count, x.qty, x.value]), [['A', 1, 1, 100]]);
+
+  // السجل: كل تقرير يُبنى بلا أخطاء وأعمدته مطابقة لمفاتيح صفوفه وإجمالياته، ومجموعاته معروفة
+  assert.equal(RP.REPORT_DEFS.length, 18);
+  for (const def of RP.REPORT_DEFS) {
+    const t = def.build(data, R, today);
+    assert.ok(t.title && t.columns.length > 0, def.id);
+    for (const row of t.rows) for (const c of t.columns) assert.ok(c.key in row, `${def.id}.${c.key}`);
+    if (t.totals) for (const c of t.columns) assert.ok(c.key in t.totals, `${def.id} totals.${c.key}`);
+  }
+  assert.deepEqual([...new Set(RP.REPORT_DEFS.map(x => x.group))], ['المبيعات', 'المالية', 'المخزون', 'الذمم والالتزامات']);
+
+  // CSV: BOM، حماية الفواصل وعلامات الاقتباس، وسطر الإجماليات
+  const csv = RP.reportToCsv({ id: 'x', title: 't', columns: [{ key: 'a', label: 'اسم' }, { key: 'b', label: 'مبلغ' }], rows: [{ a: 'زيت, "ممتاز"', b: 5 }, { a: 'عادي', b: 2.5 }], totals: { a: 'الإجمالي', b: 7.5 } });
+  assert.equal(csv.charCodeAt(0), 0xFEFF);
+  assert.deepEqual(csv.slice(1).split('\r\n'), ['اسم,مبلغ', '"زيت, ""ممتاز""",5', 'عادي,2.5', 'الإجمالي,7.5']);
+}
 console.log('كل الاختبارات نجحت');
 
 // ---------- إلغاء فاتورة ----------
