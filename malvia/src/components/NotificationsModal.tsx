@@ -65,9 +65,13 @@ const lowStockParts = useMemo(() => {
     return parts.filter((p) => p.stockQuantity === 0);
   }, [parts]);
 
-  const criticalParts = useMemo(() => {
-    return parts.filter((p) => p.stockQuantity > 0 && p.stockQuantity <= Math.ceil(p.minAlertStock / 2));
-  }, [parts]);
+const criticalParts = useMemo(() => {
+  return lowStockParts.filter(
+    (p) =>
+      p.stockQuantity > 0 &&
+      p.stockQuantity <= Math.ceil(p.minAlertStock / 2)
+  );
+}, [lowStockParts]);
 
   const filteredParts = useMemo(() => {
     return lowStockParts.filter((p) => {
