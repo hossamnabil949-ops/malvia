@@ -47,7 +47,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const todaySales = invoices.reduce((sum, inv) => inv.status === 'ملغاة' ? sum : sum + inv.grandTotal - (inv.returnedAmount || 0), 0);
   const totalInvoicesCount = invoices.length;
   const totalPartsInStock = parts.reduce((sum, p) => sum + p.stockQuantity, 0);
-  const lowStockParts = parts.filter((p) => p.stockQuantity <= p.minAlertStock);
+  const lowStockParts = parts.filter((p) => p.stockQuantity < p.minAlertStock);
   const outOfStockParts = parts.filter((p) => p.stockQuantity === 0);
 
   const searchResults = quickSearch.trim()
