@@ -11,6 +11,7 @@ export const TAB_ACCESS: Record<string, PermKey[]> = {
   shifts: ['canSellPos', 'canManageTreasury'],
   inventory: ['canManageInventory'],
   warehouses: ['canManageInventory'],
+  tracking: ['canManageInventory'],
   invoices: ['canSellPos', 'canViewReports'],
   purchases: ['canManagePurchases'],
   suppliers: ['canManagePurchases', 'canManageTreasury'],
@@ -21,8 +22,16 @@ export const TAB_ACCESS: Record<string, PermKey[]> = {
   settings: ['canManageSettings'],
 };
 
+/** هل يعمل المستخدم بوضع الكاشير المبسط؟ المدير العام لا يُحصَر أبداً، ومن لا يملك صلاحية البيع لا معنى له بهذا الوضع. */
+export function isSimpleCashier(role: string | undefined, permissions: Partial<EmployeePermissions> | undefined): boolean {
+  return role !== OWNER_ROLE && Boolean(permissions?.simpleCashierMode) && Boolean(permissions?.canSellPos);
+}
+
+/** الشاشات المتاحة في الوضع المبسط (بشرط أن تسمح بها الصلاحيات أصلاً). */
+export const SIMPLE_MODE_TABS = ['pos', 'shifts', 'invoices', 'customers'];
+
 /** ترتيب اختيار أول شاشة مسموحة عند التحويل من شاشة ممنوعة. */
-export const TAB_ORDER = ['dashboard', 'pos', 'shifts', 'invoices', 'customers', 'inventory', 'warehouses', 'purchases', 'suppliers', 'finance', 'cheques', 'reports', 'settings'];
+export const TAB_ORDER = ['dashboard', 'pos', 'shifts', 'invoices', 'customers', 'inventory', 'warehouses', 'tracking', 'purchases', 'suppliers', 'finance', 'cheques', 'reports', 'settings'];
 
 export function hasTabAccess(role: string | undefined, permissions: Partial<EmployeePermissions> | undefined, tab: string): boolean {
   if (role === OWNER_ROLE) return true;
@@ -45,7 +54,7 @@ const P = (over: Partial<EmployeePermissions>): EmployeePermissions => ({
 /** صلاحيات مقترحة لكل وظيفة (يمكن تعديلها يدوياً بعد التطبيق). */
 export const ROLE_PRESETS: Record<Employee['role'], EmployeePermissions> = {
   'مدير عام': P({ canSellPos: true, canManageInventory: true, canManagePurchases: true, canManageTreasury: true, canViewReports: true, canManageSettings: true, canManagePartners: true }),
-  'كاشير مبيعات': P({ canSellPos: true }),
+  'كاشير مبيعات': P({ canSellPos: true, simpleCashierMode: true }),
   'أمين مستودع': P({ canManageInventory: true }),
   'محاسب مالي': P({ canManageTreasury: true, canViewReports: true }),
   'مسؤول مشتريات': P({ canManagePurchases: true }),

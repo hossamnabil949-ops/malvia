@@ -48,6 +48,7 @@ import {
 import { markDirty, SYNC_STATUS_EVENT } from './syncService';
 import type { LoyaltyEntry } from '../utils/loyaltyLogic';
 import type { Cheque } from '../utils/chequeLogic';
+import type { StockBatch, SerialUnit } from '../utils/trackingLogic';
 import { DEFAULT_PASSWORDS, hashPassword, isHashed, verifyPassword } from './passwordService';
 
 const LICENSES_KEY = 'malvia_tenant_licenses_v1';
@@ -200,6 +201,8 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     stockTransfers: loadResource<StockTransfer[]>('stockTransfers', []),
     loyaltyLedger: loadResource<LoyaltyEntry[]>('loyaltyLedger', []),
     cheques: loadResource<Cheque[]>('cheques', []),
+    stockBatches: loadResource<StockBatch[]>('stockBatches', []),
+    serialUnits: loadResource<SerialUnit[]>('serialUnits', []),
   };
 }
 
@@ -230,6 +233,8 @@ export function saveTenantStoreData(
     stockTransfers?: StockTransfer[];
     loyaltyLedger?: LoyaltyEntry[];
     cheques?: Cheque[];
+    stockBatches?: StockBatch[];
+    serialUnits?: SerialUnit[];
   }
 ) {
   try {
@@ -272,6 +277,8 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     localStorage.setItem(getTenantKey(tenantId, 'stockTransfers'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'loyaltyLedger'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'cheques'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'stockBatches'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'serialUnits'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'demo_cleared'), 'true');
 
     const rawEmps = localStorage.getItem(getTenantKey(tenantId, 'employees'));
@@ -279,7 +286,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     const ownerAccount = empsList.find(e => e.role === 'مدير عام' || e.username === 'admin') || INITIAL_EMPLOYEES[0];
     const cleanedStaff = [ownerAccount];
     localStorage.setItem(getTenantKey(tenantId, 'employees'), JSON.stringify(cleanedStaff));
-    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers','loyaltyLedger','cheques']);
+    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers','loyaltyLedger','cheques','stockBatches','serialUnits']);
 
     return cleanedStaff;
   } catch (err) {

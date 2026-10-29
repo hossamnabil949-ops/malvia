@@ -252,6 +252,14 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                       <span className="font-bold text-neutral-900 block truncate max-w-[150px]">
                         {it.partName}
                       </span>
+                      {it.serials && it.serials.length > 0 && (
+                        <span className="text-[9px] font-mono text-neutral-600 block">سيريال: {it.serials.join(' ، ')}</span>
+                      )}
+                      {it.batchAllocations && it.batchAllocations.length > 0 && (
+                        <span className="text-[9px] font-mono text-neutral-600 block">
+                          دفعة: {it.batchAllocations.map((a) => `${a.batchNo}${a.expiryDate ? ` (تنتهي ${a.expiryDate})` : ''} × ${a.qty}`).join(' ، ')}
+                        </span>
+                      )}
                       <span className="text-[9px] font-mono text-neutral-500 block">
                         {it.partNumber}
                       </span>

@@ -28,6 +28,7 @@ import {
   Wallet,
   Warehouse,
   Landmark,
+  ScanBarcode,
   type LucideIcon,
 } from 'lucide-react';
 import { UserSession } from '../types/autoParts';
@@ -39,6 +40,7 @@ export type ActiveTab =
   | 'inventory'
   | 'warehouses'
   | 'cheques'
+  | 'tracking'
   | 'invoices'
   | 'purchases'
   | 'suppliers'
@@ -66,6 +68,8 @@ interface NavigationProps {
   canAccessTab?: (tab: string) => boolean;
   /** صلاحية أدوات المخزون (إكسيل، جرد، موديلات، أخطاء المخزون) */
   canManageInventory?: boolean;
+  /** وضع الكاشير المبسط: شريط علوي صغير بدل القوائم والأدوات */
+  simpleMode?: boolean;
   /** Page content: rendered next to the sidebar, below the top bar. */
   children?: React.ReactNode;
 }
@@ -90,6 +94,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: 'shifts', label: 'الورديات والدرج', icon: Wallet },
       { id: 'inventory', label: 'المخزون والقطع', icon: Boxes },
       { id: 'warehouses', label: 'المخازن والفروع', icon: Warehouse },
+      { id: 'tracking', label: 'الدفعات والسيريال', icon: ScanBarcode },
       { id: 'invoices', label: 'الفواتير والمرتجعات', icon: Receipt },
     ],
   },
@@ -257,6 +262,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   shopName,
   canAccessTab = () => true,
   canManageInventory = true,
+  simpleMode = false,
   children,
 }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -300,6 +306,45 @@ export const Navigation: React.FC<NavigationProps> = ({
     { label: 'جرد المخزون', icon: ClipboardCheck, color: 'text-amber-300', onClick: onOpenInventoryAudit, needsInventory: true },
     { label: 'دليل النشر والتشغيل', icon: BookOpen, color: 'text-slate-300', onClick: onOpenDeploymentGuide, needsInventory: false },
   ].filter(t => typeof t.onClick === 'function' && (!t.needsInventory || canManageInventory));
+
+  if (simpleMode) {
+    const simpleTabs = ALL_ITEMS.filter(i => ['pos', 'shifts', 'invoices', 'customers'].includes(i.id) && canAccessTab(i.id));
+    return (
+      <div className="min-h-screen flex flex-col" data-simple-cashier="true">
+        <header className="sticky top-0 z-40 bg-nav-bg border-b border-nav-line px-3 sm:px-6 h-14 flex items-center gap-3">
+          <div className="font-black text-white text-sm truncate max-w-[40%]">{shopName}</div>
+          <nav className="flex items-center gap-1.5 flex-1 overflow-x-auto">
+            {simpleTabs.map(t => {
+              const Icon = t.icon;
+              const active = currentTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => onTabChange(t.id)}
+                  className={`h-10 px-4 rounded-xl text-sm font-bold flex items-center gap-2 whitespace-nowrap transition-colors ${
+                    active ? 'bg-amber-500 text-black' : 'bg-white/5 text-nav-muted hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {t.label}
+                </button>
+              );
+            })}
+          </nav>
+          <div className="text-xs text-nav-muted hidden sm:block whitespace-nowrap">{currentUser?.employeeName}</div>
+          <button
+            onClick={onLogout}
+            title="تسجيل الخروج"
+            className="h-10 px-3 rounded-xl bg-white/5 hover:bg-rose-500/20 text-nav-muted hover:text-rose-300 text-xs font-bold flex items-center gap-1.5"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden sm:inline">خروج</span>
+          </button>
+        </header>
+        <main className="flex-1 w-full max-w-[1600px] mx-auto p-3 sm:p-6">{children}</main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex">

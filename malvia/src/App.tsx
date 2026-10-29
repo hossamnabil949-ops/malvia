@@ -50,10 +50,16 @@ import { SaleError, computeVoidPlan, deductStock, isCreditPayment } from './util
 import type { AuditEntry, StockMovement, InvoicePayment, Warehouse, StockLevel, StockTransfer } from './types/autoParts';
 import { MAIN_WAREHOUSE_ID, normalizeWarehouseId, availableIn, adjustLevels, validateTransfer, applyTransfer, TransferError } from './utils/warehouseLogic';
 import { WarehousesView } from './components/WarehousesView';
-import { hasTabAccess, firstAllowedTab } from './utils/permissions';
+import { hasTabAccess, firstAllowedTab, isSimpleCashier, SIMPLE_MODE_TABS } from './utils/permissions';
 import { resolveLoyalty, earnedPoints, loyaltyAfterReturn, addMonths, availableBalances, pendingExpiryEntries } from './utils/loyaltyLogic';
 import type { LoyaltyEntry, LoyaltyEntryType } from './utils/loyaltyLogic';
 import { ChequesView, NewChequeInput } from './components/ChequesView';
+import {
+  StockBatch, SerialUnit, TrackingMode, TRACKING_LABEL, allocateFefo, applyBatchOps, validateSerialSale, autoBatchNo, expiryBuckets, validateSerialIntake, unassignedStock, inStockUnits,
+} from './utils/trackingLogic';
+import { TrackingView } from './components/TrackingView';
+import { ReportsHub } from './components/ReportsHub';
+import { trackReturn } from './utils/returnTracking';
 import {
   Cheque, ChequeAction, ChequeEffect, ChequeError, CHEQUE_PAYMENT_METHOD, ACTION_LABEL as CHEQUE_ACTION_LABEL, clearLabel as chequeClearLabel,
   registrationEffect, actionEffect, applyAction, validateCheque, initialStatus, pendingIncomingByCustomer, attentionCount, dueState,
@@ -138,6 +144,8 @@ export default function App() {
   const [loyaltyLedger, setLoyaltyLedger] = useState<LoyaltyEntry[]>([]);
   const [loyaltyTick, setLoyaltyTick] = useState(0);
   const [cheques, setCheques] = useState<Cheque[]>([]);
+  const [stockBatches, setStockBatches] = useState<StockBatch[]>([]);
+  const [serialUnits, setSerialUnits] = useState<SerialUnit[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   // معرّفات حركات الخزنة المعروفة (المحمّلة) — أي حركة جديدة خارجها تُختم بوقتها ووردية الدرج
   const knownTreasuryIds = useRef<Set<string>>(new Set());
@@ -152,13 +160,20 @@ export default function App() {
   const liveEmployee = currentUser ? employees.find(e => e.id === currentUser.employeeId) : undefined;
   const effectiveRole = liveEmployee?.role ?? currentUser?.role;
   const effectivePermissions = liveEmployee?.permissions ?? currentUser?.permissions;
-  const canAccessTab = (tab: string): boolean => !currentUser || hasTabAccess(effectiveRole, effectivePermissions, tab);
+  const simpleMode = Boolean(currentUser) && isSimpleCashier(effectiveRole, effectivePermissions);
+  const canAccessTab = (tab: string): boolean =>
+    !currentUser || (hasTabAccess(effectiveRole, effectivePermissions, tab) && (!simpleMode || SIMPLE_MODE_TABS.includes(tab)));
   const canManageInventoryNow = !currentUser || hasTabAccess(effectiveRole, effectivePermissions, 'inventory');
   const viewTab: ActiveTab | null = canAccessTab(currentTab) ? currentTab : null;
   useEffect(() => {
     // أي تحويل برمجي (بحث صوتي، أزرار سريعة...) لشاشة ممنوعة يرجع لأول شاشة مسموحة
-    if (currentUser && !canAccessTab(currentTab)) setCurrentTab(firstAllowedTab(effectiveRole, effectivePermissions) as ActiveTab);
-  }, [currentTab, currentUser, effectiveRole, effectivePermissions]);
+    if (currentUser && !canAccessTab(currentTab)) {
+      const next = simpleMode
+        ? (SIMPLE_MODE_TABS.find(t => canAccessTab(t)) ?? 'pos')
+        : firstAllowedTab(effectiveRole, effectivePermissions);
+      setCurrentTab(next as ActiveTab);
+    }
+  }, [currentTab, currentUser, effectiveRole, effectivePermissions, simpleMode]);
 
   // Modals state
   const [showInventoryErrors, setShowInventoryErrors] = useState<boolean>(false);
@@ -234,6 +249,8 @@ export default function App() {
     setStockTransfers(data.stockTransfers || []);
     setLoyaltyLedger(data.loyaltyLedger || []);
     setCheques(data.cheques || []);
+    setStockBatches(data.stockBatches || []);
+    setSerialUnits(data.serialUnits || []);
   }, []);
 
   useEffect(() => {
@@ -719,6 +736,173 @@ export default function App() {
     });
   }, [customers, loyaltyLedger, loyaltyTick, activeTenantId]);
 
+  // ---------- الدفعات والسيريال ----------
+  const commitBatches = (updater: (prev: StockBatch[]) => StockBatch[]) =>
+    setStockBatches(prev => { const u = updater(prev); persistChanges({ stockBatches: u }); return u; });
+  const commitSerials = (updater: (prev: SerialUnit[]) => SerialUnit[]) =>
+    setSerialUnits(prev => { const u = updater(prev); persistChanges({ serialUnits: u }); return u; });
+
+  /** عند توريد فاتورة مشتريات: تُنشأ دفعة/وحدات سيريال لكل سطر على صنف مُفعَّل له التتبع. */
+  const registerPurchaseTracking = (invoice: PurchaseInvoice, allParts: AutoPart[]) => {
+    const newBatches: StockBatch[] = [];
+    const newUnits: SerialUnit[] = [];
+    const stamp = Date.now();
+    invoice.items.forEach((it, idx) => {
+      const part = allParts.find(p => (it.partId && p.id === it.partId) || normKey(p.partNumber) === normKey(it.partNumber) || normKey(p.name) === normKey(it.partName));
+      if (!part || !part.tracking || part.tracking === 'none') return;
+      if (part.tracking === 'batch') {
+        const seq = stockBatches.filter(b => b.partId === part.id && b.receivedDate === invoice.date).length + newBatches.filter(b => b.partId === part.id).length + 1;
+        newBatches.push({
+          id: `B-${stamp}-${idx}`,
+          partId: part.id,
+          batchNo: it.batchNo?.trim() || autoBatchNo(invoice.date, seq),
+          expiryDate: it.expiryDate || undefined,
+          receivedDate: invoice.date,
+          quantity: it.quantity,
+          initialQuantity: it.quantity,
+          costPrice: it.costPrice,
+          supplierName: invoice.supplierName,
+          purchaseInvoiceId: invoice.id,
+          purchaseInvoiceNumber: invoice.invoiceNumber,
+        });
+      } else if (part.tracking === 'serial') {
+        const known = new Set(serialUnits.filter(u => u.partId === part.id).map(u => u.serial.trim().toLowerCase()));
+        (it.serials || []).forEach((sn, i) => {
+          const k = sn.trim().toLowerCase();
+          if (!k || known.has(k)) return;     // دفاعي: لا يتكرر السيريال لنفس الصنف
+          known.add(k);
+          newUnits.push({
+            id: `SN-${stamp}-${idx}-${i}`,
+            partId: part.id,
+            serial: sn.trim(),
+            status: 'in_stock',
+            receivedDate: invoice.date,
+            purchaseInvoiceId: invoice.id,
+            purchaseInvoiceNumber: invoice.invoiceNumber,
+          });
+        });
+      }
+    });
+    if (newBatches.length) commitBatches(prev => [...newBatches, ...prev]);
+    if (newUnits.length) commitSerials(prev => [...newUnits, ...prev]);
+  };
+
+  /** تطبيق أثر مرتجع (أو حذفه) على الدفعات والسيريال. يرجع الأسطر المحدّثة للفاتورة. */
+  const applyReturnTracking = (inv: Invoice, retItems: { partNumber: string; partName: string; quantity: number; serials?: string[] }[], direction: 1 | -1) => {
+    const batchOps: { batchId: string; qty: number }[] = [];
+    const toStock = new Set<string>();
+    const toSold = new Set<string>();
+    const touchedPartIds = new Map<string, string>(); // serial -> partId
+    retItems.forEach(r => {
+      const it = inv.items.find(x => x.partNumber === r.partNumber && x.partName === r.partName);
+      if (!it) return;
+      const res = trackReturn(it, r.quantity, r.serials, direction);
+      batchOps.push(...res.batchOps);
+      res.unitsToStock.forEach(s => { toStock.add(`${it.partId}|${s.trim().toLowerCase()}`); touchedPartIds.set(s, it.partId || ''); });
+      res.unitsToSold.forEach(s => { toSold.add(`${it.partId}|${s.trim().toLowerCase()}`); touchedPartIds.set(s, it.partId || ''); });
+    });
+    if (batchOps.length) commitBatches(prev => applyBatchOps(prev, batchOps, 1));   // الكميات موقّعة: موجب يضيف وسالب يخصم
+    if (toStock.size || toSold.size) {
+      commitSerials(prev => prev.map(u => {
+        const key = `${u.partId}|${u.serial.trim().toLowerCase()}`;
+        if (toStock.has(key)) return { ...u, status: 'in_stock' as const, soldInvoiceId: undefined, soldInvoiceNumber: undefined, soldAt: undefined, customerName: undefined, customerPhone: undefined };
+        if (toSold.has(key)) return { ...u, status: 'sold' as const, soldInvoiceId: inv.id, soldInvoiceNumber: inv.invoiceNumber, soldAt: inv.date, customerName: inv.customerName, customerPhone: inv.customerPhone };
+        return u;
+      }));
+    }
+  };
+
+  /** نفس منطق الإرجاع لكن على مستوى سطر الفاتورة الذي يُحفظ (يستدعى داخل تحديث الحالة النقي). */
+  const trackedInvoiceItem = (it: Invoice['items'][number], r: { quantity: number; serials?: string[] } | undefined, direction: 1 | -1) =>
+    r && (it.batchAllocations?.length || it.serials?.length) ? trackReturn(it, r.quantity, r.serials, direction).item : it;
+
+  // ---------- إدارة الدفعات والسيريال (يدوي) ----------
+  const handleSetTracking = (partId: string, mode: TrackingMode) => {
+    const part = parts.find(p => p.id === partId);
+    if (!part) return;
+    setParts(prev => {
+      const updated = prev.map(p => (p.id === partId ? { ...p, tracking: mode === 'none' ? undefined : mode } : p));
+      persistChanges({ parts: updated });
+      return updated;
+    });
+    logAudit('stock.adjust', `نمط التتبع لـ ${part.name}: ${TRACKING_LABEL[mode]}`, partId);
+  };
+
+  const handleAddBatch = (input: { partId: string; batchNo: string; expiryDate?: string; quantity: number; note?: string }): { ok: boolean; message?: string } => {
+    const part = parts.find(p => p.id === input.partId);
+    if (!part) return { ok: false, message: 'اختر الصنف' };
+    if (!(input.quantity > 0)) return { ok: false, message: 'الكمية يجب أن تكون أكبر من صفر' };
+    const mine = stockBatches.filter(b => b.partId === part.id);
+    const free = unassignedStock(part.stockQuantity, mine);
+    if (input.quantity > free) return { ok: false, message: `المتاح بدون دفعة ${free} فقط (الرصيد الكلي ${part.stockQuantity} موزّع على دفعات)` };
+    const today = todayISO();
+    const batch: StockBatch = {
+      id: `B-${Date.now()}`,
+      partId: part.id,
+      batchNo: input.batchNo.trim() || autoBatchNo(today, mine.filter(b => b.receivedDate === today).length + 1),
+      expiryDate: input.expiryDate || undefined,
+      receivedDate: today,
+      quantity: input.quantity,
+      initialQuantity: input.quantity,
+      note: input.note?.trim() || undefined,
+    };
+    commitBatches(prev => [batch, ...prev]);
+    logAudit('batch.create', `دفعة ${batch.batchNo} للصنف ${part.name} بكمية ${batch.quantity}${batch.expiryDate ? ` تنتهي ${batch.expiryDate}` : ''}`, batch.id, batch.quantity);
+    return { ok: true };
+  };
+
+  const handleWriteOffBatch = (batchId: string, qty: number, reason: string): { ok: boolean; message?: string } => {
+    const batch = stockBatches.find(b => b.id === batchId);
+    const part = batch ? parts.find(p => p.id === batch.partId) : undefined;
+    if (!batch || !part) return { ok: false, message: 'الدفعة غير موجودة' };
+    if (!(qty > 0) || qty > batch.quantity) return { ok: false, message: `الكمية يجب أن تكون بين 1 و ${batch.quantity}` };
+    if (reason.trim().length < 3) return { ok: false, message: 'اكتب سبب الإعدام / الاستبعاد' };
+    commitBatches(prev => applyBatchOps(prev, [{ batchId, qty }], -1));
+    const delta = -Math.min(qty, part.stockQuantity);
+    setParts(prev => {
+      const updated = prev.map(p => (p.id === part.id ? { ...p, stockQuantity: Math.max(0, p.stockQuantity - qty), updatedAt: todayISO() } : p));
+      persistChanges({ parts: updated });
+      return updated;
+    });
+    logStockMovements([{ part, qtyDelta: delta, type: 'adjustment', refId: batch.id, refNumber: batch.batchNo }]);
+    logAudit('batch.writeoff', `إعدام ${qty} من دفعة ${batch.batchNo} (${part.name}): ${reason.trim()}`, batch.id, qty);
+    return { ok: true };
+  };
+
+  const handleRegisterSerials = (partId: string, serials: string[]): { ok: boolean; message?: string } => {
+    const part = parts.find(p => p.id === partId);
+    if (!part) return { ok: false, message: 'اختر الصنف' };
+    if (serials.length === 0) return { ok: false, message: 'اكتب رقماً تسلسلياً واحداً على الأقل' };
+    const v = validateSerialIntake(serials, serials.length, partId, serialUnits);
+    if (v.error === 'DUPLICATE_IN_LIST') return { ok: false, message: `الرقم ${v.detail} مكرر في القائمة` };
+    if (v.error === 'ALREADY_EXISTS') return { ok: false, message: `الرقم ${v.detail} مسجّل بالفعل لهذا الصنف` };
+    const free = Math.max(0, part.stockQuantity - inStockUnits(serialUnits, partId).length);
+    if (serials.length > free) return { ok: false, message: `المتاح تسجيله ${free} فقط (رصيد الصنف ${part.stockQuantity} منها ${inStockUnits(serialUnits, partId).length} مسجّلة)` };
+    const today = todayISO();
+    const stamp = Date.now();
+    const units: SerialUnit[] = serials.map((s, i) => ({ id: `SN-${stamp}-${i}`, partId, serial: s.trim(), status: 'in_stock', receivedDate: today }));
+    commitSerials(prev => [...units, ...prev]);
+    logAudit('serial.register', `تسجيل ${units.length} رقم تسلسلي للصنف ${part.name}`, partId, units.length);
+    return { ok: true };
+  };
+
+  const handleScrapSerial = (unitId: string, reason: string): { ok: boolean; message?: string } => {
+    const unit = serialUnits.find(u => u.id === unitId);
+    const part = unit ? parts.find(p => p.id === unit.partId) : undefined;
+    if (!unit || !part) return { ok: false, message: 'الوحدة غير موجودة' };
+    if (unit.status !== 'in_stock') return { ok: false, message: 'لا يمكن استبعاد إلا وحدة موجودة بالمخزن' };
+    if (reason.trim().length < 3) return { ok: false, message: 'اكتب سبب الاستبعاد' };
+    commitSerials(prev => prev.map(u => (u.id === unitId ? { ...u, status: 'scrapped' as const, note: reason.trim() } : u)));
+    setParts(prev => {
+      const updated = prev.map(p => (p.id === part.id ? { ...p, stockQuantity: Math.max(0, p.stockQuantity - 1), updatedAt: todayISO() } : p));
+      persistChanges({ parts: updated });
+      return updated;
+    });
+    logStockMovements([{ part, qtyDelta: -Math.min(1, part.stockQuantity), type: 'adjustment', refId: unit.id, refNumber: unit.serial }]);
+    logAudit('serial.scrap', `استبعاد السيريال ${unit.serial} (${part.name}): ${reason.trim()}`, unit.id, 1);
+    return { ok: true };
+  };
+
   // ---------- الشيكات ----------
   // يطبّق أثر الشيك على حساب العميل/المورد. التسجيل يخصم من الحساب، والارتداد/الإلغاء يعيده كما كان.
   const applyChequeEffectToParty = (cheque: Cheque, effect: ChequeEffect, isRegistration: boolean) => {
@@ -950,10 +1134,46 @@ export default function App() {
       return false;
     }
 
+    // 2ب) تتبع الدفعات والسيريال: يرفض البيع لو الصالح غير كافٍ أو السيريال غير متاح
+    const trackedExtras: Record<number, { batchAllocations?: import('./utils/trackingLogic').BatchAllocation[]; serials?: string[] }> = {};
+    const batchOpsAll: { batchId: string; qty: number }[] = [];
+    const soldSerialKeys = new Set<string>();
+    {
+      let workingBatches = stockBatches;
+      let workingUnits = serialUnits;
+      for (let i = 0; i < lines.length; i++) {
+        const { item, part } = lines[i];
+        if (!part || !part.tracking || part.tracking === 'none') continue;
+        if (part.tracking === 'batch') {
+          const res = allocateFefo(workingBatches.filter(b => b.partId === part.id), item.quantity, part.stockQuantity, todayISO());
+          if (!res.ok) {
+            window.alert(`تعذّر إتمام البيع: «${part.name}» — الكمية الصالحة غير كافية${res.expiredQty > 0 ? ` (يوجد ${res.expiredQty} منتهية الصلاحية ولا تُباع، استبعدها من شاشة الدفعات)` : ''}.`);
+            return false;
+          }
+          const ops = res.allocations.map(a => ({ batchId: a.batchId, qty: a.qty }));
+          workingBatches = applyBatchOps(workingBatches, ops, -1);
+          batchOpsAll.push(...ops);
+          trackedExtras[i] = { batchAllocations: res.allocations };
+        } else {
+          const v = validateSerialSale(item.serials, item.quantity, part.id, workingUnits);
+          if (v.error) {
+            const why = v.error === 'COUNT_MISMATCH' ? `اختر ${item.quantity} رقم تسلسلي (المختار ${item.serials?.length ?? 0})`
+              : v.error === 'DUPLICATE_IN_LIST' ? `الرقم ${v.detail} مكرر في الاختيار`
+              : `الرقم التسلسلي ${v.detail} غير متاح بالمخزن لهذا الصنف`;
+            window.alert(`تعذّر إتمام البيع: «${part.name}» — ${why}.`);
+            return false;
+          }
+          v.units.forEach(u => soldSerialKeys.add(u.id));
+          workingUnits = workingUnits.map(u => (soldSerialKeys.has(u.id) ? { ...u, status: 'sold' as const } : u));
+          trackedExtras[i] = { serials: (item.serials || []).map(s => s.trim()) };
+        }
+      }
+    }
+
     // 3) حفظ الفاتورة (بعد إضافة partId لكل سطر)
     const finalInvoice: Invoice = {
       ...invoice,
-      items: invoice.items.map((it, i) => ({ ...it, partId: lines[i].partId })),
+      items: invoice.items.map((it, i) => ({ ...it, partId: lines[i].partId, ...(trackedExtras[i] || {}) })),
       loyaltyEarned: earnedPts > 0 ? earnedPts : undefined,
     };
     appendLoyalty(finalInvoice.customerId, [
@@ -965,6 +1185,13 @@ export default function App() {
       persistChanges({ invoices: updated });
       return updated;
     });
+
+    if (batchOpsAll.length) commitBatches(prev => applyBatchOps(prev, batchOpsAll, -1));
+    if (soldSerialKeys.size) {
+      commitSerials(prev => prev.map(u => (soldSerialKeys.has(u.id)
+        ? { ...u, status: 'sold' as const, soldInvoiceId: finalInvoice.id, soldInvoiceNumber: finalInvoice.invoiceNumber, soldAt: finalInvoice.date, customerName: finalInvoice.customerName, customerPhone: finalInvoice.customerPhone }
+        : u)));
+    }
 
     // 4) المخزن + دفتر الحركات
     setParts(nextParts);
@@ -1087,6 +1314,16 @@ export default function App() {
       { type: 'reverse_redeem', points: inv.loyaltyRedeemedPoints || 0, refId: inv.id, refNumber: inv.invoiceNumber, note: cleanReason, expires: true },
     ]);
 
+    // استرجاع الدفعات والسيريال لكل ما لم يرجع بمرتجع سابق
+    applyReturnTracking(
+      inv,
+      inv.items
+        .filter(it => it.batchAllocations?.length || it.serials?.length)
+        .map(it => ({ partNumber: it.partNumber, partName: it.partName, quantity: it.quantity - (it.returnedQuantity || 0) }))
+        .filter(r => r.quantity > 0),
+      1
+    );
+
     // 1) المخزون: إعادة الكميات المتبقية
     const moves: Parameters<typeof logStockMovements>[0] = [];
     const nextParts = parts.map(part => {
@@ -1171,7 +1408,20 @@ export default function App() {
   };
 
   // Handlers for Sales Returns
-  const handleAddSalesReturn = (salesReturn: SalesReturn) => {
+  const handleAddSalesReturn = (rawReturn: SalesReturn) => {
+    // تثبيت السيريالات المرتجعة فعلياً داخل سجل المرتجع (المختارة من الشاشة أو تلقائياً)
+    const origInv = invoices.find(i => i.id === rawReturn.invoiceId);
+    const salesReturn: SalesReturn = origInv
+      ? {
+          ...rawReturn,
+          items: rawReturn.items.map(r => {
+            const it = origInv.items.find(x => x.partNumber === r.partNumber && x.partName === r.partName);
+            if (!it?.serials?.length) return r;
+            return { ...r, serials: trackReturn(it, r.quantity, r.serials, 1).unitsToStock };
+          }),
+        }
+      : rawReturn;
+    if (origInv) applyReturnTracking(origInv, salesReturn.items, 1);
     setSalesReturns(prev => {
       const updated = [salesReturn, ...prev];
       persistChanges({ salesReturns: updated });
@@ -1184,7 +1434,7 @@ export default function App() {
         if (inv.id !== salesReturn.invoiceId) return inv;
         const items = inv.items.map(it => {
           const r = salesReturn.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
-          return r ? { ...it, returnedQuantity: (it.returnedQuantity || 0) + r.quantity } : it;
+          return r ? { ...trackedInvoiceItem(it, r, 1), returnedQuantity: (it.returnedQuantity || 0) + r.quantity } : it;
         });
         const allReturned = items.every(it => (it.returnedQuantity || 0) >= it.quantity);
         return {
@@ -1277,13 +1527,16 @@ export default function App() {
     });
     if (!ret) return;
 
+    const origInvForDelete = invoices.find(i => i.id === ret.invoiceId);
+    if (origInvForDelete) applyReturnTracking(origInvForDelete, ret.items, -1);
+
     // عكس أثر المرتجع على الفاتورة
     setInvoices(prev => {
       const updated = prev.map(inv => {
         if (inv.id !== ret.invoiceId) return inv;
         const items = inv.items.map(it => {
           const r = ret.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
-          return r ? { ...it, returnedQuantity: Math.max(0, (it.returnedQuantity || 0) - r.quantity) } : it;
+          return r ? { ...trackedInvoiceItem(it, r, -1), returnedQuantity: Math.max(0, (it.returnedQuantity || 0) - r.quantity) } : it;
         });
         const returnedAmount = Math.max(0, (inv.returnedAmount || 0) - ret.totalRefundAmount);
         const anyReturned = items.some(it => (it.returnedQuantity || 0) > 0);
@@ -1443,6 +1696,7 @@ export default function App() {
           unit: 'حبة',
           createdAt: today,
           updatedAt: today,
+          ...(item.tracking && item.tracking !== 'none' ? { tracking: item.tracking } : {}),
         };
         newParts.push(created);
         // الصنف الجديد: رصيده بعد الحركة = الكمية الموردة (الرصيد قبلها صفر)
@@ -1455,6 +1709,7 @@ export default function App() {
       logStockMovements(movements);
       // الاستلام في مخزن/فرع غير رئيسي: نحرّك رصيده بمعرّفات الأصناف (تشمل الأصناف الجديدة)
       shiftWarehouseStock(invoice.warehouseId, movements.map(m => ({ partId: m.part.id, qty: m.qtyDelta })), 1);
+      registerPurchaseTracking(invoice, nextParts);
     }
     logAudit('purchase.create', `فاتورة مشتريات ${invoice.invoiceNumber} - ${invoice.supplierName}`, invoice.id, invoice.grandTotal);
 
@@ -1906,8 +2161,10 @@ export default function App() {
     const lowStockCount = parts.filter(p => p.stockQuantity <= p.minAlertStock).length;
     const unresolvedErrors = inventoryErrors.filter(e => !e.isCorrected).length;
     const chequeAlerts = canAccessTab('cheques') ? attentionCount(cheques, todayISO(), 3) : 0; // يظهر فقط لمن يملك صلاحية الشيكات
-    return lowStockCount + unresolvedErrors + chequeAlerts;
-  }, [parts, inventoryErrors, cheques, effectiveRole, effectivePermissions]);
+    const bk = expiryBuckets(stockBatches, todayISO());
+    const expiryAlerts = canAccessTab('tracking') ? bk.expired.length + bk.within30.length : 0;   // دفعات منتهية أو تنتهي خلال 30 يوماً
+    return lowStockCount + unresolvedErrors + chequeAlerts + expiryAlerts;
+  }, [parts, inventoryErrors, cheques, stockBatches, effectiveRole, effectivePermissions]);
 
   // Auth / Login Handler
   const handleLoginSuccess = (session: UserSession, tenant: TenantLicense, emps: Employee[]) => {
@@ -2039,6 +2296,7 @@ export default function App() {
       
       {/* Sidebar + Top Bar + Mobile Bottom Bar (wraps the page content) */}
       <Navigation
+        simpleMode={simpleMode}
         canAccessTab={canAccessTab}
         canManageInventory={canManageInventoryNow}
         currentTab={currentTab}
@@ -2109,9 +2367,11 @@ export default function App() {
             stockLevels={stockLevels}
             loyalty={resolveLoyalty(settings.loyalty)}
             onAddCustomer={handleAddCustomer}
+            serialUnits={serialUnits}
+            stockBatches={stockBatches}
             cashierName={currentUser?.employeeName}
             cashierId={currentUser?.employeeId}
-            onOpenVoiceAssistant={() => setShowVoiceAssistant(true)}
+            onOpenVoiceAssistant={simpleMode ? undefined : () => setShowVoiceAssistant(true)}
             onOpenReturns={() => setCurrentTab('invoices')}
             shiftOpen={Boolean(openShift)}
             shiftRequired={Boolean(settings.requireShiftForSales)}
@@ -2128,6 +2388,19 @@ export default function App() {
             canManage={currentUser?.role === 'مدير عام' || Boolean(currentUser?.permissions?.canManageInventory)}
             onSaveWarehouse={handleSaveWarehouse}
             onTransfer={handleCreateTransfer}
+          />
+        )}
+
+        {viewTab === 'tracking' && (
+          <TrackingView
+            parts={parts}
+            batches={stockBatches}
+            units={serialUnits}
+            onSetTracking={handleSetTracking}
+            onAddBatch={handleAddBatch}
+            onWriteOff={handleWriteOffBatch}
+            onRegisterSerials={handleRegisterSerials}
+            onScrapSerial={handleScrapSerial}
           />
         )}
 
@@ -2199,6 +2472,7 @@ export default function App() {
             purchaseReturns={purchaseReturns}
             suppliers={suppliers}
             warehouses={warehouses}
+            serialUnits={serialUnits}
             parts={parts}
             treasuryBalance={treasuryBalance}
             onAddPurchaseInvoice={handleAddPurchaseInvoice}
@@ -2357,18 +2631,36 @@ export default function App() {
         )}
 
         {viewTab === 'reports' && (
-          <ReportsView
-            invoices={invoices}
-            purchaseInvoices={purchaseInvoices}
-            salesReturns={salesReturns}
-            purchaseReturns={purchaseReturns}
-            parts={parts}
-            suppliers={suppliers}
-            customers={customers}
-            treasuryTransactions={treasury}
-            expenses={expenses}
-            partners={partners}
-            treasuryBalance={treasuryBalance}
+          <ReportsHub
+            data={{
+              invoices,
+              salesReturns,
+              purchaseInvoices,
+              parts,
+              customers,
+              suppliers,
+              expenses,
+              treasury,
+              cheques,
+              batches: stockBatches,
+              loyaltyLedger,
+              loyaltyPointValue: resolveLoyalty(settings.loyalty).pointValueEgp,
+            }}
+            exportTab={
+              <ReportsView
+                invoices={invoices}
+                purchaseInvoices={purchaseInvoices}
+                salesReturns={salesReturns}
+                purchaseReturns={purchaseReturns}
+                parts={parts}
+                suppliers={suppliers}
+                customers={customers}
+                treasuryTransactions={treasury}
+                expenses={expenses}
+                partners={partners}
+                treasuryBalance={treasuryBalance}
+              />
+            }
           />
         )}
 
@@ -2512,6 +2804,11 @@ export default function App() {
           } : undefined}
           onNavigateToCheques={() => {
             setCurrentTab('cheques');
+            setShowNotifications(false);
+          }}
+          expiryAttention={canAccessTab('tracking') ? (() => { const bk = expiryBuckets(stockBatches, todayISO()); return { expired: bk.expired.length, soon: bk.within30.length }; })() : undefined}
+          onNavigateToTracking={() => {
+            setCurrentTab('tracking');
             setShowNotifications(false);
           }}
         />

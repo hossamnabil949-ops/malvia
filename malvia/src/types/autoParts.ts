@@ -96,6 +96,7 @@ export interface AutoPart {
   alternatives?: PartAlternative[]; // البدائل المتطابقة
   createdAt?: string; // تاريخ إضافة الصنف للمخزن (YYYY-MM-DD)
   updatedAt?: string; // تاريخ آخر حركة على رصيد الصنف (YYYY-MM-DD)
+  tracking?: import('../utils/trackingLogic').TrackingMode; // تتبع الدفعات/السيريال (غير موجود = بدون تتبع)
 }
 
 export interface CartItem {
@@ -128,6 +129,9 @@ export interface InvoiceItem {
   costPrice?: number; // تكلفة الوحدة وقت البيع (لحساب تكلفة البضاعة المباعة بدقة)
   total: number;
   returnedQuantity?: number;
+  batchAllocations?: import('../utils/trackingLogic').BatchAllocation[]; // الدفعات المسحوبة (للأصناف ذات الدفعات)
+  serials?: string[];          // الأرقام التسلسلية المباعة
+  returnedSerials?: string[];  // التي رجعت بمرتجع
 }
 
 export interface InvoicePayment {
@@ -139,7 +143,7 @@ export type AuditAction =
   | 'invoice.create' | 'invoice.price_override' | 'invoice.discount' | 'invoice.void'
   | 'sales_return.create' | 'sales_return.delete'
   | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
-  | 'stock.adjust' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'cheque.create' | 'cheque.action' | 'stock.transfer' | 'supplier.payment'
+  | 'stock.adjust' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'cheque.create' | 'cheque.action' | 'batch.create' | 'batch.writeoff' | 'serial.register' | 'serial.scrap' | 'stock.transfer' | 'supplier.payment'
   | 'shift.open' | 'shift.close' | 'shift.variance';
 
 export interface AuditEntry {
@@ -350,6 +354,10 @@ export interface PurchaseInvoiceItem {
   salePrice: number;
   total: number;
   returnedQuantity?: number;
+  tracking?: import('../utils/trackingLogic').TrackingMode; // للصنف الجديد عند أول توريد
+  batchNo?: string;
+  expiryDate?: string;         // YYYY-MM-DD
+  serials?: string[];
 }
 
 export interface PurchaseInvoice {
@@ -383,6 +391,7 @@ export interface SalesReturnItem {
   unitPrice: number;
   total: number;
   reason?: string;
+  serials?: string[]; // الأرقام التسلسلية المرتجعة فعلاً
 }
 
 export interface SalesReturn {
@@ -512,6 +521,7 @@ export interface EmployeePermissions {
   canViewReports: boolean;
   canManageSettings: boolean;
   canManagePartners: boolean;
+  simpleCashierMode?: boolean; // وضع الكاشير المبسط: شاشة بيع فقط بدون قوائم وأدوات متقدمة
 }
 
 export interface Employee {

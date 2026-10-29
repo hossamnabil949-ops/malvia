@@ -109,6 +109,13 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
   // Sales Return Modal State
   const [returnInvoice, setReturnInvoice] = useState<Invoice | null>(null);
   const [returnItems, setReturnItems] = useState<{ [key: string]: number }>({});
+  const [returnSerials, setReturnSerials] = useState<{ [key: string]: string[] }>({});
+  const toggleReturnSerial = (rowKey: string, serial: string, max: number) => {
+    const cur = returnSerials[rowKey] || [];
+    const next = cur.includes(serial) ? cur.filter((s) => s !== serial) : cur.length >= max ? cur : [...cur, serial];
+    setReturnSerials((p) => ({ ...p, [rowKey]: next }));
+    setReturnItems((q) => ({ ...q, [rowKey]: next.length }));
+  };
   const [refundMethod, setRefundMethod] = useState<'نقدي (خصم من الخزنة)' | 'خصم من رصيد العميل الآجل' | 'إنستاباي / محفظة'>('نقدي (خصم من الخزنة)');
   const [returnReason, setReturnReason] = useState('عيب في الصنف / عدم مطابقة لموديل السيارة');
   const [returnNotes, setReturnNotes] = useState('');
@@ -164,6 +171,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       initialQtys[String(idx)] = 0;
     });
     setReturnItems(initialQtys);
+    setReturnSerials({});
     if (inv.paymentMethod === 'آجل (شكك / حساب ورشة)') {
       setRefundMethod('خصم من رصيد العميل الآجل');
     } else {
@@ -184,15 +192,16 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     if (!returnInvoice || calculatedReturnTotal <= 0) return;
 
     const itemsToReturn: SalesReturnItem[] = returnInvoice.items
-      .map((it, idx) => ({ it, qty: returnItems[String(idx)] || 0 }))
+      .map((it, idx) => ({ it, idx, qty: returnItems[String(idx)] || 0 }))
       .filter(({ qty }) => qty > 0)
-      .map(({ it, qty }) => ({
+      .map(({ it, idx, qty }) => ({
         partNumber: it.partNumber,
         partName: it.partName,
         quantity: qty,
         unitPrice: it.unitPrice,
         total: qty * it.unitPrice,
         reason: returnReason,
+        ...(it.serials?.length ? { serials: (returnSerials[String(idx)] || []).slice(0, qty) } : {}),
       }));
 
     if (itemsToReturn.length === 0) return;
@@ -650,6 +659,24 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                             <td className="p-2.5">
                               <span className="font-bold text-white block">{it.partName}</span>
                               <span className="font-mono text-[10px] text-amber-400">{it.partNumber}</span>
+                              {it.serials && it.serials.length > 0 && (
+                                <div className="mt-1.5 flex flex-wrap gap-1 max-w-[260px]">
+                                  <span className="w-full text-[10px] text-neutral-500">اختر السيريال المرتجع:</span>
+                                  {it.serials.filter((s) => !(it.returnedSerials || []).includes(s)).map((s) => {
+                                    const on = (returnSerials[rowKey] || []).includes(s);
+                                    return (
+                                      <button
+                                        key={s}
+                                        type="button"
+                                        onClick={() => toggleReturnSerial(rowKey, s, maxReturnable)}
+                                        className={`px-1.5 h-6 rounded font-mono text-[10px] border ${on ? 'bg-rose-500/25 border-rose-500 text-rose-200' : 'bg-surface-1 border-neutral-700 text-neutral-300 hover:border-neutral-500'}`}
+                                      >
+                                        {s}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </td>
                             <td className="p-2.5 text-center font-mono">
                               {it.quantity}

@@ -30,6 +30,8 @@ interface NotificationsModalProps {
   onNavigateToInventory: () => void;
   chequesAttention?: { count: number; overdue: number };  // شيكات تستحق خلال 3 أيام أو متأخرة
   onNavigateToCheques?: () => void;
+  expiryAttention?: { expired: number; soon: number };   // دفعات منتهية أو تنتهي خلال 30 يوماً
+  onNavigateToTracking?: () => void;
 }
 
 export const NotificationsModal: React.FC<NotificationsModalProps> = ({
@@ -41,6 +43,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   onNavigateToInventory,
   chequesAttention,
   onNavigateToCheques,
+  expiryAttention,
+  onNavigateToTracking,
 }) => {
   const [activeFilter, setActiveFilter] = useState<'all' | 'out' | 'critical'>('all');
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
@@ -198,6 +202,19 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
             </div>
             <button type="button" onClick={onNavigateToCheques} className="px-3 h-8 rounded-xl bg-indigo-500/25 hover:bg-indigo-500/40 text-indigo-100 text-xs font-bold">
               فتح الشيكات
+            </button>
+          </div>
+        )}
+
+        {expiryAttention && (expiryAttention.expired + expiryAttention.soon) > 0 && onNavigateToTracking && !showPrintView && (
+          <div className="px-5 sm:px-6 py-3 border-b border-neutral-800 bg-rose-500/10 flex items-center justify-between gap-3">
+            <div className="text-xs font-bold text-rose-200">
+              {expiryAttention.expired > 0 && <span>{expiryAttention.expired} دفعة منتهية الصلاحية</span>}
+              {expiryAttention.expired > 0 && expiryAttention.soon > 0 && <span> · </span>}
+              {expiryAttention.soon > 0 && <span className="text-amber-200">{expiryAttention.soon} دفعة تنتهي خلال 30 يوماً</span>}
+            </div>
+            <button type="button" onClick={onNavigateToTracking} className="px-3 h-8 rounded-xl bg-rose-500/25 hover:bg-rose-500/40 text-rose-100 text-xs font-bold">
+              فتح الدفعات
             </button>
           </div>
         )}

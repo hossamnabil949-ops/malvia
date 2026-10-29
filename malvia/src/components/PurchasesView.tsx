@@ -37,6 +37,7 @@ import {
   PaymentMethod, 
   PartCategory 
 } from '../types/autoParts';
+import { parseSerialList, validateSerialIntake, TRACKING_LABEL, TrackingMode, SerialUnit } from '../utils/trackingLogic';
 import { PART_CATEGORIES } from '../data/autoPartsData';
 import { DateRangeFilter } from './DateRangeFilter';
 import { nextPurchaseInvoiceNumber } from '../utils/invoiceNumber';
@@ -49,6 +50,7 @@ interface PurchasesViewProps {
   parts: AutoPart[];
   treasuryBalance: number;
   onAddPurchaseInvoice: (invoice: PurchaseInvoice) => void;
+  serialUnits?: SerialUnit[]; // لمنع تكرار الأرقام التسلسلية عند التوريد
   warehouses?: import('../types/autoParts').Warehouse[]; // لو فيه مخازن/فروع يظهر اختيار «استلام في مخزن»
   onEditPurchaseInvoice?: (invoice: PurchaseInvoice) => void;
   onPurchaseReturn: (returnData: PurchaseReturn) => void;
@@ -66,6 +68,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   treasuryBalance,
   onAddPurchaseInvoice,
   warehouses = [],
+  serialUnits = [],
   onEditPurchaseInvoice,
   onPurchaseReturn,
   onDeletePurchaseReturn,
@@ -95,6 +98,11 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>(suppliers[0]?.id || '');
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState('');
   const [receiveWarehouseId, setReceiveWarehouseId] = useState<string>('main');
+  const [serialTexts, setSerialTexts] = useState<Record<number, string>>({});
+  const partFor = (it: { partNumber: string; partName: string }) =>
+    parts.find((p) => (it.partNumber.trim() && p.partNumber === it.partNumber.trim()) || p.name.trim() === it.partName.trim());
+  const modeOf = (it: { partNumber: string; partName: string; tracking?: TrackingMode }): TrackingMode =>
+    partFor(it)?.tracking ?? it.tracking ?? 'none';
   const activeWarehouses = warehouses.filter((w) => w.active);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentStatus, setPaymentStatus] = useState<'مدفوعة نقداً' | 'آجل' | 'مسددة جزئياً'>('مدفوعة نقداً');
@@ -231,6 +239,11 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   };
 
   const handleRemoveItemRow = (index: number) => {
+    setSerialTexts((prev) => {
+      const next: Record<number, string> = {};
+      Object.entries(prev).forEach(([k, v]) => { const i = Number(k); if (i < index) next[i] = v; else if (i > index) next[i - 1] = v; });
+      return next;
+    });
     if (invoiceItems.length === 1) return;
     setInvoiceItems(prev => prev.filter((_, i) => i !== index));
   };
@@ -240,9 +253,20 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     if (!selectedSupplier || invoiceItems.length === 0) return;
 
     const stamp = Date.now().toString().slice(-6);
-    const validItems = invoiceItems
-      .filter(it => it.partName.trim() && Number(it.quantity) > 0)
-      .map((it, idx) => {
+    const validRows = invoiceItems.map((it, i) => ({ it, i })).filter(({ it }) => it.partName.trim() && Number(it.quantity) > 0);
+    for (const { it, i } of validRows) {
+      if (modeOf(it) !== 'serial') continue;
+      const v = validateSerialIntake(parseSerialList(serialTexts[i] || ''), Number(it.quantity), partFor(it)?.id, serialUnits);
+      if (v.error) {
+        const why = v.error === 'COUNT_MISMATCH' ? `عدد الأرقام التسلسلية (${v.detail}) لا يساوي الكمية`
+          : v.error === 'DUPLICATE_IN_LIST' ? `الرقم ${v.detail} مكرر في القائمة`
+          : `الرقم ${v.detail} مسجّل بالفعل لهذا الصنف`;
+        window.alert(`«${it.partName}»: ${why}.`);
+        return;
+      }
+    }
+    const validItems = validRows
+      .map(({ it, i }, idx) => {
         const name = it.partName.trim();
         let partNumber = it.partNumber.trim();
         if (!partNumber) {
@@ -250,7 +274,20 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           const sameName = parts.find(p => p.name.trim() === name);
           partNumber = sameName ? sameName.partNumber : `NEW-${stamp}-${idx + 1}`;
         }
-        return { ...it, partName: name, partNumber, quantity: Number(it.quantity), costPrice: Number(it.costPrice), salePrice: Number(it.salePrice) };
+        const mode = modeOf(it);
+        const isNewPart = !partFor(it);
+        return {
+          ...it,
+          partName: name,
+          partNumber,
+          quantity: Number(it.quantity),
+          costPrice: Number(it.costPrice),
+          salePrice: Number(it.salePrice),
+          tracking: isNewPart && mode !== 'none' ? mode : undefined,
+          batchNo: mode === 'batch' ? it.batchNo?.trim() || undefined : undefined,
+          expiryDate: mode === 'batch' ? it.expiryDate || undefined : undefined,
+          serials: mode === 'serial' ? parseSerialList(serialTexts[i] || '') : undefined,
+        };
       });
     if (validItems.length === 0) return;
 
@@ -284,6 +321,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
     setSupplierInvoiceNumber('');
     setReceiveWarehouseId('main');
+    setSerialTexts({});
     setApplyTax(false);
     setDiscount(0);
     setInvoiceItems([
@@ -995,7 +1033,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
                       {invoiceItems.map((item, index) => (
-                        <tr key={index} className="hover:bg-surface-3">
+                        <React.Fragment key={index}>
+                        <tr className="hover:bg-surface-3">
                           <td className="p-2.5 min-w-56">
                             <div className="space-y-1">
                               <select
@@ -1104,6 +1143,69 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                             </button>
                           </td>
                         </tr>
+                        {(() => {
+                          const mode = modeOf(item);
+                          const existing = partFor(item);
+                          const showSelector = !existing;
+                          if (!showSelector && mode === 'none') return null;
+                          return (
+                            <tr className="bg-surface-2/60">
+                              <td colSpan={8} className="px-3 pb-3 pt-1">
+                                <div className="flex flex-wrap items-start gap-3 text-[11px]">
+                                  {showSelector && (
+                                    <label className="flex items-center gap-1.5 text-neutral-400 font-bold">
+                                      التتبع:
+                                      <select
+                                        value={item.tracking ?? 'none'}
+                                        onChange={(e) => handleItemChange(index, 'tracking', e.target.value as TrackingMode)}
+                                        className="h-8 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-white"
+                                      >
+                                        {(['none', 'batch', 'serial'] as TrackingMode[]).map((m) => (
+                                          <option key={m} value={m}>{TRACKING_LABEL[m]}</option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                  )}
+                                  {!showSelector && <span className="text-amber-300 font-bold h-8 flex items-center">{TRACKING_LABEL[mode]}</span>}
+                                  {mode === 'batch' && (
+                                    <>
+                                      <input
+                                        value={item.batchNo ?? ''}
+                                        onChange={(e) => handleItemChange(index, 'batchNo', e.target.value)}
+                                        placeholder="رقم الدفعة (تلقائي لو فاضي)"
+                                        className="h-8 px-2 w-48 rounded-lg bg-surface-1 border border-neutral-700 text-white font-mono"
+                                      />
+                                      <label className="flex items-center gap-1.5 text-neutral-400 font-bold">
+                                        تاريخ الانتهاء:
+                                        <input
+                                          type="date"
+                                          value={item.expiryDate ?? ''}
+                                          onChange={(e) => handleItemChange(index, 'expiryDate', e.target.value)}
+                                          className="h-8 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-white"
+                                        />
+                                      </label>
+                                    </>
+                                  )}
+                                  {mode === 'serial' && (
+                                    <div className="flex-1 min-w-[260px]">
+                                      <textarea
+                                        value={serialTexts[index] ?? ''}
+                                        onChange={(e) => setSerialTexts((prev) => ({ ...prev, [index]: e.target.value }))}
+                                        placeholder="الأرقام التسلسلية: رقم في كل سطر (أو افصل بفاصلة)"
+                                        rows={3}
+                                        className="w-full px-2 py-1.5 rounded-lg bg-surface-1 border border-neutral-700 text-white font-mono"
+                                      />
+                                      <div className={`mt-1 font-bold ${parseSerialList(serialTexts[index] ?? '').length === Number(item.quantity) ? 'text-emerald-400' : 'text-amber-300'}`}>
+                                        {parseSerialList(serialTexts[index] ?? '').length} / {Number(item.quantity) || 0} رقم
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })()}
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>

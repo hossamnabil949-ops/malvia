@@ -20,6 +20,7 @@ import {
   Camera,
   Image as ImageIcon
 } from 'lucide-react';
+import { TrackingMode, TRACKING_LABEL } from '../utils/trackingLogic';
 import { AutoPart, CarBrand, PartCategory, Invoice, PurchaseInvoice, SalesReturn, PurchaseReturn } from '../types/autoParts';
 import { StockCardModal } from './StockCardModal';
 import { ClipboardList } from 'lucide-react';
@@ -151,6 +152,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       minAlertStock: Number.isFinite(Number(newPartForm.minAlertStock)) ? Number(newPartForm.minAlertStock) : 2,
       unit: newPartForm.unit || 'طقم',
       barcode: newPartForm.barcode?.trim() || undefined,
+      ...(newPartForm.tracking && newPartForm.tracking !== 'none' ? { tracking: newPartForm.tracking } : {}),
     };
 
     onAddNewPart(part);
@@ -169,6 +171,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       minAlertStock: 3,
       unit: 'طقم',
       barcode: '',
+      tracking: 'none',
     });
   };
 
@@ -730,6 +733,24 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="text-neutral-300 font-bold block mb-1">نوع التتبع</label>
+                <select
+                  value={newPartForm.tracking ?? 'none'}
+                  onChange={(e) => setNewPartForm({ ...newPartForm, tracking: e.target.value as TrackingMode })}
+                  className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
+                >
+                  {(['none', 'batch', 'serial'] as TrackingMode[]).map((m) => (
+                    <option key={m} value={m}>{TRACKING_LABEL[m]}</option>
+                  ))}
+                </select>
+                {(newPartForm.tracking === 'batch' || newPartForm.tracking === 'serial') && Number(newPartForm.stockQuantity) > 0 && (
+                  <p className="text-[10px] text-amber-300 mt-1">
+                    الرصيد الافتتاحي سيكون «بدون {newPartForm.tracking === 'batch' ? 'دفعة' : 'رقم تسلسلي'}» — سجّله من شاشة «الدفعات والسيريال».
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

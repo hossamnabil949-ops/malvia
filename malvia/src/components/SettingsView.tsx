@@ -308,6 +308,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     { key: 'canViewReports', label: 'تقارير إكسيل والتقارير المالية', desc: 'الاطلاع على تقارير المبيعات وتصدير ملفات Excel' },
     { key: 'canManagePartners', label: 'إدارة الشركاء ورأس المال', desc: 'توزيع الأرباح وضخ رأس المال ونسب الحصص' },
     { key: 'canManageSettings', label: 'إدارة الإعدادات والموظفين', desc: 'تعديل بيانات المحل والشعار وتعيين الصلاحيات' },
+    { key: 'simpleCashierMode', label: 'وضع الكاشير المبسط', desc: 'يفتح له شاشة البيع فقط (مع الوردية والفواتير والعملاء) بدون قوائم ولا أدوات متقدمة. لا يسري على المدير العام' },
   ];
 
   const THEMES_LIST: {

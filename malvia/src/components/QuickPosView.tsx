@@ -33,6 +33,7 @@ import { nextSalesInvoiceNumber } from '../utils/invoiceNumber';
 import { SaleError, computeTotals, validateSale, validateDiscountPolicy, toEgp, isCreditPayment } from '../utils/saleLogic';
 import { AutoPart, CartItem, Customer, Invoice, CarBrand, CarModel, PartCategory, PaymentMethod, Employee, Warehouse, StockLevel } from '../types/autoParts';
 import { MAIN_WAREHOUSE_ID, MAIN_WAREHOUSE_NAME, availableIn } from '../utils/warehouseLogic';
+import { SerialUnit, StockBatch, inStockUnits, expiryState, daysToExpiry } from '../utils/trackingLogic';
 import { LoyaltySettings, resolveLoyalty, earnedPoints, pointsValue, maxRedeemablePoints } from '../utils/loyaltyLogic';
 import { verifyOwnerPassword } from '../services/approvalService';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
@@ -55,6 +56,8 @@ interface QuickPosViewProps {
   stockLevels?: StockLevel[];
   loyalty?: LoyaltySettings;   // برنامج الولاء (غير ممرَّر أو مغلق = لا يظهر)
   onAddCustomer?: (customer: Customer) => void; // إضافة عميل جديد من داخل الكاشير
+  serialUnits?: SerialUnit[];   // وحدات السيريال (لاختيار الأرقام عند بيع صنف سيريال)
+  stockBatches?: StockBatch[];  // الدفعات (لعرض أقرب صلاحية والتحذير)
   maxDiscountPercent?: number; // الحد الأقصى للخصم % (افتراضي 10)
   cashierName?: string;
   cashierId?: string;
@@ -87,6 +90,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   stockLevels = [],
   loyalty,
   onAddCustomer,
+  serialUnits = [],
+  stockBatches = [],
   maxDiscountPercent = 10,
   cashierName,
   cashierId,
@@ -120,6 +125,41 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const stockHere = (p: AutoPart): number => availableIn(p.stockQuantity, stockLevels, p.id, saleWarehouseId);
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
   const [redeemPoints, setRedeemPoints] = useState(0);
+
+  // اختيار الأرقام التسلسلية لأصناف السيريال (لكل صنف قائمة المختار)
+  const [serialSel, setSerialSel] = useState<Record<string, string[]>>({});
+  const [serialInput, setSerialInput] = useState<Record<string, string>>({});
+  useEffect(() => {
+    // عند تقليل الكمية أو حذف الصنف نقصّ الاختيار الزائد
+    setSerialSel((prev) => {
+      let changed = false;
+      const next: Record<string, string[]> = {};
+      for (const [pid, list] of Object.entries(prev)) {
+        const item = cart.find((c) => c.part.id === pid);
+        if (!item) { changed = true; continue; }
+        const trimmed = list.slice(0, item.quantity);
+        if (trimmed.length !== list.length) changed = true;
+        next[pid] = trimmed;
+      }
+      return changed ? next : prev;
+    });
+  }, [cart]);
+  const toggleSerial = (pid: string, serial: string, max: number) =>
+    setSerialSel((prev) => {
+      const cur = prev[pid] ?? [];
+      const has = cur.some((s) => s.toLowerCase() === serial.toLowerCase());
+      if (has) return { ...prev, [pid]: cur.filter((s) => s.toLowerCase() !== serial.toLowerCase()) };
+      return cur.length >= max ? prev : { ...prev, [pid]: [...cur, serial] };
+    });
+  const addTypedSerial = (item: CartItem) => {
+    const typed = (serialInput[item.part.id] ?? '').trim();
+    if (!typed) return;
+    const unit = inStockUnits(serialUnits, item.part.id).find((u) => u.serial.toLowerCase() === typed.toLowerCase());
+    if (!unit) { setSaleError(`الرقم التسلسلي «${typed}» غير متاح بالمخزن لهذا الصنف`); return; }
+    setSaleError('');
+    toggleSerial(item.part.id, unit.serial, item.quantity);
+    setSerialInput((prev) => ({ ...prev, [item.part.id]: '' }));
+  };
 
   // إضافة عميل جديد من الكاشير
   const [showNewCustomer, setShowNewCustomer] = useState(false);
@@ -296,6 +336,15 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
     if (cart.length === 0) return;
     setSaleError('');
 
+    for (const item of cart) {
+      if (item.part.tracking !== 'serial') continue;
+      const picked = serialSel[item.part.id] ?? [];
+      if (picked.length !== item.quantity) {
+        setSaleError(`«${item.part.name}»: اختر ${item.quantity} رقم تسلسلي (المختار ${picked.length})`);
+        return;
+      }
+    }
+
     const payments = splitEnabled && splitValue > 0
       ? [{ method: paymentMethod as string, amount: primaryValue }, { method: splitMethod, amount: splitValue }]
       : [{ method: paymentMethod as string, amount: grandTotal }];
@@ -385,6 +434,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           originalPrice: item.part.salePrice,
           costPrice: item.part.costPrice,
           total: effectivePrice * item.quantity,
+          ...(item.part.tracking === 'serial' ? { serials: serialSel[item.part.id] ?? [] } : {}),
         };
       }),
       subtotal,
@@ -405,6 +455,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
 
     confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
     onClearCart();
+    setSerialSel({});
     setPriceUnlocked(false);
     setSplitEnabled(false);
     setSplitAmount('');
@@ -929,6 +980,63 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                         </span>
                       </div>
                     </div>
+
+                    {item.part.tracking === 'batch' && (() => {
+                      const today = new Date().toISOString().slice(0, 10);
+                      const mine = stockBatches.filter((b) => b.partId === item.part.id && b.quantity > 0);
+                      const valid = mine.filter((b) => expiryState(b, today) !== 'expired');
+                      const expired = mine.filter((b) => expiryState(b, today) === 'expired').reduce((s, b) => s + b.quantity, 0);
+                      const nearest = valid.filter((b) => b.expiryDate).sort((a, b) => (a.expiryDate as string).localeCompare(b.expiryDate as string))[0];
+                      const d = nearest ? daysToExpiry(nearest, today) : null;
+                      return (
+                        <div className="text-[10px] flex flex-wrap gap-x-3 gap-y-0.5">
+                          {nearest && <span className={d !== null && d <= 30 ? 'text-amber-300 font-bold' : 'text-neutral-400'}>أقرب انتهاء: {nearest.expiryDate} (دفعة {nearest.batchNo})</span>}
+                          <span className="text-neutral-500">يُباع الأقرب انتهاءً أولاً</span>
+                          {expired > 0 && <span className="text-rose-400 font-bold">{expired} منتهية الصلاحية لا تُباع</span>}
+                        </div>
+                      );
+                    })()}
+
+                    {item.part.tracking === 'serial' && (() => {
+                      const picked = serialSel[item.part.id] ?? [];
+                      const available = inStockUnits(serialUnits, item.part.id);
+                      return (
+                        <div className="p-2 rounded-lg bg-surface-1 border border-neutral-700/80 space-y-1.5">
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="font-bold text-neutral-300">الأرقام التسلسلية (المتاح {available.length})</span>
+                            <span className={`font-bold ${picked.length === item.quantity ? 'text-emerald-400' : 'text-amber-300'}`}>
+                              المختار {picked.length} / {item.quantity}
+                            </span>
+                          </div>
+                          <div className="flex gap-1.5">
+                            <input
+                              value={serialInput[item.part.id] ?? ''}
+                              onChange={(e) => setSerialInput((prev) => ({ ...prev, [item.part.id]: e.target.value }))}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTypedSerial(item); } }}
+                              placeholder="اكتب أو امسح الرقم ثم Enter"
+                              className="flex-1 h-7 px-2 rounded bg-surface-2 border border-neutral-700 text-[11px] text-white font-mono focus:outline-none focus:border-amber-400"
+                            />
+                            <button type="button" onClick={() => addTypedSerial(item)} className="px-2 h-7 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold">إضافة</button>
+                          </div>
+                          <div className="flex flex-wrap gap-1 max-h-20 overflow-auto">
+                            {available.slice(0, 60).map((u) => {
+                              const on = picked.some((s) => s.toLowerCase() === u.serial.toLowerCase());
+                              return (
+                                <button
+                                  key={u.id}
+                                  type="button"
+                                  onClick={() => toggleSerial(item.part.id, u.serial, item.quantity)}
+                                  className={`px-1.5 h-6 rounded font-mono text-[10px] border ${on ? 'bg-emerald-500/25 border-emerald-500 text-emerald-200' : 'bg-surface-2 border-neutral-700 text-neutral-300 hover:border-neutral-500'}`}
+                                >
+                                  {u.serial}
+                                </button>
+                              );
+                            })}
+                            {available.length === 0 && <span className="text-[10px] text-rose-400">لا توجد وحدات بأرقام تسلسلية بالمخزن — سجّلها من شاشة «الدفعات والسيريال»</span>}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })
