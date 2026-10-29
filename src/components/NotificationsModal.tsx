@@ -46,7 +46,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   expiryAttention,
   onNavigateToTracking,
 }) => {
-  const [activeFilter, setActiveFilter] = useState<'all' | 'out' | 'critical'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'out' | 'critical'>('out');
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
   const [copiedSupplierList, setCopiedSupplierList] = useState(false);
   const [restockInputs, setRestockInputs] = useState<Record<string, number>>({});
@@ -64,7 +64,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   }, [parts]);
 
   const criticalParts = useMemo(() => {
-    return parts.filter((p) => p.stockQuantity <= Math.ceil(p.minAlertStock / 2));
+    return parts.filter((p) => p.stockQuantity > 0 && p.stockQuantity <= p.minAlertStock);
   }, [parts]);
 
   const filteredParts = useMemo(() => {
@@ -86,7 +86,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     return Array.from(brands);
   }, [lowStockParts]);
 
-  const neededQty = (p: AutoPart) => restockInputs[p.id] ?? Math.max(p.minAlertStock * 2 - p.stockQuantity, 5);
+  const neededQty = (p: AutoPart) => restockInputs[p.id] ?? 0;
 
   // الأصناف المطلوبة فعلاً في طلب التوريد (بعد استبعاد الملغي منها)
   const orderParts = useMemo(
@@ -109,8 +109,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   if (!isOpen) return null;
 
   const handleRestock = (part: AutoPart) => {
-    const qty = restockInputs[part.id] ?? neededQty(part);
-    if (qty <= 0) return;
+    const qty = restockInputs[part.id];
+    if (!Number.isFinite(qty) || qty <= 0) return;
     onUpdateStock(part.id, qty);
     setSuccessRestockId(part.id);
     setTimeout(() => {
@@ -119,10 +119,14 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   };
 
   const handleSetRestockQty = (partId: string, qty: number) => {
-    setRestockInputs((prev) => ({
-      ...prev,
-      [partId]: Math.max(1, qty),
-    }));
+    setRestockInputs((prev) => {
+      if (!Number.isFinite(qty) || qty <= 0) {
+        const next = { ...prev };
+        delete next[partId];
+        return next;
+      }
+      return { ...prev, [partId]: Math.floor(qty) };
+    });
   };
 
   const handleCopySupplierRequisition = () => {
@@ -458,8 +462,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                 filteredParts.map((part) => {
                   const isOutOfStock = part.stockQuantity === 0;
                   const isCritical = !isOutOfStock && part.stockQuantity <= Math.ceil(part.minAlertStock / 2);
-                  const recommendedRestock = Math.max(part.minAlertStock * 2 - part.stockQuantity, 5);
-                  const currentRestockInput = restockInputs[part.id] ?? recommendedRestock;
+                  const currentRestockInput = restockInputs[part.id] ?? '';
                   const isSuccess = successRestockId === part.id;
                   const progressPct = Math.min(100, (part.stockQuantity / (part.minAlertStock || 1)) * 100);
 
@@ -528,26 +531,26 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
                       <div className="flex items-center gap-2 self-end md:self-center flex-shrink-0">
                         <div className="flex items-center gap-1 bg-surface-2 p-1 rounded-xl border border-neutral-700/80">
-                          <button
-                            type="button"
-                            onClick={() => handleSetRestockQty(part.id, 5)}
-                            className="px-2 py-1 rounded-lg text-[11px] font-bold text-neutral-300 hover:text-white hover:bg-neutral-700/60 transition-colors"
-                          >
-                            +5
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSetRestockQty(part.id, 10)}
-                            className="px-2 py-1 rounded-lg text-[11px] font-bold text-neutral-300 hover:text-white hover:bg-neutral-700/60 transition-colors"
-                          >
-                            +10
-                          </button>
                           <input
                             type="number"
                             min="1"
+                            step="1"
                             value={currentRestockInput}
-                            onChange={(e) => handleSetRestockQty(part.id, parseInt(e.target.value) || 1)}
-                            className="w-14 h-7 text-center font-mono text-xs font-bold bg-surface-1 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-amber-400"
+                            placeholder="الكمية"
+                            aria-label={`كمية التوريد للصنف ${part.name}`}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              if (raw.trim() === '') {
+                                setRestockInputs((prev) => {
+                                  const next = { ...prev };
+                                  delete next[part.id];
+                                  return next;
+                                });
+                              } else {
+                                handleSetRestockQty(part.id, Number(raw));
+                              }
+                            }}
+                            className="w-20 h-8 text-center font-mono text-xs font-bold bg-surface-1 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-amber-400"
                           />
                           <span className="text-[10px] text-neutral-400 px-1">{part.unit}</span>
                         </div>
@@ -578,7 +581,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                         <button
                           type="button"
                           onClick={() => handleRestock(part)}
-                          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+                          disabled={!Number.isFinite(restockInputs[part.id]) || (restockInputs[part.id] ?? 0) <= 0}
+                          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
                             isSuccess
                               ? 'bg-emerald-500 text-neutral-950 font-black'
                               : 'bg-amber-500 hover:bg-amber-400 text-neutral-950 shadow-md shadow-amber-500/20'

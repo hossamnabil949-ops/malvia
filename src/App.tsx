@@ -2160,12 +2160,12 @@ export default function App() {
 
   // Active Notifications Count
   const activeNotificationsCount = useMemo(() => {
-    const lowStockCount = parts.filter(p => p.stockQuantity <= p.minAlertStock).length;
+    const exhaustedStockCount = parts.filter(p => p.stockQuantity <= 0).length;
     const unresolvedErrors = inventoryErrors.filter(e => !e.isCorrected).length;
     const chequeAlerts = canAccessTab('cheques') ? attentionCount(cheques, todayISO(), 3) : 0; // يظهر فقط لمن يملك صلاحية الشيكات
     const bk = expiryBuckets(stockBatches, todayISO());
     const expiryAlerts = canAccessTab('tracking') ? bk.expired.length + bk.within30.length : 0;   // دفعات منتهية أو تنتهي خلال 30 يوماً
-    return lowStockCount + unresolvedErrors + chequeAlerts + expiryAlerts;
+    return exhaustedStockCount + unresolvedErrors + chequeAlerts + expiryAlerts;
   }, [parts, inventoryErrors, cheques, stockBatches, effectiveRole, effectivePermissions]);
 
   // Auth / Login Handler
