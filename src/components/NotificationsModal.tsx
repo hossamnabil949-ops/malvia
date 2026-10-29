@@ -46,7 +46,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   expiryAttention,
   onNavigateToTracking,
 }) => {
-  const [activeFilter, setActiveFilter] = useState<'all' | 'out' | 'critical'>('out');
+  const [activeFilter, setActiveFilter] = useState<'out' | 'critical'>('out');
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
   const [copiedSupplierList, setCopiedSupplierList] = useState(false);
   const [restockInputs, setRestockInputs] = useState<Record<string, number>>({});
@@ -60,7 +60,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   }, [parts]);
 
   const outOfStockParts = useMemo(() => {
-    return parts.filter((p) => p.stockQuantity === 0);
+    return parts.filter((p) => p.stockQuantity <= 0);
   }, [parts]);
 
   const criticalParts = useMemo(() => {
@@ -69,11 +69,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
   const filteredParts = useMemo(() => {
     // كل تصنيف يعرض نفس مجموعة الأصناف التي يُحسب منها عداده.
-    const sourceParts = activeFilter === 'out'
-      ? outOfStockParts
-      : activeFilter === 'critical'
-        ? criticalParts
-        : lowStockParts;
+    const sourceParts = activeFilter === 'out' ? outOfStockParts : criticalParts;
 
     return sourceParts.filter((p) => {
       if (selectedBrand !== 'all' && p.brand !== selectedBrand) return false;
@@ -160,11 +156,11 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 relative">
               <Bell className="w-6 h-6" />
-              {lowStockParts.length > 0 && (
+              {outOfStockParts.length > 0 && (
                 <span className="absolute -top-1 -right-1 flex h-4 w-4">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-4 w-4 bg-rose-500 text-[9px] font-bold text-[#ffffff] items-center justify-center">
-                    {lowStockParts.length}
+                    {outOfStockParts.length}
                   </span>
                 </span>
               )}
@@ -175,11 +171,11 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                   مركز إشعارات المخزون والنواقص
                 </h3>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                  {lowStockParts.length} أصناف منخفضة
+                  {outOfStockParts.length} أصناف مستنفدة
                 </span>
               </div>
               <p className="text-xs text-neutral-400 mt-0.5">
-                تنبيهات فورية عند وصول كمية الصنف في المستودع إلى الحد الأدنى المسموح به أو نفاده
+                إشعارات الاستنفاد تظهر هنا؛ أما الأصناف الحرجة فتجدها في تبويب مخزون حرج جداً
               </p>
             </div>
           </div>
@@ -358,16 +354,6 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
             <div className="p-4 border-b border-neutral-800 bg-surface-2 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-1.5">
-                <button
-                  onClick={() => setActiveFilter('all')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    activeFilter === 'all'
-                      ? 'bg-amber-500 text-neutral-950 font-black shadow-md'
-                      : 'bg-surface-2 text-neutral-300 hover:text-white border border-neutral-800'
-                  }`}
-                >
-                  جميع النواقص ({lowStockParts.length})
-                </button>
                 <button
                   onClick={() => setActiveFilter('out')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
