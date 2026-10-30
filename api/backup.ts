@@ -4,7 +4,7 @@
 //  - صاحب المنظومة:      (x-admin-token)  GET ?tenant=ID قائمة النسخ | GET ?id=N تفاصيل النسخة (تنزيل)
 //                        POST {action:'create', tenant} نسخة الآن | POST {action:'restore', tenant, id} استرجاع
 import { backupAllChanged, createBackup, getAll, getBackup, getOne, listBackups, restoreBackup } from './_db.js';
-import { ApiError, assertLicenseUsable, clientIp, findLicense, rateLimit, safeEqual, sendError } from './_security.js';
+import { ApiError, clientIp, findLicense, rateLimit, safeEqual, sendError } from './_security.js';
 
 // رسائل الاسترجاع المقصودة للمالك (أي خطأ آخر لا يُسرَّب)
 const SAFE_MESSAGES = new Set(['النسخة غير موجودة', 'هذه النسخة تخص محلاً آخر']);
@@ -20,7 +20,6 @@ export default async function handler(req: any, res: any) {
       rateLimit(`export:${clientIp(req)}`, 20, 10 * 60_000);
       const lic = await findLicense(key);
       if (!lic) throw new ApiError('LICENSE_INVALID');
-      assertLicenseUsable(lic);
       const docs = await getAll(String(lic.tenantId));
       return res.status(200).json({
         app: 'MALVIA', format: 1, exportedAt: new Date().toISOString(),

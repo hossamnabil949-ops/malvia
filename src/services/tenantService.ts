@@ -487,6 +487,27 @@ export async function authenticateShopUser(
   }
   const usingDefaultPassword = DEFAULT_PASSWORDS.includes(cleanPass);
 
+  // Issue a separate server-verified session for AI financial operations. Local/offline login remains
+  // available, but the AI execution API fails closed when this server token is absent.
+  let serverSessionToken: string | undefined;
+  let serverSessionExpiresAt: string | undefined;
+  try {
+    const authResponse = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-license-key': tenant.licenseKey },
+      body: JSON.stringify({ username: cleanUser, password: cleanPass }),
+    });
+    if (authResponse.ok) {
+      const authBody = await authResponse.json();
+      if (typeof authBody.token === 'string' && authBody.token.length >= 32) {
+        serverSessionToken = authBody.token;
+        serverSessionExpiresAt = typeof authBody.expiresAt === 'string' ? authBody.expiresAt : undefined;
+      }
+    }
+  } catch (e) {
+    console.warn('Server employee session unavailable; AI financial actions will remain disabled until online re-login.', e);
+  }
+
   const session: UserSession = {
     tenantId: tenant.tenantId,
     licenseKey: tenant.licenseKey,
@@ -496,6 +517,8 @@ export async function authenticateShopUser(
     role: matchedEmp.role,
     permissions: matchedEmp.permissions,
     loginTime: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+    serverSessionToken,
+    serverSessionExpiresAt,
   };
 
   saveUserSession(session);

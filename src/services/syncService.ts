@@ -130,7 +130,16 @@ let busy = false;
 const dirty = new Set<string>();
 
 async function api(path: string, init: RequestInit & { headers?: Record<string, string> }) {
-  const r = await fetch(path, init);
+  const headers: Record<string, string> = { ...(init.headers || {}) };
+  try {
+    const raw = localStorage.getItem('malvia_user_session_v1');
+    const session = raw ? JSON.parse(raw) : null;
+    const pendingRaw = localStorage.getItem('malvia_pending_server_session_v1');
+    const pending = pendingRaw ? JSON.parse(pendingRaw) : null;
+    const token = session?.serverSessionToken || pending?.token;
+    if (token && !headers.Authorization && !headers.authorization) headers.Authorization = `Bearer ${token}`;
+  } catch { /* no server session: protected writes will be rejected */ }
+  const r = await fetch(path, { ...init, headers });
   let body: any = null;
   try { body = await r.json(); } catch { /* ignore */ }
   return { status: r.status, ok: r.ok, body };
@@ -171,8 +180,10 @@ async function pushResource(tenantId: string, licenseKey: string, res: string): 
   return false;
 }
 
-export async function pullAll(tenantId: string, licenseKey: string): Promise<{ changed: boolean; tenant?: any }> {
-  const r = await api('/api/sync', { method: 'GET', headers: { 'x-license-key': licenseKey } });
+export async function pullAll(tenantId: string, licenseKey: string, serverToken?: string): Promise<{ changed: boolean; tenant?: any }> {
+  const headers: Record<string, string> = { 'x-license-key': licenseKey };
+  if (serverToken) headers.Authorization = `Bearer ${serverToken}`;
+  const r = await api('/api/sync', { method: 'GET', headers });
   if (!r.ok) throw Object.assign(new Error(r.body?.error || `HTTP ${r.status}`), { status: r.status });
   const docs: Record<string, { data: unknown; version: number }> = r.body.docs || {};
   const meta = readMeta(tenantId);
@@ -212,26 +223,9 @@ async function flush() {
     // أول اتصال بالسحابة: ارفع كل ما هو محلي وغير موجود في السحابة
     const meta = readMeta(tenantId);
     for (const res of SYNC_RESOURCES) if (meta.versions[res] === undefined && readLocal(tenantId, res) !== undefined) dirty.add(res);
-    const list = [...dirty];
-    dirty.clear();
+    const list = [...dirty]; dirty.clear();
     for (const res of list) {
-      try {
-        const pushed = await pushResource(tenantId, licenseKey, res);
-        if (!pushed) {
-          // لا نعلن نجاح المزامنة إذا انتهت محاولات فضّ التعارض دون حفظ المورد.
-          dirty.add(res);
-          throw new Error(`تعذر حفظ المورد ${res} بعد عدة محاولات؛ ستتم إعادة المحاولة`);
-        }
-      } catch (e) {
-        dirty.add(res);
-        throw e;
-      }
-    }
-    // إذا وُجدت تغييرات جديدة أثناء المزامنة، لا نعرض الحالة على أنها مكتملة.
-    if (dirty.size > 0) {
-      emitStatus('syncing');
-      schedule(1500);
-      return;
+      try { await pushResource(tenantId, licenseKey, res); } catch (e) { dirty.add(res); throw e; }
     }
     emitStatus('synced');
   } catch (e: any) {
@@ -273,14 +267,21 @@ export function stopSync() {
   timer = poll = null;
 }
 
-/** عند تسجيل الدخول على جهاز جديد: اجلب بيانات المحل والترخيص من السحابة قبل التحقق المحلي. */
-export async function activateFromCloud(licenseKey: string): Promise<{ ok: boolean; tenant?: any; error?: string; offline?: boolean }> {
+/** Bootstrap returns license metadata only. Full tenant data is downloaded only after server employee authentication. */
+export async function activateFromCloud(licenseKey: string, username?: string, password?: string): Promise<{ ok: boolean; tenant?: any; error?: string; offline?: boolean }> {
   try {
-    const r = await api('/api/sync', { method: 'GET', headers: { 'x-license-key': licenseKey.trim().toUpperCase() } });
-    if (!r.ok) return { ok: false, error: r.body?.error || `HTTP ${r.status}` };
-    const tenant = r.body.tenant;
-    // اكتب بيانات المحل محلياً حتى يجدها authenticateShopUser
-    await pullAll(String(tenant.tenantId), licenseKey.trim().toUpperCase());
+    const key = licenseKey.trim().toUpperCase();
+    const bootstrap = await api('/api/auth/bootstrap', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-license-key': key }, body: JSON.stringify({ licenseKey: key }) });
+    if (!bootstrap.ok) return { ok: false, error: bootstrap.body?.error || `HTTP ${bootstrap.status}` };
+    const tenant = bootstrap.body.tenant;
+    if (username && password) {
+      const auth = await api('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-license-key': key }, body: JSON.stringify({ username, password }) });
+      if (auth.ok && auth.body?.token) {
+        try { localStorage.setItem('malvia_pending_server_session_v1', JSON.stringify({ token: auth.body.token, tenantId: auth.body.tenantId })); } catch { /* fail closed for cloud data access */ }
+        try { await pullAll(String(tenant.tenantId), key, String(auth.body.token)); }
+        finally { try { localStorage.removeItem('malvia_pending_server_session_v1'); } catch { /* ignore */ } }
+      }
+    }
     return { ok: true, tenant };
   } catch {
     return { ok: false, offline: true };

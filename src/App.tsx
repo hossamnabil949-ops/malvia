@@ -2834,6 +2834,12 @@ export default function App() {
           onClose={() => setShowVoiceAssistant(false)}
           parts={parts}
           customers={customers}
+          allowedActions={{
+            sale: effectiveRole === 'مدير عام' || Boolean(effectivePermissions?.canSellPos),
+            inventory: effectiveRole === 'مدير عام' || Boolean(effectivePermissions?.canManageInventory),
+            treasury: effectiveRole === 'مدير عام' || Boolean(effectivePermissions?.canManageTreasury),
+            purchases: effectiveRole === 'مدير عام' || Boolean(effectivePermissions?.canManagePurchases),
+          }}
           onDirectSale={(part: AutoPart, quantity: number, custName: string, payMethod: string) => {
             const total = part.salePrice * quantity;
             const newInv: Invoice = {
@@ -2860,14 +2866,16 @@ export default function App() {
               status: 'مسددة',
               cashierName: currentUser?.employeeName || 'الكاشير'
             };
-            handleCreateInvoice(newInv);
+            return handleCreateInvoice(newInv);
           }}
           onOpenAudit={(part: AutoPart) => {
             setSelectedAuditPart(part);
             setShowInventoryAudit(true);
           }}
           onRestock={(partId: string, quantity: number) => {
+            if (!parts.some(p => p.id === partId) || quantity <= 0) return false;
             handleUpdateStock(partId, quantity);
+            return true;
           }}
           onAddExpense={(title: string, amount: number) => {
             const newExp: Expense = {
@@ -2880,7 +2888,9 @@ export default function App() {
               notes: 'أمر صوتي ذكي',
               recordedBy: currentUser?.employeeName || 'الكاشير'
             };
+            if (!Number.isFinite(amount) || amount <= 0) return false;
             handleAddExpense(newExp);
+            return true;
           }}
           onOpenNotifications={() => {
             setShowVoiceAssistant(false);
@@ -2890,6 +2900,7 @@ export default function App() {
             setShowVoiceAssistant(false);
             setCurrentTab(tab);
           }}
+          currentSession={currentUser!}
         />
       )}
 

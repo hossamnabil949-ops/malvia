@@ -19,7 +19,8 @@ import {
   History,
   RotateCcw
 } from 'lucide-react';
-import { AutoPart, Customer } from '../types/autoParts';
+import { AutoPart, Customer, UserSession } from '../types/autoParts';
+import { executeAgentAction } from '../services/agentExecutionService';
 import { 
   sendVoiceCommandToServer, 
   AICommandResult, 
@@ -33,15 +34,17 @@ interface VoiceAssistantModalProps {
   onClose: () => void;
   parts: AutoPart[];
   customers: Customer[];
-  onDirectSale: (part: AutoPart, quantity: number, customerName: string, paymentMethod: string) => void;
+  onDirectSale: (part: AutoPart, quantity: number, customerName: string, paymentMethod: string) => boolean;
   onOpenAudit: (part: AutoPart) => void;
-  onRestock: (partId: string, quantity: number) => void;
-  onAddExpense: (title: string, amount: number) => void;
+  onRestock: (partId: string, quantity: number) => boolean;
+  onAddExpense: (title: string, amount: number) => boolean;
   onSettleSupplier?: (supplierName: string, amount: number) => void;
   onCollectCustomer?: (customerName: string, amount: number) => void;
   onAddPurchase?: (supplierName: string, amount: number) => void;
   onOpenNotifications: () => void;
   onNavigateTab: (tab: any) => void;
+  currentSession: UserSession;
+  allowedActions: { sale: boolean; inventory: boolean; treasury: boolean; purchases: boolean };
 }
 
 export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
@@ -58,8 +61,11 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   onAddPurchase,
   onOpenNotifications,
   onNavigateTab,
+  currentSession,
+  allowedActions,
 }) => {
   const [isListening, setIsListening] = useState(false);
+  const [continuousMode, setContinuousMode] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [speechEnabled, setSpeechEnabled] = useState(true);
@@ -70,6 +76,10 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   const [pending, setPending] = useState<{ result: AICommandResult; question: string; warning?: string } | null>(null);
 
   const recognitionRef = useRef<any>(null);
+  const conversationRef = useRef<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const continuousModeRef = useRef(false);
+  const restartingRecognitionRef = useRef(false);
+  const finalTranscriptRef = useRef('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -84,11 +94,14 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     if (!isOpen) {
       stopListening();
       stopArabicSpeech();
+      conversationRef.current = [];
     }
   }, [isOpen]);
 
   const startListening = () => {
     setMicError(null);
+    finalTranscriptRef.current = '';
+    stopArabicSpeech();
     setTranscript('');
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     
@@ -105,7 +118,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
 
       const recognition = new SpeechRecognition();
       recognition.lang = 'ar-EG';
-      recognition.continuous = false;
+      recognition.continuous = continuousModeRef.current;
       recognition.interimResults = true;
 
       recognition.onstart = () => {
@@ -113,11 +126,27 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       };
 
       recognition.onresult = (event: any) => {
-        let currentTranscript = '';
-        for (let i = 0; i < event.results.length; i++) {
-          currentTranscript += event.results[i][0].transcript;
+        let interim = '';
+        let finalText = '';
+        for (let i = event.resultIndex || 0; i < event.results.length; i++) {
+          const spoken = String(event.results[i]?.[0]?.transcript || '').trim();
+          if (!spoken) continue;
+          if (event.results[i].isFinal) finalText += `${spoken} `;
+          else interim += `${spoken} `;
         }
-        setTranscript(currentTranscript);
+        if (finalText.trim()) {
+          finalTranscriptRef.current = `${finalTranscriptRef.current} ${finalText}`.trim();
+        }
+        setTranscript(`${finalTranscriptRef.current} ${interim}`.trim());
+        // In continuous conversation mode, each completed utterance is a turn.
+        // Stop recognition while processing/speaking to avoid recording the assistant's own voice.
+        if (continuousModeRef.current && finalText.trim() && !restartingRecognitionRef.current) {
+          const turn = `${finalTranscriptRef.current}`.trim();
+          finalTranscriptRef.current = '';
+          restartingRecognitionRef.current = true;
+          try { recognition.stop(); } catch { /* ignore */ }
+          void handleExecuteCommand(turn);
+        }
       };
 
       recognition.onerror = (event: any) => {
@@ -132,6 +161,12 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
 
       recognition.onend = () => {
         setIsListening(false);
+        if (continuousModeRef.current && isOpen) {
+          // Restart after the current turn and assistant reply; this is intentionally
+          // disabled while a financial action is awaiting explicit confirmation only
+          // if the user has stopped continuous mode. Confirmation can be spoken.
+          restartingRecognitionRef.current = false;
+        }
       };
 
       recognitionRef.current = recognition;
@@ -143,7 +178,12 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     }
   };
 
-  const stopListening = () => {
+  const stopListening = (preserveContinuous = false) => {
+    if (!preserveContinuous) {
+      continuousModeRef.current = false;
+      setContinuousMode(false);
+    }
+    restartingRecognitionRef.current = false;
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -155,10 +195,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   };
 
   const needsConfirmation = (r: AICommandResult): boolean => {
-    if (r.action === 'EXECUTE_SALE' || r.action === 'RESTOCK_ITEM' || r.action === 'ADD_EXPENSE') return true;
-    if (r.action === 'SETTLE_SUPPLIER') return !!onSettleSupplier;
-    if (r.action === 'COLLECT_CUSTOMER') return !!onCollectCustomer;
-    if (r.action === 'ADD_PURCHASE') return !!onAddPurchase;
+    if (['EXECUTE_SALE', 'RESTOCK_ITEM', 'ADD_EXPENSE', 'SETTLE_SUPPLIER', 'COLLECT_CUSTOMER', 'ADD_PURCHASE'].includes(r.action)) return true;
     return false;
   };
 
@@ -199,7 +236,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     }
     if (r.action === 'ADD_PURCHASE') {
       return {
-        question: `فاتورة مشتريات من «${r.supplierName}» بقيمة ${r.expenseAmount} ج.م`,
+        question: `توريد ${r.quantity || 1} من «${r.matchedPartName || 'الصنف المحدد'}» إلى «${r.supplierName}» بسعر شراء ${r.unitCost || 'المسجل بالنظام'} للوحدة`,
         done: `تم تسجيل فاتورة مشتريات من ${r.supplierName}.`,
       };
     }
@@ -207,23 +244,54 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   };
 
   // Runs the (already verified and, when needed, confirmed) action.
-  const runAction = (result: AICommandResult) => {
+  const runAction = async (result: AICommandResult) => {
     let feedback = result.spokenFeedback;
+    const serverActions = ['EXECUTE_SALE', 'RESTOCK_ITEM', 'ADD_EXPENSE', 'SETTLE_SUPPLIER', 'COLLECT_CUSTOMER', 'ADD_PURCHASE'];
+    let serverExecuted = false;
+    if (serverActions.includes(result.action)) {
+      try {
+        const receipt = await executeAgentAction(result, currentSession);
+        serverExecuted = true;
+        feedback = `تم حفظ العملية على الخادم بنجاح. رقم العملية: ${receipt.documentNumber}.${receipt.refreshWarning ? ` ${receipt.refreshWarning}` : ''}`;
+      } catch (error) {
+        feedback = error instanceof Error ? error.message : 'لم يؤكد الخادم حفظ العملية؛ لم يتم إعلان نجاحها.';
+        const failed: AICommandResult = { ...result, spokenFeedback: feedback };
+        setLastResult(failed);
+        if (speechEnabled) speakArabic(feedback, () => { if (continuousModeRef.current && isOpen) startListening(); });
+        else if (continuousModeRef.current && isOpen) startListening();
+        return;
+      }
+    }
 
-    if (result.action === 'EXECUTE_SALE') {
+    if (serverExecuted) {
+      // Financial mutations are committed and authorized by /api/agent/execute; never run UI callbacks too.
+    } else if (result.action === 'EXECUTE_SALE') {
       const part = parts.find((p) => p.id === result.matchedPartId);
       if (!part) return;
-      onDirectSale(part, result.quantity || 1, result.customerName || 'عميل نقدي', result.paymentMethod || 'نقدي');
-      feedback = describe(result).done;
+      const accepted = onDirectSale(part, result.quantity || 1, result.customerName || 'عميل نقدي', result.paymentMethod || 'نقدي');
+      if (!accepted) {
+        feedback = 'لم تُقبل الفاتورة بسبب تحقق من الرصيد أو الوردية أو بيانات البيع. لم يتم تأكيد نجاح العملية.';
+        setLastResult({ ...result, spokenFeedback: feedback });
+        if (speechEnabled) speakArabic(feedback, () => { if (continuousModeRef.current && isOpen) startListening(); });
+        else if (continuousModeRef.current && isOpen) startListening();
+        return;
+      }
+      feedback = `تم قبول فاتورة البيع داخل التطبيق بإجمالي ${part.salePrice * (result.quantity || 1)} جنيه. هذا لا يؤكد وحده اكتمال المزامنة السحابية.`;
     } else if (result.action === 'INVENTORY_AUDIT') {
       const part = parts.find((p) => p.id === result.matchedPartId);
       if (part) onOpenAudit(part);
     } else if (result.action === 'RESTOCK_ITEM' && result.matchedPartId) {
-      onRestock(result.matchedPartId, result.quantity || 1);
-      feedback = describe(result).done;
+      const accepted = onRestock(result.matchedPartId, result.quantity || 1);
+      feedback = accepted
+        ? 'تم قبول تعديل المخزون داخل التطبيق. تحقق من حالة المزامنة لتأكيد وصوله إلى السحابة.'
+        : 'تعذر قبول تعديل المخزون؛ لم يتم تأكيد نجاح العملية.';
+      if (!accepted) { setLastResult({ ...result, spokenFeedback: feedback }); if (speechEnabled) speakArabic(feedback); return; }
     } else if (result.action === 'ADD_EXPENSE' && result.expenseAmount) {
-      onAddExpense(result.expenseTitle || 'مصروف عام', result.expenseAmount);
-      feedback = describe(result).done;
+      const accepted = onAddExpense(result.expenseTitle || 'مصروف عام', result.expenseAmount);
+      feedback = accepted
+        ? 'تم قبول تسجيل المصروف داخل التطبيق. تحقق من حالة المزامنة لتأكيد وصوله إلى السحابة.'
+        : 'تعذر قبول تسجيل المصروف؛ لم يتم تأكيد نجاح العملية.';
+      if (!accepted) { setLastResult({ ...result, spokenFeedback: feedback }); if (speechEnabled) speakArabic(feedback); return; }
     } else if (result.action === 'SETTLE_SUPPLIER') {
       if (onSettleSupplier && result.supplierName && result.supplierPaymentAmount) {
         onSettleSupplier(result.supplierName, result.supplierPaymentAmount);
@@ -259,7 +327,11 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     if (result.action !== 'GENERAL_ANSWER') {
       setHistory((prev) => [finalResult, ...prev.slice(0, 9)]);
     }
-    if (speechEnabled && feedback) speakArabic(feedback);
+    if (speechEnabled && feedback) {
+      speakArabic(feedback, () => { if (continuousModeRef.current && isOpen) startListening(); });
+    } else if (continuousModeRef.current && isOpen) {
+      startListening();
+    }
   };
 
   const confirmPending = () => {
@@ -273,14 +345,15 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     setPending(null);
     const msg = 'تم إلغاء الأمر ولم يتم تنفيذ شيء.';
     setLastResult({ action: 'GENERAL_ANSWER', spokenFeedback: msg, timestamp: new Date().toLocaleTimeString('ar-EG') });
-    if (speechEnabled) speakArabic(msg);
+    if (speechEnabled) speakArabic(msg, () => { if (continuousModeRef.current && isOpen) startListening(); });
+    else if (continuousModeRef.current && isOpen) startListening();
   };
 
   const handleExecuteCommand = async (commandText: string) => {
     const textToExecute = commandText.trim();
     if (!textToExecute) return;
 
-    stopListening();
+    stopListening(true);
 
     // While a command waits for confirmation, "تأكيد" / "إلغاء" answer it.
     if (pending) {
@@ -302,18 +375,48 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     setMicError(null);
 
     try {
-      const result = await sendVoiceCommandToServer(textToExecute, parts, customers);
+      conversationRef.current = [...conversationRef.current, { role: 'user', content: textToExecute }].slice(-12);
+      const result = await sendVoiceCommandToServer(textToExecute, parts, customers, conversationRef.current.slice(0, -1));
+
+      const requiredPermission = result.action === 'EXECUTE_SALE' || result.action === 'COLLECT_CUSTOMER'
+        ? (result.action === 'COLLECT_CUSTOMER' ? allowedActions.treasury : allowedActions.sale)
+        : result.action === 'RESTOCK_ITEM' || result.action === 'INVENTORY_AUDIT'
+        ? allowedActions.inventory
+        : result.action === 'ADD_EXPENSE'
+        ? allowedActions.treasury
+        : result.action === 'SETTLE_SUPPLIER'
+        ? (allowedActions.treasury || allowedActions.purchases)
+        : result.action === 'ADD_PURCHASE'
+        ? allowedActions.purchases
+        : true;
+      if (!requiredPermission) {
+        const message = 'عذراً، حسابك لا يملك صلاحية تنفيذ هذا الإجراء. لم يتم تنفيذ أي شيء.';
+        const denied: AICommandResult = { action: 'GENERAL_ANSWER', spokenFeedback: message, timestamp: new Date().toLocaleTimeString('ar-EG') };
+        setLastResult(denied);
+        conversationRef.current = [...conversationRef.current, { role: 'assistant', content: message }].slice(-12);
+        if (speechEnabled) speakArabic(message, () => { if (continuousModeRef.current && isOpen) startListening(); });
+        else if (continuousModeRef.current && isOpen) startListening();
+        return;
+      }
 
       if (needsConfirmation(result)) {
         const d = describe(result);
         setPending({ result, question: d.question, warning: d.warning });
         setLastResult(null);
-        if (speechEnabled) speakArabic(`هل تقصد: ${d.question}؟ قل تأكيد أو إلغاء.`);
+        if (speechEnabled) speakArabic(`هل تقصد: ${d.question}؟ قل تأكيد أو إلغاء.`, () => {
+          if (continuousModeRef.current && isOpen) startListening();
+        });
+        else if (continuousModeRef.current && isOpen) startListening();
       } else {
         runAction(result);
       }
+      conversationRef.current = [...conversationRef.current, { role: 'assistant', content: result.spokenFeedback }].slice(-12);
     } catch (err) {
       console.error('Error executing AI command:', err);
+      const message = err instanceof Error ? err.message : 'تعذر معالجة الأمر. لم يتم تنفيذ أي شيء.';
+      setLastResult({ action: 'GENERAL_ANSWER', spokenFeedback: message, timestamp: new Date().toLocaleTimeString('ar-EG') });
+      if (speechEnabled) speakArabic(message, () => { if (continuousModeRef.current && isOpen) startListening(); });
+      else if (continuousModeRef.current && isOpen) startListening();
     } finally {
       setIsProcessing(false);
     }
@@ -403,6 +506,26 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
               </>
             )}
 
+            <div className="relative z-10 flex flex-col items-center gap-3">
+            <button
+              onClick={() => {
+                const next = !continuousModeRef.current;
+                continuousModeRef.current = next;
+                setContinuousMode(next);
+                finalTranscriptRef.current = '';
+                if (next) {
+                  startListening();
+                } else {
+                  if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch { /* ignore */ } }
+                  setIsListening(false);
+                }
+              }}
+              disabled={isProcessing}
+              className={`px-4 py-2 rounded-xl text-xs font-bold border transition-colors ${continuousMode ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-neutral-900 border-neutral-700 text-neutral-300 hover:border-amber-500/40'}`}
+              title="تشغيل أو إيقاف المحادثة الصوتية المستمرة"
+            >
+              {continuousMode ? 'إيقاف المحادثة المستمرة' : 'تشغيل المحادثة المستمرة'}
+            </button>
             <button
               onClick={() => {
                 if (isListening) {
@@ -427,6 +550,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                 <Mic className="w-10 h-10" />
               )}
             </button>
+            </div>
 
             <div className="mt-4 z-10">
               <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ${
@@ -447,7 +571,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                     جاري تحليل الأمر والتنفيذ بالذكاء الاصطناعي...
                   </>
                 ) : (
-                  'اضغط على الميكروفون وتحدث بصوتك'
+                  continuousMode ? 'المحادثة المستمرة مفعّلة — قل طلبك، ثم استمع للرد' : 'اضغط على الميكروفون وتحدث بصوتك'
                 )}
               </span>
             </div>

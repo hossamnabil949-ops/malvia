@@ -549,6 +549,9 @@ export interface UserSession {
   role: Employee['role'];
   permissions: EmployeePermissions;
   loginTime: string;
+  /** Server-issued token used only for privileged AI operations; absent in offline/local-only sessions. */
+  serverSessionToken?: string;
+  serverSessionExpiresAt?: string;
 }
 
 export interface ShopSettings {

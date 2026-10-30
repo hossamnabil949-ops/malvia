@@ -88,7 +88,7 @@ export const ShopLoginView: React.FC<ShopLoginViewProps> = ({
 
     (async () => {
       // جهاز جديد: اجلب الترخيص وبيانات المحل من السحابة أولاً. لو لا يوجد إنترنت نكمل بالبيانات المحلية.
-      const cloud = await activateFromCloud(key);
+      const cloud = await activateFromCloud(key, u, p);
       if (cloud.ok && cloud.tenant) {
         upsertTenantLicense(cloud.tenant);
       } else if (!cloud.offline && cloud.error === 'الترخيص معلق') {

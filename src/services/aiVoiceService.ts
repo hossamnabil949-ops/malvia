@@ -18,6 +18,7 @@ export interface AICommandResult {
   matchedPartId?: string;
   matchedPartName?: string;
   quantity?: number;
+  unitCost?: number;
   customerName?: string;
   paymentMethod?: string;
   expenseTitle?: string;
@@ -33,7 +34,8 @@ export interface AICommandResult {
 export async function sendVoiceCommandToServer(
   command: string,
   parts: AutoPart[],
-  customers: Customer[]
+  customers: Customer[],
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
 ): Promise<AICommandResult> {
   try {
     const response = await fetch('/api/ai/command', {
@@ -44,6 +46,7 @@ export async function sendVoiceCommandToServer(
       },
       body: JSON.stringify({
         command,
+        conversationHistory: conversationHistory.slice(-12).map((m) => ({ role: m.role, content: String(m.content).slice(0, 500) })),
         parts: parts.map((p) => ({
           id: p.id,
           partNumber: p.partNumber,
@@ -78,8 +81,10 @@ export async function sendVoiceCommandToServer(
       customers
     );
   } catch (error) {
-    console.warn('Network call to /api/ai/command failed, applying instant client-side fallback:', error);
-    return verifyCommandResult(getClientFallbackResult(command, parts, customers), command, parts, customers);
+    // Fail closed: do not execute a financial/inventory action from a client-side guess
+    // when the authenticated AI endpoint is unavailable.
+    console.error('AI endpoint unavailable; command was not executed:', error);
+    throw new Error('تعذر الاتصال بالمساعد الآمن. لم يتم تنفيذ الأمر. تحقق من الاتصال وحاول مرة أخرى.');
   }
 }
 

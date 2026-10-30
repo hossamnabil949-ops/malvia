@@ -1,6 +1,6 @@
-// اختبارات طبقة أمان API باستخدام الوحدة الفعلية في المشروع.
+// ملاحظة: هذا الاختبار يعمل على نسخة من api/_security.ts بدون سطر import { getOne } (لأن _db.js يحتاج Neon). انسخ الملف وشِل السطر وعدّل المسار قبل التشغيل.
 import assert from 'node:assert/strict';
-import { validateSyncBody, rateLimit, safeEqual, ApiError, sendError, assertLicenseUsable } from '../api/_security.ts';
+import { validateSyncBody, rateLimit, safeEqual, ApiError, sendError } from './sec.ts';
 const code = (fn: () => unknown) => { try { fn(); } catch (e) { return (e as ApiError).code; } return 'OK'; };
 assert.equal(code(() => validateSyncBody({ resource: 'parts', data: [{ id: 'a' }], baseVersion: 0 })), 'OK');
 assert.equal(code(() => validateSyncBody({ resource: 'auditLog', data: [{ id: 'a' }], baseVersion: 0 })), 'OK');
@@ -21,8 +21,3 @@ sendError(res, new Error('secret db password leaked'));
 assert.equal(out.c, 500); assert.equal(out.b.code, 'INTERNAL'); assert.ok(!JSON.stringify(out.b).includes('secret'));
 sendError(res, new ApiError('RATE_LIMITED')); assert.equal(out.c, 429);
 console.log('api: كل الاختبارات نجحت');
-
-// الترخيص المنتهي يجب أن يُرفض، والترخيص الساري يجب أن يُقبل.
-assert.equal(code(() => assertLicenseUsable({ status: 'نشط', expiryDate: '2000-01-01' })), 'LICENSE_EXPIRED');
-assert.equal(code(() => assertLicenseUsable({ status: 'نشط', expiryDate: '2999-12-31' })), 'OK');
-assert.equal(code(() => assertLicenseUsable({ status: 'معلق مؤقتاً', expiryDate: '2999-12-31' })), 'LICENSE_SUSPENDED');

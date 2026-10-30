@@ -127,7 +127,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     ⚠️ {outOfStockParts.length} أصناف نفدت بالكامل (0 حبة)!
                   </span>
                 )}
-                يرجى مراجعة الأصناف المستنفدة. الأصناف التي وصلت للحد الأدنى تظهر في تصنيف المخزون الحرج داخل مركز المخزون.
+                قم بمراجعة القائمة لتفادي تعطل عمليات البيع وتوليد أمر شراء للموردين فورا.
               </p>
             </div>
           </div>
@@ -210,10 +210,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         <div 
           onClick={onOpenNotifications}
           className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 hover:border-rose-500/50 hover:bg-surface-2 transition-all cursor-pointer shadow-sm flex flex-col justify-between group"
-          title="اضغط لفتح مركز إشعارات النواقص والتوريد"
+          title="اضغط لفتح مركز إشعارات الأصناف المستنفدة"
         >
           <div className="flex items-center justify-between text-neutral-400 text-xs">
-            <span className="group-hover:text-rose-300 transition-colors">أصناف نفدت من المخزن</span>
+            <span className="group-hover:text-rose-300 transition-colors">أصناف نفدت بالكامل</span>
             <div className="w-8 h-8 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center group-hover:scale-110 transition-transform">
               <AlertTriangle className="w-4 h-4" />
             </div>
@@ -221,14 +221,14 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           <div className="mt-2">
             <div className="text-xl md:text-2xl font-black text-rose-400 font-mono">
               {outOfStockParts.length}{' '}
-              <span className="text-xs font-normal text-neutral-400">أصناف مستنفدة</span>
+              <span className="text-xs font-normal text-neutral-400">أصناف رصيدها صفر</span>
             </div>
             <div className="flex items-center justify-between mt-1">
               <span className="text-[10px] text-neutral-400">
                 تحتاج إلى إعادة توريد
               </span>
               <span className="text-[10px] text-rose-400 font-bold group-hover:underline">
-                عرض الإشعارات ←
+                عرض التنبيهات ←
               </span>
             </div>
           </div>
@@ -333,16 +333,16 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-400" />
               <h3 className="text-sm font-bold text-white">
-                أصناف نفدت من المخزن ({outOfStockParts.length})
+                مخزون حرج – رصيد أقل من الحد الأدنى ({lowStockParts.length})
               </h3>
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={onOpenNotifications}
-                className="text-xs text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1 bg-rose-500/10 px-2.5 py-1 rounded-lg border border-rose-500/20 hover:bg-rose-500/20 transition-colors"
+                onClick={() => onChangeTab('inventory')}
+                className="text-xs text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
               >
-                <Bell className="w-3.5 h-3.5" />
-                <span>مركز الإشعارات</span>
+                <Boxes className="w-3.5 h-3.5" />
+                <span>إدارة المخزون الحرج</span>
               </button>
               <button
                 onClick={() => onChangeTab('inventory')}
@@ -354,13 +354,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           </div>
 
           <div className="divide-y divide-neutral-800/80">
-            {outOfStockParts.length === 0 ? (
+            {lowStockParts.length === 0 ? (
               <div className="py-8 text-center text-xs text-neutral-400">
                 <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
-                لا توجد أصناف مستنفدة من المخزن
+                جميع مستويات المخزون كافية ومستقرة
               </div>
             ) : (
-              outOfStockParts.map((part) => (
+              lowStockParts.map((part) => (
                 <div key={part.id} className="py-2.5 flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2">

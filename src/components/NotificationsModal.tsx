@@ -46,7 +46,6 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   expiryAttention,
   onNavigateToTracking,
 }) => {
-  const [activeFilter, setActiveFilter] = useState<'out' | 'critical'>('out');
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
   const [copiedSupplierList, setCopiedSupplierList] = useState(false);
   const [restockInputs, setRestockInputs] = useState<Record<string, number>>({});
@@ -55,39 +54,25 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   // أصناف أُلغيت من طلب التوريد (لا تظهر في الطلب المنسوخ أو المطبوع ولا في الإجماليات)
   const [excludedIds, setExcludedIds] = useState<string[]>([]);
 
-  const lowStockParts = useMemo(() => {
-    return parts.filter((p) => p.stockQuantity <= p.minAlertStock);
-  }, [parts]);
-
   const outOfStockParts = useMemo(() => {
     return parts.filter((p) => p.stockQuantity <= 0);
   }, [parts]);
 
-  const criticalParts = useMemo(() => {
-    return parts.filter((p) => p.stockQuantity > 0 && p.stockQuantity <= p.minAlertStock);
-  }, [parts]);
-
   const filteredParts = useMemo(() => {
-    // كل تصنيف يعرض نفس مجموعة الأصناف التي يُحسب منها عداده.
-    const sourceParts = activeFilter === 'out' ? outOfStockParts : criticalParts;
-
-    return sourceParts.filter((p) => {
-      if (selectedBrand !== 'all' && p.brand !== selectedBrand) return false;
-      return true;
-    });
-  }, [lowStockParts, outOfStockParts, criticalParts, activeFilter, selectedBrand]);
+    return outOfStockParts.filter((p) => selectedBrand === 'all' || p.brand === selectedBrand);
+  }, [outOfStockParts, selectedBrand]);
 
   const availableBrands = useMemo(() => {
-    const brands = new Set(lowStockParts.map((p) => p.brand));
+    const brands = new Set(outOfStockParts.map((p) => p.brand));
     return Array.from(brands);
-  }, [lowStockParts]);
+  }, [outOfStockParts]);
 
-  const neededQty = (p: AutoPart) => restockInputs[p.id] ?? 0;
+  const neededQty = (p: AutoPart) => restockInputs[p.id] ?? 1;
 
   // الأصناف المطلوبة فعلاً في طلب التوريد (بعد استبعاد الملغي منها)
   const orderParts = useMemo(
-    () => lowStockParts.filter((p) => !excludedIds.includes(p.id)),
-    [lowStockParts, excludedIds]
+    () => outOfStockParts.filter((p) => !excludedIds.includes(p.id)),
+    [outOfStockParts, excludedIds]
   );
 
   const toggleExcluded = (partId: string) => {
@@ -105,8 +90,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   if (!isOpen) return null;
 
   const handleRestock = (part: AutoPart) => {
-    const qty = restockInputs[part.id];
-    if (!Number.isFinite(qty) || qty <= 0) return;
+    const qty = restockInputs[part.id] ?? 1;
+    if (qty <= 0) return;
     onUpdateStock(part.id, qty);
     setSuccessRestockId(part.id);
     setTimeout(() => {
@@ -115,14 +100,10 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   };
 
   const handleSetRestockQty = (partId: string, qty: number) => {
-    setRestockInputs((prev) => {
-      if (!Number.isFinite(qty) || qty <= 0) {
-        const next = { ...prev };
-        delete next[partId];
-        return next;
-      }
-      return { ...prev, [partId]: Math.floor(qty) };
-    });
+    setRestockInputs((prev) => ({
+      ...prev,
+      [partId]: Math.max(1, qty),
+    }));
   };
 
   const handleCopySupplierRequisition = () => {
@@ -168,14 +149,14 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-black text-white">
-                  مركز إشعارات المخزون والنواقص
+                  مركز إشعارات الأصناف المستنفدة
                 </h3>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
                   {outOfStockParts.length} أصناف مستنفدة
                 </span>
               </div>
               <p className="text-xs text-neutral-400 mt-0.5">
-                إشعارات الاستنفاد تظهر هنا؛ أما الأصناف الحرجة فتجدها في تبويب مخزون حرج جداً
+                تنبيهات الأصناف التي نفد رصيدها بالكامل. الأصناف تحت الحد الأدنى مع وجود رصيد تظهر في قسم المخزون الحرج.
               </p>
             </div>
           </div>
@@ -263,7 +244,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                       <td className="p-2 font-bold">{p.name}</td>
                       <td className="p-2">{p.brand} ({p.compatibleModels})</td>
                       <td className="p-2 text-center">{p.shelfLocation}</td>
-                      <td className={`p-2 text-center font-bold ${p.stockQuantity === 0 ? 'text-rose-600' : 'text-amber-600'}`}>
+                      <td className={`p-2 text-center font-bold ${p.stockQuantity <= 0 ? 'text-rose-600' : 'text-amber-600'}`}>
                         {p.stockQuantity} {p.unit}
                       </td>
                       <td className="p-2 text-center text-neutral-600">{p.minAlertStock}</td>
@@ -306,7 +287,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
           </div>
         ) : (
           <>
-            <div className="p-4 bg-surface-2 border-b border-neutral-800/80 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-4 bg-surface-2 border-b border-neutral-800/80 grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="p-3 rounded-2xl bg-surface-1 border border-rose-500/20">
                 <div className="flex items-center justify-between text-neutral-400 text-xs">
                   <span>نفد بالكامل (0 حبة)</span>
@@ -314,17 +295,6 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                 </div>
                 <div className="text-xl font-black text-rose-400 font-mono mt-1">
                   {outOfStockParts.length}{' '}
-                  <span className="text-xs font-normal text-neutral-400">صنف</span>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-2xl bg-surface-1 border border-amber-500/20">
-                <div className="flex items-center justify-between text-neutral-400 text-xs">
-                  <span>تحت الحد الأدنى</span>
-                  <AlertTriangle className="w-4 h-4 text-amber-400" />
-                </div>
-                <div className="text-xl font-black text-amber-400 font-mono mt-1">
-                  {lowStockParts.length}{' '}
                   <span className="text-xs font-normal text-neutral-400">صنف</span>
                 </div>
               </div>
@@ -354,26 +324,9 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
             <div className="p-4 border-b border-neutral-800 bg-surface-2 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-1.5">
-                <button
-                  onClick={() => setActiveFilter('out')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    activeFilter === 'out'
-                      ? 'bg-rose-500 text-[#ffffff] font-black shadow-md'
-                      : 'bg-surface-2 text-rose-300 hover:text-white border border-neutral-800'
-                  }`}
-                >
-                  نفد من المخزن ({outOfStockParts.length})
-                </button>
-                <button
-                  onClick={() => setActiveFilter('critical')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    activeFilter === 'critical'
-                      ? 'bg-amber-500 text-neutral-950 font-black shadow-md'
-                      : 'bg-surface-2 text-amber-300 hover:text-white border border-neutral-800'
-                  }`}
-                >
-                  مخزون حرج جداً ({criticalParts.length})
-                </button>
+                <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/10 text-rose-300 border border-rose-500/20">
+                  الأصناف المستنفدة بالكامل ({outOfStockParts.length})
+                </span>
 
                 {availableBrands.length > 1 && (
                   <select
@@ -446,9 +399,10 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                 </div>
               ) : (
                 filteredParts.map((part) => {
-                  const isOutOfStock = part.stockQuantity === 0;
-                  const isCritical = !isOutOfStock && part.stockQuantity <= Math.ceil(part.minAlertStock / 2);
-                  const currentRestockInput = restockInputs[part.id] ?? '';
+                  const isOutOfStock = part.stockQuantity <= 0;
+                  const isCritical = false; // القائمة هنا للأصناف المستنفدة فقط
+                  const recommendedRestock = 1;
+                  const currentRestockInput = restockInputs[part.id] ?? recommendedRestock;
                   const isSuccess = successRestockId === part.id;
                   const progressPct = Math.min(100, (part.stockQuantity / (part.minAlertStock || 1)) * 100);
 
@@ -520,23 +474,9 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                           <input
                             type="number"
                             min="1"
-                            step="1"
                             value={currentRestockInput}
-                            placeholder="الكمية"
-                            aria-label={`كمية التوريد للصنف ${part.name}`}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              if (raw.trim() === '') {
-                                setRestockInputs((prev) => {
-                                  const next = { ...prev };
-                                  delete next[part.id];
-                                  return next;
-                                });
-                              } else {
-                                handleSetRestockQty(part.id, Number(raw));
-                              }
-                            }}
-                            className="w-20 h-8 text-center font-mono text-xs font-bold bg-surface-1 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-amber-400"
+                            onChange={(e) => handleSetRestockQty(part.id, parseInt(e.target.value) || 1)}
+                            className="w-14 h-7 text-center font-mono text-xs font-bold bg-surface-1 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-amber-400"
                           />
                           <span className="text-[10px] text-neutral-400 px-1">{part.unit}</span>
                         </div>
@@ -567,8 +507,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                         <button
                           type="button"
                           onClick={() => handleRestock(part)}
-                          disabled={!Number.isFinite(restockInputs[part.id]) || (restockInputs[part.id] ?? 0) <= 0}
-                          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
                             isSuccess
                               ? 'bg-emerald-500 text-neutral-950 font-black'
                               : 'bg-amber-500 hover:bg-amber-400 text-neutral-950 shadow-md shadow-amber-500/20'
