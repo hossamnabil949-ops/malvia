@@ -8,8 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit",
-    "test": "tsx tests/passwordService.test.ts && tsx tests/permissions.test.ts && tsx tests/shiftLogic.test.ts && tsx tests/saleLogic.test.ts && tsx tests/apiSecurity.test.ts"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

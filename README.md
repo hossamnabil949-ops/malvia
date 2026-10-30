@@ -18,3 +18,6 @@ View your app in AI Studio: https://ai.studio/apps/487e0920-2749-4b6e-bd9e-d8576
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## MALVIA AI Agent — Server Execution
+راجع `VOICE_AGENT_PHASE4_SERVER_EXECUTION_AR.md` لتفاصيل مصادقة الموظف على الخادم، وواجهات التنفيذ الآمنة، ومنع تكرار عمليات الوكيل، ومتطلبات النشر والاختبارات المتبقية.
