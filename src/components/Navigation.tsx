@@ -38,6 +38,7 @@ export type ActiveTab =
   | 'pos'
   | 'shifts'
   | 'inventory'
+  | 'lowstock'
   | 'warehouses'
   | 'cheques'
   | 'tracking'
@@ -93,6 +94,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: 'pos', label: 'الكاشير (POS)', icon: ShoppingCart },
       { id: 'shifts', label: 'الورديات والدرج', icon: Wallet },
       { id: 'inventory', label: 'المخزون والقطع', icon: Boxes },
+      { id: 'lowstock', label: 'المخزون الحرج', icon: AlertTriangle },
       { id: 'warehouses', label: 'المخازن والفروع', icon: Warehouse },
       { id: 'tracking', label: 'الدفعات والسيريال', icon: ScanBarcode },
       { id: 'invoices', label: 'الفواتير والمرتجعات', icon: Receipt },

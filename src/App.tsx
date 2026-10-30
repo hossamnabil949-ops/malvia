@@ -104,6 +104,7 @@ import { TenantActivationGateway } from './components/TenantActivationGateway';
 import { ShopLoginView } from './components/ShopLoginView';
 import { SystemDeploymentGuideModal } from './components/SystemDeploymentGuideModal';
 import { NotificationsModal } from './components/NotificationsModal';
+import { LowStockView } from './components/LowStockView';
 import { VoiceAssistantModal } from './components/VoiceAssistantModal';
 import { InventoryAuditModal } from './components/InventoryAuditModal';
 import { BarcodeStocktakeModal } from './components/BarcodeStocktakeModal';
@@ -553,6 +554,19 @@ export default function App() {
       persistChanges({ parts: updated });
       return updated;
     });
+  };
+
+  // حذف صنف (أُضيف بالخطأ): التحقق من باسورد المدير يتم في الواجهة قبل الاستدعاء.
+  // الفواتير القديمة تحتفظ باسم ورقم الصنف داخل سطورها فلا تتأثر.
+  const handleDeletePart = (partId: string, approvedBy: string) => {
+    const target = parts.find(p => p.id === partId);
+    if (!target) return;
+    logAudit('part.delete', `حذف صنف ${target.name} (${target.partNumber}) - رصيد وقت الحذف ${target.stockQuantity} - باعتماد ${approvedBy}`, partId, target.stockQuantity);
+    setParts(prev => { const u = prev.filter(p => p.id !== partId); persistChanges({ parts: u }); return u; });
+    setStockLevels(prev => { const u = prev.filter(l => l.partId !== partId); persistChanges({ stockLevels: u }); return u; });
+    setStockBatches(prev => { const u = prev.filter(b => b.partId !== partId); persistChanges({ stockBatches: u }); return u; });
+    setSerialUnits(prev => { const u = prev.filter(s => s.partId !== partId); persistChanges({ serialUnits: u }); return u; });
+    setCart(prev => prev.filter(item => item.part.id !== partId));
   };
 
   const handleUpdateStock = (partId: string, addedStock: number) => {
@@ -2381,6 +2395,15 @@ export default function App() {
           />
         )}
 
+        {viewTab === 'lowstock' && (
+          <LowStockView
+            parts={parts}
+            canManage={canManageInventoryNow}
+            onUpdateStock={handleUpdateStock}
+            onNavigateToInventory={() => setCurrentTab('inventory')}
+          />
+        )}
+
         {viewTab === 'warehouses' && (
           <WarehousesView
             warehouses={warehouses}
@@ -2442,6 +2465,8 @@ export default function App() {
             onRemoveBrand={handleRemoveBrand}
             onAddNewPart={handleAddPart}
             onUpdateStock={handleUpdateStock}
+            employees={employees}
+            onDeletePart={handleDeletePart}
             onUpdatePartPrices={handleUpdatePartPrices}
             onQuickSalePart={(part) => {
               handleAddToCart(part);
@@ -2901,6 +2926,9 @@ export default function App() {
             setCurrentTab(tab);
           }}
           currentSession={currentUser!}
+          invoices={invoices}
+          suppliers={suppliers}
+          shopName={activeTenant.companyName}
         />
       )}
 

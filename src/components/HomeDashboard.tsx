@@ -338,7 +338,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => onChangeTab('inventory')}
+                onClick={() => onChangeTab('lowstock')}
                 className="text-xs text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
               >
                 <Boxes className="w-3.5 h-3.5" />

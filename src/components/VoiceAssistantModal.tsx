@@ -19,14 +19,16 @@ import {
   History,
   RotateCcw
 } from 'lucide-react';
-import { AutoPart, Customer, UserSession } from '../types/autoParts';
+import { AutoPart, Customer, Invoice, Supplier, UserSession } from '../types/autoParts';
 import { executeAgentAction } from '../services/agentExecutionService';
 import { 
   sendVoiceCommandToServer, 
   AICommandResult, 
   speakArabic, 
   stopArabicSpeech,
-  normalizeArabic
+  normalizeArabic,
+  buildShopSnapshot,
+  detectLang
 } from '../services/aiVoiceService';
 
 interface VoiceAssistantModalProps {
@@ -44,6 +46,9 @@ interface VoiceAssistantModalProps {
   onOpenNotifications: () => void;
   onNavigateTab: (tab: any) => void;
   currentSession: UserSession;
+  invoices?: Invoice[];
+  suppliers?: Supplier[];
+  shopName?: string;
   allowedActions: { sale: boolean; inventory: boolean; treasury: boolean; purchases: boolean };
 }
 
@@ -62,6 +67,9 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   onOpenNotifications,
   onNavigateTab,
   currentSession,
+  invoices = [],
+  suppliers = [],
+  shopName,
   allowedActions,
 }) => {
   const [isListening, setIsListening] = useState(false);
@@ -74,6 +82,19 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
   const [micError, setMicError] = useState<string | null>(null);
   const [pending, setPending] = useState<{ result: AICommandResult; question: string; warning?: string } | null>(null);
+
+  // سجل المحادثة المعروض (مستخدم/مساعد) + لغة الميكروفون
+  const [messages, setMessages] = useState<Array<{ id: number; role: 'user' | 'assistant'; text: string; kind?: 'confirm' | 'audit'; partId?: string }>>([]);
+  const [voiceLang, setVoiceLang] = useState<'ar-EG' | 'en-US'>('ar-EG');
+  const voiceLangRef = useRef<'ar-EG' | 'en-US'>('ar-EG');
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const msgIdRef = useRef(0);
+  const pushMessage = (role: 'user' | 'assistant', text: string, extra?: { kind?: 'confirm' | 'audit'; partId?: string }) => {
+    if (!text) return;
+    msgIdRef.current += 1;
+    const id = msgIdRef.current;
+    setMessages((prev) => [...prev, { id, role, text, ...extra }].slice(-60));
+  };
 
   const recognitionRef = useRef<any>(null);
   const conversationRef = useRef<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
@@ -95,8 +116,25 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       stopListening();
       stopArabicSpeech();
       conversationRef.current = [];
+      setMessages([]);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (lastResult?.spokenFeedback) {
+      pushMessage('assistant', lastResult.spokenFeedback, lastResult.action === 'INVENTORY_AUDIT' ? { kind: 'audit', partId: lastResult.matchedPartId } : undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastResult]);
+
+  useEffect(() => {
+    if (pending) pushMessage('assistant', pending.question, { kind: 'confirm' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages, isProcessing]);
 
   const startListening = () => {
     setMicError(null);
@@ -117,7 +155,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       }
 
       const recognition = new SpeechRecognition();
-      recognition.lang = 'ar-EG';
+      recognition.lang = voiceLangRef.current;
       recognition.continuous = continuousModeRef.current;
       recognition.interimResults = true;
 
@@ -200,44 +238,53 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   };
 
   const describe = (r: AICommandResult): { question: string; done: string; warning?: string } => {
+    const en = r.lang === 'en';
     const part = r.matchedPartId ? parts.find((p) => p.id === r.matchedPartId) : undefined;
     const qty = r.quantity && r.quantity > 0 ? r.quantity : 1;
     if (r.action === 'EXECUTE_SALE' && part) {
       const total = part.salePrice * qty;
+      const who = r.customerName || (en ? 'cash customer' : 'عميل نقدي');
+      const pay = r.paymentMethod || (en ? 'cash' : 'نقدي');
       return {
-        question: `بيع ${qty} ${part.unit} من «${part.name}» بسعر ${part.salePrice} للوحدة، الإجمالي ${total} ج.م — ${r.customerName || 'عميل نقدي'} — ${r.paymentMethod || 'نقدي'}`,
-        done: `تم بيع ${qty} ${part.unit} من ${part.name} بإجمالي ${total} جنيه.`,
-        warning: qty > part.stockQuantity ? `تنبيه: الرصيد المتاح ${part.stockQuantity} فقط.` : undefined,
+        question: en
+          ? `Sell ${qty} ${part.unit} of "${part.name}" at ${part.salePrice} each, total ${total} EGP — ${who} — ${pay}`
+          : `بيع ${qty} ${part.unit} من «${part.name}» بسعر ${part.salePrice} للوحدة، الإجمالي ${total} ج.م — ${who} — ${pay}`,
+        done: en ? `Sold ${qty} ${part.unit} of ${part.name}, total ${total} EGP.` : `تم بيع ${qty} ${part.unit} من ${part.name} بإجمالي ${total} جنيه.`,
+        warning: qty > part.stockQuantity ? (en ? `Warning: only ${part.stockQuantity} in stock.` : `تنبيه: الرصيد المتاح ${part.stockQuantity} فقط.`) : undefined,
       };
     }
     if (r.action === 'RESTOCK_ITEM' && part) {
       return {
-        question: `توريد ${qty} ${part.unit} إلى «${part.name}» (الرصيد الحالي ${part.stockQuantity})`,
-        done: `تمت إضافة ${qty} ${part.unit} إلى ${part.name}.`,
+        question: en ? `Add ${qty} ${part.unit} to "${part.name}" (current stock ${part.stockQuantity})` : `توريد ${qty} ${part.unit} إلى «${part.name}» (الرصيد الحالي ${part.stockQuantity})`,
+        done: en ? `Added ${qty} ${part.unit} to ${part.name}.` : `تمت إضافة ${qty} ${part.unit} إلى ${part.name}.`,
       };
     }
     if (r.action === 'ADD_EXPENSE') {
+      const title = r.expenseTitle || (en ? 'General expense' : 'مصروف عام');
       return {
-        question: `تسجيل مصروف «${r.expenseTitle || 'مصروف عام'}» بمبلغ ${r.expenseAmount} ج.م`,
-        done: `تم تسجيل مصروف ${r.expenseAmount} جنيه: ${r.expenseTitle || 'مصروف عام'}.`,
+        question: en ? `Record expense "${title}" of ${r.expenseAmount} EGP` : `تسجيل مصروف «${title}» بمبلغ ${r.expenseAmount} ج.م`,
+        done: en ? `Expense of ${r.expenseAmount} EGP recorded: ${title}.` : `تم تسجيل مصروف ${r.expenseAmount} جنيه: ${title}.`,
       };
     }
     if (r.action === 'SETTLE_SUPPLIER') {
       return {
-        question: `سداد ${r.supplierPaymentAmount} ج.م للمورد «${r.supplierName}»`,
-        done: `تم سداد ${r.supplierPaymentAmount} جنيه للمورد ${r.supplierName}.`,
+        question: en ? `Pay ${r.supplierPaymentAmount} EGP to supplier "${r.supplierName}"` : `سداد ${r.supplierPaymentAmount} ج.م للمورد «${r.supplierName}»`,
+        done: en ? `Paid ${r.supplierPaymentAmount} EGP to ${r.supplierName}.` : `تم سداد ${r.supplierPaymentAmount} جنيه للمورد ${r.supplierName}.`,
       };
     }
     if (r.action === 'COLLECT_CUSTOMER') {
       return {
-        question: `تحصيل ${r.customerCollectionAmount} ج.م من «${r.customerName}»`,
-        done: `تم تحصيل ${r.customerCollectionAmount} جنيه من ${r.customerName}.`,
+        question: en ? `Collect ${r.customerCollectionAmount} EGP from "${r.customerName}"` : `تحصيل ${r.customerCollectionAmount} ج.م من «${r.customerName}»`,
+        done: en ? `Collected ${r.customerCollectionAmount} EGP from ${r.customerName}.` : `تم تحصيل ${r.customerCollectionAmount} جنيه من ${r.customerName}.`,
       };
     }
     if (r.action === 'ADD_PURCHASE') {
+      const name = r.matchedPartName || (en ? 'the selected part' : 'الصنف المحدد');
       return {
-        question: `توريد ${r.quantity || 1} من «${r.matchedPartName || 'الصنف المحدد'}» إلى «${r.supplierName}» بسعر شراء ${r.unitCost || 'المسجل بالنظام'} للوحدة`,
-        done: `تم تسجيل فاتورة مشتريات من ${r.supplierName}.`,
+        question: en
+          ? `Purchase ${r.quantity || 1} of "${name}" from "${r.supplierName}" at unit cost ${r.unitCost}`
+          : `توريد ${r.quantity || 1} من «${name}» من المورد «${r.supplierName}» بسعر شراء ${r.unitCost || 'المسجل بالنظام'} للوحدة`,
+        done: en ? `Purchase invoice recorded from ${r.supplierName}.` : `تم تسجيل فاتورة مشتريات من ${r.supplierName}.`,
       };
     }
     return { question: r.spokenFeedback, done: r.spokenFeedback };
@@ -252,7 +299,9 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       try {
         const receipt = await executeAgentAction(result, currentSession);
         serverExecuted = true;
-        feedback = `تم حفظ العملية على الخادم بنجاح. رقم العملية: ${receipt.documentNumber}.${receipt.refreshWarning ? ` ${receipt.refreshWarning}` : ''}`;
+        feedback = result.lang === 'en'
+          ? `Saved on the server successfully. Operation number: ${receipt.documentNumber}.${receipt.refreshWarning ? ` ${receipt.refreshWarning}` : ''}`
+          : `تم حفظ العملية على الخادم بنجاح. رقم العملية: ${receipt.documentNumber}.${receipt.refreshWarning ? ` ${receipt.refreshWarning}` : ''}`;
       } catch (error) {
         feedback = error instanceof Error ? error.message : 'لم يؤكد الخادم حفظ العملية؛ لم يتم إعلان نجاحها.';
         const failed: AICommandResult = { ...result, spokenFeedback: feedback };
@@ -278,8 +327,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       }
       feedback = `تم قبول فاتورة البيع داخل التطبيق بإجمالي ${part.salePrice * (result.quantity || 1)} جنيه. هذا لا يؤكد وحده اكتمال المزامنة السحابية.`;
     } else if (result.action === 'INVENTORY_AUDIT') {
-      const part = parts.find((p) => p.id === result.matchedPartId);
-      if (part) onOpenAudit(part);
+      // الرد الحواري يحتوي الأرقام؛ كارت الجرد يُفتح من زر داخل المحادثة بدل مقاطعة الحوار
     } else if (result.action === 'RESTOCK_ITEM' && result.matchedPartId) {
       const accepted = onRestock(result.matchedPartId, result.quantity || 1);
       feedback = accepted
@@ -320,6 +368,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       onOpenNotifications();
     } else if (result.action === 'NAVIGATE_TAB' && result.targetTab) {
       onNavigateTab(result.targetTab === 'home' ? 'dashboard' : result.targetTab);
+      feedback = feedback || (result.lang === 'en' ? 'Opening it now.' : 'جاري الفتح.');
     }
 
     const finalResult: AICommandResult = { ...result, spokenFeedback: feedback };
@@ -343,7 +392,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
 
   const cancelPending = () => {
     setPending(null);
-    const msg = 'تم إلغاء الأمر ولم يتم تنفيذ شيء.';
+    const msg = pending?.result.lang === 'en' ? 'Cancelled. Nothing was executed.' : 'تم إلغاء الأمر ولم يتم تنفيذ شيء.';
     setLastResult({ action: 'GENERAL_ANSWER', spokenFeedback: msg, timestamp: new Date().toLocaleTimeString('ar-EG') });
     if (speechEnabled) speakArabic(msg, () => { if (continuousModeRef.current && isOpen) startListening(); });
     else if (continuousModeRef.current && isOpen) startListening();
@@ -358,12 +407,12 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     // While a command waits for confirmation, "تأكيد" / "إلغاء" answer it.
     if (pending) {
       const n = normalizeArabic(textToExecute);
-      if (/^(تاكيد|اكد|نفذ|ايوه|ايوا|اه|موافق|تمام|اكيد|نعم|ok|yes)$/.test(n)) {
+      if (/^(تاكيد|اكد|نفذ|ايوه|ايوا|اه|موافق|تمام|اكيد|نعم|ok|okay|yes|yeah|sure|confirm|go ahead|do it)$/.test(n)) {
         setTranscript('');
         confirmPending();
         return;
       }
-      if (/^(الغاء|الغي|لا|كنسل|وقف|cancel|no)$/.test(n)) {
+      if (/^(الغاء|الغي|لا|كنسل|وقف|cancel|no|stop|never mind)$/.test(n)) {
         setTranscript('');
         cancelPending();
         return;
@@ -375,8 +424,14 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     setMicError(null);
 
     try {
-      conversationRef.current = [...conversationRef.current, { role: 'user', content: textToExecute }].slice(-12);
-      const result = await sendVoiceCommandToServer(textToExecute, parts, customers, conversationRef.current.slice(0, -1));
+      conversationRef.current = [...conversationRef.current, { role: 'user' as const, content: textToExecute }].slice(-12);
+      pushMessage('user', textToExecute);
+      setTranscript('');
+      const shop = buildShopSnapshot(parts, invoices, suppliers, currentSession, shopName);
+      const result = await sendVoiceCommandToServer(
+        textToExecute, parts, customers, conversationRef.current.slice(0, -1), shop,
+        voiceLangRef.current === 'en-US' ? 'en' : 'ar'
+      );
 
       const requiredPermission = result.action === 'EXECUTE_SALE' || result.action === 'COLLECT_CUSTOMER'
         ? (result.action === 'COLLECT_CUSTOMER' ? allowedActions.treasury : allowedActions.sale)
@@ -390,10 +445,10 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
         ? allowedActions.purchases
         : true;
       if (!requiredPermission) {
-        const message = 'عذراً، حسابك لا يملك صلاحية تنفيذ هذا الإجراء. لم يتم تنفيذ أي شيء.';
+        const message = result.lang === 'en' ? 'Sorry, your account does not have permission for this action. Nothing was executed.' : 'عذراً، حسابك لا يملك صلاحية تنفيذ هذا الإجراء. لم يتم تنفيذ أي شيء.';
         const denied: AICommandResult = { action: 'GENERAL_ANSWER', spokenFeedback: message, timestamp: new Date().toLocaleTimeString('ar-EG') };
         setLastResult(denied);
-        conversationRef.current = [...conversationRef.current, { role: 'assistant', content: message }].slice(-12);
+        conversationRef.current = [...conversationRef.current, { role: 'assistant' as const, content: message }].slice(-12);
         if (speechEnabled) speakArabic(message, () => { if (continuousModeRef.current && isOpen) startListening(); });
         else if (continuousModeRef.current && isOpen) startListening();
         return;
@@ -403,14 +458,14 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
         const d = describe(result);
         setPending({ result, question: d.question, warning: d.warning });
         setLastResult(null);
-        if (speechEnabled) speakArabic(`هل تقصد: ${d.question}؟ قل تأكيد أو إلغاء.`, () => {
+        if (speechEnabled) speakArabic(result.lang === 'en' ? `Do you mean: ${d.question}? Say confirm or cancel.` : `هل تقصد: ${d.question}؟ قل تأكيد أو إلغاء.`, () => {
           if (continuousModeRef.current && isOpen) startListening();
         });
         else if (continuousModeRef.current && isOpen) startListening();
       } else {
         runAction(result);
       }
-      conversationRef.current = [...conversationRef.current, { role: 'assistant', content: result.spokenFeedback }].slice(-12);
+      conversationRef.current = [...conversationRef.current, { role: 'assistant' as const, content: result.spokenFeedback }].slice(-12);
     } catch (err) {
       console.error('Error executing AI command:', err);
       const message = err instanceof Error ? err.message : 'تعذر معالجة الأمر. لم يتم تنفيذ أي شيء.';
@@ -425,14 +480,14 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   if (!isOpen) return null;
 
   const quickVoicePresets = [
+    { label: 'إيه أكتر الأصناف مبيعاً الشهر ده؟', icon: TrendingDown },
     { label: 'بعت 1 تيل فرامل تويوتا نقدي', icon: Receipt },
-    { label: 'عايز جرد تيل الفرامل ومكانه بالرف', icon: Boxes },
-    { label: 'سدد 5000 للمورد الأهرام من الخزينة', icon: DollarSign },
-    { label: 'حصلت 2000 من ورشة الأمانة', icon: CheckCircle2 },
-    { label: 'سجل فاتورة مشتريات من المورد بـ 4500', icon: Receipt },
+    { label: 'كام فلتر زيت فاضل وفين مكانه؟', icon: Boxes },
+    { label: 'What is low on stock right now?', icon: TrendingDown },
+    { label: 'Sell 2 oil filters to cash customer', icon: Receipt },
     { label: 'سجل مصروف 150 جنيه شاي وبوفيه', icon: DollarSign },
-    { label: 'إيه الأصناف الناقصة في المخزن؟', icon: TrendingDown },
-    { label: 'افتح تقارير إكسيل', icon: ArrowRight },
+    { label: 'افتح صفحة المخزون الحرج', icon: ArrowRight },
+    { label: 'اشرحلي إزاي أسجل فاتورة مشتريات', icon: CheckCircle2 },
   ];
 
   return (
@@ -455,19 +510,30 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg sm:text-xl font-black text-white">
-                  المساعد الصوتي الذكي (Voice Auto AI)
+                  المساعد الذكي (Gemini AI)
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                  تحدث ثم أكّد الأمر قبل التنفيذ
+                  يناقشك وينفذ بعد تأكيدك
                 </span>
               </div>
               <p className="text-xs text-neutral-400 mt-0.5">
-                تحدث بحرية باللغة العربية: "بعت تيل"، "عايز جرد فلتر الزيت"، "سدد 5000 للمورد الأهرام"...
+                اتكلم أو اكتب بالعربي أو English، واسأله أي سؤال عن المحل والمخزون والمبيعات، أو اطلب منه تنفيذ عملية.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const next = voiceLangRef.current === 'ar-EG' ? 'en-US' : 'ar-EG';
+                voiceLangRef.current = next;
+                setVoiceLang(next);
+              }}
+              title="لغة الميكروفون: عربي / English"
+              className="px-2.5 py-2 rounded-xl border bg-neutral-800 border-neutral-700 text-neutral-200 hover:text-amber-300 text-[11px] font-black"
+            >
+              {voiceLang === 'ar-EG' ? 'ع | AR' : 'EN'}
+            </button>
             <button
               onClick={() => {
                 const next = !speechEnabled;
@@ -568,7 +634,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                 ) : isProcessing ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
-                    جاري تحليل الأمر والتنفيذ بالذكاء الاصطناعي...
+                    جاري التفكير...
                   </>
                 ) : (
                   continuousMode ? 'المحادثة المستمرة مفعّلة — قل طلبك، ثم استمع للرد' : 'اضغط على الميكروفون وتحدث بصوتك'
@@ -583,7 +649,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                 </p>
               ) : (
                 <p className="text-xs text-neutral-400">
-                  مثال: <span className="text-neutral-300 font-semibold">"بعت تيل فرامل"</span> أو <span className="text-neutral-300 font-semibold">"عايز جرد فلتر زيت هيونداي"</span>
+                  جرّب: <span className="text-neutral-300 font-semibold">"إيه أكتر صنف بيتباع؟"</span> أو <span className="text-neutral-300 font-semibold">"sell 2 oil filters"</span>
                 </p>
               )}
             </div>
@@ -599,7 +665,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
             <div className="flex items-center justify-between mb-2.5">
               <span className="text-xs font-bold text-neutral-400 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                أوامر صوتية جاهزة بنقرة واحدة (جرب الآن):
+                جرّب مباشرة (عربي / English):
               </span>
             </div>
 
@@ -634,7 +700,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                   handleExecuteCommand(transcript);
                 }
               }}
-              placeholder="أو اكتب الأمر هنا مباشرة (مثلاً: بعت تيل / عايز جرد تيل الفرامل)..."
+              placeholder="اكتب رسالتك هنا بالعربي أو English..."
               className="flex-1 bg-transparent border-none text-white placeholder-neutral-500 text-xs sm:text-sm focus:outline-none"
             />
             <button
@@ -647,7 +713,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
               ) : (
                 <>
                   <Send className="w-3.5 h-3.5" />
-                  <span>تنفيذ</span>
+                  <span>إرسال</span>
                 </>
               )}
             </button>
@@ -677,79 +743,46 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
             </div>
           )}
 
-          {lastResult && (
-            <div className={`p-4 rounded-2xl border animate-fade-in ${
-              lastResult.action === 'EXECUTE_SALE'
-                ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
-                : lastResult.action === 'INVENTORY_AUDIT'
-                ? 'bg-amber-950/30 border-amber-500/40 text-amber-200'
-                : 'bg-amber-950/30 border-amber-500/40 text-amber-200'
-            }`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2.5">
-                  <div className="p-2 rounded-xl bg-black/40 mt-0.5">
-                    {lastResult.action === 'EXECUTE_SALE' ? (
-                      <Receipt className="w-5 h-5 text-emerald-400" />
-                    ) : lastResult.action === 'INVENTORY_AUDIT' ? (
-                      <Boxes className="w-5 h-5 text-amber-400" />
-                    ) : (
-                      <CheckCircle2 className="w-5 h-5 text-amber-400" />
+          {messages.length > 0 && (
+            <div className="space-y-2 max-h-[38vh] overflow-y-auto pr-1">
+              {messages.map((m) => (
+                <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                  <div
+                    dir="auto"
+                    className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                      m.role === 'user'
+                        ? 'bg-neutral-800 text-white border border-neutral-700'
+                        : m.kind === 'confirm'
+                        ? 'bg-amber-950/40 text-amber-100 border border-amber-500/40'
+                        : 'bg-surface-3 text-neutral-100 border border-amber-500/20'
+                    }`}
+                  >
+                    {m.text}
+                    {m.kind === 'audit' && m.partId && (
+                      <button
+                        onClick={() => { const part = parts.find((p) => p.id === m.partId); if (part) onOpenAudit(part); }}
+                        className="mt-2 block text-[11px] font-bold text-amber-300 hover:underline"
+                      >
+                        فتح كارت الجرد / Open stock card
+                      </button>
+                    )}
+                    {m.role === 'assistant' && speechEnabled && (
+                      <button onClick={() => speakArabic(m.text)} title="إعادة نطق الرد" className="mr-2 inline-flex align-middle text-neutral-500 hover:text-amber-300">
+                        <Volume2 className="w-3.5 h-3.5" />
+                      </button>
                     )}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-black/40 border border-white/10 uppercase tracking-wide">
-                        {lastResult.action === 'EXECUTE_SALE'
-                          ? '✅ تم تنفيذ عملية البيع'
-                          : lastResult.action === 'INVENTORY_AUDIT'
-                          ? '📋 تم إنجاز الجرد المخزني'
-                          : lastResult.action === 'RESTOCK_ITEM'
-                          ? '📦 تم توريد المخزون'
-                          : lastResult.action === 'GENERAL_ANSWER'
-                          ? '💬 توضيح'
-                          : '⚡ تم تنفيذ الإجراء'}
-                      </span>
-                      <span className="text-[11px] text-neutral-400">{lastResult.timestamp}</span>
-                    </div>
-                    <p className="text-sm font-bold text-white mt-1.5 leading-relaxed">
-                      {lastResult.spokenFeedback}
-                    </p>
+                </div>
+              ))}
+              {isProcessing && (
+                <div className="flex justify-end">
+                  <div className="px-3.5 py-2.5 rounded-2xl bg-surface-3 border border-amber-500/20 text-neutral-400 text-sm flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                    ...
                   </div>
                 </div>
-
-                {speechEnabled && (
-                  <button
-                    onClick={() => speakArabic(lastResult.spokenFeedback)}
-                    title="إعادة نطق الرد"
-                    className="p-1.5 rounded-lg bg-black/40 hover:bg-black/60 text-neutral-300 hover:text-white transition-colors"
-                  >
-                    <Volume2 className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {history.length > 0 && (
-            <div className="border-t border-neutral-800/80 pt-4">
-              <span className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2.5">
-                <History className="w-3.5 h-3.5 text-neutral-500" />
-                سجل الأوامر المنفذة في هذه الجلسة:
-              </span>
-              <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                {history.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="p-2.5 rounded-xl bg-neutral-900/60 border border-neutral-800 flex items-center justify-between text-xs text-neutral-300"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                      <span className="font-medium text-white">{item.spokenFeedback}</span>
-                    </div>
-                    <span className="text-[10px] text-neutral-500 font-mono shrink-0 mr-2">{item.timestamp}</span>
-                  </div>
-                ))}
-              </div>
+              )}
+              <div ref={chatEndRef} />
             </div>
           )}
         </div>
@@ -757,7 +790,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
         <div className="p-4 bg-neutral-900/90 border-t border-neutral-800 flex items-center justify-between text-xs text-neutral-400">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>نظام الذكاء الاصطناعي متصل وجاهز للاستماع في أي وقت</span>
+            <span>متصل بـ Gemini — أي عملية مالية تحتاج تأكيدك قبل التنفيذ</span>
           </div>
           <button
             onClick={onClose}

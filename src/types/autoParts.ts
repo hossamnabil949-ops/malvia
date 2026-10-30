@@ -144,7 +144,7 @@ export type AuditAction =
   | 'sales_return.create' | 'sales_return.delete'
   | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
   | 'stock.adjust' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'cheque.create' | 'cheque.action' | 'batch.create' | 'batch.writeoff' | 'serial.register' | 'serial.scrap' | 'stock.transfer' | 'supplier.payment'
-  | 'shift.open' | 'shift.close' | 'shift.variance';
+  | 'shift.open' | 'shift.close' | 'shift.variance' | 'part.delete';
 
 export interface AuditEntry {
   id: string;

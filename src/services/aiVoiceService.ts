@@ -1,4 +1,4 @@
-import { AutoPart, Customer } from '../types/autoParts';
+import { AutoPart, Customer, Invoice, Supplier } from '../types/autoParts';
 import { loadDeviceLicenseKey } from './tenantService';
 
 export type AIActionType = 
@@ -26,19 +26,74 @@ export interface AICommandResult {
   supplierName?: string;
   supplierPaymentAmount?: number;
   customerCollectionAmount?: number;
-  targetTab?: 'home' | 'pos' | 'inventory' | 'invoices' | 'purchases' | 'suppliers' | 'customers' | 'finance' | 'reports' | 'settings';
+  targetTab?: 'home' | 'pos' | 'shifts' | 'inventory' | 'lowstock' | 'warehouses' | 'tracking' | 'invoices' | 'purchases' | 'suppliers' | 'customers' | 'finance' | 'cheques' | 'reports' | 'settings';
+  partConfidence?: 'high' | 'medium' | 'low';
+  lang?: 'ar' | 'en';
   spokenFeedback: string;
   timestamp?: string;
+}
+
+export const hasArabic = (text: string): boolean => /[\u0600-\u06FF]/.test(text || '');
+export const detectLang = (text: string, fallback: 'ar' | 'en' = 'ar'): 'ar' | 'en' =>
+  hasArabic(text) ? 'ar' : /[a-z]/i.test(text || '') ? 'en' : fallback;
+
+/** ملخص آمن للمحل يُرسل للمساعد ليناقش به (بدون أسعار تكلفة ولا هواتف ولا أرصدة). */
+export function buildShopSnapshot(
+  parts: AutoPart[],
+  invoices: Invoice[],
+  suppliers: Supplier[],
+  session?: { employeeName?: string; role?: string },
+  shopName?: string
+) {
+  const today = new Date().toISOString().slice(0, 10);
+  const month = today.slice(0, 7);
+  const live = invoices.filter((i) => i.status !== 'ملغاة');
+  const sum = (list: Invoice[]) => list.reduce((t, i) => t + (i.grandTotal - (i.returnedAmount || 0)), 0);
+  const todayInv = live.filter((i) => i.date === today);
+  const monthInv = live.filter((i) => (i.date || '').startsWith(month));
+  const sold = new Map<string, { name: string; qty: number }>();
+  for (const inv of monthInv) {
+    for (const it of inv.items || []) {
+      const k = it.partId || it.partNumber;
+      const cur = sold.get(k) || { name: it.partName, qty: 0 };
+      cur.qty += it.quantity - (it.returnedQuantity || 0);
+      sold.set(k, cur);
+    }
+  }
+  const topSellers = [...sold.values()].sort((a, b) => b.qty - a.qty).slice(0, 8);
+  const out = parts.filter((p) => p.stockQuantity <= 0);
+  const critical = parts.filter((p) => p.stockQuantity > 0 && p.stockQuantity <= p.minAlertStock);
+  return {
+    name: shopName,
+    userName: session?.employeeName,
+    role: session?.role,
+    suppliers: suppliers.map((s) => s.name).slice(0, 200),
+    summary: {
+      partsCount: parts.length,
+      outOfStockCount: out.length,
+      outOfStock: out.slice(0, 25).map((p) => p.name),
+      criticalCount: critical.length,
+      critical: critical.slice(0, 25).map((p) => `${p.name} (${p.stockQuantity}/${p.minAlertStock})`),
+      todaySales: Math.round(sum(todayInv)),
+      todayInvoices: todayInv.length,
+      monthSales: Math.round(sum(monthInv)),
+      monthInvoices: monthInv.length,
+      topSellersThisMonth: topSellers,
+    },
+  };
 }
 
 export async function sendVoiceCommandToServer(
   command: string,
   parts: AutoPart[],
   customers: Customer[],
-  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
+  shop?: ReturnType<typeof buildShopSnapshot>,
+  uiLang: 'ar' | 'en' = 'ar'
 ): Promise<AICommandResult> {
+  let response: Response;
   try {
-    const response = await fetch('/api/ai/command', {
+    response = await fetch('/api/ai/command', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -46,7 +101,9 @@ export async function sendVoiceCommandToServer(
       },
       body: JSON.stringify({
         command,
-        conversationHistory: conversationHistory.slice(-12).map((m) => ({ role: m.role, content: String(m.content).slice(0, 500) })),
+        uiLang,
+        shop,
+        conversationHistory: conversationHistory.slice(-12).map((m) => ({ role: m.role, content: String(m.content).slice(0, 600) })),
         parts: parts.map((p) => ({
           id: p.id,
           partNumber: p.partNumber,
@@ -59,33 +116,37 @@ export async function sendVoiceCommandToServer(
           stockQuantity: p.stockQuantity,
           unit: p.unit,
         })), // لا نرسل سعر التكلفة لطرف ثالث
-        customers: customers.map((c) => ({
-          id: c.id,
-          name: c.name,
-        })), // الاسم فقط (بدون رصيد أو هاتف)
+        customers: customers.map((c) => ({ id: c.id, name: c.name })), // الاسم فقط (بدون رصيد أو هاتف)
       }),
     });
-
-    if (!response.ok) {
-      throw new Error(`Server returned ${response.status}`);
-    }
-
-    const data: AICommandResult = await response.json();
-    return verifyCommandResult(
-      {
-        ...data,
-        timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      },
-      command,
-      parts,
-      customers
-    );
   } catch (error) {
-    // Fail closed: do not execute a financial/inventory action from a client-side guess
-    // when the authenticated AI endpoint is unavailable.
-    console.error('AI endpoint unavailable; command was not executed:', error);
-    throw new Error('تعذر الاتصال بالمساعد الآمن. لم يتم تنفيذ الأمر. تحقق من الاتصال وحاول مرة أخرى.');
+    console.error('AI endpoint unreachable:', error);
+    throw new Error(detectLang(command) === 'ar'
+      ? 'تعذر الاتصال بالمساعد. تأكد من الإنترنت وحاول مرة أخرى. لم يتم تنفيذ أي شيء.'
+      : 'Could not reach the assistant. Check your connection and try again. Nothing was executed.');
   }
+
+  if (!response.ok) {
+    // نعرض سبب الخطأ الحقيقي من الخادم (مفتاح Gemini ناقص، حد الاستخدام...) بدل رسالة عامة
+    const err = await response.json().catch(() => ({} as any));
+    throw new Error(String(err?.error || `تعذر الاتصال بالمساعد (${response.status}). لم يتم تنفيذ أي شيء.`));
+  }
+
+  const data: AICommandResult & { reply?: string } = await response.json();
+  const lang = data.lang || detectLang(command, uiLang);
+  const context = conversationHistory.filter((m) => m.role === 'user').map((m) => m.content).join(' ');
+  return verifyCommandResult(
+    {
+      ...data,
+      lang,
+      spokenFeedback: data.reply || data.spokenFeedback,
+      timestamp: new Date().toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    },
+    command,
+    parts,
+    customers,
+    context
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -271,43 +332,61 @@ export function verifyCommandResult(
   result: AICommandResult,
   command: string,
   parts: AutoPart[],
-  customers: Customer[]
+  customers: Customer[],
+  context = ''
 ): AICommandResult {
-  const time = result.timestamp || new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const lang = result.lang || detectLang(command);
+  const ar = lang === 'ar';
+  const time = result.timestamp || new Date().toLocaleTimeString(ar ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const ask = (arText: string, enText: string): AICommandResult => ({ action: 'GENERAL_ANSWER', spokenFeedback: ar ? arText : enText, timestamp: time, lang });
 
-  if (result.action === 'EXECUTE_SALE' || result.action === 'RESTOCK_ITEM' || result.action === 'INVENTORY_AUDIT') {
-    const res = resolvePart(command, parts, result.matchedPartId);
-    const problem = describeResolution(res, command, time);
-    if (problem) return problem;
-    if (res.status === 'ok') {
-      const rawQty = Number(result.quantity);
-      const quantity = Number.isInteger(rawQty) && rawQty >= 1 && rawQty <= 1000 ? rawQty : extractQuantity(command);
-      return { ...result, matchedPartId: res.part.id, matchedPartName: res.part.name, quantity };
+  if (result.action === 'EXECUTE_SALE' || result.action === 'RESTOCK_ITEM' || result.action === 'INVENTORY_AUDIT' || result.action === 'ADD_PURCHASE') {
+    // 1) مطابقة نصية على كلام المستخدم، 2) مع سياق المحادثة (للمتابعات مثل «خليها 3»)
+    let res = resolvePart(command, parts, result.matchedPartId);
+    if (res.status !== 'ok' && context) res = resolvePart(`${context} ${command}`, parts, result.matchedPartId);
+    let chosen: AutoPart | undefined = res.status === 'ok' ? res.part : undefined;
+    // 3) كلام بلغة مختلفة عن اسم الصنف (مثلاً «oil filter» لصنف «فلتر زيت»): نقبل اختيار Gemini
+    //    فقط لو كان واثقاً جداً والصنف موجود فعلاً؛ والتنفيذ لا يتم إلا بعد تأكيد المستخدم لما سيظهر له.
+    if (!chosen && result.matchedPartId && result.partConfidence === 'high') {
+      chosen = parts.find((p) => p.id === result.matchedPartId);
     }
+    if (!chosen) {
+      if (res.status === 'ambiguous') {
+        const names = res.candidates.map((p) => `${p.name} (${p.brand}${p.partNumber ? ' - ' + p.partNumber : ''})`).join(' / ');
+        return ask(`وجدت أكثر من صنف مناسب: ${names}. حدد الصنف أو الماركة بدقة أكثر.`, `I found several matching parts: ${names}. Please specify the part or brand.`);
+      }
+      // الرد الحواري من Gemini غالباً يحتوي سؤالاً توضيحياً مفيداً
+      if (result.spokenFeedback && result.action !== 'ADD_PURCHASE') return { ...result, action: 'GENERAL_ANSWER', matchedPartId: undefined, timestamp: time, lang };
+      return ask(`لم أجد في المخزون صنفاً يطابق كلامك. اذكر اسم الصنف كما هو مسجل. لم أنفذ أي شيء.`, `I couldn't find a matching part in stock. Please say the part name as registered. Nothing was executed.`);
+    }
+    if (result.action === 'ADD_PURCHASE' && (!result.supplierName || !(Number(result.unitCost) > 0))) {
+      return ask('لفاتورة التوريد قل اسم المورد والكمية وسعر الشراء للوحدة. لم أسجل شيئاً.', 'For a purchase invoice please tell me the supplier, quantity and unit cost. Nothing was recorded.');
+    }
+    const rawQty = Number(result.quantity);
+    const quantity = Number.isInteger(rawQty) && rawQty >= 1 && rawQty <= 1000 ? rawQty : extractQuantity(command);
+    return { ...result, matchedPartId: chosen.id, matchedPartName: chosen.name, quantity, lang };
   }
 
   if (result.action === 'ADD_EXPENSE') {
     const amount = Number(result.expenseAmount) > 0 ? Number(result.expenseAmount) : firstAmount(command);
-    if (!amount) return clarify('كم مبلغ المصروف؟ لم أسجل شيئاً.', time);
-    return { ...result, expenseAmount: amount };
+    if (!amount) return ask('كم مبلغ المصروف؟ لم أسجل شيئاً.', 'What is the expense amount? Nothing was recorded.');
+    return { ...result, expenseAmount: amount, lang };
   }
 
   if (result.action === 'COLLECT_CUSTOMER') {
     const amount = Number(result.customerCollectionAmount) > 0 ? Number(result.customerCollectionAmount) : firstAmount(command);
     const cust = findCustomer(`${result.customerName || ''} ${command}`, customers);
-    if (!cust || !amount) {
-      return clarify('حدد اسم العميل أو الورشة والمبلغ بوضوح. لم أنفذ أي شيء.', time);
-    }
-    return { ...result, customerName: cust.name, customerCollectionAmount: amount };
+    if (!cust || !amount) return ask('حدد اسم العميل أو الورشة والمبلغ بوضوح. لم أنفذ أي شيء.', 'Please state the customer name and the amount clearly. Nothing was executed.');
+    return { ...result, customerName: cust.name, customerCollectionAmount: amount, lang };
   }
 
-  if (result.action === 'SETTLE_SUPPLIER' || result.action === 'ADD_PURCHASE') {
-    if (!result.supplierName) {
-      return clarify('حدد اسم المورد والمبلغ بوضوح. لم أنفذ أي شيء.', time);
-    }
+  if (result.action === 'SETTLE_SUPPLIER') {
+    const amount = Number(result.supplierPaymentAmount) > 0 ? Number(result.supplierPaymentAmount) : firstAmount(command);
+    if (!result.supplierName || !amount) return ask('حدد اسم المورد والمبلغ بوضوح. لم أنفذ أي شيء.', 'Please state the supplier name and the amount clearly. Nothing was executed.');
+    return { ...result, supplierPaymentAmount: amount, lang };
   }
 
-  return result;
+  return { ...result, lang };
 }
 
 function getClientFallbackResult(command: string, parts: AutoPart[], customers: Customer[]): AICommandResult {
@@ -354,6 +433,7 @@ function getClientFallbackResult(command: string, parts: AutoPart[], customers: 
   if (/موردين/.test(cmd)) return { action: 'NAVIGATE_TAB', targetTab: 'suppliers', spokenFeedback: 'جاري فتح الموردين.', timestamp: time };
   if (/تقارير|اكسيل|اكسل/.test(cmd)) return { action: 'NAVIGATE_TAB', targetTab: 'reports', spokenFeedback: 'جاري فتح التقارير.', timestamp: time };
   if (/اعدادات|موظفين|شعار/.test(cmd)) return { action: 'NAVIGATE_TAB', targetTab: 'settings', spokenFeedback: 'جاري فتح الإعدادات.', timestamp: time };
+  if (/حرج|الحرجه|الحد الادني|قربت تخلص|اوشك/.test(cmd)) return { action: 'NAVIGATE_TAB', targetTab: 'lowstock', spokenFeedback: 'جاري فتح صفحة المخزون الحرج.', timestamp: time };
   if (/ناقص|نواقص|الناقصه/.test(cmd)) return { action: 'QUERY_LOW_STOCK', spokenFeedback: 'عرض نواقص المخزون.', timestamp: time };
 
   // ---- parts: sale / audit ----
@@ -403,15 +483,18 @@ export function speakArabic(text: string, onEnd?: () => void): void {
   try {
     window.speechSynthesis.cancel();
 
+    const ar = hasArabic(text);
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'ar-SA';
+    utterance.lang = ar ? 'ar-SA' : 'en-US';
     utterance.rate = 1.0;
     utterance.pitch = 1.0;
 
     const voices = window.speechSynthesis.getVoices();
-    const arabicVoice = voices.find((v) => v.lang.startsWith('ar') || v.name.includes('Arabic') || v.name.includes('Tarek') || v.name.includes('Laila'));
-    if (arabicVoice) {
-      utterance.voice = arabicVoice;
+    const voice = ar
+      ? voices.find((v) => v.lang.startsWith('ar') || v.name.includes('Arabic') || v.name.includes('Tarek') || v.name.includes('Laila'))
+      : voices.find((v) => v.lang.startsWith('en'));
+    if (voice) {
+      utterance.voice = voice;
     }
 
     if (onEnd) {

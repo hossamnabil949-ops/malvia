@@ -21,7 +21,9 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { TrackingMode, TRACKING_LABEL } from '../utils/trackingLogic';
-import { AutoPart, CarBrand, PartCategory, Invoice, PurchaseInvoice, SalesReturn, PurchaseReturn } from '../types/autoParts';
+import { Trash2, Lock } from 'lucide-react';
+import { verifyOwnerPassword } from '../services/approvalService';
+import { Employee, AutoPart, CarBrand, PartCategory, Invoice, PurchaseInvoice, SalesReturn, PurchaseReturn } from '../types/autoParts';
 import { StockCardModal } from './StockCardModal';
 import { ClipboardList, ScanBarcode as ScanBarcodeIcon } from 'lucide-react';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
@@ -34,6 +36,8 @@ interface InventoryViewProps {
   onAddNewPart: (newPart: AutoPart) => void;
   onUpdateStock: (partId: string, addedStock: number) => void;
   onUpdatePartPrices?: (partId: string, costPrice: number, salePrice: number, barcode?: string) => void;
+  employees?: Employee[];
+  onDeletePart?: (partId: string, approvedBy: string) => void;
   carBrands?: string[];
   onAddBrand?: (brand: string) => void;
   onRemoveBrand?: (brand: string) => void;
@@ -55,6 +59,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   onAddNewPart,
   onUpdateStock,
   onUpdatePartPrices,
+  employees = [],
+  onDeletePart,
   carBrands = CAR_BRANDS,
   onAddBrand,
   onRemoveBrand,
@@ -71,6 +77,34 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   isAddModalOpenInitially = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  // حذف صنف: لا يتم إلا بعد إدخال باسورد المدير
+  const [deletePart, setDeletePart] = useState<AutoPart | null>(null);
+  const [deletePass, setDeletePass] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const closeDelete = () => { setDeletePart(null); setDeletePass(''); setDeleteError(''); setDeleteBusy(false); };
+  const confirmDelete = async () => {
+    if (!deletePart || !onDeletePart || deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteError('');
+    try {
+      const mgr = await verifyOwnerPassword(employees, deletePass);
+      if (!mgr) { setDeleteError('باسورد المدير غير صحيح. لم يتم حذف الصنف.'); setDeleteBusy(false); return; }
+      onDeletePart(deletePart.id, mgr.name);
+      closeDelete();
+    } catch {
+      setDeleteError('تعذر التحقق من الباسورد. حاول مرة أخرى.');
+      setDeleteBusy(false);
+    }
+  };
+  const deleteLinkedDocs = useMemo(() => {
+    if (!deletePart) return { sales: 0, purchases: 0 };
+    const match = (it: { partId?: string; partNumber: string }) => it.partId ? it.partId === deletePart.id : it.partNumber === deletePart.partNumber;
+    return {
+      sales: invoices.filter(inv => (inv.items || []).some(match)).length,
+      purchases: purchaseInvoices.filter(pi => (pi.items || []).some(match)).length,
+    };
+  }, [deletePart, invoices, purchaseInvoices]);
   const [stockCardPart, setStockCardPart] = useState<AutoPart | null>(null);
   const [selectedBrand, setSelectedBrand] = useState<CarBrand>('شامل');
   const [selectedCategory, setSelectedCategory] = useState<string>('الكل');
@@ -438,6 +472,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
+
+                          {onDeletePart && (
+                            <button
+                              onClick={() => { setDeletePart(part); setDeletePass(''); setDeleteError(''); }}
+                              className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 transition-colors"
+                              title="حذف الصنف (يتطلب باسورد المدير)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -448,6 +492,51 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </table>
         </div>
       </div>
+
+      {deletePart && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={closeDelete}>
+          <div className="w-full max-w-sm rounded-3xl bg-surface-2 border border-rose-500/30 p-5 text-white shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
+              <div className="flex items-center gap-2">
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                <h3 className="text-sm font-bold text-white">حذف صنف من المخزن</h3>
+              </div>
+              <button onClick={closeDelete} className="text-neutral-400 hover:text-white"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="text-xs leading-relaxed text-neutral-300">
+              سيتم حذف <strong className="text-white">{deletePart.name}</strong> ({deletePart.partNumber}) نهائياً، ورصيده الحالي {deletePart.stockQuantity} {deletePart.unit}.
+              {(deleteLinkedDocs.sales + deleteLinkedDocs.purchases) > 0 && (
+                <div className="mt-2 p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 font-bold">
+                  الصنف مذكور في {deleteLinkedDocs.sales} فاتورة بيع و{deleteLinkedDocs.purchases} فاتورة شراء. الفواتير القديمة ستبقى كما هي، لكن لن يظهر الصنف في المخزن.
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-neutral-400 flex items-center gap-1 mb-1.5"><Lock className="w-3 h-3" /> باسورد المدير</label>
+              <input
+                type="password"
+                autoFocus
+                value={deletePass}
+                onChange={(e) => { setDeletePass(e.target.value); setDeleteError(''); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') void confirmDelete(); }}
+                placeholder="أدخل باسورد المدير للتأكيد"
+                className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-sm text-white focus:outline-none focus:border-rose-400"
+              />
+              {deleteError && <p className="text-xs font-bold text-rose-400 mt-1.5">{deleteError}</p>}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => void confirmDelete()}
+                disabled={!deletePass.trim() || deleteBusy}
+                className="flex-1 h-10 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-sm font-black disabled:opacity-40"
+              >
+                {deleteBusy ? 'جاري التحقق...' : 'تأكيد الحذف'}
+              </button>
+              <button onClick={closeDelete} className="px-4 h-10 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-sm font-bold text-neutral-200">إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editPricePart && (
         <div 

@@ -10,6 +10,7 @@ export const TAB_ACCESS: Record<string, PermKey[]> = {
   pos: ['canSellPos'],
   shifts: ['canSellPos', 'canManageTreasury'],
   inventory: ['canManageInventory'],
+  lowstock: ['canManageInventory'],
   warehouses: ['canManageInventory'],
   tracking: ['canManageInventory'],
   invoices: ['canSellPos', 'canViewReports'],
@@ -31,7 +32,7 @@ export function isSimpleCashier(role: string | undefined, permissions: Partial<E
 export const SIMPLE_MODE_TABS = ['pos', 'shifts', 'invoices', 'customers'];
 
 /** ترتيب اختيار أول شاشة مسموحة عند التحويل من شاشة ممنوعة. */
-export const TAB_ORDER = ['dashboard', 'pos', 'shifts', 'invoices', 'customers', 'inventory', 'warehouses', 'tracking', 'purchases', 'suppliers', 'finance', 'cheques', 'reports', 'settings'];
+export const TAB_ORDER = ['dashboard', 'pos', 'shifts', 'invoices', 'customers', 'inventory', 'lowstock', 'warehouses', 'tracking', 'purchases', 'suppliers', 'finance', 'cheques', 'reports', 'settings'];
 
 export function hasTabAccess(role: string | undefined, permissions: Partial<EmployeePermissions> | undefined, tab: string): boolean {
   if (role === OWNER_ROLE) return true;
