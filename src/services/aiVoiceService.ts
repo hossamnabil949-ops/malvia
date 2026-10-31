@@ -111,15 +111,27 @@ function answerInternalShopQuery(command: string, parts: AutoPart[], customers: 
 
   const summary: any = shop?.summary || {};
 
-  // Customer and supplier balances are read from tenant-local data only.
-  const customerName = customers.find((customer) => {
-    const name = normalizeArabic(customer.name);
-    return name.length > 1 && q.includes(name);
-  });
-  if (customerName && /(رصيد|مديون|عليه|حساب|باقي|مستحق)/.test(q)) {
+  // Customer balance questions are strictly local. Never forward a customer name/balance query externally.
+  const customerBalanceIntent = /(رصيد|مديون|عليه|حساب|باقي|مستحق)/.test(q) && /(عميل|للعميل|العميل|حساب)/.test(q);
+  const customerMatch = customers
+    .map((customer) => ({ customer, normalizedName: normalizeArabic(customer.name) }))
+    .filter(({ normalizedName }) => normalizedName.length > 2 && q.includes(normalizedName))
+    .sort((a, b) => b.normalizedName.length - a.normalizedName.length)[0]?.customer;
+
+  if (customerBalanceIntent) {
+    if (customerMatch) {
+      const balance = Number(customerMatch.balance);
+      return answer(lang === 'ar'
+        ? `رصيد العميل ${customerMatch.name}: ${Number.isFinite(balance) ? balance.toLocaleString('ar-EG') : 'غير متاح'} جنيه.`
+        : `Customer ${customerMatch.name} balance: ${Number.isFinite(balance) ? balance.toLocaleString() : 'unavailable'}.`);
+    }
+    const requestedName = q
+      .replace(/رصيد|مديون|عليه|حساب|باقي|مستحق|العميل|للعميل|عميل/g, ' ')
+      .replace(/\\s+/g, ' ')
+      .trim();
     return answer(lang === 'ar'
-      ? `رصيد ${customerName.name} المستحق: ${Number(customerName.balance || 0).toLocaleString('ar-EG')} جنيه.`
-      : `${customerName.name} outstanding balance: ${Number(customerName.balance || 0).toLocaleString()}.`);
+      ? (requestedName ? `لم أجد عميلاً باسم "${requestedName}" في بيانات المحل الحالية.` : 'من فضلك اذكر اسم العميل لمعرفة رصيده.')
+      : (requestedName ? `I could not find a customer named "${requestedName}" in this shop data.` : 'Please provide the customer name to check the balance.'));
   }
   const supplierBalances = suppliers.filter((supplier) => Number(supplier.balance) > 0).map((supplier) => ({ name: supplier.name, balance: Number(supplier.balance) || 0 }));
   const supplierMatch = supplierBalances.find((supplier) => {
