@@ -254,7 +254,10 @@ export async function sendVoiceCommandToServer(
   shop?: ReturnType<typeof buildShopSnapshot>,
   uiLang: 'ar' | 'en' = 'ar'
 ): Promise<AICommandResult> {
-  const customerBalanceAnswer = answerCustomerBalanceLookup(command, customers, uiLang);\n  if (customerBalanceAnswer) return customerBalanceAnswer;\n\n  const internalAnswer = answerInternalShopQuery(command, parts, customers || [], suppliers || [], shop, uiLang);
+  const customerBalanceAnswer = answerCustomerBalanceLookup(command, customers, uiLang);
+  if (customerBalanceAnswer) return customerBalanceAnswer;
+
+  const internalAnswer = answerInternalShopQuery(command, parts, customers || [], suppliers || [], shop, uiLang);
   if (internalAnswer) return internalAnswer;
   let response: Response;
   try {
