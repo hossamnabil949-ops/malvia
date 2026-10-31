@@ -118,7 +118,7 @@ export default async function handler(req: any, res: any) {
     // لغة الرد تُحدد من آخر رسالة للمستخدم (حتى لا يرد بالإنجليزية على كلام عربي)
     const lang: 'ar' | 'en' = hasArabic(command) ? 'ar' : (/[a-z]/i.test(command) ? 'en' : (body.uiLang === 'en' ? 'en' : 'ar'));
 
-    const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
