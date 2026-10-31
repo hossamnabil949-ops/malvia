@@ -112,11 +112,11 @@ function answerInternalShopQuery(command: string, parts: AutoPart[], customers: 
   const summary: any = shop?.summary || {};
 
   // Customer balance questions are strictly local. Never forward a customer name/balance query externally.
-  const customerBalanceIntent = /(رصيد|مديون|عليه|حساب|باقي|مستحق)/.test(q) && /(عميل|للعميل|العميل|حساب)/.test(q);
   const customerMatch = customers
     .map((customer) => ({ customer, normalizedName: normalizeArabic(customer.name) }))
     .filter(({ normalizedName }) => normalizedName.length > 2 && q.includes(normalizedName))
     .sort((a, b) => b.normalizedName.length - a.normalizedName.length)[0]?.customer;
+  const customerBalanceIntent = /(رصيد|مديون|عليه|حساب|باقي|مستحق)/.test(q) && (/(عميل|للعميل|العميل|حساب|ورشه|ورشة)/.test(q) || !!customerMatch);
 
   if (customerBalanceIntent) {
     if (customerMatch) {
