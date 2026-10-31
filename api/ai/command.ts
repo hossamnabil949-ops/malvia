@@ -373,7 +373,8 @@ export default async function handler(req: any, res: any) {
         responseMimeType: 'application/json',
         responseSchema: RESPONSE_SCHEMA,
         temperature: 0.5,
-        maxOutputTokens: 1024,
+        // Replies are intentionally concise; cap generation to reduce latency.
+        maxOutputTokens: 512,
       },
     };
 
@@ -401,6 +402,7 @@ export default async function handler(req: any, res: any) {
       attemptTimeoutMs: 15_000,
     });
 
+    const geminiStartedAt = Date.now();
     let r: Response | undefined;
     let primaryFailure: string | undefined;
 
@@ -494,6 +496,14 @@ export default async function handler(req: any, res: any) {
     // -----------------------------------------------------
 
     const j: any = await r.json();
+    const usage = j?.usageMetadata || {};
+    console.info('Gemini completed', {
+      model: r.url.includes(encodeURIComponent(fallbackModel)) || r.url.includes(fallbackModel) ? fallbackModel : model,
+      elapsedMs: Date.now() - geminiStartedAt,
+      promptTokens: Number.isFinite(usage.promptTokenCount) ? usage.promptTokenCount : undefined,
+      outputTokens: Number.isFinite(usage.candidatesTokenCount) ? usage.candidatesTokenCount : undefined,
+      totalTokens: Number.isFinite(usage.totalTokenCount) ? usage.totalTokenCount : undefined,
+    });
 
     const text = (
       j?.candidates?.[0]?.content?.parts || []
