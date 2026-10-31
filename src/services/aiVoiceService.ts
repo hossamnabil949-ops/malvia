@@ -198,8 +198,8 @@ export function answerCustomerBalanceLookup(
 
   // Remove intent words and business descriptors, leaving only the requested customer name.
   const cleanedName = q
-    .replace(/رصيد|مديون|عليه|حساب|باقي|مستحق|العميل|للعميل|عميل|مركز|ورشه|ورشة|الاسطى|الاسطي/g, ' ')
-    .replace(/\\s+/g, ' ')
+    .replace(/رصيد|مديون|عليه|حساب|باقي|مستحق|العميل|للعميل|عميل|المركز|مركز|الورشه|الورشة|ورشه|ورشة|الاسطى|الاسطي/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
   const lang: 'ar' | 'en' = hasArabic(command) ? 'ar' : uiLang;
   const now = new Date().toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
