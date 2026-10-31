@@ -135,10 +135,11 @@ const sleep = (ms: number) =>
 async function callGeminiWithRetry(
   url: string,
   apiKey: string,
-  payload: any
+  payload: any,
+  maxAttempts = 2
 ): Promise<Response> {
-  // Keep interactive requests bounded: one short retry, with a hard timeout per attempt.
-  const maxAttempts = 2;
+  // Keep interactive requests bounded; fallback calls can use one attempt.
+
   const attemptTimeoutMs = 9_000;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -166,10 +167,11 @@ async function callGeminiWithRetry(
 
       const retryAfterHeader = response.headers.get('retry-after');
       const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
+      const backoffDelay = Math.min(800 * (2 ** (attempt - 1)), 2_500);
       const serverDelay = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
-        ? Math.min(retryAfterSeconds * 1000, 1_000)
+        ? Math.min(retryAfterSeconds * 1000, 2_500)
         : 0;
-      const delay = serverDelay || 300 + Math.floor(Math.random() * 200);
+      const delay = serverDelay || backoffDelay + Math.floor(Math.random() * 250);
 
       console.warn(`Gemini temporary error ${response.status}; retrying once after ${delay}ms`);
       await response.body?.cancel().catch(() => {});
@@ -183,8 +185,8 @@ async function callGeminiWithRetry(
         throw new GeminiUnavailableError();
       }
 
-      const delay = 300 + Math.floor(Math.random() * 200);
-      console.warn(`Gemini network/timeout error; retrying once after ${delay}ms`);
+      const delay = Math.min(800 * (2 ** (attempt - 1)), 2_500) + Math.floor(Math.random() * 250);
+      console.warn(`Gemini network/timeout error; retrying after ${delay}ms`);
       await sleep(delay);
     } finally {
       clearTimeout(timeout);
@@ -365,7 +367,30 @@ export default async function handler(req: any, res: any) {
       },
     };
 
-    const r = await callGeminiWithRetry(url, apiKey, payload);
+    let r = await callGeminiWithRetry(url, apiKey, payload);
+
+    // If the primary model remains temporarily unavailable, make one bounded
+    // attempt with a stable Flash fallback. Do not fallback for quota or config errors.
+    if ([500, 502, 503, 504].includes(r.status)) {
+      const fallbackModel =
+        process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.6-flash';
+
+      if (fallbackModel !== model) {
+        console.warn(
+          `Gemini model ${model} returned ${r.status}; trying fallback ${fallbackModel} once`
+        );
+
+        const fallbackUrl =
+          `https://generativelanguage.googleapis.com/v1beta/models/${fallbackModel}:generateContent`;
+
+        r = await callGeminiWithRetry(
+          fallbackUrl,
+          apiKey,
+          payload,
+          1
+        );
+      }
+    }
 
     // -----------------------------------------------------
     // GEMINI ERROR HANDLING
