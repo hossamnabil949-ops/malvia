@@ -132,78 +132,42 @@ const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504];
 const sleep = (ms: number) =>
   new Promise(resolve => setTimeout(resolve, ms));
 
-async function callGeminiWithRetry(
+async function callGeminiOnce(
   url: string,
   apiKey: string,
   payload: any,
-  maxAttempts = 2
+  timeoutMs: number
 ): Promise<Response> {
-  // Keep interactive requests bounded; fallback calls can use one attempt.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
 
-  const attemptTimeoutMs = 15_000;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), attemptTimeoutMs);
-    const attemptStartedAt = Date.now();
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-
-      console.info(
-        `Gemini HTTP response received in ${Date.now() - attemptStartedAt}ms (attempt ${attempt}/${maxAttempts}, status ${response.status})`
-      );
-
-      // A 429 is a quota/rate-limit response; retrying it usually adds latency without helping.
-      const shouldRetry = response.status !== 429 &&
-        RETRYABLE_STATUS_CODES.includes(response.status);
-
-      if (!shouldRetry || attempt === maxAttempts) {
-        return response;
-      }
-
-      const retryAfterHeader = response.headers.get('retry-after');
-      const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
-      const backoffDelay = Math.min(800 * (2 ** (attempt - 1)), 2_500);
-      const serverDelay = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
-        ? Math.min(retryAfterSeconds * 1000, 2_500)
-        : 0;
-      const delay = serverDelay || backoffDelay + Math.floor(Math.random() * 250);
-
-      console.warn(`Gemini temporary error ${response.status}; retrying once after ${delay}ms`);
-      await response.body?.cancel().catch(() => {});
-      clearTimeout(timeout);
-      await sleep(delay);
-    } catch (error) {
-      if (error instanceof GeminiUnavailableError) throw error;
-
-      if (attempt === maxAttempts) {
-        console.error(
-          `Gemini request failed after ${Date.now() - attemptStartedAt}ms (attempt ${attempt}/${maxAttempts}, timeout ${attemptTimeoutMs}ms):`,
-          error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 250) : String(error).slice(0, 250)
-        );
-        throw new GeminiUnavailableError();
-      }
-
-      const delay = Math.min(800 * (2 ** (attempt - 1)), 2_500) + Math.floor(Math.random() * 250);
-      console.warn(
-        `Gemini network/timeout error after ${Date.now() - attemptStartedAt}ms (attempt ${attempt}/${maxAttempts}); retrying after ${delay}ms`
-      );
-      await sleep(delay);
-    } finally {
-      clearTimeout(timeout);
-    }
+    console.info(
+      `Gemini HTTP response received in ${Date.now() - startedAt}ms (status ${response.status}, timeout ${timeoutMs}ms)`
+    );
+    return response;
+  } catch (error) {
+    console.error(
+      `Gemini request failed after ${Date.now() - startedAt}ms (timeout ${timeoutMs}ms):`,
+      error instanceof Error
+        ? `${error.name}: ${error.message}`.slice(0, 250)
+        : String(error).slice(0, 250)
+    );
+    throw new GeminiUnavailableError();
+  } finally {
+    clearTimeout(timeout);
   }
-
-  throw new GeminiUnavailableError();
 }
 
 // =========================================================
@@ -399,7 +363,8 @@ export default async function handler(req: any, res: any) {
       customersCount: customers.length,
       suppliersCount: shop.suppliers.length,
       payloadChars: JSON.stringify(payload).length,
-      attemptTimeoutMs: 15_000,
+      primaryTimeoutMs: 10_000,
+      fallbackTimeoutMs: 8_000,
     });
 
     const geminiStartedAt = Date.now();
@@ -407,7 +372,7 @@ export default async function handler(req: any, res: any) {
     let primaryFailure: string | undefined;
 
     try {
-      r = await callGeminiWithRetry(url, apiKey, payload);
+      r = await callGeminiOnce(url, apiKey, payload, 10_000);
     } catch (error) {
       // A network failure or timeout must also activate the fallback model.
       primaryFailure = String(error).slice(0, 250);
@@ -429,12 +394,7 @@ export default async function handler(req: any, res: any) {
       }
 
       try {
-        r = await callGeminiWithRetry(
-          fallbackUrl,
-          apiKey,
-          payload,
-          1
-        );
+        r = await callGeminiOnce(fallbackUrl, apiKey, payload, 8_000);
       } catch (error) {
         console.error(
           'Gemini fallback request failed or timed out:',
