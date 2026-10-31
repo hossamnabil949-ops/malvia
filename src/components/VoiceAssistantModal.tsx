@@ -432,7 +432,13 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       const lang = detectLang(textToExecute, voiceLangRef.current === 'en-US' ? 'en' : 'ar');
       const reply = lang === 'en'
         ? 'Hello! I’m here and ready to help.'
-        : 'صباح النور! أنا معاك، أقدر أساعدك في إيه؟';
+        : normalizedGreeting === 'السلام عليكم' || normalizedGreeting === 'وعليكم السلام'
+          ? 'وعليكم السلام ورحمة الله وبركاته، أهلاً بيك! أقدر أساعدك في إيه؟'
+          : normalizedGreeting === 'مساء الخير' || normalizedGreeting === 'مساء النور'
+            ? 'مساء النور! أنا معاك، أقدر أساعدك في إيه؟'
+            : normalizedGreeting === 'اهلا' || normalizedGreeting === 'اهلا وسهلا'
+              ? 'أهلاً بيك! أنا معاك، أقدر أساعدك في إيه؟'
+              : 'صباح النور! أنا معاك، أقدر أساعدك في إيه؟';
       conversationRef.current = [
         ...conversationRef.current,
         { role: 'user' as const, content: textToExecute },
