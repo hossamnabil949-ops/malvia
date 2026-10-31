@@ -127,7 +127,7 @@ function answerInternalShopQuery(command: string, parts: AutoPart[], customers: 
     }
     const requestedName = q
       .replace(/رصيد|مديون|عليه|حساب|باقي|مستحق|العميل|للعميل|عميل/g, ' ')
-      .replace(/\\s+/g, ' ')
+      .replace(/\s+/g, ' ')
       .trim();
     return answer(lang === 'ar'
       ? (requestedName ? `لم أجد عميلاً باسم "${requestedName}" في بيانات المحل الحالية.` : 'من فضلك اذكر اسم العميل لمعرفة رصيده.')
