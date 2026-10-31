@@ -112,11 +112,21 @@ function answerInternalShopQuery(command: string, parts: AutoPart[], customers: 
   const summary: any = shop?.summary || {};
 
   // Customer balance questions are strictly local. Never forward a customer name/balance query externally.
-  const customerMatch = customers
+  const exactCustomerMatch = customers
     .map((customer) => ({ customer, normalizedName: normalizeArabic(customer.name) }))
     .filter(({ normalizedName }) => normalizedName.length > 2 && q.includes(normalizedName))
     .sort((a, b) => b.normalizedName.length - a.normalizedName.length)[0]?.customer;
-  const customerBalanceIntent = /(رصيد|مديون|عليه|حساب|باقي|مستحق)/.test(q) && (/(عميل|للعميل|العميل|حساب|ورشه|ورشة)/.test(q) || !!customerMatch);
+  // Fallback for names with extra descriptors (e.g. "مركز الأمانة - فرع ...").
+  const queryTokens = q.split(' ').filter(token => token.length > 1 && !['رصيد','مديون','عليه','حساب','باقي','مستحق','العميل','للعميل','عميل','ورشه'].includes(token));
+  const rankedCustomers = customers.map(customer => {
+    const nameTokens = normalizeArabic(customer.name).split(' ').filter(token => token.length > 1);
+    const hits = nameTokens.filter(token => queryTokens.some(queryToken => queryToken === token || (queryToken.length >= 4 && token.startsWith(queryToken)) || (token.length >= 4 && queryToken.startsWith(token)))).length;
+    return { customer, hits, nameTokenCount: nameTokens.length };
+  }).sort((a, b) => b.hits - a.hits);
+  const fuzzyTop = rankedCustomers[0];
+  const fuzzyCustomerMatch = fuzzyTop && fuzzyTop.hits >= 2 ? fuzzyTop.customer : undefined;
+  const customerMatch = exactCustomerMatch || fuzzyCustomerMatch;
+  const customerBalanceIntent = /(رصيد|مديون|عليه|حساب|باقي|مستحق)/.test(q) && (/(عميل|للعميل|العميل|حساب|ورشه|ورشة|مركز)/.test(q) || !!customerMatch);
 
   if (customerBalanceIntent) {
     if (customerMatch) {
