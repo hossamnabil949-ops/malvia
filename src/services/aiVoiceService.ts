@@ -83,6 +83,52 @@ export function buildShopSnapshot(
   };
 }
 
+/**
+ * MALVIA Internal AI Router — deterministic answers from the shop snapshot.
+ * These intents are answered locally and never call Gemini or an external agent.
+ */
+function answerInternalShopQuery(command: string, parts: AutoPart[], shop?: ReturnType<typeof buildShopSnapshot>, uiLang: 'ar' | 'en' = 'ar'): AICommandResult | null {
+  const lang: 'ar' | 'en' = hasArabic(command) ? 'ar' : (/[a-z]/i.test(command) ? 'en' : uiLang);
+  const time = new Date().toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const q = normalizeArabic(command);
+  const answer = (spokenFeedback: string, extra: Partial<AICommandResult> = {}): AICommandResult => ({ action: 'GENERAL_ANSWER', spokenFeedback, timestamp: time, lang, ...extra });
+
+  // Local inventory lookup: no network or model call.
+  if (/(كم|باقي|فاضل|متبقي|رصيد|مخزون|عندنا|الموجود|جرد|شوفلي)/.test(q)) {
+    const match = resolvePart(command, parts);
+    if (match.status === 'ok') {
+      const p = match.part;
+      return answer(lang === 'ar'
+        ? `المتبقي من ${p.name}: ${p.stockQuantity} ${p.unit || 'قطعة'}، ومكانه ${p.shelfLocation || 'غير محدد'}.`
+        : `${p.name}: ${p.stockQuantity} ${p.unit || 'units'} in stock. Location: ${p.shelfLocation || 'not specified'}.`,
+        { action: 'INVENTORY_AUDIT', matchedPartId: p.id, matchedPartName: p.name, partConfidence: 'high' });
+    }
+    if (match.status === 'ambiguous') {
+      const names = match.candidates.slice(0, 4).map(p => p.name).join(' / ');
+      return answer(lang === 'ar' ? `وجدت أكثر من صنف محتمل: ${names}. حدد الصنف أو الماركة.` : `Multiple possible parts: ${names}. Please specify the part or brand.`);
+    }
+  }
+
+  const summary: any = shop?.summary || {};
+  if (/(مبيعات اليوم|بيع اليوم|حصيله اليوم|اجمالي اليوم|today sales)/.test(q) && Number.isFinite(Number(summary.todaySales))) {
+    return answer(lang === 'ar'
+      ? `إجمالي مبيعات اليوم ${Number(summary.todaySales).toLocaleString('ar-EG')} جنيه من ${Number(summary.todayInvoices || 0)} فاتورة.`
+      : `Today's sales are ${Number(summary.todaySales).toLocaleString()} across ${Number(summary.todayInvoices || 0)} invoices.`);
+  }
+  if (/(مبيعات الشهر|بيع الشهر|اجمالي الشهر|الشهر الحالي|month sales)/.test(q) && Number.isFinite(Number(summary.monthSales))) {
+    return answer(lang === 'ar'
+      ? `إجمالي مبيعات الشهر ${Number(summary.monthSales).toLocaleString('ar-EG')} جنيه من ${Number(summary.monthInvoices || 0)} فاتورة.`
+      : `This month's sales are ${Number(summary.monthSales).toLocaleString()} across ${Number(summary.monthInvoices || 0)} invoices.`);
+  }
+  if (/(اصناف ناقصه|الاصناف الناقصه|نواقص المخزون|المخزون الناقص|out of stock)/.test(q)) {
+    const names = Array.isArray(summary.outOfStock) ? summary.outOfStock : [];
+    return answer(lang === 'ar'
+      ? (names.length ? `الأصناف النافدة (${summary.outOfStockCount ?? names.length}): ${names.join('، ')}.` : 'لا توجد أصناف نافدة حسب بيانات المخزون الحالية.')
+      : (names.length ? `Out of stock (${summary.outOfStockCount ?? names.length}): ${names.join(', ')}.` : 'There are no out-of-stock items in the current inventory data.'));
+  }
+  return null;
+}
+
 export async function sendVoiceCommandToServer(
   command: string,
   parts: AutoPart[],
@@ -91,6 +137,8 @@ export async function sendVoiceCommandToServer(
   shop?: ReturnType<typeof buildShopSnapshot>,
   uiLang: 'ar' | 'en' = 'ar'
 ): Promise<AICommandResult> {
+  const internalAnswer = answerInternalShopQuery(command, parts, shop, uiLang);
+  if (internalAnswer) return internalAnswer;
   let response: Response;
   try {
     response = await fetch('/api/ai/command', {
