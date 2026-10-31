@@ -420,6 +420,40 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setPending(null);
     }
 
+    // Instant local handling for standalone greetings; do not spend an AI request on small talk.
+    const normalizedGreeting = normalizeArabic(textToExecute).replace(/[.!؟?،,]+/g, '').trim();
+    const instantGreetings = new Set([
+      'صباح الخير', 'صباح النور', 'مساء الخير', 'مساء النور',
+      'السلام عليكم', 'وعليكم السلام', 'اهلا', 'اهلا وسهلا',
+      'ازيك', 'عامل ايه', 'اخبارك ايه',
+      'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
+    ]);
+    if (instantGreetings.has(normalizedGreeting)) {
+      const lang = detectLang(textToExecute, voiceLangRef.current === 'en-US' ? 'en' : 'ar');
+      const reply = lang === 'en'
+        ? 'Hello! I’m here and ready to help.'
+        : 'صباح النور! أنا معاك، أقدر أساعدك في إيه؟';
+      conversationRef.current = [
+        ...conversationRef.current,
+        { role: 'user' as const, content: textToExecute },
+        { role: 'assistant' as const, content: reply },
+      ].slice(-12);
+      pushMessage('user', textToExecute);
+      setTranscript('');
+      const instantResult: AICommandResult = {
+        action: 'GENERAL_ANSWER',
+        lang,
+        spokenFeedback: reply,
+        timestamp: new Date().toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US'),
+      };
+      setLastResult(instantResult);
+      if (speechEnabled) speakArabic(reply, () => {
+        if (continuousModeRef.current && isOpen) startListening();
+      });
+      else if (continuousModeRef.current && isOpen) startListening();
+      return;
+    }
+
     setIsProcessing(true);
     setMicError(null);
 

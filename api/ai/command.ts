@@ -137,9 +137,14 @@ async function callGeminiWithRetry(
   apiKey: string,
   payload: any
 ): Promise<Response> {
-  const maxAttempts = 3;
+  // Keep interactive requests bounded: one short retry, with a hard timeout per attempt.
+  const maxAttempts = 2;
+  const attemptTimeoutMs = 9_000;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), attemptTimeoutMs);
+
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -148,58 +153,41 @@ async function callGeminiWithRetry(
           'x-goog-api-key': apiKey,
         },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
 
-      const shouldRetry = RETRYABLE_STATUS_CODES.includes(response.status);
+      // A 429 is a quota/rate-limit response; retrying it usually adds latency without helping.
+      const shouldRetry = response.status !== 429 &&
+        RETRYABLE_STATUS_CODES.includes(response.status);
 
       if (!shouldRetry || attempt === maxAttempts) {
         return response;
       }
 
       const retryAfterHeader = response.headers.get('retry-after');
-      const retryAfterSeconds = retryAfterHeader
-        ? Number(retryAfterHeader)
-        : NaN;
+      const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
+      const serverDelay = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+        ? Math.min(retryAfterSeconds * 1000, 1_000)
+        : 0;
+      const delay = serverDelay || 300 + Math.floor(Math.random() * 200);
 
-      const serverDelay =
-        Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
-          ? Math.min(retryAfterSeconds * 1000, 5000)
-          : 0;
-
-      const delay =
-        serverDelay ||
-        (800 * Math.pow(2, attempt - 1) +
-          Math.floor(Math.random() * 400));
-
-      console.warn(
-        `Gemini temporary error ${response.status}; retry ${attempt + 1}/${maxAttempts} after ${delay}ms`
-      );
-
+      console.warn(`Gemini temporary error ${response.status}; retrying once after ${delay}ms`);
       await response.body?.cancel().catch(() => {});
+      clearTimeout(timeout);
       await sleep(delay);
-
     } catch (error) {
-      if (error instanceof GeminiUnavailableError) {
-        throw error;
-      }
+      if (error instanceof GeminiUnavailableError) throw error;
 
       if (attempt === maxAttempts) {
-        console.error(
-          'Gemini connection failed after retries:',
-          String(error).slice(0, 250)
-        );
+        console.error('Gemini request failed or timed out:', String(error).slice(0, 250));
         throw new GeminiUnavailableError();
       }
 
-      const delay =
-        800 * Math.pow(2, attempt - 1) +
-        Math.floor(Math.random() * 400);
-
-      console.warn(
-        `Gemini network error; retry ${attempt + 1}/${maxAttempts} after ${delay}ms`
-      );
-
+      const delay = 300 + Math.floor(Math.random() * 200);
+      console.warn(`Gemini network/timeout error; retrying once after ${delay}ms`);
       await sleep(delay);
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
