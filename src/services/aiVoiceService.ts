@@ -182,6 +182,69 @@ function answerInternalShopQuery(command: string, parts: AutoPart[], customers: 
   return null;
 }
 
+/**
+ * Fail-closed local route for customer balance lookups.
+ * These requests must never be sent to an external AI, even when customer data
+ * has not loaded yet or a customer name cannot be matched.
+ */
+function answerCustomerBalanceLookup(
+  command: string,
+  customers: Customer[] | undefined,
+  uiLang: 'ar' | 'en'
+): AICommandResult | null {
+  const q = normalizeArabic(command);
+  const hasBalanceTerm = /(رصيد|مديون|عليه|حساب|باقي|مستحق)/.test(q);
+  if (!hasBalanceTerm || /(مورد|للمورد|المورد)/.test(q)) return null;
+
+  const cleanedName = q
+    .replace(/رصيد|مديون|عليه|حساب|باقي|مستحق|العميل|للعميل|عميل|مركز|ورشه|ورشة|الاسطى|الاسطي/g, ' ')
+    .replace(/\\s+/g, ' ')
+    .trim();
+  const hasCustomerContext = /(عميل|للعميل|العميل|مركز|ورشه|ورشة)/.test(q);
+  // "رصيد <name>" is also a customer lookup, even without the word عميل.
+  if (!hasCustomerContext && !cleanedName) return null;
+  const lang: 'ar' | 'en' = hasArabic(command) ? 'ar' : uiLang;
+  const now = new Date().toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const answer = (spokenFeedback: string): AICommandResult => ({ action: 'GENERAL_ANSWER', spokenFeedback, timestamp: now, lang });
+
+  if (!Array.isArray(customers)) {
+    return answer(lang === 'ar'
+      ? 'تعذر تحميل بيانات العملاء حاليًا. لم يتم إرسال السؤال إلى خدمة خارجية. أعد المحاولة بعد تحميل بيانات المحل.'
+      : 'Customer data is not loaded. This request was not sent to an external service. Please retry after shop data loads.');
+  }
+
+  const normalizedCustomers = customers.map(customer => ({
+    customer,
+    name: normalizeArabic(customer.name || ''),
+  })).filter(item => item.name.length > 1);
+  const exact = normalizedCustomers
+    .filter(item => item.name && (q.includes(item.name) || item.name.includes(cleanedName)))
+    .sort((a, b) => b.name.length - a.name.length)[0]?.customer;
+  const queryTokens = cleanedName.split(' ').filter(token => token.length > 1);
+  const ranked = normalizedCustomers.map(item => {
+    const nameTokens = item.name.split(' ').filter(token => token.length > 1);
+    const hits = nameTokens.filter(token => queryTokens.some(queryToken =>
+      token === queryToken ||
+      (queryToken.length >= 4 && token.startsWith(queryToken)) ||
+      (token.length >= 4 && queryToken.startsWith(token))
+    )).length;
+    return { ...item, hits, tokenCount: nameTokens.length };
+  }).sort((a, b) => b.hits - a.hits);
+  const fuzzy = ranked[0];
+  const matched = exact || (fuzzy && fuzzy.hits >= Math.min(2, fuzzy.tokenCount) ? fuzzy.customer : undefined);
+
+  if (!matched) {
+    return answer(lang === 'ar'
+      ? (cleanedName ? `لم أجد عميلاً باسم "${cleanedName}" في بيانات المحل الحالية.` : 'من فضلك اذكر اسم العميل لمعرفة رصيده.')
+      : (cleanedName ? `I could not find customer "${cleanedName}" in the current shop data.` : 'Please provide the customer name to check the balance.'));
+  }
+
+  const balance = Number(matched.balance);
+  return answer(lang === 'ar'
+    ? `رصيد العميل ${matched.name}: ${Number.isFinite(balance) ? balance.toLocaleString('ar-EG') : 'غير متاح'} جنيه.`
+    : `Customer ${matched.name} balance: ${Number.isFinite(balance) ? balance.toLocaleString() : 'unavailable'}.`);
+}
+
 export async function sendVoiceCommandToServer(
   command: string,
   parts: AutoPart[],
@@ -191,7 +254,7 @@ export async function sendVoiceCommandToServer(
   shop?: ReturnType<typeof buildShopSnapshot>,
   uiLang: 'ar' | 'en' = 'ar'
 ): Promise<AICommandResult> {
-  const internalAnswer = answerInternalShopQuery(command, parts, customers, suppliers, shop, uiLang);
+  const customerBalanceAnswer = answerCustomerBalanceLookup(command, customers, uiLang);\n  if (customerBalanceAnswer) return customerBalanceAnswer;\n\n  const internalAnswer = answerInternalShopQuery(command, parts, customers || [], suppliers || [], shop, uiLang);
   if (internalAnswer) return internalAnswer;
   let response: Response;
   try {
