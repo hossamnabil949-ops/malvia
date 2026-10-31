@@ -187,7 +187,7 @@ function answerInternalShopQuery(command: string, parts: AutoPart[], customers: 
  * These requests must never be sent to an external AI, even when customer data
  * has not loaded yet or a customer name cannot be matched.
  */
-function answerCustomerBalanceLookup(
+export function answerCustomerBalanceLookup(
   command: string,
   customers: Customer[] | undefined,
   uiLang: 'ar' | 'en'
@@ -196,16 +196,21 @@ function answerCustomerBalanceLookup(
   const hasBalanceTerm = /(رصيد|مديون|عليه|حساب|باقي|مستحق)/.test(q);
   if (!hasBalanceTerm || /(مورد|للمورد|المورد)/.test(q)) return null;
 
+  // Remove intent words and business descriptors, leaving only the requested customer name.
   const cleanedName = q
     .replace(/رصيد|مديون|عليه|حساب|باقي|مستحق|العميل|للعميل|عميل|مركز|ورشه|ورشة|الاسطى|الاسطي/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/\\s+/g, ' ')
     .trim();
-  const hasCustomerContext = /(عميل|للعميل|العميل|مركز|ورشه|ورشة)/.test(q);
-  // "رصيد <name>" is also a customer lookup, even without the word عميل.
-  if (!hasCustomerContext && !cleanedName) return null;
   const lang: 'ar' | 'en' = hasArabic(command) ? 'ar' : uiLang;
   const now = new Date().toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const answer = (spokenFeedback: string): AICommandResult => ({ action: 'GENERAL_ANSWER', spokenFeedback, timestamp: now, lang });
+
+  // Fail closed: never let an incomplete balance query reach an external model.
+  if (!cleanedName) {
+    return answer(lang === 'ar'
+      ? 'من فضلك اذكر اسم العميل أو المركز أو الورشة لمعرفة الرصيد.'
+      : 'Please provide the customer, center, or workshop name to check the balance.');
+  }
 
   if (!Array.isArray(customers)) {
     return answer(lang === 'ar'
@@ -217,9 +222,12 @@ function answerCustomerBalanceLookup(
     customer,
     name: normalizeArabic(customer.name || ''),
   })).filter(item => item.name.length > 1);
+
+  // Exact matching must never compare against an empty query.
   const exact = normalizedCustomers
-    .filter(item => item.name && (q.includes(item.name) || item.name.includes(cleanedName)))
+    .filter(item => cleanedName.length > 1 && (q.includes(item.name) || item.name === cleanedName || item.name.includes(cleanedName)))
     .sort((a, b) => b.name.length - a.name.length)[0]?.customer;
+
   const queryTokens = cleanedName.split(' ').filter(token => token.length > 1);
   const ranked = normalizedCustomers.map(item => {
     const nameTokens = item.name.split(' ').filter(token => token.length > 1);
@@ -230,13 +238,17 @@ function answerCustomerBalanceLookup(
     )).length;
     return { ...item, hits, tokenCount: nameTokens.length };
   }).sort((a, b) => b.hits - a.hits);
-  const fuzzy = ranked[0];
-  const matched = exact || (fuzzy && fuzzy.hits >= Math.min(2, fuzzy.tokenCount) ? fuzzy.customer : undefined);
+
+  const top = ranked[0];
+  const second = ranked[1];
+  const confidentFuzzyMatch = top && top.hits >= Math.min(2, top.tokenCount) &&
+    (!second || second.hits < top.hits) ? top.customer : undefined;
+  const matched = exact || confidentFuzzyMatch;
 
   if (!matched) {
     return answer(lang === 'ar'
-      ? (cleanedName ? `لم أجد عميلاً باسم "${cleanedName}" في بيانات المحل الحالية.` : 'من فضلك اذكر اسم العميل لمعرفة رصيده.')
-      : (cleanedName ? `I could not find customer "${cleanedName}" in the current shop data.` : 'Please provide the customer name to check the balance.'));
+      ? `لم أجد عميلاً باسم "${cleanedName}" في بيانات المحل الحالية. لم يتم إرسال السؤال إلى خدمة خارجية.`
+      : `I could not find customer "${cleanedName}" in the current shop data. This request was not sent externally.`);
   }
 
   const balance = Number(matched.balance);
@@ -244,7 +256,6 @@ function answerCustomerBalanceLookup(
     ? `رصيد العميل ${matched.name}: ${Number.isFinite(balance) ? balance.toLocaleString('ar-EG') : 'غير متاح'} جنيه.`
     : `Customer ${matched.name} balance: ${Number.isFinite(balance) ? balance.toLocaleString() : 'unavailable'}.`);
 }
-
 export async function sendVoiceCommandToServer(
   command: string,
   parts: AutoPart[],
