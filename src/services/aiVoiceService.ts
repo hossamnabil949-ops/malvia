@@ -198,7 +198,7 @@ function answerCustomerBalanceLookup(
 
   const cleanedName = q
     .replace(/رصيد|مديون|عليه|حساب|باقي|مستحق|العميل|للعميل|عميل|مركز|ورشه|ورشة|الاسطى|الاسطي/g, ' ')
-    .replace(/\\s+/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
   const hasCustomerContext = /(عميل|للعميل|العميل|مركز|ورشه|ورشة)/.test(q);
   // "رصيد <name>" is also a customer lookup, even without the word عميل.
