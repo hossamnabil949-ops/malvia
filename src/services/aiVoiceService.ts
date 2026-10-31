@@ -43,8 +43,7 @@ export function buildShopSnapshot(
   invoices: Invoice[],
   suppliers: Supplier[],
   session?: { employeeName?: string; role?: string },
-  shopName?: string,
-  customers: Customer[] = []
+  shopName?: string
 ) {
   const today = new Date().toISOString().slice(0, 10);
   const month = today.slice(0, 7);
@@ -80,12 +79,6 @@ export function buildShopSnapshot(
       monthSales: Math.round(sum(monthInv)),
       monthInvoices: monthInv.length,
       topSellersThisMonth: topSellers,
-      customerReceivables: Math.round(customers.reduce((total, customer) => total + Math.max(0, Number(customer.balance) || 0), 0)),
-      customersWithBalances: customers.filter((customer) => Number(customer.balance) > 0).length,
-      customerBalances: customers.filter((customer) => Number(customer.balance) > 0).sort((a, b) => b.balance - a.balance).slice(0, 30).map((customer) => ({ name: customer.name, balance: Math.round(Number(customer.balance) || 0) })),
-      supplierPayables: Math.round(suppliers.reduce((total, supplier) => total + Math.max(0, Number(supplier.balance) || 0), 0)),
-      suppliersWithBalances: suppliers.filter((supplier) => Number(supplier.balance) > 0).length,
-      supplierBalances: suppliers.filter((supplier) => Number(supplier.balance) > 0).sort((a, b) => b.balance - a.balance).slice(0, 30).map((supplier) => ({ name: supplier.name, balance: Math.round(Number(supplier.balance) || 0) })),
     },
   };
 }
@@ -94,7 +87,7 @@ export function buildShopSnapshot(
  * MALVIA Internal AI Router — deterministic answers from the shop snapshot.
  * These intents are answered locally and never call Gemini or an external agent.
  */
-function answerInternalShopQuery(command: string, parts: AutoPart[], customers: Customer[], shop?: ReturnType<typeof buildShopSnapshot>, uiLang: 'ar' | 'en' = 'ar'): AICommandResult | null {
+function answerInternalShopQuery(command: string, parts: AutoPart[], customers: Customer[], suppliers: Supplier[], shop?: ReturnType<typeof buildShopSnapshot>, uiLang: 'ar' | 'en' = 'ar'): AICommandResult | null {
   const lang: 'ar' | 'en' = hasArabic(command) ? 'ar' : (/[a-z]/i.test(command) ? 'en' : uiLang);
   const time = new Date().toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const q = normalizeArabic(command);
@@ -128,7 +121,7 @@ function answerInternalShopQuery(command: string, parts: AutoPart[], customers: 
       ? `رصيد ${customerName.name} المستحق: ${Number(customerName.balance || 0).toLocaleString('ar-EG')} جنيه.`
       : `${customerName.name} outstanding balance: ${Number(customerName.balance || 0).toLocaleString()}.`);
   }
-  const supplierBalances: Array<{ name: string; balance: number }> = Array.isArray(summary.supplierBalances) ? summary.supplierBalances : [];
+  const supplierBalances = suppliers.filter((supplier) => Number(supplier.balance) > 0).map((supplier) => ({ name: supplier.name, balance: Number(supplier.balance) || 0 }));
   const supplierMatch = supplierBalances.find((supplier) => {
     const name = normalizeArabic(supplier.name);
     return name.length > 1 && q.includes(name);
@@ -140,12 +133,12 @@ function answerInternalShopQuery(command: string, parts: AutoPart[], customers: 
   }
   if (/(اجمالي مديونيه العملاء|مديونيات العملاء|ارصده العملاء|مستحقات العملاء|customer receivables)/.test(q)) {
     return answer(lang === 'ar'
-      ? `إجمالي مديونيات العملاء ${Number(summary.customerReceivables || 0).toLocaleString('ar-EG')} جنيه، وعدد العملاء أصحاب الأرصدة ${Number(summary.customersWithBalances || 0)}.`
+      ? `إجمالي مديونيات العملاء ${customers.reduce((total, customer) => total + Math.max(0, Number(customer.balance) || 0), 0).toLocaleString('ar-EG')} جنيه، وعدد العملاء أصحاب الأرصدة ${customers.filter((customer) => Number(customer.balance) > 0).length}.`
       : `Customer receivables total ${Number(summary.customerReceivables || 0).toLocaleString()} across ${Number(summary.customersWithBalances || 0)} customers.`);
   }
   if (/(اجمالي مديونيه الموردين|مستحقات الموردين|حسابات الموردين|supplier payables)/.test(q)) {
     return answer(lang === 'ar'
-      ? `إجمالي المستحق للموردين ${Number(summary.supplierPayables || 0).toLocaleString('ar-EG')} جنيه، وعدد الموردين أصحاب الأرصدة ${Number(summary.suppliersWithBalances || 0)}.`
+      ? `إجمالي المستحق للموردين ${suppliers.reduce((total, supplier) => total + Math.max(0, Number(supplier.balance) || 0), 0).toLocaleString('ar-EG')} جنيه، وعدد الموردين أصحاب الأرصدة ${suppliers.filter((supplier) => Number(supplier.balance) > 0).length}.`
       : `Supplier payables total ${Number(summary.supplierPayables || 0).toLocaleString()} across ${Number(summary.suppliersWithBalances || 0)} suppliers.`);
   }
   if (/(مبيعات اليوم|بيع اليوم|حصيله اليوم|اجمالي اليوم|today sales)/.test(q) && Number.isFinite(Number(summary.todaySales))) {
@@ -171,11 +164,12 @@ export async function sendVoiceCommandToServer(
   command: string,
   parts: AutoPart[],
   customers: Customer[],
+  suppliers: Supplier[],
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
   shop?: ReturnType<typeof buildShopSnapshot>,
   uiLang: 'ar' | 'en' = 'ar'
 ): Promise<AICommandResult> {
-  const internalAnswer = answerInternalShopQuery(command, parts, customers, shop, uiLang);
+  const internalAnswer = answerInternalShopQuery(command, parts, customers, suppliers, shop, uiLang);
   if (internalAnswer) return internalAnswer;
   let response: Response;
   try {
