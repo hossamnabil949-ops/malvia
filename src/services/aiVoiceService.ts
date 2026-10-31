@@ -188,73 +188,43 @@ function answerInternalShopQuery(command: string, parts: AutoPart[], customers: 
  * has not loaded yet or a customer name cannot be matched.
  */
 export function answerCustomerBalanceLookup(
-  command: string,
-  customers: Customer[] | undefined,
-  uiLang: 'ar' | 'en'
+  command: string, customers: Customer[] | undefined, uiLang: 'ar' | 'en', suppliers: Supplier[] | undefined = []
 ): AICommandResult | null {
   const q = normalizeArabic(command);
-  const hasBalanceTerm = /(رصيد|مديون|عليه|حساب|باقي|مستحق)/.test(q);
-  if (!hasBalanceTerm || /(مورد|للمورد|المورد)/.test(q)) return null;
-
-  // Remove intent words and business descriptors, leaving only the requested customer name.
-  const cleanedName = q
-    .replace(/رصيد|مديون|عليه|حساب|باقي|مستحق|العميل|للعميل|عميل|المركز|مركز|الورشه|الورشة|ورشه|ورشة|الاسطى|الاسطي/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const balanceIntent = /(رصيد|مديون|عليه|حساب|باقي|مستحق|مستحقات)/.test(q);
+  const supplierIntent = /(مورد|للمورد|الموردين|موردين)/.test(q);
+  const customerIntent = /(عميل|للعميل|العميل|ورشه|مركز|ورشة)/.test(q);
+  if (!balanceIntent || (!supplierIntent && !customerIntent)) return null;
   const lang: 'ar' | 'en' = hasArabic(command) ? 'ar' : uiLang;
   const now = new Date().toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const answer = (spokenFeedback: string): AICommandResult => ({ action: 'GENERAL_ANSWER', spokenFeedback, timestamp: now, lang });
-
-  // Fail closed: never let an incomplete balance query reach an external model.
-  if (!cleanedName) {
-    return answer(lang === 'ar'
-      ? 'من فضلك اذكر اسم العميل أو المركز أو الورشة لمعرفة الرصيد.'
-      : 'Please provide the customer, center, or workshop name to check the balance.');
+  const stop = new Set(['رصيد','مديون','عليه','حساب','باقي','مستحق','مستحقات','العميل','للعميل','عميل','المورد','للمورد','مورد','الموردين','موردين','المركز','مركز','الورشه','ورشه','ورشة','الاسطى','الاسطي','الاستاذ','استاذ','المعلم','معلم']);
+  const requestedName = q.split(' ').filter(t => t.length > 1 && !stop.has(t)).join(' ').trim();
+  const supplier = supplierIntent;
+  const kind = supplier ? 'المورد' : 'العميل أو الورشة';
+  if (!requestedName) return answer(lang === 'ar' ? 'من فضلك اذكر اسم ' + kind + ' لمعرفة الرصيد.' : 'Please provide the ' + (supplier ? 'supplier' : 'customer') + ' name.');
+  const source = supplier ? suppliers : customers;
+  if (!Array.isArray(source)) return answer(lang === 'ar' ? 'تعذر تحميل بيانات ' + (supplier ? 'الموردين' : 'العملاء') + ' حاليًا. لم يتم إرسال السؤال أو الاسم أو الرصيد إلى خدمة خارجية.' : 'Data is not loaded. This balance request was not sent externally.');
+  const clean = (v: string) => normalizeArabic(v).replace(/(ورشه|مركز|المركز|الاسطى|الاسطي|المعلم|معلم|مورد|المورد|عميل|العميل)/g, ' ').replace(/\\s+/g, ' ').trim();
+  const query = clean(requestedName);
+  const qt = query.split(' ').filter(t => t.length > 1);
+  if (!qt.length) return answer(lang === 'ar' ? 'من فضلك اذكر الاسم بشكل أوضح.' : 'Please provide a clearer name.');
+  const ranked = source.map(record => {
+    const name = clean(record.name || '');
+    const nt = name.split(' ').filter(t => t.length > 1);
+    const exact = name === query || (query.length >= 4 && name.includes(query));
+    const hits = nt.filter(t => qt.some(x => x === t || (x.length >= 4 && t.startsWith(x)) || (t.length >= 4 && x.startsWith(t)))).length;
+    return { record, name, exact, hits, score: exact ? 100 + name.length : hits / Math.max(1, Math.min(qt.length, nt.length)) };
+  }).filter(x => x.name && x.score > 0).sort((x,y) => y.score - x.score);
+  const top = ranked[0], second = ranked[1];
+  const uniqueExact = !!top && top.exact && (!second || !second.exact || second.score < top.score);
+  const uniqueFuzzy = !!top && !top.exact && top.hits >= Math.min(2, qt.length) && (!second || second.score < top.score);
+  if (!uniqueExact && !uniqueFuzzy) {
+    if (top && second && top.score === second.score) return answer(lang === 'ar' ? 'وجدت أكثر من سجل محتمل: ' + top.name + ' و' + second.name + '. من فضلك حدد الاسم الكامل.' : 'Multiple possible matches: ' + top.name + ' and ' + second.name + '. Please specify the full name.');
+    return answer(lang === 'ar' ? 'لم أجد ' + kind + ' باسم "' + requestedName + '". لم يتم إرسال السؤال أو الاسم أو الرصيد إلى خدمة خارجية.' : 'No matching record was found. This request was not sent externally.');
   }
-
-  if (!Array.isArray(customers)) {
-    return answer(lang === 'ar'
-      ? 'تعذر تحميل بيانات العملاء حاليًا. لم يتم إرسال السؤال إلى خدمة خارجية. أعد المحاولة بعد تحميل بيانات المحل.'
-      : 'Customer data is not loaded. This request was not sent to an external service. Please retry after shop data loads.');
-  }
-
-  const normalizedCustomers = customers.map(customer => ({
-    customer,
-    name: normalizeArabic(customer.name || ''),
-  })).filter(item => item.name.length > 1);
-
-  // Exact matching must never compare against an empty query.
-  const exact = normalizedCustomers
-    .filter(item => cleanedName.length > 1 && (q.includes(item.name) || item.name === cleanedName || item.name.includes(cleanedName)))
-    .sort((a, b) => b.name.length - a.name.length)[0]?.customer;
-
-  const queryTokens = cleanedName.split(' ').filter(token => token.length > 1);
-  const ranked = normalizedCustomers.map(item => {
-    const nameTokens = item.name.split(' ').filter(token => token.length > 1);
-    const hits = nameTokens.filter(token => queryTokens.some(queryToken =>
-      token === queryToken ||
-      (queryToken.length >= 4 && token.startsWith(queryToken)) ||
-      (token.length >= 4 && queryToken.startsWith(token))
-    )).length;
-    return { ...item, hits, tokenCount: nameTokens.length };
-  }).sort((a, b) => b.hits - a.hits);
-
-  const top = ranked[0];
-  const second = ranked[1];
-  const confidentFuzzyMatch = top && top.hits >= Math.min(2, top.tokenCount) &&
-    (!second || second.hits < top.hits) ? top.customer : undefined;
-  const matched = exact || confidentFuzzyMatch;
-
-  if (!matched) {
-    return answer(lang === 'ar'
-      ? `لم أجد عميلاً باسم "${cleanedName}" في بيانات المحل الحالية. لم يتم إرسال السؤال إلى خدمة خارجية.`
-      : `I could not find customer "${cleanedName}" in the current shop data. This request was not sent externally.`);
-  }
-
-  const balance = Number(matched.balance);
-  return answer(lang === 'ar'
-    ? `رصيد العميل ${matched.name}: ${Number.isFinite(balance) ? balance.toLocaleString('ar-EG') : 'غير متاح'} جنيه.`
-    : `Customer ${matched.name} balance: ${Number.isFinite(balance) ? balance.toLocaleString() : 'unavailable'}.`);
+  const balance = Number(top.record.balance);
+  return answer(lang === 'ar' ? (supplier ? 'المستحق للمورد ' : 'رصيد العميل ') + top.record.name + ': ' + (Number.isFinite(balance) ? balance.toLocaleString('ar-EG') : 'غير متاح') + ' جنيه.' : (supplier ? 'Amount payable to ' : 'Customer balance for ') + top.record.name + ': ' + (Number.isFinite(balance) ? balance.toLocaleString() : 'unavailable') + '.');
 }
 export async function sendVoiceCommandToServer(
   command: string,
@@ -265,7 +235,7 @@ export async function sendVoiceCommandToServer(
   shop?: ReturnType<typeof buildShopSnapshot>,
   uiLang: 'ar' | 'en' = 'ar'
 ): Promise<AICommandResult> {
-  const customerBalanceAnswer = answerCustomerBalanceLookup(command, customers, uiLang);
+  const customerBalanceAnswer = answerCustomerBalanceLookup(command, customers, uiLang, suppliers);
   if (customerBalanceAnswer) return customerBalanceAnswer;
 
   const internalAnswer = answerInternalShopQuery(command, parts, customers || [], suppliers || [], shop, uiLang);
