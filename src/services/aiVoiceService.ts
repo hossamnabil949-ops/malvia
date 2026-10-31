@@ -205,7 +205,7 @@ export function answerCustomerBalanceLookup(
   if (!requestedName) return answer(lang === 'ar' ? 'من فضلك اذكر اسم ' + kind + ' لمعرفة الرصيد.' : 'Please provide the ' + (supplier ? 'supplier' : 'customer') + ' name.');
   const source = supplier ? suppliers : customers;
   if (!Array.isArray(source)) return answer(lang === 'ar' ? 'تعذر تحميل بيانات ' + (supplier ? 'الموردين' : 'العملاء') + ' حاليًا. لم يتم إرسال السؤال أو الاسم أو الرصيد إلى خدمة خارجية.' : 'Data is not loaded. This balance request was not sent externally.');
-  const clean = (v: string) => normalizeArabic(v).replace(/(ورشه|مركز|المركز|الاسطى|الاسطي|المعلم|معلم|مورد|المورد|عميل|العميل)/g, ' ').replace(/\\s+/g, ' ').trim();
+  const clean = (v: string) => normalizeArabic(v).replace(/(ورشه|مركز|المركز|الاسطى|الاسطي|المعلم|معلم|مورد|المورد|عميل|العميل)/g, ' ').replace(/\s+/g, ' ').trim();
   const query = clean(requestedName);
   const qt = query.split(' ').filter(t => t.length > 1);
   if (!qt.length) return answer(lang === 'ar' ? 'من فضلك اذكر الاسم بشكل أوضح.' : 'Please provide a clearer name.');
