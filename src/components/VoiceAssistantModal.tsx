@@ -469,7 +469,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setTranscript('');
       const shop = buildShopSnapshot(parts, invoices, suppliers, currentSession, shopName);
       const result = await sendVoiceCommandToServer(
-        textToExecute, parts, customers, conversationRef.current.slice(0, -1), shop,
+        textToExecute, parts, customers, suppliers, conversationRef.current.slice(0, -1), shop,
         voiceLangRef.current === 'en-US' ? 'en' : 'ar'
       );
 
