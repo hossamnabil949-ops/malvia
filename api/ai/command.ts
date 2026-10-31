@@ -145,6 +145,7 @@ async function callGeminiWithRetry(
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), attemptTimeoutMs);
+    const attemptStartedAt = Date.now();
 
     try {
       const response = await fetch(url, {
@@ -156,6 +157,10 @@ async function callGeminiWithRetry(
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
+
+      console.info(
+        `Gemini HTTP response received in ${Date.now() - attemptStartedAt}ms (attempt ${attempt}/${maxAttempts}, status ${response.status})`
+      );
 
       // A 429 is a quota/rate-limit response; retrying it usually adds latency without helping.
       const shouldRetry = response.status !== 429 &&
@@ -181,12 +186,17 @@ async function callGeminiWithRetry(
       if (error instanceof GeminiUnavailableError) throw error;
 
       if (attempt === maxAttempts) {
-        console.error('Gemini request failed or timed out:', String(error).slice(0, 250));
+        console.error(
+          `Gemini request failed after ${Date.now() - attemptStartedAt}ms (attempt ${attempt}/${maxAttempts}, timeout ${attemptTimeoutMs}ms):`,
+          error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 250) : String(error).slice(0, 250)
+        );
         throw new GeminiUnavailableError();
       }
 
       const delay = Math.min(800 * (2 ** (attempt - 1)), 2_500) + Math.floor(Math.random() * 250);
-      console.warn(`Gemini network/timeout error; retrying after ${delay}ms`);
+      console.warn(
+        `Gemini network/timeout error after ${Date.now() - attemptStartedAt}ms (attempt ${attempt}/${maxAttempts}); retrying after ${delay}ms`
+      );
       await sleep(delay);
     } finally {
       clearTimeout(timeout);
@@ -371,6 +381,25 @@ export default async function handler(req: any, res: any) {
       process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.6-flash';
     const fallbackUrl =
       `https://generativelanguage.googleapis.com/v1beta/models/${fallbackModel}:generateContent`;
+
+    // Log request shape only; never log prompts, inventory/customer data, or API keys.
+    const systemPromptChars = payload.systemInstruction.parts[0].text.length;
+    const historyChars = history.reduce(
+      (total: number, item: any) => total + (item.parts?.[0]?.text?.length || 0),
+      0
+    );
+    console.info('Gemini request diagnostics', {
+      primaryModel: model,
+      fallbackModel,
+      systemPromptChars,
+      historyChars,
+      commandChars: command.length,
+      partsCount: parts.length,
+      customersCount: customers.length,
+      suppliersCount: shop.suppliers.length,
+      payloadChars: JSON.stringify(payload).length,
+      attemptTimeoutMs: 15_000,
+    });
 
     let r: Response | undefined;
     let primaryFailure: string | undefined;
