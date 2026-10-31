@@ -140,7 +140,7 @@ async function callGeminiWithRetry(
 ): Promise<Response> {
   // Keep interactive requests bounded; fallback calls can use one attempt.
 
-  const attemptTimeoutMs = 9_000;
+  const attemptTimeoutMs = 15_000;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
@@ -367,29 +367,54 @@ export default async function handler(req: any, res: any) {
       },
     };
 
-    let r = await callGeminiWithRetry(url, apiKey, payload);
+    const fallbackModel =
+      process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.6-flash';
+    const fallbackUrl =
+      `https://generativelanguage.googleapis.com/v1beta/models/${fallbackModel}:generateContent`;
 
-    // If the primary model remains temporarily unavailable, make one bounded
-    // attempt with a stable Flash fallback. Do not fallback for quota or config errors.
-    if ([500, 502, 503, 504].includes(r.status)) {
-      const fallbackModel =
-        process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.6-flash';
+    let r: Response | undefined;
+    let primaryFailure: string | undefined;
 
-      if (fallbackModel !== model) {
+    try {
+      r = await callGeminiWithRetry(url, apiKey, payload);
+    } catch (error) {
+      // A network failure or timeout must also activate the fallback model.
+      primaryFailure = String(error).slice(0, 250);
+      console.warn(
+        `Gemini primary model ${model} failed; trying fallback ${fallbackModel}: ${primaryFailure}`
+      );
+    }
+
+    // Fallback is limited to one attempt and only for transient failures.
+    if (
+      (!r || [500, 502, 503, 504].includes(r.status)) &&
+      fallbackModel !== model
+    ) {
+      if (r) {
         console.warn(
           `Gemini model ${model} returned ${r.status}; trying fallback ${fallbackModel} once`
         );
+        await r.body?.cancel().catch(() => {});
+      }
 
-        const fallbackUrl =
-          `https://generativelanguage.googleapis.com/v1beta/models/${fallbackModel}:generateContent`;
-
+      try {
         r = await callGeminiWithRetry(
           fallbackUrl,
           apiKey,
           payload,
           1
         );
+      } catch (error) {
+        console.error(
+          'Gemini fallback request failed or timed out:',
+          String(error).slice(0, 250)
+        );
+        throw new GeminiUnavailableError();
       }
+    }
+
+    if (!r) {
+      throw new GeminiUnavailableError();
     }
 
     // -----------------------------------------------------
