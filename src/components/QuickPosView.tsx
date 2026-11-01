@@ -1157,7 +1157,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               </div>
             )}
             <div className="flex justify-between">
-              <span>ضريبة القيمة المضافة ${pricesIncludeTax ? '(مستخرجة من السعر الشامل)' : '(مضافة إلى السعر)'}:</span>
+              <span>ضريبة القيمة المضافة {pricesIncludeTax ? '(مستخرجة من السعر الشامل)' : '(مضافة إلى السعر)'}:</span>
               <span className={`font-mono ${applyVat ? 'text-amber-400 font-bold' : 'text-neutral-500'}`}>
                 {applyVat ? `${tax.toFixed(2)} ج.م (${vatRate}%)` : 'معفى / 0.00 ج.م'}
               </span>
