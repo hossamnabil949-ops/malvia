@@ -580,6 +580,8 @@ export interface ShopSettings {
   taxId: string;
   currency: string;
   vatRate: number;
+  vatEnabled?: boolean; // خضوع المنشأة للضريبة — إعداد على مستوى المنشأة
+  pricesIncludeTax?: boolean; // الأسعار المدخلة شاملة الضريبة أم غير شاملة
   invoiceFooterNotes: string;
   activeEmployeeId: string;
   requireShiftForSales?: boolean; // إلزام فتح وردية قبل أي بيع في الكاشير
