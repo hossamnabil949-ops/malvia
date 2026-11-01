@@ -410,39 +410,54 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       .replace(/[٬،]/g, ',')
       .replace(/٫/g, '.');
     const q = normalizeArabic(digitText);
-    const isCreate = /(جدول|جدوله|قسم المبلغ|قسّم المبلغ|قسم حساب|قسّم حساب|قسم .*دفعات|قسم .*دفعات|توزيع .*دفعات|مستحقات المورد|المستحق للمورد|دفعات اسبوع|دفعات شهري|كل يوم|كل اسبوع|كل شهر)/.test(q);
+    const isCreate = /(جدول|جدوله|قسم|قسّم|توزيع|مستحقات المورد|المستحق للمورد|دفعات اسبوع|دفعات شهري|كل يوم|كل اسبوع|كل شهر)/.test(q);
     if (!supplierPlanDraft && !isCreate) return false;
     if (/^(الغاء|الغي|كنسل|cancel)$/.test(q)) {
       setSupplierPlanDraft(null); pushMessage('assistant','تم إلغاء إعداد الجدول، ولم يتم حفظ أي شيء.'); return true;
     }
+
     const draft = { ...(supplierPlanDraft || { recurrence: 'weekly', weekdays: [], notes: 'إنشاء صوتي' }), source: raw };
-    // Numeric-only replies answer the missing field currently requested.
-    const numericOnly = q.match(/^(\\d{1,4})$/);
+    const numericOnly = q.match(/^(\d{1,4})$/);
     const waitingForInterval = Boolean(supplierPlanDraft && supplierPlanDraft.recurrence === 'every_n_days' && !supplierPlanDraft.intervalDays);
     if (numericOnly && waitingForInterval) {
       draft.intervalDays = Number(numericOnly[1]);
     } else if (numericOnly && supplierPlanDraft && !supplierPlanDraft.installmentCount) {
       draft.installmentCount = Number(numericOnly[1]);
     } else {
-      const amountMatch = digitText.match(/(?:بمبلغ|مبلغ|المبلغ|اجمالي|إجمالي|المستحق)[\\s\\S]{0,120}?([0-9][0-9,.]*)\\s*(?:جنيه|ج\\.?)/i) || digitText.match(/([0-9][0-9,.]*)\\s*(?:جنيه|ج\\.?)/i);
+      // Amount is recognized by its currency suffix, even when supplier details precede it.
+      const amountMatch = digitText.match(/([0-9][0-9,.]*)\s*(?:جنيه|ج\.?)/i);
       if (amountMatch) {
         const parsedAmount = Number(amountMatch[1].replace(/,/g, ''));
         if (Number.isFinite(parsedAmount) && parsedAmount > 0) draft.totalAmount = parsedAmount;
       }
-      const countMatch = q.match(/(?:على|عدد|لعدد)\\s*(\\d{1,3})\\s*(?:دفعات|دفعة|قسط|اقساط)?|^(\\d{1,3})\\s*(?:دفعات|دفعة|قسط)?$/);
+      const countMatch = q.match(/(?:على|عدد|لعدد)\s*(\d{1,3})\s*(?:دفعات|دفعة|قسط|اقساط)?|^(\d{1,3})\s*(?:دفعات|دفعة|قسط)?$/);
       if (countMatch) draft.installmentCount = Number(countMatch[1] || countMatch[2]);
     }
+
     if (/اسبوع|اسبوعي|اسبوعيا/.test(q)) draft.recurrence = 'weekly';
     if (/شهري|شهريا|كل شهر/.test(q)) draft.recurrence = 'monthly';
     if (/كل يوم|يوميا|كل (\d+) يوم/.test(q)) { draft.recurrence = 'every_n_days'; const n=q.match(/كل (\d+) يوم/); if(n) draft.intervalDays=Number(n[1]); }
-    const weekdayMap: Record<string,number> = { الاحد:0, الأحد:0, الاثنين:1, الإثنين:1, الثلاثاء:2, الاربعاء:3, الأربعاء:3, الخميس:4, الجمعة:5, السبت:6 };
+
+    const weekdayMap: Record<string,number> = { الاحد:0, الاثنين:1, الثلاثاء:2, الاربعاء:3, الخميس:4, الجمعة:5, السبت:6 };
     const dayHits = Object.keys(weekdayMap).filter(day => q.includes(normalizeArabic(day)));
     if (dayHits.length) draft.weekdays = [...new Set(dayHits.map(day => weekdayMap[day]))];
+
     const dateMatch = digitText.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
     if (dateMatch) draft.startDate = [dateMatch[3],dateMatch[2].padStart(2,'0'),dateMatch[1].padStart(2,'0')].join('-');
-    const supplierTokens = q.split(' ').filter(w => w.length > 2 && !/^\\d+$/.test(w) && !['جدول','جدوله','دفعات','دفعة','المبلغ','قسم','حساب','اقسم','قسّم','قسموا','توزيع','الي','الى','اسبوعي','اسبوعيا','شهري','شهريا','مورد','للمورد','المورد','جنيه','بداية','من','كل','يوم','على','المستحق','اجمالي','الاجمالي'].includes(w));
-    const ranked = suppliers.map(s => { const tokens=normalizeArabic(s.name).split(' '); return {s, hits:supplierTokens.filter(t=>tokens.includes(t)).length}; }).filter(x=>x.hits>0).sort((a,b)=>b.hits-a.hits);
-    if (ranked.length && (!ranked[1] || ranked[0].hits>ranked[1].hits)) draft.supplierId=ranked[0].s.id, draft.supplierName=ranked[0].s.name;
+
+    // Match supplier names by normalized tokens and prefixes, not exact full-token equality.
+    const stop = new Set(['جدول','جدوله','دفعات','دفعة','المبلغ','قسم','حساب','اقسم','توزيع','الي','الى','اسبوعي','اسبوعيا','شهري','شهريا','مورد','للمورد','المورد','جنيه','بداية','من','كل','يوم','على','المستحق','مستحق','اجمالي','الاجمالي','الشركه']);
+    const supplierTokens = q.split(' ').filter(w => w.length > 1 && !/^\d+$/.test(w) && !stop.has(w));
+    const ranked = suppliers.map(s => {
+      const tokens = normalizeArabic(s.name).split(' ').filter(w => w.length > 1);
+      const hits = supplierTokens.filter(t => tokens.some(n => n === t || (t.length >= 3 && n.startsWith(t)) || (n.length >= 3 && t.startsWith(n)))).length;
+      return { s, hits, coverage: hits / Math.max(1, tokens.length) };
+    }).filter(x => x.hits > 0).sort((a,b) => b.hits-a.hits || b.coverage-a.coverage);
+    if (ranked.length && (!ranked[1] || ranked[0].hits > ranked[1].hits || ranked[0].coverage > ranked[1].coverage + 0.2)) {
+      draft.supplierId = ranked[0].s.id;
+      draft.supplierName = ranked[0].s.name;
+    }
+
     if (draft.preview) {
       if (/^(تاكيد|اكد|احفظ|موافق|نعم|تمام)$/.test(q)) {
         const rows=draft.preview as import('../types/autoParts').SupplierPaymentSchedule[];
@@ -453,6 +468,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       }
       if (/^(لا|الغاء|الغي|كنسل)$/.test(q)) { setSupplierPlanDraft(null); pushMessage('assistant','تم إلغاء الجدول ولم يتم حفظه.'); return true; }
     }
+
     const missing = !draft.supplierId ? 'اسم المورد المسجل' : !draft.totalAmount ? 'إجمالي المبلغ' : !draft.startDate ? 'تاريخ بداية أول دفعة (يوم-شهر-سنة)' : draft.recurrence==='weekly' && !draft.weekdays?.length ? 'يوم أو أيام السداد' : draft.recurrence==='every_n_days' && !draft.intervalDays ? 'عدد الأيام بين الدفعات' : !draft.installmentCount ? 'عدد الدفعات' : null;
     if (missing) {
       setSupplierPlanDraft(draft);
@@ -472,7 +488,6 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     } catch(e) { pushMessage('assistant',e instanceof Error?e.message:'تعذر إعداد الجدول.'); }
     return true;
   };
-
   const handleExecuteCommand = async (commandText: string) => {
     const textToExecute = commandText.trim();
     if (!textToExecute) return;
