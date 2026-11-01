@@ -2528,6 +2528,9 @@ export default function App() {
             parts={parts}
             treasuryBalance={treasuryBalance}
             onAddPurchaseInvoice={handleAddPurchaseInvoice}
+            vatEnabled={settings.vatEnabled}
+            vatRate={settings.vatRate}
+            pricesIncludeTax={settings.pricesIncludeTax}
             onPurchaseReturn={handleAddPurchaseReturn}
             onDeletePurchaseReturn={handleDeletePurchaseReturn}
             onAddSupplier={(newSup: Supplier) => {
