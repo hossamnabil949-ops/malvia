@@ -5,7 +5,7 @@ import { registrationEffect, actionEffect } from '../src/utils/chequeLogic.ts';
 import { refundForLine } from '../src/utils/saleLogic.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
-import { cairoDateKey, salesForDate } from '../src/utils/reportsLogic.ts';
+import { cairoDateKey, salesForDate, netSales, reportDailySales, reportSalesByItem } from '../src/utils/reportsLogic.ts';
 
 // FIN-1 / AI-4: dashboard sales use Cairo's calendar day and one consistent eligible-invoice set.
 const dashboardInvoices: any[] = [
@@ -22,6 +22,28 @@ assert.deepEqual(todaySummary.invoices.map(invoice => invoice.id), ['today-a', '
 assert.equal(salesForDate(dashboardInvoices, '2026-11-02').count, 0);
 assert.equal(salesForDate(dashboardInvoices, '2026-11-02').average, 0);
 assert.equal(cairoDateKey(new Date('2026-10-31T22:30:00.000Z')), '2026-11-01');
+
+// FIN-2 / FIN-6: report totals use the same discounted, pre-tax net-sales definition.
+const reportInvoice: any = {
+  id: 'report-1', invoiceNumber: 'INV-1', date: '2026-11-01', time: '10:15 ص',
+  status: 'مسددة', customerName: 'Test', cashierName: 'Cashier',
+  subtotal: 1000, discount: 100, tax: 126, grandTotal: 1026, returnedAmount: 307.8,
+  items: [
+    { partId: 'p1', partNumber: 'A', partName: 'Part A', quantity: 2, returnedQuantity: 1, unitPrice: 300, costPrice: 100, total: 600 },
+    { partId: 'p2', partNumber: 'B', partName: 'Part B', quantity: 1, returnedQuantity: 0, unitPrice: 400, costPrice: 200, total: 400 },
+  ],
+};
+assert.equal(netSales(reportInvoice), 630);
+const reportInput: any = {
+  invoices: [reportInvoice], salesReturns: [], purchaseInvoices: [], parts: [], customers: [],
+  suppliers: [], expenses: [], treasury: [], cheques: [], batches: [], loyaltyLedger: [], loyaltyPointValue: 0,
+};
+const dailyReport = reportDailySales(reportInput, { from: '2026-11-01', to: '2026-11-01' });
+assert.equal(dailyReport.totals?.net, 630);
+const itemReport = reportSalesByItem(reportInput, { from: '2026-11-01', to: '2026-11-01' });
+assert.equal(itemReport.totals?.revenue, 630);
+assert.equal(itemReport.totals?.cost, 300);
+assert.equal(itemReport.totals?.profit, 330);
 
 // FIN-14: monthly schedule must never begin before the configured start date.
 assert.deepEqual(
