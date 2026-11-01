@@ -24,6 +24,7 @@ import {
   Invoice, 
   Customer, 
   Supplier, 
+  SupplierPaymentSchedule,
   TreasuryTransaction, 
   Employee, 
   ShopSettings, 
@@ -128,6 +129,7 @@ export default function App() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierPayments, setSupplierPayments] = useState<import('./types/autoParts').SupplierPayment[]>([]);
+  const [supplierPaymentSchedules, setSupplierPaymentSchedules] = useState<SupplierPaymentSchedule[]>([]);
   const [treasury, setTreasury] = useState<TreasuryTransaction[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [settings, setSettings] = useState<ShopSettings>(INITIAL_SHOP_SETTINGS);
@@ -233,6 +235,7 @@ export default function App() {
     setCustomers(data.customers);
     setSuppliers(data.suppliers);
     setSupplierPayments(data.supplierPayments || []);
+    setSupplierPaymentSchedules(data.supplierPaymentSchedules || []);
     data.treasuryTransactions.forEach(t => knownTreasuryIds.current.add(t.id));
     setTreasury(data.treasuryTransactions);
     setShifts(data.shifts || []);
@@ -2569,6 +2572,8 @@ export default function App() {
           <SuppliersView
             suppliers={suppliers}
             supplierPayments={supplierPayments}
+            supplierPaymentSchedules={supplierPaymentSchedules}
+            onChangeSupplierPaymentSchedules={(next) => { setSupplierPaymentSchedules(next); persistChanges({ supplierPaymentSchedules: next }); }}
             purchaseInvoices={purchaseInvoices}
             purchaseReturns={purchaseReturns}
             treasuryBalance={treasuryBalance}
