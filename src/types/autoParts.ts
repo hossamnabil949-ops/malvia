@@ -202,7 +202,7 @@ export interface Invoice {
   loyaltyEarned?: number;         // نقاط ولاء اكتسبها العميل من هذه الفاتورة
   loyaltyRedeemedPoints?: number; // نقاط استبدلها العميل كخصم في هذه الفاتورة
   loyaltyDiscount?: number;       // قيمة الخصم الناتج عن النقاط (ج.م) وهو جزء من discount
-  status?: 'مسددة' | 'مرتجع جزئي' | 'مرتجع كلي' | 'ملغاة';
+  status?: 'آجلة' | 'مسددة جزئياً' | 'مسددة' | 'مرتجع جزئي' | 'مرتجع كلي' | 'ملغاة';
   returnedAmount?: number;
   voidedAt?: string;        // ISO — وقت الإلغاء
   voidedBy?: string;        // من نفّذ الإلغاء
@@ -221,7 +221,7 @@ export interface Customer {
   monthlyPurchases: number; // مشتريات الشهر الحالي
   invoicesCount?: number;
   lastVisit: string;
-  creditLimit?: number; // حد الائتمان (ج.م) — 0 أو بدون قيمة = غير محدود
+  creditLimit?: number; // حد الائتمان (ج.م) — القيمة الافتراضية 5,000 ج.م عند عدم التحديد
   loyaltyPoints?: number; // رصيد نقاط الولاء (يُدمج بالفرق على السحابة)
   chequesPending?: number; // (محسوب وغير محفوظ) شيكات واردة مفتوحة تُحتسب ضمن مخاطر الائتمان
 }
