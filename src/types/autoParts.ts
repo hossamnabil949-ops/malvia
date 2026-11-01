@@ -318,11 +318,16 @@ export interface Supplier {
 }
 
 export type SupplierPaymentScheduleStatus = 'scheduled' | 'paid' | 'cancelled';
+export type SupplierPaymentRecurrence = 'once' | 'weekly' | 'monthly' | 'every_n_days' | 'custom';
 
 export interface SupplierPaymentSchedule {
   id: string; supplierId: string; supplierName: string; purchaseInvoiceId?: string; purchaseInvoiceNumber?: string;
   amount: number; amountPaid: number; dueDate: string; status: SupplierPaymentScheduleStatus;
-  paymentId?: string; paymentIds?: string[]; treasuryTransactionId?: string; treasuryTransactionIds?: string[]; notes?: string; createdAt: string; updatedAt: string;
+  paymentId?: string; paymentIds?: string[]; treasuryTransactionId?: string; treasuryTransactionIds?: string[];
+  notes?: string; createdAt: string; updatedAt: string;
+  planId?: string; sequenceNumber?: number; recurrence?: SupplierPaymentRecurrence;
+  recurrenceInterval?: number; recurrenceWeekdays?: number[]; recurrenceDayOfMonth?: number;
+  planEndDate?: string; planTotalInstallments?: number;
 }
 
 export interface SupplierPayment {
