@@ -526,8 +526,6 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     // Keep every utterance visible and in context, including locally handled schedule turns.
     conversationRef.current = [...conversationRef.current, { role: 'user' as const, content: textToExecute }].slice(-12);
     pushMessage('user', textToExecute);
-    if (handleSupplierPlanTurn(textToExecute)) { setTranscript(''); return; }
-
     // Supplier settlement is intentionally human-operated.
     // Voice may locate the saved installment and open the supplier screen,
     // but it must never create a payment, treasury movement, or change balances.
@@ -555,6 +553,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       onNavigateTab('suppliers');
       return;
     }
+    if (handleSupplierPlanTurn(textToExecute)) { setTranscript(''); return; }
 
     // While a command waits for confirmation, "تأكيد" / "إلغاء" answer it.
     if (pending) {
