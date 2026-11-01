@@ -96,6 +96,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [taxId, setTaxId] = useState(settings.taxId || '');
   const [currency, setCurrency] = useState(settings.currency || 'ج.م');
   const [vatRate, setVatRate] = useState(settings.vatRate || 14);
+  const [taxRegistered, setTaxRegistered] = useState(Boolean(settings.taxRegistered));
+  const [pricesIncludeVat, setPricesIncludeVat] = useState(Boolean(settings.pricesIncludeVat));
   const [invoiceFooterNotes, setInvoiceFooterNotes] = useState(settings.invoiceFooterNotes || '');
 
   const ownerAccount = employees.find(e => e.role === 'مدير عام' || e.username === 'admin') || employees[0];
@@ -117,6 +119,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTaxId(settings.taxId || '');
     setCurrency(settings.currency || 'ج.م');
     setVatRate(settings.vatRate || 14);
+    setTaxRegistered(Boolean(settings.taxRegistered));
+    setPricesIncludeVat(Boolean(settings.pricesIncludeVat));
     setInvoiceFooterNotes(settings.invoiceFooterNotes || '');
   }, [settings]);
 
@@ -189,6 +193,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       taxId,
       currency,
       vatRate: Number(vatRate),
+      taxRegistered,
+      pricesIncludeVat: taxRegistered && pricesIncludeVat,
       invoiceFooterNotes,
     };
 
@@ -788,6 +794,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       />
                     </div>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <label className="flex items-start gap-3 p-3 rounded-xl bg-surface-2 border border-neutral-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={taxRegistered}
+                      onChange={(e) => setTaxRegistered(e.target.checked)}
+                      className="mt-0.5 accent-amber-500"
+                    />
+                    <span>
+                      <strong className="block text-white">المنشأة خاضعة لضريبة القيمة المضافة</strong>
+                      <span className="text-neutral-400 block mt-1">تطبيق الضريبة تلقائياً على فواتير البيع الجديدة حسب النسبة المحددة.</span>
+                    </span>
+                  </label>
+                  <label className={`flex items-start gap-3 p-3 rounded-xl bg-surface-2 border border-neutral-700 ${taxRegistered ? 'cursor-pointer' : 'opacity-50'}`}>
+                    <input
+                      type="checkbox"
+                      checked={pricesIncludeVat}
+                      disabled={!taxRegistered}
+                      onChange={(e) => setPricesIncludeVat(e.target.checked)}
+                      className="mt-0.5 accent-amber-500"
+                    />
+                    <span>
+                      <strong className="block text-white">أسعار البيع المدخلة شاملة الضريبة</strong>
+                      <span className="text-neutral-400 block mt-1">استخراج قيمة الضريبة من السعر دون إضافتها مرة ثانية.</span>
+                    </span>
+                  </label>
                 </div>
 
                 <div className="text-xs">
