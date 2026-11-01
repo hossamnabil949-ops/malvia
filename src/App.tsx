@@ -1109,6 +1109,11 @@ export default function App() {
   };
 
   const handleCreateInvoice = (invoice: Invoice): boolean => {
+    const duplicateNumber = invoices.find(existing => existing.invoiceNumber === invoice.invoiceNumber && existing.id !== invoice.id);
+    if (duplicateNumber) {
+      window.alert(`رقم الفاتورة ${invoice.invoiceNumber} مستخدم بالفعل على جهاز آخر. حدّث الترقيم وحاول مرة أخرى.`);
+      return false;
+    }
     // إلزام الوردية: لا بيع بدون وردية مفتوحة (لو الإعداد مفعّل) حتى يكون الدرج محسوباً
     if (settings.requireShiftForSales && !findOpenShift(shifts)) {
       window.alert('لازم تفتح وردية الأول (وتعدّ كاش الدرج) قبل ما تبيع.');
