@@ -181,11 +181,13 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const handleQuickAddCustomer = () => {
     const name = newCustName.trim();
     if (!name || !onAddCustomer) return;
-    // منع التكرار: نفس الموبايل أو نفس الاسم => نختار العميل الموجود بدل إنشاء نسخة ثانية
+    // إنشاء عميل جديد يتطلب هاتفاً؛ الاسم وحده ليس مفتاح هوية فريداً.
     const phone = normPhone(newCustPhone);
-    const existing = customers.find(
-      (c) => (phone.length >= 7 && normPhone(c.phone) === phone) || normText(c.name) === normText(name)
-    );
+    if (phone.length < 7) {
+      setNewCustNote('أدخل رقم هاتف صحيحاً (7 أرقام على الأقل) قبل إنشاء العميل.');
+      return;
+    }
+    const existing = customers.find(c => normPhone(c.phone) === phone);
     if (existing) {
       setSelectedCustomerId(existing.id);
       setCustomerPhoneInput(existing.phone || '');
