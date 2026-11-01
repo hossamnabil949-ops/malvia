@@ -496,7 +496,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
   assert.deepEqual(tb.rows.map(x => [x.number, x.count, x.qty, x.value]), [['A', 1, 1, 96]]);
 
   // السجل: كل تقرير يُبنى بلا أخطاء وأعمدته مطابقة لمفاتيح صفوفه وإجمالياته، ومجموعاته معروفة
-  assert.equal(RP.REPORT_DEFS.length, 18);
+  assert.equal(RP.REPORT_DEFS.length, 20);
   for (const def of RP.REPORT_DEFS) {
     const t = def.build(data, R, today);
     assert.ok(t.title && t.columns.length > 0, def.id);
