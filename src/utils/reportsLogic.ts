@@ -255,11 +255,11 @@ export function reportVatSummary(d: ReportData, r: DateRange): ReportTable {
   const salesInvoices = active(d, r);
   const purchaseInvoices = d.purchaseInvoices.filter(invoice => inRange(invoice.date, r));
   const returnedOutputTax = sum(
-    d.salesReturns.filter(ret => validSalesIds.has(ret.invoiceId) && inRange(ret.date, r)),
+    (d.salesReturns || []).filter(ret => validSalesIds.has(ret.invoiceId) && inRange(ret.date, r)),
     ret => sum(ret.items, item => item.taxAmount || 0)
   );
   const returnedInputTax = sum(
-    d.purchaseReturns.filter(ret => validPurchaseIds.has(ret.purchaseInvoiceId) && inRange(ret.date, r)),
+    (d.purchaseReturns || []).filter(ret => validPurchaseIds.has(ret.purchaseInvoiceId) && inRange(ret.date, r)),
     ret => sum(ret.items, item => item.taxAmount || 0)
   );
   const outputTax = r2(sum(salesInvoices, invoice => invoice.tax || 0) - returnedOutputTax);
