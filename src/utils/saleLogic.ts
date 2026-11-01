@@ -113,12 +113,10 @@ export function deductStock<T extends StockPart>(parts: T[], lines: CartLine[], 
 export function refundForLine(lineTotalEgp: number, lineQty: number, returnQty: number, alreadyReturnedQty: number): number {
   if (returnQty <= 0 || returnQty + alreadyReturnedQty > lineQty) throw new SaleError('INVALID_QTY', { returnQty, remaining: lineQty - alreadyReturnedQty });
   const total = toPiasters(lineTotalEgp);
-  const previouslyReturned = Math.round((total * alreadyReturnedQty) / lineQty);
-  const isFinalReturn = returnQty + alreadyReturnedQty === lineQty;
-  const amount = isFinalReturn
-    ? total - previouslyReturned
-    : Math.round((total * returnQty) / lineQty);
-  return toEgp(amount);
+  const cumulativeBefore = Math.round((total * alreadyReturnedQty) / lineQty);
+  const cumulativeAfter = Math.round((total * (alreadyReturnedQty + returnQty)) / lineQty);
+  // توزيع تراكمي ثابت: مجموع كل الدفعات الجزئية يساوي إجمالي السطر بالقرش تماماً.
+  return toEgp(cumulativeAfter - cumulativeBefore);
 }
 
 // ---------- إلغاء فاتورة (Void) ----------
