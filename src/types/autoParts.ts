@@ -336,6 +336,7 @@ export interface SupplierPayment {
   treasurySource: string;
   notes?: string;
   recordedBy: string;
+  scheduleId?: string;
 }
 
 export interface CustomerPayment {
