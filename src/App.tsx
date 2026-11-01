@@ -2997,7 +2997,8 @@ export default function App() {
                 quantity,
                 unitPrice: part.salePrice,
                 costPrice: part.costPrice,
-                total
+                total,
+                taxAmount: aiTotals.tax / 100,
               }],
               subtotal: aiTotals.subtotal / 100,
               tax: aiTotals.tax / 100,
