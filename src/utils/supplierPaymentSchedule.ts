@@ -11,7 +11,7 @@ export interface SupplierScheduleRule {
 }
 
 const parseDate = (value: string): Date => {
-  const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(value || '');
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').trim());
   if (!match) throw new Error('تاريخ غير صالح؛ استخدم YYYY-MM-DD.');
   const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12);
   if (date.getFullYear() !== Number(match[1]) || date.getMonth() !== Number(match[2]) - 1 || date.getDate() !== Number(match[3])) throw new Error('التاريخ المحدد غير موجود.');
