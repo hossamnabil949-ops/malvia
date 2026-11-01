@@ -220,7 +220,7 @@ export interface Customer {
   monthlyPurchases: number; // مشتريات الشهر الحالي
   invoicesCount?: number;
   lastVisit: string;
-  creditLimit?: number; // حد الائتمان (ج.م) — 0 أو بدون قيمة = غير محدود
+  creditLimit?: number; // حد الائتمان (ج.م) — يجب أن يكون موجباً للسماح بالبيع الآجل
   loyaltyPoints?: number; // رصيد نقاط الولاء (يُدمج بالفرق على السحابة)
   chequesPending?: number; // (محسوب وغير محفوظ) شيكات واردة مفتوحة تُحتسب ضمن مخاطر الائتمان
 }
