@@ -75,7 +75,7 @@ export function registrationEffect(
   party: { balance: number; deferredDebt?: number }
 ): { effect: ChequeEffect; applied: Pick<Cheque, 'appliedAmount' | 'appliedDebt' | 'appliedCredit'> } {
   if (direction === 'incoming') {
-    const applied = Math.min(amount, Math.max(0, party.balance));
+    const applied = amount; // الزيادة عن المديونية تصبح رصيداً دائناً للعميل (رصيد سالب)
     return { effect: { customerBalanceDelta: -applied }, applied: { appliedAmount: applied } };
   }
   const debt = Math.max(0, party.deferredDebt ?? party.balance ?? 0);
