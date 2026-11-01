@@ -1109,6 +1109,14 @@ export default function App() {
 
   const handleCreateInvoice = (invoice: Invoice): boolean => {
     // إلزام الوردية: لا بيع بدون وردية مفتوحة (لو الإعداد مفعّل) حتى يكون الدرج محسوباً
+    const requestedPayments: InvoicePayment[] = invoice.payments && invoice.payments.length > 0
+      ? invoice.payments
+      : [{ method: invoice.paymentMethod, amount: invoice.grandTotal }];
+    const requestedCredit = requestedPayments.filter(p => isCreditPayment(String(p.method))).reduce((sum, p) => sum + p.amount, 0);
+    if (requestedCredit > 0 && (!invoice.customerId || !customers.some(c => c.id === invoice.customerId))) {
+      window.alert('البيع الآجل يتطلب اختيار عميل مسجل في النظام وتحديد حد ائتمان موجب له.');
+      return false;
+    }
     if (settings.requireShiftForSales && !findOpenShift(shifts)) {
       window.alert('لازم تفتح وردية الأول (وتعدّ كاش الدرج) قبل ما تبيع.');
       setCurrentTab('shifts');
@@ -1222,44 +1230,20 @@ export default function App() {
     })));
 
     // 5) المدفوعات: كل طريقة دفع في حسابها بالخزنة، والآجل على حساب العميل
-    const payments: InvoicePayment[] = finalInvoice.payments && finalInvoice.payments.length > 0
-      ? finalInvoice.payments
-      : [{ method: finalInvoice.paymentMethod, amount: finalInvoice.grandTotal }];
-    const creditAmount = payments.filter(p => isCreditPayment(String(p.method))).reduce((s, p) => s + p.amount, 0);
+    const payments: InvoicePayment[] = requestedPayments;
+    const creditAmount = requestedCredit;
 
-    if (creditAmount > 0) {
+    // إحصاءات العميل المسجّل تُحدّث لكل فاتورة (نقدي أو آجل) وبالمعرّف فقط.
+    if (finalInvoice.customerId) {
       setCustomers(prev => {
-        const nameKey = normKey(finalInvoice.customerName);
-        const phoneKey = normKey(finalInvoice.customerPhone);
-        const idx = prev.findIndex(c =>
-          (finalInvoice.customerId && c.id === finalInvoice.customerId) ||
-          (phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey
-        );
-        let updated: Customer[];
-        if (idx >= 0) {
-          updated = prev.map((c, i) => i === idx ? {
-            ...c,
-            balance: c.balance + creditAmount,
-            totalPurchases: (c.totalPurchases || 0) + finalInvoice.grandTotal,
-            monthlyPurchases: (c.monthlyPurchases || 0) + finalInvoice.grandTotal,
-            invoicesCount: (c.invoicesCount || 0) + 1,
-            lastVisit: finalInvoice.date,
-            phone: c.phone || finalInvoice.customerPhone || '',
-          } : c);
-        } else {
-          const created: Customer = {
-            id: `cust-${Date.now()}`,
-            name: finalInvoice.customerName || 'عميل آجل',
-            type: finalInvoice.customerType === 'ورشة' ? 'ورشة فنية' : 'عميل تجزئة',
-            phone: finalInvoice.customerPhone || '',
-            balance: creditAmount,
-            totalPurchases: finalInvoice.grandTotal,
-            monthlyPurchases: finalInvoice.grandTotal,
-            invoicesCount: 1,
-            lastVisit: finalInvoice.date,
-          };
-          updated = [created, ...prev];
-        }
+        const updated = prev.map(customer => customer.id === finalInvoice.customerId ? {
+          ...customer,
+          balance: customer.balance + creditAmount,
+          totalPurchases: (customer.totalPurchases || 0) + finalInvoice.grandTotal,
+          monthlyPurchases: (customer.monthlyPurchases || 0) + finalInvoice.grandTotal,
+          invoicesCount: (customer.invoicesCount || 0) + 1,
+          lastVisit: finalInvoice.date,
+        } : customer);
         persistChanges({ customers: updated });
         return updated;
       });
@@ -1376,21 +1360,16 @@ export default function App() {
     // 3) المدفوعات: رد كل طريقة دفع من حسابها، وتخفيض مديونية العميل الآجل
     const creditAmount = plan.creditAmount;
 
-    if (creditAmount > 0) {
+    if (inv.customerId) {
       setCustomers(prev => {
-        const nameKey = normKey(inv.customerName);
-        const phoneKey = normKey(inv.customerPhone);
-        const updated = prev.map(c =>
-          ((inv.customerId && c.id === inv.customerId) || (phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey)
-            ? {
-                ...c,
-                balance: c.balance - creditAmount,
-                totalPurchases: Math.max(0, (c.totalPurchases || 0) - inv.grandTotal * fraction),
-                monthlyPurchases: Math.max(0, (c.monthlyPurchases || 0) - inv.grandTotal * fraction),
-                invoicesCount: Math.max(0, (c.invoicesCount || 0) - 1),
-              }
-            : c
-        );
+        const updated = prev.map(c => c.id === inv.customerId ? {
+          ...c,
+          balance: c.balance - creditAmount,
+          totalPurchases: Math.max(0, (c.totalPurchases || 0) - Math.max(0, inv.grandTotal - (inv.returnedAmount || 0))),
+          monthlyPurchases: Math.max(0, (c.monthlyPurchases || 0) - Math.max(0, inv.grandTotal - (inv.returnedAmount || 0))),
+          invoicesCount: Math.max(0, (c.invoicesCount || 0) - 1),
+          lastVisit: invoices.filter(x => x.id !== inv.id && x.customerId === inv.customerId && x.status !== 'ملغاة').map(x => x.date).sort().at(-1) || '',
+        } : c);
         persistChanges({ customers: updated });
         return updated;
       });
