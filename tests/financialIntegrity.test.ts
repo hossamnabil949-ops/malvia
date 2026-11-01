@@ -74,11 +74,13 @@ assert.equal(inclusiveTax.tax, 1400);
 assert.equal(inclusiveTax.grandTotal, 11400);
 
 // FIN-15: an unset/zero credit limit is not unlimited; it uses the explicit default cap.
+const creditLimitLines = [{ partId: 'p1', qty: 1, unitPrice: 100, unitCost: 50 }];
+const creditLimitTotals = computeTotals(creditLimitLines, 0, 0, false);
 assert.throws(
   () => validateSale(
-    [{ partId: 'p1', qty: 1, unitPrice: 100, unitCost: 50 }],
+    creditLimitLines,
     [{ id: 'p1', stockQuantity: 10 }],
-    { subtotal: 100, discount: 0, tax: 0, grandTotal: 100 },
+    creditLimitTotals,
     [{ method: 'آجل', amount: 100 }],
     { allowBelowCost: false, customerId: 'c1', customerBalance: 5000, customerCreditLimit: 0 },
   ),
