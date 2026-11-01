@@ -127,6 +127,7 @@ export interface VoidInput {
   returnedAmount?: number;
   items: { partId?: string; partNumber: string; quantity: number; returnedQuantity?: number }[];
   payments: PaymentLine[];
+  priorRefunds?: { refundMethod: string; totalRefundAmount: number }[];
 }
 export interface VoidPlan {
   fraction: number;                                                   // نسبة ما لم يُرتجع من الفاتورة (0..1)
@@ -142,10 +143,51 @@ export function computeVoidPlan(inv: VoidInput): VoidPlan {
   const restock = inv.items
     .map(it => ({ partId: it.partId, partNumber: it.partNumber, qty: Math.max(0, it.quantity - (it.returnedQuantity || 0)) }))
     .filter(r => r.qty > 0);
-  const creditAmount = round2(inv.payments.filter(p => isCreditPayment(p.method)).reduce((s, p) => s + p.amount, 0) * fraction);
-  const refunds = inv.payments
-    .filter(p => !isCreditPayment(p.method))
-    .map(p => ({ method: p.method, amount: round2(p.amount * fraction) }))
-    .filter(r => r.amount > 0);
+  const creditPayments = inv.payments.filter(p => isCreditPayment(p.method));
+  const nonCreditPayments = inv.payments.filter(p => !isCreditPayment(p.method));
+  let creditAmount = round2(creditPayments.reduce((s, p) => s + p.amount, 0) * fraction);
+  let refunds = nonCreditPayments.map(p => ({ method: p.method, amount: round2(p.amount * fraction) })).filter(r => r.amount > 0);
+
+  // When return records exist, reverse their actual refund channels instead of prorating every original method.
+  if (inv.priorRefunds && inv.priorRefunds.length > 0) {
+    const refundClass = (method: string): string => {
+      if (method === 'خصم من رصيد العميل الآجل') return 'credit';
+      if (method === 'نقدي (خصم من الخزنة)') return 'cash';
+      if (method === 'إنستاباي / محفظة') return 'digital';
+      return method.trim().toLowerCase();
+    };
+    const paymentClass = (method: string): string => {
+      if (isCreditPayment(method)) return 'credit';
+      if (/نقد|كاش|cash/i.test(method)) return 'cash';
+      if (/إنستاباي|محفظة|فودافون|instapay|wallet/i.test(method)) return 'digital';
+      return method.trim().toLowerCase();
+    };
+    const creditReturned = inv.priorRefunds
+      .filter(r => refundClass(r.refundMethod) === 'credit')
+      .reduce((total, r) => total + r.totalRefundAmount, 0);
+    creditAmount = round2(Math.max(0, creditPayments.reduce((s, p) => s + p.amount, 0) - creditReturned));
+
+    const remainingByIndex = nonCreditPayments.map(p => p.amount);
+    for (const prior of inv.priorRefunds.filter(r => refundClass(r.refundMethod) !== 'credit')) {
+      let remaining = prior.totalRefundAmount;
+      const wantedClass = refundClass(prior.refundMethod);
+      let candidates = nonCreditPayments.map((p, index) => ({ p, index }))
+        .filter(x => paymentClass(x.p.method) === wantedClass && remainingByIndex[x.index] > 0);
+      // A refund can be issued through a different channel than the original payment; preserve that actual channel's value by reducing the largest remaining original bucket.
+      if (!candidates.length) candidates = nonCreditPayments.map((p, index) => ({ p, index }))
+        .filter(x => remainingByIndex[x.index] > 0)
+        .sort((a, b) => remainingByIndex[b.index] - remainingByIndex[a.index]);
+      for (const candidate of candidates) {
+        if (remaining <= 0.005) break;
+        const applied = Math.min(remaining, remainingByIndex[candidate.index]);
+        remainingByIndex[candidate.index] = round2(remainingByIndex[candidate.index] - applied);
+        remaining = round2(remaining - applied);
+      }
+    }
+    refunds = nonCreditPayments.map((payment, index) => ({
+      method: payment.method,
+      amount: round2(Math.max(0, remainingByIndex[index])),
+    })).filter(refund => refund.amount > 0);
+  }
   return { fraction, restock, creditAmount, refunds };
 }
