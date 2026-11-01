@@ -398,13 +398,13 @@ import * as RP from '../src/utils/reportsLogic.ts';
   };
   const data: any = {
     invoices: [
-      inv('i1', '2026-10-20', [it('a', 4, 100, 60, 1), it('b', 2, 50, 30)], { discount: 20, grandTotal: 480 }),            // مرتجع وحدة من a
+      inv('i1', '2026-10-20', [it('a', 4, 100, 60, 1), it('b', 2, 50, 30)], { discount: 20, grandTotal: 480, returnedAmount: 96 }),            // مرتجع وحدة من a
       inv('i2', '2026-10-21', [it('a', 1, 100, 60)], { cashierName: 'منى' }),
       inv('i3', '2026-10-21', [it('a', 9, 100, 60)], { status: 'ملغاة', cashierName: 'منى' }),                              // ملغاة: تُستبعد
       inv('i4', '2026-07-01', [it('c', 1, 200, 150)], { customerId: 'c1', customerName: 'ورشة', paymentMethod: 'مختلط (دفع مقسّم)', payments: [{ method: 'آجل (شكك / حساب ورشة)', amount: 120 }, { method: 'كاش (نقدي)', amount: 80 }] }),
       inv('i5', '2026-10-10', [it('c', 1, 500, 300)], { customerId: 'c1', customerName: 'ورشة', paymentMethod: 'آجل (شكك / حساب ورشة)' }),
     ],
-    salesReturns: [{ id: 'r1', invoiceId: 'i1', date: '2026-10-20', totalRefundAmount: 100, items: [{ partNumber: 'A', partName: 'صنف a', quantity: 1, unitPrice: 100, total: 100 }] }],
+    salesReturns: [{ id: 'r1', invoiceId: 'i1', date: '2026-10-20', totalRefundAmount: 96, items: [{ partNumber: 'A', partName: 'صنف a', quantity: 1, unitPrice: 100, total: 96 }] }],
     purchaseInvoices: [{ id: 'p1', date: '2026-10-05', supplierName: 'مورد', grandTotal: 1000, amountPaid: 400 }, { id: 'p2', date: '2026-10-06', supplierName: 'مورد', grandTotal: 500, amountPaid: 500 }],
     parts: [
       { id: 'a', partNumber: 'A', name: 'صنف a', category: 'فلاتر وزيوت', stockQuantity: 10, minAlertStock: 3, costPrice: 60, salePrice: 100 },
@@ -430,24 +430,24 @@ import * as RP from '../src/utils/reportsLogic.ts';
     loyaltyPointValue: 0.5,
   };
 
-  // المبيعات اليومية: الملغاة مستبعدة، والمرتجع يخصم من يومه
+  // المبيعات اليومية: الملغاة مستبعدة، والمرتجع محسوب على صافي الفاتورة الأصلية
   let tb = RP.reportDailySales(data, R);
-  assert.deepEqual(tb.rows.map(x => [x.date, x.count, x.total, x.returns, x.net]), [['2026-07-01', 1, 200, 0, 200], ['2026-10-10', 1, 500, 0, 500], ['2026-10-20', 1, 480, 100, 380], ['2026-10-21', 1, 100, 0, 100]]);
-  assert.equal(tb.totals!.net, 1180);
+  assert.deepEqual(tb.rows.map(x => [x.date, x.count, x.total, x.returns, x.net]), [['2026-07-01', 1, 200, 0, 200], ['2026-10-10', 1, 500, 0, 500], ['2026-10-20', 1, 480, 96, 384], ['2026-10-21', 1, 100, 0, 100]]);
+  assert.equal(tb.totals!.net, 1184);
   tb = RP.reportDailySales(data, { from: '2026-10-20', to: '2026-10-21' });                  // نطاق التاريخ
   assert.deepEqual([tb.rows.length, tb.totals!.total], [2, 580]);
 
   // أرباح الأصناف: الكمية الصافية بعد المرتجع، والملغاة خارج الحساب
   tb = RP.reportSalesByItem(data, R);
   const a = tb.rows.find(x => x.number === 'A')!;
-  assert.deepEqual([a.qty, a.revenue, a.cost, a.profit, a.margin], [4, 400, 240, 160, 40]);       // (3 من i1 + 1 من i2) لا 9 الملغاة
-  assert.deepEqual(tb.rows.map(x => [x.number, x.profit]), [['C', 250], ['A', 160], ['B', 40]]);   // الأعلى ربحاً أولاً
-  assert.equal(tb.totals!.profit, 450);
+  assert.deepEqual([a.qty, a.revenue, a.cost, a.profit, a.margin], [4, 388, 240, 148, 38.14]);       // (3 من i1 + 1 من i2) لا 9 الملغاة
+  assert.deepEqual(tb.rows.map(x => [x.number, x.profit]), [['C', 250], ['A', 148], ['B', 36]]);   // الأعلى ربحاً أولاً
+  assert.equal(tb.totals!.profit, 434);
 
   // الدفع المقسّم يُحسب بكل طريقة
   tb = RP.reportSalesByPayment(data, R);
   const pay = Object.fromEntries(tb.rows.map(x => [x.method, x.amount]));
-  assert.equal(pay['آجل (شكك / حساب ورشة)'], 120 + 500); assert.equal(pay['كاش (نقدي)'], 480 + 100 + 80);
+  assert.equal(pay['آجل (شكك / حساب ورشة)'], 120 + 500); assert.equal(pay['كاش (نقدي)'], 384 + 100 + 80);
 
   // حسب الموظف: الملغاة تظهر في عمود الملغاة فقط
   tb = RP.reportSalesByCashier(data, R);
@@ -459,7 +459,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
   const pl = Object.fromEntries(tb.rows.map(x => [x.item, x.amount]));
   assert.deepEqual(
     [pl['المبيعات (قبل الضريبة وبعد الخصم)'], pl['يخصم: المرتجعات'], pl['صافي المبيعات'], pl['يخصم: تكلفة البضاعة المباعة'], pl['مجمل الربح'], pl['يخصم: المصروفات'], pl['صافي الربح']],
-    [1080, -100, 980, -600, 380, -400, -20]
+    [1080, -96, 984, -450, 534, -400, 134]
   );
   assert.equal(RP.reportExpensesByCategory(data, { from: '2026-10-01', to: '2026-10-31' }).totals!.amount, 400);   // القديم خارج الفترة
   tb = RP.reportTreasury(data, R);
@@ -491,9 +491,9 @@ import * as RP from '../src/utils/reportsLogic.ts';
   tb = RP.reportLoyalty(data, '2026-10-24T23:59:59.000Z');
   assert.deepEqual(tb.rows.map(x => [x.name, x.points, x.value]), [['ورشة', 200, 100]]);
   tb = RP.reportSalesByCustomer(data, R);
-  assert.deepEqual(tb.rows.map(x => [x.name, x.count, x.total, x.balance]), [['ورشة', 2, 700, 1000], ['ز', 2, 580, 0]]);
+  assert.deepEqual(tb.rows.map(x => [x.name, x.count, x.total, x.balance]), [['ورشة', 2, 700, 1000], ['ز', 2, 484, 0]]);
   tb = RP.reportReturns(data, R);
-  assert.deepEqual(tb.rows.map(x => [x.number, x.count, x.qty, x.value]), [['A', 1, 1, 100]]);
+  assert.deepEqual(tb.rows.map(x => [x.number, x.count, x.qty, x.value]), [['A', 1, 1, 96]]);
 
   // السجل: كل تقرير يُبنى بلا أخطاء وأعمدته مطابقة لمفاتيح صفوفه وإجمالياته، ومجموعاته معروفة
   assert.equal(RP.REPORT_DEFS.length, 18);
