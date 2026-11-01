@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { generateSupplierScheduleDates } from '../src/utils/supplierPaymentSchedule.ts';
 import { accountOf } from '../src/utils/treasuryAccounts.ts';
 import { registrationEffect, actionEffect } from '../src/utils/chequeLogic.ts';
-import { refundForLine } from '../src/utils/saleLogic.ts';
+import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
 import { validateSale, SaleError } from '../src/utils/saleLogic.ts';
@@ -84,6 +84,22 @@ const cheque: any = {
 };
 assert.equal(actionEffect(cheque, 'bounce').customerBalanceDelta, 150);
 assert.equal(actionEffect(cheque, 'clear').treasury?.amount, 150);
+
+// FIN-16: voiding an invoice subtracts refunds from the account that actually paid them.
+const voidAfterCashReturn = computeVoidPlan({
+  grandTotal: 100,
+  returnedAmount: 20,
+  items: [{ partId: 'p1', partNumber: 'A', quantity: 2, returnedQuantity: 1 }],
+  payments: [
+    { method: 'نقدي', amount: 50 },
+    { method: 'فيزا', amount: 50 },
+  ],
+  priorRefunds: [{ refundMethod: 'نقدي (خصم من الخزنة)', totalRefundAmount: 20 }],
+});
+assert.deepEqual(voidAfterCashReturn.refunds, [
+  { method: 'نقدي', amount: 30 },
+  { method: 'فيزا', amount: 50 },
+]);
 
 // FIN-17: final partial return takes the exact remaining cents.
 assert.equal(refundForLine(100.01, 3, 1, 0), 33.34);
