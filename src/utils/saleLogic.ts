@@ -30,13 +30,15 @@ export const isCreditPayment = (method: string): boolean => (method || '').inclu
 export interface Totals { subtotal: number; discount: number; tax: number; grandTotal: number } // بالقروش
 
 /** الخصم قبل الضريبة. vatRatePercent من الإعدادات (لا تُكتب 0.14 داخل الشاشة). */
-export function computeTotals(lines: CartLine[], discountEgp: number, vatRatePercent: number, applyVat: boolean): Totals {
+export function computeTotals(lines: CartLine[], discountEgp: number, vatRatePercent: number, applyVat: boolean, pricesIncludeVat = false): Totals {
   const subtotal = lines.reduce((s, l) => s + Math.round(l.qty * toPiasters(l.unitPrice)), 0);
   const discount = toPiasters(discountEgp);
   if (discount < 0 || discount > subtotal) throw new SaleError('DISCOUNT_EXCEEDS_SUBTOTAL', { subtotal, discount });
   const taxable = subtotal - discount;
-  const tax = applyVat ? Math.round((taxable * vatRatePercent) / 100) : 0;
-  return { subtotal, discount, tax, grandTotal: taxable + tax };
+  const tax = applyVat
+    ? Math.round(pricesIncludeVat ? (taxable * vatRatePercent) / (100 + vatRatePercent) : (taxable * vatRatePercent) / 100)
+    : 0;
+  return { subtotal, discount, tax, grandTotal: applyVat && pricesIncludeVat ? taxable : taxable + tax };
 }
 
 export interface DiscountPolicyLine { qty: number; listPrice: number; unitPrice: number; unitCost: number }
