@@ -541,6 +541,18 @@ import { computeVoidPlan } from '../src/utils/saleLogic.ts';
   assert.deepEqual(partial.restock, [{ partId: 'p1', partNumber: 'A', qty: 2 }]);
   assert.deepEqual(partial.refunds, [{ method: 'كاش', amount: 200 }]);   // 300 - 100 رُدّت وقت المرتجع
 
+  // يُخصم المرتجع السابق من حساب طريقة الرد الفعلية بدلاً من توزيعه عشوائياً.
+  const methodAwareVoid = computeVoidPlan({
+    grandTotal: 200, returnedAmount: 50,
+    items: [{ partId: 'p1', partNumber: 'A', quantity: 2, returnedQuantity: 1 }],
+    payments: [{ method: 'كاش (نقدي)', amount: 100 }, { method: 'فيزا / بطاقة بنكية', amount: 100 }],
+    previousRefunds: [{ method: 'نقدي (خصم من الخزنة)', amount: 50 }],
+  });
+  assert.deepEqual(methodAwareVoid.refunds, [
+    { method: 'كاش (نقدي)', amount: 50 },
+    { method: 'فيزا / بطاقة بنكية', amount: 100 },
+  ]);
+
   // مرتجع كلي سابق ثم إلغاء: لا شيء يُعكس مرة ثانية
   const full = computeVoidPlan({ grandTotal: 300, returnedAmount: 300, items: [{ partNumber: 'A', quantity: 3, returnedQuantity: 3 }], payments: [{ method: 'كاش', amount: 300 }] });
   assert.equal(full.restock.length, 0); assert.equal(full.refunds.length, 0); assert.equal(full.creditAmount, 0);
