@@ -1427,6 +1427,15 @@ export default function App() {
   };
 
   // Handlers for Sales Returns
+  const findReturnLineItem = (ret: SalesReturn, inv: Invoice, index: number) => {
+    const lineId = `${inv.id}:${index}`;
+    const exact = ret.items.find(item => item.lineId === lineId);
+    if (exact) return exact;
+    const line = inv.items[index];
+    const matches = ret.items.filter(item => item.partId ? item.partId === line.partId : item.partNumber === line.partNumber && item.partName === line.partName);
+    return matches.length === 1 ? matches[0] : undefined; // لا نخمن عند تكرار السطر
+  };
+
   const handleAddSalesReturn = (rawReturn: SalesReturn) => {
     // تثبيت السيريالات المرتجعة فعلياً داخل سجل المرتجع (المختارة من الشاشة أو تلقائياً)
     const origInv = invoices.find(i => i.id === rawReturn.invoiceId);
@@ -1434,7 +1443,8 @@ export default function App() {
       ? {
           ...rawReturn,
           items: rawReturn.items.map(r => {
-            const it = origInv.items.find(x => x.partNumber === r.partNumber && x.partName === r.partName);
+            const lineIndex = r.lineId ? Number(r.lineId.slice(r.lineId.lastIndexOf(':') + 1)) : -1;
+            const it = lineIndex >= 0 && origInv.items[lineIndex] ? origInv.items[lineIndex] : origInv.items.find(x => r.partId ? x.partId === r.partId : x.partNumber === r.partNumber && x.partName === r.partName);
             if (!it?.serials?.length) return r;
             return { ...r, serials: trackReturn(it, r.quantity, r.serials, 1).unitsToStock };
           }),
@@ -1452,7 +1462,7 @@ export default function App() {
       const updated = prev.map(inv => {
         if (inv.id !== salesReturn.invoiceId) return inv;
         const items = inv.items.map(it => {
-          const r = salesReturn.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
+          const r = findReturnLineItem(salesReturn, inv, inv.items.indexOf(it));
           return r ? { ...trackedInvoiceItem(it, r, 1), returnedQuantity: (it.returnedQuantity || 0) + r.quantity } : it;
         });
         const allReturned = items.every(it => (it.returnedQuantity || 0) >= it.quantity);
@@ -1471,10 +1481,11 @@ export default function App() {
     if (salesReturn.items && salesReturn.items.length > 0) {
       const moves: Parameters<typeof logStockMovements>[0] = [];
       const updated = parts.map(part => {
-        const item = salesReturn.items.find(i => i.partNumber === part.partNumber);
-        if (item) {
-          moves.push({ part, qtyDelta: item.quantity, type: 'sales_return', refId: salesReturn.id, refNumber: salesReturn.returnNumber });
-          return { ...part, stockQuantity: part.stockQuantity + item.quantity, updatedAt: todayISO() };
+        const legacyMatches = salesReturn.items.filter(i => !i.partId && i.partNumber === part.partNumber && i.partName === part.name);
+        const item = salesReturn.items.filter(i => i.partId === part.id).reduce((n, i) => n + i.quantity, 0) + (parts.filter(p => p.partNumber === part.partNumber && p.name === part.name).length === 1 ? legacyMatches.reduce((n, i) => n + i.quantity, 0) : 0);
+        if (item > 0) {
+          moves.push({ part, qtyDelta: item, type: 'sales_return', refId: salesReturn.id, refNumber: salesReturn.returnNumber });
+          return { ...part, stockQuantity: part.stockQuantity + item, updatedAt: todayISO() };
         }
         return part;
       });
@@ -1483,7 +1494,7 @@ export default function App() {
       logStockMovements(moves);
     }
     shiftWarehouseStock(invoices.find(i => i.id === salesReturn.invoiceId)?.warehouseId,
-      (salesReturn.items || []).map(i => ({ partNumber: i.partNumber, qty: i.quantity })), 1);
+      (salesReturn.items || []).map(i => ({ partId: i.partId, partNumber: i.partNumber, qty: i.quantity })), 1);
     {
       const inv = invoices.find(i => i.id === salesReturn.invoiceId);
       if (inv) {
@@ -1496,12 +1507,9 @@ export default function App() {
 
     // المرتجع على حساب العميل الآجل: يُخصم من مديونيته (وإن زاد عنها يصبح له رصيد دائن ظاهر بالسالب)
     if (salesReturn.refundMethod === 'خصم من رصيد العميل الآجل') {
-      const original = invoices.find(i => i.id === salesReturn.invoiceId);
       setCustomers(prev => {
-        const nameKey = normKey(salesReturn.customerName);
-        const phoneKey = normKey(original?.customerPhone);
         const updated = prev.map(c =>
-          ((phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey)
+          (salesReturn.customerId && c.id === salesReturn.customerId)
             ? { ...c, balance: c.balance - salesReturn.totalRefundAmount }
             : c
         );
@@ -1554,7 +1562,7 @@ export default function App() {
       const updated = prev.map(inv => {
         if (inv.id !== ret.invoiceId) return inv;
         const items = inv.items.map(it => {
-          const r = ret.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
+          const r = findReturnLineItem(ret, inv, inv.items.indexOf(it));
           return r ? { ...trackedInvoiceItem(it, r, -1), returnedQuantity: Math.max(0, (it.returnedQuantity || 0) - r.quantity) } : it;
         });
         const returnedAmount = Math.max(0, (inv.returnedAmount || 0) - ret.totalRefundAmount);
@@ -1575,17 +1583,18 @@ export default function App() {
     {
       const moves: Parameters<typeof logStockMovements>[0] = [];
       const updated = parts.map(part => {
-        const item = ret.items.find(i => i.partNumber === part.partNumber);
-        if (!item) return part;
-        moves.push({ part, qtyDelta: -item.quantity, type: 'sales_return_delete', refId: ret.id, refNumber: ret.returnNumber });
-        return { ...part, stockQuantity: Math.max(0, part.stockQuantity - item.quantity), updatedAt: todayISO() };
+        const legacyMatches = ret.items.filter(i => !i.partId && i.partNumber === part.partNumber && i.partName === part.name);
+        const qty = ret.items.filter(i => i.partId === part.id).reduce((n, i) => n + i.quantity, 0) + (parts.filter(p => p.partNumber === part.partNumber && p.name === part.name).length === 1 ? legacyMatches.reduce((n, i) => n + i.quantity, 0) : 0);
+        if (qty <= 0) return part;
+        moves.push({ part, qtyDelta: -qty, type: 'sales_return_delete', refId: ret.id, refNumber: ret.returnNumber });
+        return { ...part, stockQuantity: Math.max(0, part.stockQuantity - qty), updatedAt: todayISO() };
       });
       setParts(updated);
       persistChanges({ parts: updated });
       logStockMovements(moves);
     }
     shiftWarehouseStock(invoices.find(i => i.id === ret.invoiceId)?.warehouseId,
-      ret.items.map(i => ({ partNumber: i.partNumber, qty: i.quantity })), -1);
+      ret.items.map(i => ({ partId: i.partId, partNumber: i.partNumber, qty: i.quantity })), -1);
     {
       const inv = invoices.find(i => i.id === ret.invoiceId);
       if (inv) {
@@ -1599,12 +1608,9 @@ export default function App() {
 
     // عكس رصيد العميل الآجل
     if (ret.refundMethod === 'خصم من رصيد العميل الآجل') {
-      const original = invoices.find(i => i.id === ret.invoiceId);
       setCustomers(prev => {
-        const nameKey = normKey(ret.customerName);
-        const phoneKey = normKey(original?.customerPhone);
         const updated = prev.map(c =>
-          ((phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey)
+          (ret.customerId && c.id === ret.customerId)
             ? { ...c, balance: c.balance + ret.totalRefundAmount }
             : c
         );
