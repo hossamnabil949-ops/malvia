@@ -4,6 +4,7 @@ import { AutoPart, Invoice, TreasuryTransaction, UserSession } from '../types/au
 import { TreasuryAccountsWidget } from './TreasuryAccountsReport';
 import { ActiveTab } from './Navigation';
 import { SalesCharts } from './SalesCharts';
+import { salesForDate } from '../utils/reportsLogic';
 
 interface HomeDashboardProps {
   parts: AutoPart[];
@@ -44,8 +45,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
   const isOwnerOrManager = !currentSession || currentSession.role === 'مدير عام' || (currentSession.permissions?.canViewReports && currentSession.role !== 'كاشير مبيعات');
 
-  const todaySales = invoices.reduce((sum, inv) => inv.status === 'ملغاة' ? sum : sum + inv.grandTotal - (inv.returnedAmount || 0), 0);
-  const totalInvoicesCount = invoices.length;
+  const { sales: todaySales, count: totalInvoicesCount, average: todayAverageInvoice } = salesForDate(invoices);
   const totalPartsInStock = parts.reduce((sum, p) => sum + p.stockQuantity, 0);
   const lowStockParts = parts.filter((p) => p.stockQuantity <= p.minAlertStock);
   const outOfStockParts = parts.filter((p) => p.stockQuantity <= 0);
@@ -184,7 +184,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               <span className="text-xs font-normal text-neutral-400">فاتورة</span>
             </div>
             <span className="text-[10px] text-neutral-400 mt-1 block">
-              متوسط الفاتورة: {(todaySales / (totalInvoicesCount || 1)).toFixed(0)} ج.م
+              متوسط الفاتورة: {todayAverageInvoice.toFixed(0)} ج.م
             </span>
           </div>
         </div>
