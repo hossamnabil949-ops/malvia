@@ -1470,7 +1470,11 @@ export default function App() {
 
   const handleAddSalesReturn = (rawReturn: SalesReturn) => {
     const sourceInvoice = invoices.find(i => i.id === rawReturn.invoiceId);
-    if (sourceInvoice?.status === 'ملغاة') {
+    if (!sourceInvoice) {
+      window.alert('الفاتورة الأصلية غير موجودة؛ لا يمكن تسجيل المرتجع.');
+      return;
+    }
+    if (sourceInvoice.status === 'ملغاة') {
       window.alert('لا يمكن إنشاء مرتجع لفاتورة ملغاة.');
       return;
     }
@@ -1491,7 +1495,7 @@ export default function App() {
           }),
         }
       : rawReturn;
-    if (origInv && salesReturn.items.some(item => !item.lineId)) {
+    if (origInv && salesReturn.items.some(item => !origInv.items.some((line, index) => item.lineId === `${origInv.id}:${index}`))) {
       window.alert('تعذر تحديد سطر الفاتورة الأصلي لهذا المرتجع بأمان. راجع الأصناف المتشابهة واختر السطر الصحيح.');
       return;
     }
