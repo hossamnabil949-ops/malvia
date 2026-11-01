@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { AutoPart, Customer, Invoice, Supplier, UserSession } from '../types/autoParts';
 import { executeAgentAction } from '../services/agentExecutionService';
+import { generateSupplierScheduleDates, splitSupplierScheduleAmount } from '../utils/supplierPaymentSchedule';
 import { 
   sendVoiceCommandToServer, 
   AICommandResult, 
@@ -43,6 +44,7 @@ interface VoiceAssistantModalProps {
   onSettleSupplier?: (supplierName: string, amount: number) => void;
   onCollectCustomer?: (customerName: string, amount: number) => void;
   onAddPurchase?: (supplierName: string, amount: number) => void;
+  onCreateSupplierPaymentSchedules?: (rows: import('../types/autoParts').SupplierPaymentSchedule[]) => boolean;
   onOpenNotifications: () => void;
   onNavigateTab: (tab: any) => void;
   currentSession: UserSession;
@@ -65,6 +67,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   onSettleSupplier,
   onCollectCustomer,
   onAddPurchase,
+  onCreateSupplierPaymentSchedules,
   onOpenNotifications,
   onNavigateTab,
   currentSession,
@@ -84,6 +87,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
   const [micError, setMicError] = useState<string | null>(null);
   const [pending, setPending] = useState<{ result: AICommandResult; question: string; warning?: string } | null>(null);
+  const [supplierPlanDraft, setSupplierPlanDraft] = useState<any>(null);
 
   // سجل المحادثة المعروض (مستخدم/مساعد) + لغة الميكروفون
   const [messages, setMessages] = useState<Array<{ id: number; role: 'user' | 'assistant'; text: string; kind?: 'confirm' | 'audit'; partId?: string }>>([]);
@@ -400,11 +404,66 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     else if (continuousModeRef.current && isOpen) startListening();
   };
 
+  const handleSupplierPlanTurn = (raw: string): boolean => {
+    const digitText = raw.replace(/[٠-٩۰-۹]/g, d => String('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'.indexOf(d) % 10));
+    const q = normalizeArabic(digitText);
+    const isCreate = /(جدول|جدوله|قسم المبلغ|قسّم المبلغ|جدول دفعات|دفعات اسبوع|دفعات شهري|كل يوم|كل اسبوع|كل شهر)/.test(q);
+    if (!supplierPlanDraft && !isCreate) return false;
+    if (/^(الغاء|الغي|كنسل|cancel)$/.test(q)) {
+      setSupplierPlanDraft(null); pushMessage('assistant','تم إلغاء إعداد الجدول، ولم يتم حفظ أي شيء.'); return true;
+    }
+    const draft = { ...(supplierPlanDraft || { recurrence: 'weekly', weekdays: [], notes: 'إنشاء صوتي' }), source: raw };
+    const amountMatch = digitText.match(/(?:بمبلغ|مبلغ|المبلغ|اجمالي|إجمالي)?\s*([0-9][0-9,،.]*)(?:\s*جنيه|\s*جنيه)?/);
+    if (amountMatch && Number(amountMatch[1].replace(/[,.،]/g,'')) > 0) draft.totalAmount = Number(amountMatch[1].replace(/[,.،]/g,''));
+    const countMatch = q.match(/(?:على|عدد|لعدد)\s*(\d{1,3})\s*(?:دفعات|دفعة|قسط|اقساط)?|^(\d{1,3})\s*(?:دفعات|دفعة|قسط)?$/);
+    if (countMatch) draft.installmentCount = Number(countMatch[1] || countMatch[2]);
+    if (/اسبوع|اسبوعي|اسبوعيا/.test(q)) draft.recurrence = 'weekly';
+    if (/شهري|شهريا|كل شهر/.test(q)) draft.recurrence = 'monthly';
+    if (/كل يوم|يوميا|كل (\d+) يوم/.test(q)) { draft.recurrence = 'every_n_days'; const n=q.match(/كل (\d+) يوم/); if(n) draft.intervalDays=Number(n[1]); }
+    const weekdayMap: Record<string,number> = { الاحد:0, الأحد:0, الاثنين:1, الإثنين:1, الثلاثاء:2, الاربعاء:3, الأربعاء:3, الخميس:4, الجمعة:5, السبت:6 };
+    const dayHits = Object.keys(weekdayMap).filter(day => q.includes(normalizeArabic(day)));
+    if (dayHits.length) draft.weekdays = [...new Set(dayHits.map(day => weekdayMap[day]))];
+    const dateMatch = digitText.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (dateMatch) draft.startDate = [dateMatch[3],dateMatch[2].padStart(2,'0'),dateMatch[1].padStart(2,'0')].join('-');
+    const supplierTokens = q.split(' ').filter(w => w.length > 2 && !['جدول','دفعات','دفعة','المبلغ','قسم','اسبوعي','اسبوعيا','شهري','شهريا','مورد','للمورد','جنيه','بداية','من','كل','يوم','على'].includes(w));
+    const ranked = suppliers.map(s => { const tokens=normalizeArabic(s.name).split(' '); return {s, hits:supplierTokens.filter(t=>tokens.includes(t)).length}; }).filter(x=>x.hits>0).sort((a,b)=>b.hits-a.hits);
+    if (ranked.length && (!ranked[1] || ranked[0].hits>ranked[1].hits)) draft.supplierId=ranked[0].s.id, draft.supplierName=ranked[0].s.name;
+    if (draft.preview) {
+      if (/^(تاكيد|اكد|احفظ|موافق|نعم|تمام)$/.test(q)) {
+        const rows=draft.preview as import('../types/autoParts').SupplierPaymentSchedule[];
+        const saved=onCreateSupplierPaymentSchedules?.(rows) ?? false;
+        if (saved) { setSupplierPlanDraft(null); pushMessage('assistant','تم حفظ جدول الدفعات. لم يتم تسجيل أي سداد أو حركة خزينة.'); }
+        else pushMessage('assistant','تعذر حفظ الجدول. لم يتم تسجيل أي حركة مالية.');
+        return true;
+      }
+      if (/^(لا|الغاء|الغي|كنسل)$/.test(q)) { setSupplierPlanDraft(null); pushMessage('assistant','تم إلغاء الجدول ولم يتم حفظه.'); return true; }
+    }
+    const missing = !draft.supplierId ? 'اسم المورد المسجل' : !draft.totalAmount ? 'إجمالي المبلغ' : !draft.startDate ? 'تاريخ بداية أول دفعة (يوم-شهر-سنة)' : draft.recurrence==='weekly' && !draft.weekdays?.length ? 'يوم أو أيام السداد' : draft.recurrence==='every_n_days' && !draft.intervalDays ? 'عدد الأيام بين الدفعات' : !draft.installmentCount ? 'عدد الدفعات' : null;
+    if (missing) {
+      setSupplierPlanDraft(draft);
+      const msg='محتاج أعرف '+missing+' عشان أكمل إعداد الجدول. اذكر المعلومة فقط.';
+      pushMessage('assistant',msg); if(speechEnabled) speakArabic(msg); return true;
+    }
+    try {
+      const dates=generateSupplierScheduleDates({ recurrence:draft.recurrence, startDate:draft.startDate, installmentCount:draft.installmentCount, intervalDays:draft.intervalDays, weekdays:draft.weekdays });
+      const amounts=splitSupplierScheduleAmount(draft.totalAmount,draft.installmentCount);
+      const planId='SP-'+Date.now();
+      const now=new Date().toISOString();
+      const preview=dates.map((dueDate,i)=>({ id:planId+'-'+(i+1), planId, sequenceNumber:i+1, planTotalInstallments:dates.length, recurrence:draft.recurrence, recurrenceInterval:draft.intervalDays, recurrenceWeekdays:draft.weekdays, supplierId:draft.supplierId, supplierName:draft.supplierName, amount:amounts[i], amountPaid:0, dueDate, status:'scheduled' as const, notes:'إنشاء صوتي', createdAt:now, updatedAt:now }));
+      draft.preview=preview; setSupplierPlanDraft(draft);
+      const summary=preview.map(x=>x.dueDate+': '+x.amount.toLocaleString('ar-EG')+' جنيه').join('\n');
+      const msg='معاينة جدول '+draft.supplierName+' بإجمالي '+draft.totalAmount.toLocaleString('ar-EG')+' جنيه:\n'+summary+'\nهل تؤكد حفظ الجدول؟ لن تُسجل أي حركة خزينة.';
+      pushMessage('assistant',msg); if(speechEnabled) speakArabic('تم تجهيز المعاينة. هل تؤكد حفظ الجدول؟');
+    } catch(e) { pushMessage('assistant',e instanceof Error?e.message:'تعذر إعداد الجدول.'); }
+    return true;
+  };
+
   const handleExecuteCommand = async (commandText: string) => {
     const textToExecute = commandText.trim();
     if (!textToExecute) return;
 
     stopListening(true);
+    if (handleSupplierPlanTurn(textToExecute)) { setTranscript(''); return; }
 
     // While a command waits for confirmation, "تأكيد" / "إلغاء" answer it.
     if (pending) {
