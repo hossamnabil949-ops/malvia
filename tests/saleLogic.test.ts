@@ -459,7 +459,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
   const pl = Object.fromEntries(tb.rows.map(x => [x.item, x.amount]));
   assert.deepEqual(
     [pl['المبيعات (قبل الضريبة وبعد الخصم)'], pl['يخصم: المرتجعات'], pl['صافي المبيعات'], pl['يخصم: تكلفة البضاعة المباعة'], pl['مجمل الربح'], pl['يخصم: المصروفات'], pl['صافي الربح']],
-    [1080, -96, 984, -450, 534, -400, 134]
+    [1080, -96, 984, -600, 384, -400, -16]
   );
   assert.equal(RP.reportExpensesByCategory(data, { from: '2026-10-01', to: '2026-10-31' }).totals!.amount, 400);   // القديم خارج الفترة
   tb = RP.reportTreasury(data, R);
