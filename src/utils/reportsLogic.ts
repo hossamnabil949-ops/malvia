@@ -248,6 +248,25 @@ export function reportSalesReconciliation(d: ReportData, r: DateRange): ReportTa
   };
 }
 
+/** ملخص ضريبة المخرجات والمدخلات من الضرائب المخزنة على المستندات. */
+export function reportVatSummary(d: ReportData, r: DateRange): ReportTable {
+  const salesInvoices = active(d, r);
+  const purchaseInvoices = d.purchaseInvoices.filter(invoice => inRange(invoice.date, r));
+  const outputTax = r2(sum(salesInvoices, invoice => invoice.tax || 0));
+  const inputTax = r2(sum(purchaseInvoices, invoice => invoice.tax || 0));
+  return {
+    id: 'vat-summary', title: 'ملخص ضريبة القيمة المضافة',
+    columns: [{ key: 'kind', label: 'نوع الضريبة' }, { key: 'amount', label: 'المبلغ', kind: 'money' }],
+    rows: [
+      { kind: 'ضريبة المخرجات على فواتير البيع', amount: outputTax },
+      { kind: 'ضريبة المدخلات على فواتير الشراء', amount: inputTax },
+      { kind: 'صافي الضريبة (مخرجات − مدخلات)', amount: r2(outputTax - inputTax) },
+    ],
+    totals: { kind: 'صافي الضريبة', amount: r2(outputTax - inputTax) },
+    note: 'التجميع مبني على قيمة الضريبة المحفوظة في كل فاتورة. راجع أثر المرتجعات الضريبية ومستندات الإشعار الدائن مع المحاسب قبل الإقرار الرسمي.',
+  };
+}
+
 export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
   const inv = active(d, r);
   const sales = sum(inv, i => Math.max(0, i.subtotal - i.discount - (i.pricesIncludeTax ? (i.tax || 0) : 0)));
@@ -495,6 +514,7 @@ export const REPORT_DEFS: ReportDef[] = [
   { id: 'sales-by-cashier', group: 'المبيعات', title: 'المبيعات حسب الموظف', usesRange: true, build: (d, r) => reportSalesByCashier(d, r) },
   { id: 'sales-by-payment', group: 'المبيعات', title: 'المبيعات حسب طريقة الدفع', usesRange: true, build: (d, r) => reportSalesByPayment(d, r) },
   { id: 'sales-reconciliation', group: 'المبيعات', title: 'مطابقة صافي المبيعات', usesRange: true, build: (d, r) => reportSalesReconciliation(d, r) },
+  { id: 'vat-summary', group: 'المالية', title: 'ملخص ضريبة المدخلات والمخرجات', usesRange: true, build: (d, r) => reportVatSummary(d, r) },
   { id: 'returns', group: 'المبيعات', title: 'تحليل المرتجعات', usesRange: true, build: (d, r) => reportReturns(d, r) },
   { id: 'profit-loss', group: 'المالية', title: 'الأرباح والخسائر', usesRange: true, build: (d, r) => reportProfitLoss(d, r) },
   { id: 'expenses', group: 'المالية', title: 'المصروفات حسب البند', usesRange: true, build: (d, r) => reportExpensesByCategory(d, r) },
