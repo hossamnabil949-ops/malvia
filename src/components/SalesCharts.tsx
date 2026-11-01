@@ -62,7 +62,6 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
     const today = cairoDateKey(new Date());
     const todayInvoices = invoices.filter(inv => inv.status !== 'ملغاة' && (inv.date || '').slice(0, 10) === today);
     const dailyReport = reportDailySales(reportData, { from: today, to: today });
-    const dailyNet = Number(dailyReport.totals?.net || 0);
 
     const parseHour = (raw: string): number | null => {
       if (!raw) return null;
@@ -126,7 +125,6 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
   const totalPeriodSales = useMemo(() => activeData.reduce((acc, curr) => acc + curr.sales, 0), [activeData]);
   const totalPeriodProfit = useMemo(() => activeData.reduce((acc, curr) => acc + curr.profit, 0), [activeData]);
   const totalPeriodVolume = useMemo(() => activeData.reduce((acc, curr) => acc + curr.volume, 0), [activeData]);
-  const totalPeriodCost = totalPeriodSales - totalPeriodProfit;
   // هامش الربح يُحسب على صافي المبيعات قبل الضريبة
   const profitMargin = totalPeriodSales > 0 ? ((totalPeriodProfit / totalPeriodSales) * 100).toFixed(1) : '0';
 
