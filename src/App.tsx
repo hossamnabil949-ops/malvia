@@ -44,7 +44,7 @@ import {
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
 import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands';
-import { isCreditMethod } from './utils/treasuryAccounts';
+import { isCreditMethod, accountOf } from './utils/treasuryAccounts';
 import { findOpenShift, findOpenShifts, summarizeShift, stampNewTreasury, nextShiftNumber, countTotal, round2, varianceOf } from './utils/shiftLogic';
 import { nextSalesInvoiceNumber } from './utils/invoiceNumber';
 import { nextTreasuryTransactionNumber } from './utils/transactionNumber';
@@ -1130,6 +1130,11 @@ export default function App() {
     const requestedPayments: InvoicePayment[] = invoice.payments && invoice.payments.length > 0
       ? invoice.payments
       : [{ method: invoice.paymentMethod, amount: invoice.grandTotal }];
+    const unknownPayment = requestedPayments.find(p => !isCreditPayment(String(p.method)) && accountOf(String(p.method)) === 'unclassified');
+    if (unknownPayment) {
+      window.alert(`طريقة الدفع «${unknownPayment.method}» غير معروفة؛ اختر طريقة دفع مصنفة قبل إتمام البيع.`);
+      return false;
+    }
     const requestedCredit = requestedPayments.filter(p => isCreditPayment(String(p.method))).reduce((sum, p) => sum + p.amount, 0);
     if (requestedCredit > 0) {
       const creditCustomer = invoice.customerId ? customers.find(c => c.id === invoice.customerId) : undefined;
@@ -1645,6 +1650,7 @@ export default function App() {
     if (!Number.isFinite(invoice.grandTotal) || invoice.grandTotal <= 0 ||
         !Number.isFinite(invoice.amountPaid) || invoice.amountPaid < 0 ||
         invoice.amountPaid > invoice.grandTotal + 0.001 ||
+        (invoice.amountPaid > 0 && !isCreditMethod(String(invoice.paymentMethod)) && accountOf(String(invoice.paymentMethod)) === 'unclassified') ||
         invoice.items.some(item => !Number.isFinite(item.quantity) || item.quantity <= 0 || !Number.isFinite(item.costPrice) || item.costPrice < 0)) {
       window.alert('بيانات فاتورة المشتريات غير صالحة أو المبلغ المدفوع أكبر من إجمالي الفاتورة.');
       return;
