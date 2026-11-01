@@ -844,13 +844,15 @@ export default function App() {
   };
 
   /** تطبيق أثر مرتجع (أو حذفه) على الدفعات والسيريال. يرجع الأسطر المحدّثة للفاتورة. */
-  const applyReturnTracking = (inv: Invoice, retItems: { partNumber: string; partName: string; quantity: number; serials?: string[] }[], direction: 1 | -1) => {
+  const applyReturnTracking = (inv: Invoice, retItems: { lineId?: string; partId?: string; partNumber: string; partName: string; quantity: number; unitPrice?: number; serials?: string[] }[], direction: 1 | -1) => {
     const batchOps: { batchId: string; qty: number }[] = [];
     const toStock = new Set<string>();
     const toSold = new Set<string>();
     const touchedPartIds = new Map<string, string>(); // serial -> partId
     retItems.forEach(r => {
-      const it = inv.items.find(x => x.partNumber === r.partNumber && x.partName === r.partName);
+      const exactIndex = r.lineId ? inv.items.findIndex((x, index) => r.lineId === (x.lineId || `${inv.id}:${index}`)) : -1;
+      const fallbackMatches = inv.items.filter(x => (r.partId ? x.partId === r.partId : x.partNumber === r.partNumber && x.partName === r.partName) && (r.unitPrice === undefined || x.unitPrice === r.unitPrice));
+      const it = exactIndex >= 0 ? inv.items[exactIndex] : fallbackMatches.length === 1 ? fallbackMatches[0] : undefined;
       if (!it) return;
       const res = trackReturn(it, r.quantity, r.serials, direction);
       batchOps.push(...res.batchOps);
@@ -964,7 +966,7 @@ export default function App() {
   const applyChequeEffectToParty = (cheque: Cheque, effect: ChequeEffect, isRegistration: boolean) => {
     if (cheque.partyType === 'customer' && effect.customerBalanceDelta) {
       setCustomers(prev => {
-        const updated = prev.map(c => (c.id === cheque.partyId ? { ...c, balance: Math.max(0, c.balance + effect.customerBalanceDelta) } : c));
+        const updated = prev.map(c => (c.id === cheque.partyId ? { ...c, balance: c.balance + effect.customerBalanceDelta } : c));
         persistChanges({ customers: updated });
         return updated;
       });
@@ -1144,6 +1146,11 @@ export default function App() {
   };
 
   const handleCreateInvoice = (invoice: Invoice): boolean => {
+    const duplicateNumber = invoices.find(existing => existing.invoiceNumber === invoice.invoiceNumber && existing.id !== invoice.id);
+    if (duplicateNumber) {
+      window.alert(`رقم الفاتورة ${invoice.invoiceNumber} مستخدم بالفعل. أعد إنشاء الرقم ثم حاول مرة أخرى.`);
+      return false;
+    }
     // إلزام الوردية: لا بيع بدون وردية مفتوحة (لو الإعداد مفعّل) حتى يكون الدرج محسوباً
     const requestedPayments: InvoicePayment[] = invoice.payments && invoice.payments.length > 0
       ? invoice.payments
@@ -1462,19 +1469,32 @@ export default function App() {
   };
 
   const handleAddSalesReturn = (rawReturn: SalesReturn) => {
+    const sourceInvoice = invoices.find(i => i.id === rawReturn.invoiceId);
+    if (sourceInvoice?.status === 'ملغاة') {
+      window.alert('لا يمكن إنشاء مرتجع لفاتورة ملغاة.');
+      return;
+    }
     // تثبيت السيريالات المرتجعة فعلياً داخل سجل المرتجع (المختارة من الشاشة أو تلقائياً)
     const origInv = invoices.find(i => i.id === rawReturn.invoiceId);
     const salesReturn: SalesReturn = origInv
       ? {
           ...rawReturn,
+          customerId: rawReturn.customerId || origInv.customerId,
           items: rawReturn.items.map(r => {
             const lineIndex = r.lineId ? Number(r.lineId.slice(r.lineId.lastIndexOf(':') + 1)) : -1;
             const it = r.lineId ? (lineIndex >= 0 ? origInv.items[lineIndex] : undefined) : (() => { const matches = origInv.items.filter(x => r.partId ? x.partId === r.partId : x.partNumber === r.partNumber && x.partName === r.partName); return matches.length === 1 ? matches[0] : undefined; })();
-            if (!it?.serials?.length) return r;
-            return { ...r, serials: trackReturn(it, r.quantity, r.serials, 1).unitsToStock };
+            if (!it) return r;
+            const resolvedIndex = origInv.items.indexOf(it);
+            const enriched = { ...r, lineId: `${origInv.id}:${resolvedIndex}`, partId: r.partId || it.partId };
+            if (!it.serials?.length) return enriched;
+            return { ...enriched, serials: trackReturn(it, r.quantity, r.serials, 1).unitsToStock };
           }),
         }
       : rawReturn;
+    if (origInv && salesReturn.items.some(item => !item.lineId)) {
+      window.alert('تعذر تحديد سطر الفاتورة الأصلي لهذا المرتجع بأمان. راجع الأصناف المتشابهة واختر السطر الصحيح.');
+      return;
+    }
     if (origInv) applyReturnTracking(origInv, salesReturn.items, 1);
     setSalesReturns(prev => {
       const updated = [salesReturn, ...prev];
