@@ -15,3 +15,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+// Allow TypeScript to recognize Vite CSS side-effect imports.
+declare module '*.css';
