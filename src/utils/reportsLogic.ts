@@ -32,6 +32,7 @@ export interface ReportData {
   invoices: Invoice[];
   salesReturns: SalesReturn[];
   purchaseInvoices: PurchaseInvoice[];
+  purchaseReturns?: import('../types/autoParts').PurchaseReturn[];
   parts: AutoPart[];
   customers: Customer[];
   suppliers: Supplier[];
