@@ -21,6 +21,7 @@ import {
   FileQuestion
 } from 'lucide-react';
 import { AutoPart, Invoice } from '../types/autoParts';
+import { ReportData, cairoDateKey, netSales, reportDailySales, reportSalesByItem } from '../utils/reportsLogic';
 
 interface SalesPoint {
   label: string;
@@ -42,100 +43,83 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
 }) => {
   const [timeframe, setTimeframe] = useState<'daily' | 'monthly'>('daily');
 
-  const costMap = useMemo(() => {
-    const map = new Map<string, number>();
-    parts.forEach(p => {
-      map.set(p.partNumber.toLowerCase(), p.costPrice);
-      map.set(p.name.toLowerCase(), p.costPrice);
-    });
-    return map;
-  }, [parts]);
+  const reportData = useMemo(() => ({
+    invoices,
+    salesReturns: [],
+    purchaseInvoices: [],
+    parts,
+    customers: [],
+    suppliers: [],
+    expenses: [],
+    treasury: [],
+    cheques: [],
+    batches: [],
+    loyaltyLedger: [],
+    loyaltyPointValue: 0,
+  } as unknown as ReportData), [invoices, parts]);
 
   const dailyData: SalesPoint[] = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayInvoices = invoices.filter(inv => inv.date === todayStr);
+    const today = cairoDateKey(new Date());
+    const todayInvoices = invoices.filter(inv => inv.status !== 'ملغاة' && (inv.date || '').slice(0, 10) === today);
+    const dailyReport = reportDailySales(reportData, { from: today, to: today });
+    const dailyNet = Number(dailyReport.totals?.net || 0);
 
-    const hourSlots = [
-      { key: '08', label: '08:00 ص' },
-      { key: '10', label: '10:00 ص' },
-      { key: '12', label: '12:00 م' },
-      { key: '14', label: '02:00 م' },
-      { key: '16', label: '04:00 م' },
-      { key: '18', label: '06:00 م' },
-      { key: '20', label: '08:00 م' },
-      { key: '22', label: '10:00 م' },
-    ];
+    const parseHour = (raw: string): number | null => {
+      if (!raw) return null;
+      const latin = raw.replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit))).trim();
+      const match = latin.match(/(\\d{1,2})(?::(\\d{2}))?\\s*(ص|م|AM|PM)?/i);
+      if (!match) return null;
+      let hour = Number(match[1]);
+      const marker = (match[3] || '').toLowerCase();
+      if (marker === 'ص' || marker === 'am') hour = hour % 12;
+      else if (marker === 'م' || marker === 'pm') hour = (hour % 12) + 12;
+      return hour >= 0 && hour <= 23 ? hour : null;
+    };
 
-    if (invoices.length === 0) {
-      return hourSlots.map(h => ({ label: h.label, sales: 0, profit: 0, volume: 0 }));
-    }
-
-    return hourSlots.map(slot => {
-      let sales = 0;
-      let profit = 0;
-      let volume = 0;
-
-      todayInvoices.forEach(inv => {
-        sales += inv.grandTotal / hourSlots.length;
-        inv.items.forEach(it => {
-          volume += it.quantity / hourSlots.length;
-          const cost = costMap.get(it.partNumber.toLowerCase()) ?? (it.unitPrice * 0.7);
-          profit += (it.unitPrice - cost) * (it.quantity / hourSlots.length);
-        });
-      });
-
+    return Array.from({ length: 24 }, (_, hour) => {
+      const bucket = todayInvoices.filter(inv => parseHour(inv.time) === hour);
+      const itemReport = reportSalesByItem({ ...reportData, invoices: bucket }, { from: today, to: today });
+      const label = hour === 0 ? '12 ص' : hour < 12 ? `${hour} ص` : hour === 12 ? '12 م' : `${hour - 12} م`;
       return {
-        label: slot.label,
-        sales: Math.round(sales),
-        profit: Math.round(profit),
-        volume: Math.round(volume),
+        label,
+        sales: Math.round(bucket.reduce((total, invoice) => total + netSales(invoice), 0)),
+        profit: Math.round(Number(itemReport.totals?.profit || 0)),
+        volume: Math.round(Number(itemReport.totals?.qty || 0)),
       };
     });
-  }, [invoices, costMap]);
+  }, [invoices, reportData]);
 
   const monthlyData: SalesPoint[] = useMemo(() => {
-    const months = [
+    const monthNames = [
       'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
       'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
     ];
-
-    if (invoices.length === 0) {
-      return months.slice(0, 6).map(m => ({ label: m, sales: 0, profit: 0, volume: 0 }));
-    }
-
-    const currentMonthIdx = new Date().getMonth();
-    const monthMap = new Map<number, { sales: number; profit: number; volume: number }>();
-    for (let i = 0; i <= currentMonthIdx; i++) {
-      monthMap.set(i, { sales: 0, profit: 0, volume: 0 });
-    }
-
+    const current = cairoDateKey(new Date()).slice(0, 7);
+    const monthKeys = new Set<string>();
     invoices.forEach(inv => {
-      const d = new Date(inv.date);
-      if (!isNaN(d.getTime())) {
-        const mIdx = d.getMonth();
-        const existing = monthMap.get(mIdx) || { sales: 0, profit: 0, volume: 0 };
-        existing.sales += inv.grandTotal;
-        inv.items.forEach(it => {
-          existing.volume += it.quantity;
-          const cost = costMap.get(it.partNumber.toLowerCase()) ?? (it.unitPrice * 0.7);
-          existing.profit += (it.unitPrice - cost) * it.quantity;
-        });
-        monthMap.set(mIdx, existing);
-      }
+      if (inv.status === 'ملغاة' || !/^\\d{4}-\\d{2}-\\d{2}/.test(inv.date || '')) return;
+      monthKeys.add(inv.date.slice(0, 7));
     });
+    monthKeys.add(current);
 
-    const result: SalesPoint[] = [];
-    monthMap.forEach((val, mIdx) => {
-      result.push({
-        label: months[mIdx] || `شهر ${mIdx + 1}`,
-        sales: Math.round(val.sales),
-        profit: Math.round(val.profit),
-        volume: Math.round(val.volume),
-      });
+    return [...monthKeys].sort().map(key => {
+      const [yearText, monthText] = key.split('-');
+      const year = Number(yearText);
+      const month = Number(monthText);
+      const from = `${key}-01`;
+      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      const to = `${key}-${String(lastDay).padStart(2, '0')}`;
+      const periodInvoices = invoices.filter(inv => inv.status !== 'ملغاة' && (inv.date || '').slice(0, 7) === key);
+      const dailyReport = reportDailySales({ ...reportData, invoices: periodInvoices }, { from, to });
+      const itemReport = reportSalesByItem({ ...reportData, invoices: periodInvoices }, { from, to });
+      return {
+        label: `${monthNames[month - 1] || monthText} ${year}`,
+        sales: Math.round(Number(dailyReport.totals?.net || 0)),
+        profit: Math.round(Number(itemReport.totals?.profit || 0)),
+        volume: Math.round(Number(itemReport.totals?.qty || 0)),
+      };
     });
-
-    return result.length > 0 ? result : [{ label: 'الشهر الحالي', sales: 0, profit: 0, volume: 0 }];
-  }, [invoices, costMap]);
+  }, [invoices, reportData]);
 
   const activeData: SalesPoint[] = timeframe === 'daily' ? dailyData : monthlyData;
 
@@ -143,8 +127,8 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
   const totalPeriodProfit = useMemo(() => activeData.reduce((acc, curr) => acc + curr.profit, 0), [activeData]);
   const totalPeriodVolume = useMemo(() => activeData.reduce((acc, curr) => acc + curr.volume, 0), [activeData]);
   const totalPeriodCost = totalPeriodSales - totalPeriodProfit;
-  // نسبة الربح تُحسب على أساس التكلفة وليس سعر البيع
-  const profitMargin = totalPeriodCost > 0 ? ((totalPeriodProfit / totalPeriodCost) * 100).toFixed(1) : '0';
+  // هامش الربح يُحسب على صافي المبيعات قبل الضريبة
+  const profitMargin = totalPeriodSales > 0 ? ((totalPeriodProfit / totalPeriodSales) * 100).toFixed(1) : '0';
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
