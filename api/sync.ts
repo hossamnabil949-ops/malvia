@@ -41,7 +41,7 @@ export default async function handler(req: any, res: any) {
         stockBatches: ['canManageInventory','canManagePurchases','canSellPos'], serialUnits: ['canManageInventory','canManagePurchases','canSellPos'],
         inventoryErrors: ['canManageInventory'], stockTransfers: ['canManageInventory'], warehouses: ['canManageInventory'],
         invoices: ['canSellPos'], salesReturns: ['canSellPos'], loyaltyLedger: ['canSellPos'], customers: ['canSellPos','canManageTreasury'],
-        suppliers: ['canManagePurchases','canManageTreasury'], supplierPayments: ['canManagePurchases','canManageTreasury'],
+        suppliers: ['canManagePurchases','canManageTreasury'], supplierPayments: ['canManagePurchases','canManageTreasury'], supplierPaymentSchedules: ['canManagePurchases','canManageTreasury'],
         purchaseInvoices: ['canManagePurchases'], purchaseReturns: ['canManagePurchases'],
         expenses: ['canManageTreasury'], treasury: ['canManageTreasury','canSellPos','canManagePurchases'],
         shifts: ['canSellPos','canManageTreasury'], stockMovements: ['canManageInventory','canManagePurchases','canSellPos'],

@@ -43,7 +43,8 @@ export function buildShopSnapshot(
   invoices: Invoice[],
   suppliers: Supplier[],
   session?: { employeeName?: string; role?: string },
-  shopName?: string
+  shopName?: string,
+  supplierPaymentSchedules: Array<{ id: string; supplierId: string; supplierName: string; amount: number; amountPaid: number; dueDate: string; status: string; notes?: string }> = []
 ) {
   const today = new Date().toISOString().slice(0, 10);
   const month = today.slice(0, 7);
@@ -68,6 +69,7 @@ export function buildShopSnapshot(
     userName: session?.employeeName,
     role: session?.role,
     suppliers: suppliers.map((s) => s.name).slice(0, 200),
+    supplierPaymentSchedules: supplierPaymentSchedules.map(p => ({ ...p })),
     summary: {
       partsCount: parts.length,
       outOfStockCount: out.length,
@@ -83,14 +85,244 @@ export function buildShopSnapshot(
   };
 }
 
+/**
+ * MALVIA Internal AI Router — deterministic answers from the shop snapshot.
+ * These intents are answered locally and never call Gemini or an external agent.
+ */
+function answerInternalShopQuery(command: string, parts: AutoPart[], customers: Customer[], suppliers: Supplier[], shop?: ReturnType<typeof buildShopSnapshot>, uiLang: 'ar' | 'en' = 'ar'): AICommandResult | null {
+  const lang: 'ar' | 'en' = hasArabic(command) ? 'ar' : (/[a-z]/i.test(command) ? 'en' : uiLang);
+  const time = new Date().toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const q = normalizeArabic(command);
+  const answer = (spokenFeedback: string, extra: Partial<AICommandResult> = {}): AICommandResult => ({ action: 'GENERAL_ANSWER', spokenFeedback, timestamp: time, lang, ...extra });
+
+  // Supplier installment questions are answered locally from the tenant's saved schedule.
+  const scheduleIntent = /(دفعة|الدفعات|الدفعة|ميعاد الدف|موعد الدف|القادمه|الجايه|متاخره|المتأخره)/.test(q);
+  if (scheduleIntent) {
+    const rows = (shop as any)?.supplierPaymentSchedules as Array<{supplierId:string;supplierName:string;amount:number;amountPaid:number;dueDate:string;status:string}> | undefined;
+    if (!rows || rows.length === 0) return answer('لا توجد دفعات موردين مجدولة في النظام حتى الآن.');
+    const supplierTerms = suppliers.map(x => ({ supplier:x, tokens: normalizeArabic(x.name).split(' ').filter(w => w.length > 2) }));
+    const spoken = q.split(' ').filter(w => w.length > 2 && !['دفعة','الدفعات','الدفعة','القادمة','القادمه','الجاية','الجايه','مورد','المورد','ميعاد','موعد','كام','امتى'].includes(w));
+    const matched = supplierTerms.map(x => ({...x, score: spoken.filter(w => x.tokens.includes(w)).length})).filter(x => x.score > 0).sort((a,b)=>b.score-a.score);
+    if (spoken.length && (!matched.length || (matched[1] && matched[1].score === matched[0].score))) return answer('لم أستطع تحديد المورد بشكل فريد. اذكر اسم المورد كما هو مسجل.');
+    const selected = matched[0]?.supplier;
+    const today = new Date().toISOString().slice(0,10);
+    const pending = rows.filter(x => x.status === 'scheduled' && x.amount > x.amountPaid && (!selected || x.supplierId === selected.id)).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
+    if (!pending.length) return answer(selected ? 'لا توجد دفعات مجدولة متبقية للمورد ' + selected.name + '.' : 'لا توجد دفعات مجدولة متبقية.');
+    const overdue = pending.filter(x => x.dueDate < today);
+    if (/(متاخره|المتأخره)/.test(q)) {
+      const list = overdue.slice(0,8).map(x => x.supplierName + ': ' + (x.amount-x.amountPaid).toLocaleString('ar-EG') + ' جنيه، ' + x.dueDate).join('؛ ');
+      return answer(list || 'لا توجد دفعات متأخرة.');
+    }
+    const next = pending[0];
+    return answer('الدفعة القادمة للمورد ' + next.supplierName + ': ' + (next.amount-next.amountPaid).toLocaleString('ar-EG') + ' جنيه، وموعدها ' + next.dueDate + (next.dueDate < today ? ' (متأخرة)' : '') + '.');
+  }
+
+  // Local inventory lookup: no network or model call.
+  if (/(كم|باقي|فاضل|متبقي|رصيد|مخزون|عندنا|الموجود|جرد|شوفلي)/.test(q)) {
+    const match = resolvePart(command, parts);
+    if (match.status === 'ok') {
+      const p = match.part;
+      return answer(lang === 'ar'
+        ? `المتبقي من ${p.name}: ${p.stockQuantity} ${p.unit || 'قطعة'}، ومكانه ${p.shelfLocation || 'غير محدد'}.`
+        : `${p.name}: ${p.stockQuantity} ${p.unit || 'units'} in stock. Location: ${p.shelfLocation || 'not specified'}.`,
+        { action: 'INVENTORY_AUDIT', matchedPartId: p.id, matchedPartName: p.name, partConfidence: 'high' });
+    }
+    if (match.status === 'ambiguous') {
+      const names = match.candidates.slice(0, 4).map(p => p.name).join(' / ');
+      return answer(lang === 'ar' ? `وجدت أكثر من صنف محتمل: ${names}. حدد الصنف أو الماركة.` : `Multiple possible parts: ${names}. Please specify the part or brand.`);
+    }
+  }
+
+  const summary: any = shop?.summary || {};
+
+  // Customer balance questions are strictly local. Never forward a customer name/balance query externally.
+  const exactCustomerMatch = customers
+    .map((customer) => ({ customer, normalizedName: normalizeArabic(customer.name) }))
+    .filter(({ normalizedName }) => normalizedName.length > 2 && q.includes(normalizedName))
+    .sort((a, b) => b.normalizedName.length - a.normalizedName.length)[0]?.customer;
+  // Fallback for names with extra descriptors (e.g. "مركز الأمانة - فرع ...").
+  const queryTokens = q.split(' ').filter(token => token.length > 1 && !['رصيد','مديون','عليه','حساب','باقي','مستحق','العميل','للعميل','عميل','ورشه'].includes(token));
+  const rankedCustomers = customers.map(customer => {
+    const nameTokens = normalizeArabic(customer.name).split(' ').filter(token => token.length > 1);
+    const hits = nameTokens.filter(token => queryTokens.some(queryToken => queryToken === token || (queryToken.length >= 4 && token.startsWith(queryToken)) || (token.length >= 4 && queryToken.startsWith(token)))).length;
+    return { customer, hits, nameTokenCount: nameTokens.length };
+  }).sort((a, b) => b.hits - a.hits);
+  const fuzzyTop = rankedCustomers[0];
+  const fuzzyCustomerMatch = fuzzyTop && fuzzyTop.hits >= 2 ? fuzzyTop.customer : undefined;
+  const customerMatch = exactCustomerMatch || fuzzyCustomerMatch;
+  const customerBalanceIntent = /(رصيد|مديون|عليه|حساب|باقي|مستحق)/.test(q) && (/(عميل|للعميل|العميل|حساب|ورشه|ورشة|مركز)/.test(q) || !!customerMatch);
+
+  if (customerBalanceIntent) {
+    if (customerMatch) {
+      const balance = Number(customerMatch.balance);
+      return answer(lang === 'ar'
+        ? `رصيد العميل ${customerMatch.name}: ${Number.isFinite(balance) ? balance.toLocaleString('ar-EG') : 'غير متاح'} جنيه.`
+        : `Customer ${customerMatch.name} balance: ${Number.isFinite(balance) ? balance.toLocaleString() : 'unavailable'}.`);
+    }
+    const requestedName = q
+      .replace(/رصيد|مديون|عليه|حساب|باقي|مستحق|العميل|للعميل|عميل/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return answer(lang === 'ar'
+      ? (requestedName ? `لم أجد عميلاً باسم "${requestedName}" في بيانات المحل الحالية.` : 'من فضلك اذكر اسم العميل لمعرفة رصيده.')
+      : (requestedName ? `I could not find a customer named "${requestedName}" in this shop data.` : 'Please provide the customer name to check the balance.'));
+  }
+  const supplierBalances = suppliers.filter((supplier) => Number(supplier.balance) > 0).map((supplier) => ({ name: supplier.name, balance: Number(supplier.balance) || 0 }));
+  const supplierMatch = supplierBalances.find((supplier) => {
+    const name = normalizeArabic(supplier.name);
+    return name.length > 1 && q.includes(name);
+  });
+  if (supplierMatch && /(رصيد|مديون|عليه|حساب|باقي|مستحق|للمورد)/.test(q)) {
+    return answer(lang === 'ar'
+      ? `المستحق للمورد ${supplierMatch.name}: ${Number(supplierMatch.balance || 0).toLocaleString('ar-EG')} جنيه.`
+      : `Amount payable to ${supplierMatch.name}: ${Number(supplierMatch.balance || 0).toLocaleString()}.`);
+  }
+  if (/(اجمالي مديونيه العملاء|مديونيات العملاء|ارصده العملاء|مستحقات العملاء|customer receivables)/.test(q)) {
+    return answer(lang === 'ar'
+      ? `إجمالي مديونيات العملاء ${customers.reduce((total, customer) => total + Math.max(0, Number(customer.balance) || 0), 0).toLocaleString('ar-EG')} جنيه، وعدد العملاء أصحاب الأرصدة ${customers.filter((customer) => Number(customer.balance) > 0).length}.`
+      : `Customer receivables total ${Number(summary.customerReceivables || 0).toLocaleString()} across ${Number(summary.customersWithBalances || 0)} customers.`);
+  }
+  if (/(اجمالي مديونيه الموردين|مستحقات الموردين|حسابات الموردين|supplier payables)/.test(q)) {
+    return answer(lang === 'ar'
+      ? `إجمالي المستحق للموردين ${suppliers.reduce((total, supplier) => total + Math.max(0, Number(supplier.balance) || 0), 0).toLocaleString('ar-EG')} جنيه، وعدد الموردين أصحاب الأرصدة ${suppliers.filter((supplier) => Number(supplier.balance) > 0).length}.`
+      : `Supplier payables total ${Number(summary.supplierPayables || 0).toLocaleString()} across ${Number(summary.suppliersWithBalances || 0)} suppliers.`);
+  }
+  if (/(مبيعات اليوم|بيع اليوم|حصيله اليوم|اجمالي اليوم|today sales)/.test(q) && Number.isFinite(Number(summary.todaySales))) {
+    return answer(lang === 'ar'
+      ? `إجمالي مبيعات اليوم ${Number(summary.todaySales).toLocaleString('ar-EG')} جنيه من ${Number(summary.todayInvoices || 0)} فاتورة.`
+      : `Today's sales are ${Number(summary.todaySales).toLocaleString()} across ${Number(summary.todayInvoices || 0)} invoices.`);
+  }
+  if (/(مبيعات الشهر|بيع الشهر|اجمالي الشهر|الشهر الحالي|month sales)/.test(q) && Number.isFinite(Number(summary.monthSales))) {
+    return answer(lang === 'ar'
+      ? `إجمالي مبيعات الشهر ${Number(summary.monthSales).toLocaleString('ar-EG')} جنيه من ${Number(summary.monthInvoices || 0)} فاتورة.`
+      : `This month's sales are ${Number(summary.monthSales).toLocaleString()} across ${Number(summary.monthInvoices || 0)} invoices.`);
+  }
+  if (/(اصناف ناقصه|الاصناف الناقصه|نواقص المخزون|المخزون الناقص|out of stock)/.test(q)) {
+    const names = Array.isArray(summary.outOfStock) ? summary.outOfStock : [];
+    return answer(lang === 'ar'
+      ? (names.length ? `الأصناف النافدة (${summary.outOfStockCount ?? names.length}): ${names.join('، ')}.` : 'لا توجد أصناف نافدة حسب بيانات المخزون الحالية.')
+      : (names.length ? `Out of stock (${summary.outOfStockCount ?? names.length}): ${names.join(', ')}.` : 'There are no out-of-stock items in the current inventory data.'));
+  }
+  return null;
+}
+
+/**
+ * Fail-closed local route for customer balance lookups.
+ * These requests must never be sent to an external AI, even when customer data
+ * has not loaded yet or a customer name cannot be matched.
+ */
+export function answerCustomerBalanceLookup(
+  command: string, customers: Customer[] | undefined, uiLang: 'ar' | 'en', suppliers: Supplier[] | undefined = []
+): AICommandResult | null {
+  const q = normalizeArabic(command);
+  const supplierWords = new Set(['مورد', 'المورد', 'للمورد', 'موردين', 'الموردين']);
+  const customerWords = new Set(['عميل', 'العميل', 'للعميل', 'عملاء', 'العملاء', 'ورشه', 'الورشه', 'ورشة', 'الورشة', 'مركز', 'المركز']);
+  const words = q.split(' ').filter(Boolean);
+  const hasSupplier = words.some(w => supplierWords.has(w));
+  const hasCustomer = words.some(w => customerWords.has(w));
+  const balanceIntent = /(رصيد|ارصده|مديونيه|مديون|مستحق|مستحقات|حساب|باقي)/.test(q);
+  if (!balanceIntent) return null;
+
+  // Aggregate questions belong to reports, not an individual-record lookup.
+  const aggregateIntent = /(اجمالي|مجموع|كل|عام|ارصده العملاء|ارصده الموردين|مديونيه العملاء|مديونيه الموردين|حسابات العملاء|حسابات الموردين)/.test(q);
+  if (aggregateIntent) return null;
+
+  const lang: 'ar' | 'en' = hasArabic(command) ? 'ar' : uiLang;
+  const now = new Date().toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const answer = (spokenFeedback: string): AICommandResult => ({ action: 'GENERAL_ANSWER', spokenFeedback, timestamp: now, lang });
+  const clarify = lang === 'ar'
+    ? 'هل تقصد رصيد عميل/ورشة أم مستحقات مورد؟ من فضلك حدد النوع والاسم.'
+    : 'Do you mean a customer/workshop balance or a supplier balance? Please specify the type and name.';
+
+  if (hasSupplier && hasCustomer) return answer(clarify);
+
+  const stop = new Set([
+    'رصيد','ارصده','مديونيه','مديون','عليه','حساب','باقي','مستحق','مستحقات',
+    ...supplierWords, ...customerWords,
+    'كم','ما','هو','هي','من','فضلك','لو','سمحت','عايز','عاوزه','عاوز','اريد','اعرف',
+    'لدي','عند','جنيه','اجمالي','مجموع','كل'
+  ]);
+  const requestedTokens = words.filter(t => t.length > 1 && !stop.has(t));
+  const requestedName = requestedTokens.join(' ').trim();
+  const explicitType = hasSupplier || hasCustomer;
+  if (!requestedName) {
+    return answer(lang === 'ar'
+      ? (hasSupplier ? 'من فضلك اذكر اسم المورد.' : hasCustomer ? 'من فضلك اذكر اسم العميل أو الورشة.' : clarify)
+      : (hasSupplier ? 'Please provide the supplier name.' : hasCustomer ? 'Please provide the customer or workshop name.' : clarify));
+  }
+
+  const descriptorWords = new Set(['ورشه','مركز','المركز','الاسطى','الاسطي','الاستاذ','استاذ','المعلم','معلم','مورد','المورد','عميل','العميل']);
+  const cleanTokens = (value: string) => normalizeArabic(value).split(' ').filter(Boolean)
+    .filter(token => !descriptorWords.has(token));
+  const queryTokens = cleanTokens(requestedName);
+  if (!queryTokens.length) return answer(clarify);
+
+  const rank = (source: Customer[] | Supplier[] | undefined) => (Array.isArray(source) ? source : [])
+    .map(record => {
+      const nameTokens = cleanTokens(record.name || '');
+      const matched = queryTokens.filter(token => nameTokens.some(nameToken =>
+        token === nameToken || (token.length >= 5 && nameToken.length >= 5 &&
+          (token.startsWith(nameToken) || nameToken.startsWith(token)))
+      )).length;
+      const exact = queryTokens.length === nameTokens.length &&
+        queryTokens.every(token => nameTokens.includes(token));
+      return { record, matched, exact, score: matched / Math.max(queryTokens.length, nameTokens.length, 1) };
+    })
+    .filter(item => item.matched > 0)
+    .sort((a,b) => Number(b.exact) - Number(a.exact) || b.score - a.score || b.matched - a.matched);
+
+  const customerMatches = rank(customers);
+  const supplierMatches = rank(suppliers);
+
+  if (!explicitType && customerMatches[0] && supplierMatches[0]) return answer(clarify);
+
+  const matches = hasSupplier ? supplierMatches : hasCustomer ? customerMatches
+    : customerMatches.length ? customerMatches : supplierMatches;
+  const kindIsSupplier = hasSupplier || (!hasCustomer && !customerMatches.length && !!supplierMatches.length);
+  const kind = kindIsSupplier ? 'المورد' : 'العميل أو الورشة';
+  const top = matches[0];
+  const second = matches[1];
+  // Accept a shortened registered name when every spoken token matches
+  // exactly one supplier/customer record (e.g. "مؤسسة الأهرام").
+  const uniqueCompleteTokenMatch = !!top && top.matched === queryTokens.length &&
+    matches.filter(item => item.matched === queryTokens.length).length === 1;
+  const uniqueSingleTokenMatch = queryTokens.length === 1 && !!top && top.matched === 1 &&
+    matches.filter(item => item.matched === 1).length === 1;
+  if (!top || (!top.exact && !uniqueCompleteTokenMatch && !uniqueSingleTokenMatch &&
+    (top.matched < queryTokens.length || top.score < 0.75))) {
+    return answer(lang === 'ar'
+      ? 'لم أجد ' + kind + ' بمطابقة مؤكدة للاسم "' + requestedName + '". من فضلك اكتب الاسم كما هو مسجل. لم يتم إرسال الطلب إلى خدمة خارجية.'
+      : 'No confident ' + (hasSupplier ? 'supplier' : 'customer') + ' match was found. Please enter the registered name. This request was not sent externally.');
+  }
+  // Never choose between close candidates, even if one ranks marginally higher.
+  if (second && (second.exact || top.exact || top.score - second.score < 0.20)) {
+    return answer(lang === 'ar'
+      ? 'وجدت أكثر من سجل قريب من "' + requestedName + '". من فضلك اكتب الاسم الكامل لتمييز السجل.'
+      : 'More than one record closely matches "' + requestedName + '". Please provide the full name.');
+  }
+
+  const balance = Number(top.record.balance);
+  return answer(lang === 'ar'
+    ? (kindIsSupplier ? 'المستحق للمورد ' : 'رصيد العميل ') + top.record.name + ': ' + (Number.isFinite(balance) ? balance.toLocaleString('ar-EG') : 'غير متاح') + ' جنيه.'
+    : (kindIsSupplier ? 'Amount payable to ' : 'Customer balance for ') + top.record.name + ': ' + (Number.isFinite(balance) ? balance.toLocaleString() : 'unavailable') + '.');
+}
+
 export async function sendVoiceCommandToServer(
   command: string,
   parts: AutoPart[],
   customers: Customer[],
+  suppliers: Supplier[],
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
   shop?: ReturnType<typeof buildShopSnapshot>,
   uiLang: 'ar' | 'en' = 'ar'
 ): Promise<AICommandResult> {
+  const customerBalanceAnswer = answerCustomerBalanceLookup(command, customers, uiLang, suppliers);
+  if (customerBalanceAnswer) return customerBalanceAnswer;
+
+  const internalAnswer = answerInternalShopQuery(command, parts, customers || [], suppliers || [], shop, uiLang);
+  if (internalAnswer) return internalAnswer;
+  // Financial installment records are local-only; never include them in the external AI payload.
+  const { supplierPaymentSchedules: _privateSchedules, ...externalShop } = shop || {};
   let response: Response;
   try {
     response = await fetch('/api/ai/command', {
@@ -102,7 +334,7 @@ export async function sendVoiceCommandToServer(
       body: JSON.stringify({
         command,
         uiLang,
-        shop,
+        shop: externalShop,
         conversationHistory: conversationHistory.slice(-12).map((m) => ({ role: m.role, content: String(m.content).slice(0, 600) })),
         parts: parts.map((p) => ({
           id: p.id,
@@ -134,12 +366,15 @@ export async function sendVoiceCommandToServer(
 
   const data: AICommandResult & { reply?: string } = await response.json();
   const lang = data.lang || detectLang(command, uiLang);
+  // Remove occasional model/debug suffixes (for example "(index):1") from user-facing speech.
+  const cleanReply = String(data.reply || data.spokenFeedback || '').replace(/\\s*\\(index\\)\\s*:?\\s*\\d*\\s*$/i, '').trim();
+  if (!cleanReply) throw new Error(lang === 'ar' ? 'وصل رد غير مكتمل من المساعد. أعد صياغة الأمر؛ لم يتم تنفيذ أي شيء.' : 'The assistant returned an incomplete reply. Please rephrase; nothing was executed.');
   const context = conversationHistory.filter((m) => m.role === 'user').map((m) => m.content).join(' ');
   return verifyCommandResult(
     {
       ...data,
       lang,
-      spokenFeedback: data.reply || data.spokenFeedback,
+      spokenFeedback: cleanReply,
       timestamp: new Date().toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
     },
     command,

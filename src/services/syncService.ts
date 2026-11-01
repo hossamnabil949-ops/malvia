@@ -1,7 +1,7 @@
 // مزامنة سحابية: localStorage يظل النسخة المحلية السريعة (تعمل بدون إنترنت)،
 // والتغييرات تُدمج مع السحابة بدمج ثلاثي حسب id، فلا يضيع عمل جهاز بسبب جهاز آخر.
 
-export const SYNC_RESOURCES = ['parts','invoices','customers','suppliers','supplierPayments','treasury','employees','settings',
+export const SYNC_RESOURCES = ['parts','invoices','customers','suppliers','supplierPayments','supplierPaymentSchedules','treasury','employees','settings',
   'salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','carModels','reservations','inventoryErrors','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers','loyaltyLedger','cheques','stockBatches','serialUnits'] as const;
 
 // حقول رقمية تُدمج بالفرق (delta) بدل الاستبدال، حتى لا يضيع خصم مخزون جهاز آخر.
