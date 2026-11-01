@@ -66,7 +66,7 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
     const parseHour = (raw: string): number | null => {
       if (!raw) return null;
       const latin = raw.replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit))).trim();
-      const match = latin.match(/(\\d{1,2})(?::(\\d{2}))?\\s*(ص|م|AM|PM)?/i);
+      const match = latin.match(/(\d{1,2})(?::(\d{2}))?\s*(ص|م|AM|PM)?/i);
       if (!match) return null;
       let hour = Number(match[1]);
       const marker = (match[3] || '').toLowerCase();
@@ -75,7 +75,7 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
       return hour >= 0 && hour <= 23 ? hour : null;
     };
 
-    return Array.from({ length: 24 }, (_, hour) => {
+    const points = Array.from({ length: 24 }, (_, hour) => {
       const bucket = todayInvoices.filter(inv => parseHour(inv.time) === hour);
       const itemReport = reportSalesByItem({ ...reportData, invoices: bucket }, { from: today, to: today });
       const label = hour === 0 ? '12 ص' : hour < 12 ? `${hour} ص` : hour === 12 ? '12 م' : `${hour - 12} م`;
@@ -86,6 +86,20 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
         volume: Math.round(Number(itemReport.totals?.qty || 0)),
       };
     });
+
+    const unknownTimeInvoices = todayInvoices.filter(invoice => parseHour(invoice.time) === null);
+    const reportedTotal = Number(dailyReport.totals?.net || 0);
+    const assignedTotal = points.reduce((total, point) => total + point.sales, 0);
+    const unknownReport = reportSalesByItem({ ...reportData, invoices: unknownTimeInvoices }, { from: today, to: today });
+    if (unknownTimeInvoices.length || Math.abs(reportedTotal - assignedTotal) >= 1) {
+      points.push({
+        label: 'وقت غير محدد',
+        sales: Math.max(0, Math.round(reportedTotal - assignedTotal)),
+        profit: Math.round(Number(unknownReport.totals?.profit || 0)),
+        volume: Math.round(Number(unknownReport.totals?.qty || 0)),
+      });
+    }
+    return points;
   }, [invoices, reportData]);
 
   const monthlyData: SalesPoint[] = useMemo(() => {
@@ -96,7 +110,7 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
     const current = cairoDateKey(new Date()).slice(0, 7);
     const monthKeys = new Set<string>();
     invoices.forEach(inv => {
-      if (inv.status === 'ملغاة' || !/^\\d{4}-\\d{2}-\\d{2}/.test(inv.date || '')) return;
+      if (inv.status === 'ملغاة' || !/^\d{4}-\d{2}-\d{2}/.test(inv.date || '')) return;
       monthKeys.add(inv.date.slice(0, 7));
     });
     monthKeys.add(current);
