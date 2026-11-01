@@ -471,7 +471,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
   assert.deepEqual([tb.totals!.cost, tb.totals!.units], [1310, 21]);
   tb = RP.reportLowStock(data);
   assert.deepEqual(tb.rows.map(x => [x.number, x.suggest]), [['B', 8]]);
-  assert.deepEqual(RP.reportSlowMoving(data, today, 90).rows.map(x => x.number), ['C', 'D']);           // لم يُبع قط
+  assert.deepEqual(RP.reportSlowMoving(data, today, 90).rows.map(x => x.number), ['C', 'D']);           // آخر نشاط قديم أو غير معروف
   assert.equal(RP.reportSlowMoving(data, today, 90).rows[0].idle, 'بدون مبيعات');
   assert.deepEqual(RP.reportSlowMoving(data, today, 10).rows.map(x => x.number), ['C', 'D']);      // c آخر بيع قبل 14 يوماً، مرتبة بالتكلفة المجمّدة
   tb = RP.reportExpiry(data, today);
