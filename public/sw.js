@@ -1,5 +1,5 @@
-// MALVIA service worker: resilient shell caching; never intercept API or cross-origin requests.
-const CACHE = 'malvia-shell-v5';
+// MALVIA PWA worker: update-aware shell cache; API requests are never intercepted.
+const CACHE = 'malvia-shell-v6';
 const SHELL_URLS = ['/', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -21,27 +21,34 @@ self.addEventListener('activate', (event) => {
   })());
 });
 
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
-  if (request.mode === 'navigate') {
+  // HTML and executable assets are network-first so a deployment is picked up immediately.
+  const updateSensitive = request.mode === 'navigate' || ['script', 'style'].includes(request.destination);
+  if (updateSensitive) {
     event.respondWith((async () => {
       try {
-        const response = await fetch(request);
-        if (response.ok) {
+        const response = await fetch(request, { cache: request.mode === 'navigate' ? 'no-cache' : 'default' });
+        if (response.ok && response.type === 'basic') {
           const cache = await caches.open(CACHE);
-          await cache.put('/', response.clone());
+          await cache.put(request.mode === 'navigate' ? '/' : request, response.clone());
         }
         return response;
       } catch {
-        return (await caches.match('/')) || Response.error();
+        return (await caches.match(request)) || (request.mode === 'navigate' ? (await caches.match('/')) : null) || Response.error();
       }
     })());
     return;
   }
 
+  // Other static assets retain an offline fallback; hashed Vite assets are immutable per build.
   event.respondWith((async () => {
     const cached = await caches.match(request);
     if (cached) return cached;
