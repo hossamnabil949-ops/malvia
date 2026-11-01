@@ -282,6 +282,7 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
   }));
   const expenses = sum(d.expenses.filter(e => inRange(e.date, r)), e => e.amount);
   const drawerShortage = sum(d.treasury.filter(t => inRange(t.date, r) && t.category === 'عجز درج (تسوية وردية)' && t.type === 'صرف'), t => t.amount);
+  const drawerSurplus = sum(d.treasury.filter(t => inRange(t.date, r) && t.category === 'زيادة درج (تسوية وردية)' && t.type === 'قبض'), t => t.amount);
   const gross = net - cogs;
   const rows = [
     { item: 'المبيعات (قبل الضريبة وبعد الخصم)', amount: r2(sales) },
@@ -291,7 +292,8 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
     { item: 'مجمل الربح', amount: r2(gross) },
     { item: 'يخصم: المصروفات', amount: r2(-expenses) },
     { item: 'يخصم: عجز الدرج', amount: r2(-drawerShortage) },
-    { item: 'صافي الربح', amount: r2(gross - expenses - drawerShortage) },
+    { item: 'يضاف: زيادة الدرج', amount: r2(drawerSurplus) },
+    { item: 'صافي الربح', amount: r2(gross - expenses - drawerShortage + drawerSurplus) },
   ];
   return {
     id: 'profit-loss', title: 'ملخص الأرباح والخسائر',
