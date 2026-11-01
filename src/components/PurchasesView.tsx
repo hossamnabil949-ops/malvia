@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FileText, 
   Plus, 
@@ -60,6 +60,8 @@ interface PurchasesViewProps {
   onAddNewPart?: (part: AutoPart) => void;
   onAddSupplier?: (supplier: Supplier) => void;
   carBrands?: string[];
+  defaultTaxEnabled?: boolean;
+  defaultTaxRate?: number;
 }
 
 export const PurchasesView: React.FC<PurchasesViewProps> = ({
@@ -77,6 +79,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   onAddNewPart,
   onAddSupplier,
   carBrands = [],
+  defaultTaxEnabled = false,
+  defaultTaxRate = 14,
 }) => {
   const [currentTab, setCurrentTab] = useState<'invoices' | 'returns'>('invoices');
   const [searchQuery, setSearchQuery] = useState('');
@@ -111,8 +115,9 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | string>('كاش (نقدي)');
   const [amountPaid, setAmountPaid] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
-  const [applyTax, setApplyTax] = useState<boolean>(false); // الضريبة اختيارية (الافتراضي: بدون)
-  const [taxPercent, setTaxPercent] = useState<number>(14);
+  const [applyTax, setApplyTax] = useState<boolean>(defaultTaxEnabled);
+  const [taxPercent, setTaxPercent] = useState<number>(defaultTaxRate);
+  useEffect(() => { setApplyTax(defaultTaxEnabled); setTaxPercent(defaultTaxRate); }, [defaultTaxEnabled, defaultTaxRate]);
   const [notes, setNotes] = useState<string>('');
   const [receivedBy, setReceivedBy] = useState<string>('أمين المخزن');
 
@@ -172,7 +177,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
   const taxAmount = useMemo(() => {
     if (!applyTax) return 0;
-    return Math.round(Math.max(0, subtotal - discount) * (Math.min(100, Math.max(0, taxPercent)) / 100));
+    return Math.round(Math.max(0, subtotal - discount) * (Math.min(100, Math.max(0, taxPercent)) / 100) * 100) / 100;
   }, [subtotal, discount, taxPercent, applyTax]);
 
   const grandTotal = useMemo(() => {
