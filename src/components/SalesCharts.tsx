@@ -79,7 +79,13 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
       bucket.profit += Number(itemReport.totals?.profit) || 0;
       bucket.volume += inv.items.reduce((n, item) => n + Math.max(0, item.quantity - (item.returnedQuantity || 0)), 0);
     });
-    // الفواتير ذات الوقت غير القابل للتحليل لا تُوزع تخمينياً؛ يظهر إجمالي التقرير الحقيقي في تنبيه مستقل.
+    // الفواتير ذات الوقت غير القابل للتحليل لا تُوزع تخمينياً؛ أي فرق مع التقرير يظهر كبند مستقل.
+    const assignedSales = hours.reduce((total, hour) => total + hour.sales, 0) + unknown.sales;
+    const reconciliationGap = reportTotal - assignedSales;
+    if (Math.abs(reconciliationGap) >= 0.01) {
+      unknown.sales += reconciliationGap;
+      unknown.label = 'فرق غير موزع';
+    }
     const points = hours.map(({ label, sales, profit, volume }) => ({
       label, sales: Math.round(sales), profit: Math.round(profit), volume: Math.round(volume),
     }));
