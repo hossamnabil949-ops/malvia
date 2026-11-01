@@ -56,7 +56,8 @@ interface SuppliersViewProps {
     paymentDate: string, 
     paymentMethod: PaymentMethod | string, 
     treasurySource: string, 
-    notes: string
+    notes: string,
+    scheduleId?: string
   ) => void;
   onAddPurchaseReturn?: (returnData: PurchaseReturn) => void;
   onSettlePurchaseReturn?: (returnId: string) => void;
@@ -90,6 +91,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
   const [scheduleDueDate, setScheduleDueDate] = useState(new Date().toISOString().slice(0, 10));
   const [scheduleInvoiceId, setScheduleInvoiceId] = useState('');
   const [scheduleNotes, setScheduleNotes] = useState('');
+  const [settleSchedule, setSettleSchedule] = useState<SupplierPaymentSchedule | null>(null);
 
   // Settle Payment State
   const [settleAmount, setSettleAmount] = useState<number>(1000);
@@ -170,8 +172,11 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
       settleDate,
       settleMethod,
       treasurySource,
-      settleNotes || `دفعة سداد للمورد ${settleModalSupplier.name}`
+      settleNotes || `دفعة سداد للمورد ${settleModalSupplier.name}`,
+      settleSchedule?.id
     );
+
+    setSettleSchedule(null);
 
     setSettleModalSupplier(null);
   };
@@ -760,7 +765,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
             <input value={scheduleNotes} onChange={e => setScheduleNotes(e.target.value)} placeholder="ملاحظات" className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" />
             <button onClick={() => { const supplier = suppliers.find(x => x.id === scheduleSupplierId); const amount = Number(scheduleAmount); if (!supplier || !Number.isFinite(amount) || amount <= 0 || !scheduleDueDate) return; const invoice = purchaseInvoices.find(x => x.id === scheduleInvoiceId); const now = new Date().toISOString(); const row: SupplierPaymentSchedule = { id: 'SPS-' + Date.now() + '-' + Math.random().toString(36).slice(2,7), supplierId: supplier.id, supplierName: supplier.name, purchaseInvoiceId: invoice?.id, purchaseInvoiceNumber: invoice?.invoiceNumber, amount, amountPaid: 0, dueDate: scheduleDueDate, status: 'scheduled', notes: scheduleNotes, createdAt: now, updatedAt: now }; onChangeSupplierPaymentSchedules([row, ...supplierPaymentSchedules]); setScheduleAmount(''); setScheduleNotes(''); setScheduleInvoiceId(''); }} className="bg-amber-500 text-slate-950 rounded-xl px-3 py-2 text-xs font-black">إضافة دفعة مجدولة</button>
           </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-right text-xs"><thead className="bg-slate-950 text-slate-400"><tr><th className="p-3">المورد</th><th className="p-3">الفاتورة</th><th className="p-3">تاريخ الاستحقاق</th><th className="p-3">المبلغ</th><th className="p-3">الحالة</th><th className="p-3">ملاحظات</th><th className="p-3">إجراء</th></tr></thead><tbody className="divide-y divide-slate-800">{supplierPaymentSchedules.slice().sort((a,b)=>a.dueDate.localeCompare(b.dueDate)).map(x => { const status = x.status === 'cancelled' ? 'ملغاة' : x.status === 'paid' ? 'مسددة' : x.dueDate < new Date().toISOString().slice(0,10) ? 'متأخرة' : x.dueDate === new Date().toISOString().slice(0,10) ? 'مستحقة اليوم' : 'قادمة'; return <tr key={x.id}><td className="p-3 text-white font-bold">{x.supplierName}</td><td className="p-3">{x.purchaseInvoiceNumber || '-'}</td><td className="p-3 font-mono">{x.dueDate}</td><td className="p-3 text-amber-400 font-black">{x.amount.toLocaleString()} ج.م</td><td className="p-3">{status}</td><td className="p-3">{x.notes || '-'}</td><td className="p-3">{x.status === 'scheduled' && <button onClick={() => onChangeSupplierPaymentSchedules(supplierPaymentSchedules.map(y => y.id === x.id ? {...y,status:'cancelled',updatedAt:new Date().toISOString()} : y))} className="text-rose-400">إلغاء</button>}</td></tr>; })}{supplierPaymentSchedules.length===0 && <tr><td colSpan={7} className="p-8 text-center text-slate-500">لا توجد دفعات مجدولة بعد</td></tr>}</tbody></table></div></div>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-right text-xs"><thead className="bg-slate-950 text-slate-400"><tr><th className="p-3">المورد</th><th className="p-3">الفاتورة</th><th className="p-3">تاريخ الاستحقاق</th><th className="p-3">المبلغ</th><th className="p-3">الحالة</th><th className="p-3">ملاحظات</th><th className="p-3">إجراء</th></tr></thead><tbody className="divide-y divide-slate-800">{supplierPaymentSchedules.slice().sort((a,b)=>a.dueDate.localeCompare(b.dueDate)).map(x => { const status = x.status === 'cancelled' ? 'ملغاة' : x.status === 'paid' ? 'مسددة' : x.dueDate < new Date().toISOString().slice(0,10) ? 'متأخرة' : x.dueDate === new Date().toISOString().slice(0,10) ? 'مستحقة اليوم' : 'قادمة'; return <tr key={x.id}><td className="p-3 text-white font-bold">{x.supplierName}</td><td className="p-3">{x.purchaseInvoiceNumber || '-'}</td><td className="p-3 font-mono">{x.dueDate}</td><td className="p-3 text-amber-400 font-black">{x.amount.toLocaleString()} ج.م</td><td className="p-3">{status}</td><td className="p-3">{x.notes || '-'}</td><td className="p-3">{x.status === 'scheduled' && <div className="flex items-center gap-2"><button onClick={() => { const supplier = suppliers.find(y => y.id === x.supplierId); if (!supplier) return; setSettleSchedule(x); setSettleModalSupplier(supplier); setSettleAmount(Math.max(0, x.amount-x.amountPaid)); setSettleDate(new Date().toISOString().slice(0,10)); setSettleMethod('نقدي'); setSettleNotes('سداد الدفعة المجدولة ' + x.id); }} className="text-emerald-400 font-bold">سداد</button><button onClick={() => onChangeSupplierPaymentSchedules(supplierPaymentSchedules.map(y => y.id === x.id ? {...y,status:'cancelled',updatedAt:new Date().toISOString()} : y))} className="text-rose-400">إلغاء</button></div>}</td></tr>; })}{supplierPaymentSchedules.length===0 && <tr><td colSpan={7} className="p-8 text-center text-slate-500">لا توجد دفعات مجدولة بعد</td></tr>}</tbody></table></div></div>
         </div>
       )}
 
