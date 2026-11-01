@@ -26,7 +26,7 @@ export interface SalesForDateSummary {
 
 /** Calendar date in Egypt's business timezone, independent of the device timezone. */
 export function cairoDateKey(date: Date | string = new Date()): string {
-  if (typeof date === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(date)) return date;
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
   const value = date instanceof Date ? date : new Date(date);
   if (Number.isNaN(value.getTime())) throw new Error('تاريخ غير صالح لحساب مبيعات اليوم');
   const parts = new Intl.DateTimeFormat('en', {
