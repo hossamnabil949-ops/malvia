@@ -453,6 +453,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           originalPrice: item.part.salePrice,
           costPrice: item.part.costPrice,
           total: effectivePrice * item.quantity,
+          taxAmount: subtotal > 0 ? Math.round(tax * (effectivePrice * item.quantity / subtotal) * 100) / 100 : 0,
           ...(item.part.tracking === 'serial' ? { serials: serialSel[item.part.id] ?? [] } : {}),
         };
       }),
@@ -461,6 +462,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       loyaltyRedeemedPoints: redeemUsed > 0 ? redeemUsed : undefined,
       loyaltyDiscount: loyaltyDiscount > 0 ? loyaltyDiscount : undefined,
       tax: Number(tax.toFixed(2)),
+      pricesIncludeTax: applyVat && pricesIncludeTax,
       grandTotal: Number(grandTotal.toFixed(2)),
       paymentMethod: payments.length > 1 ? 'مختلط (دفع مقسّم)' : paymentMethod,
       payments: payments.map((p) => ({ method: p.method, amount: p.amount })),
