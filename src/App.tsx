@@ -850,7 +850,7 @@ export default function App() {
     const toSold = new Set<string>();
     const touchedPartIds = new Map<string, string>(); // serial -> partId
     retItems.forEach(r => {
-      const exactIndex = r.lineId ? inv.items.findIndex((x, index) => r.lineId === (x.lineId || `${inv.id}:${index}`)) : -1;
+      const exactIndex = r.lineId ? inv.items.findIndex((x, index) => r.lineId === `${inv.id}:${index}`) : -1;
       const fallbackMatches = inv.items.filter(x => (r.partId ? x.partId === r.partId : x.partNumber === r.partNumber && x.partName === r.partName) && (r.unitPrice === undefined || x.unitPrice === r.unitPrice));
       const it = exactIndex >= 0 ? inv.items[exactIndex] : fallbackMatches.length === 1 ? fallbackMatches[0] : undefined;
       if (!it) return;
