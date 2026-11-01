@@ -522,6 +522,33 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     pushMessage('user', textToExecute);
     if (handleSupplierPlanTurn(textToExecute)) { setTranscript(''); return; }
 
+    // Supplier settlement is intentionally human-operated.
+    // Voice may locate the saved installment and open the supplier screen,
+    // but it must never create a payment, treasury movement, or change balances.
+    const settlementIntent = /(?:سدد|سدّد|دفع|ادفع|سداد|تسديد|settle|pay)\\s*(?:دفعة|قسط|مستحقات|مستحق|مبلغ|supplier|installment)?/i.test(normalizeArabic(textToExecute));
+    if (settlementIntent) {
+      const normalizedCommand = normalizeArabic(textToExecute);
+      const requestedDate = normalizedCommand.match(/\\b(\\d{4}-\\d{2}-\\d{2})\\b/)?.[1]
+        || (() => {
+          const m = textToExecute.match(/(?:^|\\s)(\\d{2})[-/](\\d{2})[-/](\\d{4})(?:\\s|$)/);
+          return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+        })();
+      const supplier = suppliers.find(s => normalizedCommand.includes(normalizeArabic(s.name)));
+      const schedule = supplierPaymentSchedules.find(x =>
+        x.status === 'scheduled' &&
+        (!supplier || x.supplierId === supplier.id) &&
+        (!requestedDate || x.dueDate === requestedDate)
+      );
+      const msg = schedule
+        ? `وجدت قسطاً محفوظاً للمورد ${schedule.supplierName} بتاريخ ${schedule.dueDate} بقيمة ${Number(schedule.amount - schedule.amountPaid).toLocaleString('ar-EG')} جنيه. سأفتح شاشة الموردين لتراجع البيانات وتنفذ السداد بنفسك. لم يتم تسجيل أي دفعة أو حركة خزينة.`
+        : 'سأفتح شاشة الموردين لتبحث عن المورد والقسط المطلوب وتراجع بياناته. لن يتم تسجيل أي دفعة أو حركة خزينة من خلال المساعد الصوتي.';
+      pushMessage('assistant', msg);
+      if (speechEnabled) speakArabic(msg);
+      setTranscript('');
+      onNavigateTab('suppliers');
+      return;
+    }
+
     // While a command waits for confirmation, "تأكيد" / "إلغاء" answer it.
     if (pending) {
       const n = normalizeArabic(textToExecute);
