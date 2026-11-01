@@ -195,6 +195,8 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       .map((it, idx) => ({ it, idx, qty: returnItems[String(idx)] || 0 }))
       .filter(({ qty }) => qty > 0)
       .map(({ it, idx, qty }) => ({
+        partId: it.partId,
+        lineId: `${returnInvoice.id}:${idx}`,
         partNumber: it.partNumber,
         partName: it.partName,
         quantity: qty,
@@ -214,6 +216,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       date: new Date().toISOString().split('T')[0],
       time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
       customerName: returnInvoice.customerName,
+      customerId: returnInvoice.customerId,
       items: itemsToReturn,
       totalRefundAmount: calculatedReturnTotal,
       refundMethod,
