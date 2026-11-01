@@ -52,6 +52,9 @@ interface PurchasesViewProps {
   parts: AutoPart[];
   treasuryBalance: number;
   onAddPurchaseInvoice: (invoice: PurchaseInvoice) => void;
+  vatEnabled?: boolean;
+  vatRate?: number;
+  pricesIncludeTax?: boolean;
   serialUnits?: SerialUnit[]; // لمنع تكرار الأرقام التسلسلية عند التوريد
   warehouses?: import('../types/autoParts').Warehouse[]; // لو فيه مخازن/فروع يظهر اختيار «استلام في مخزن»
   onEditPurchaseInvoice?: (invoice: PurchaseInvoice) => void;
@@ -69,6 +72,9 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   parts,
   treasuryBalance,
   onAddPurchaseInvoice,
+  vatEnabled = false,
+  vatRate = 14,
+  pricesIncludeTax = false,
   warehouses = [],
   serialUnits = [],
   onEditPurchaseInvoice,
@@ -111,8 +117,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | string>('كاش (نقدي)');
   const [amountPaid, setAmountPaid] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
-  const [applyTax, setApplyTax] = useState<boolean>(false); // الضريبة اختيارية (الافتراضي: بدون)
-  const [taxPercent, setTaxPercent] = useState<number>(14);
+  const applyTax = vatEnabled;
+  const taxPercent = vatRate;
   const [notes, setNotes] = useState<string>('');
   const [receivedBy, setReceivedBy] = useState<string>('أمين المخزن');
 
@@ -172,12 +178,15 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
   const taxAmount = useMemo(() => {
     if (!applyTax) return 0;
-    return Math.round(Math.max(0, subtotal - discount) * (Math.min(100, Math.max(0, taxPercent)) / 100));
+    const taxable = Math.max(0, subtotal - discount);
+    const rate = Math.min(100, Math.max(0, taxPercent));
+    return Math.round(taxable * (pricesIncludeTax ? rate / (100 + rate) : rate / 100) * 100) / 100;
   }, [subtotal, discount, taxPercent, applyTax]);
 
   const grandTotal = useMemo(() => {
-    return Math.max(0, subtotal - discount + taxAmount);
-  }, [subtotal, discount, taxAmount]);
+    const taxable = Math.max(0, subtotal - discount);
+    return Math.max(0, pricesIncludeTax && applyTax ? taxable : taxable + taxAmount);
+  }, [subtotal, discount, taxAmount, pricesIncludeTax, applyTax]);
 
   const handlePaymentStatusChange = (status: 'مدفوعة نقداً' | 'آجل' | 'مسددة جزئياً') => {
     setPaymentStatus(status);
@@ -330,6 +339,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       items: validItems,
       subtotal,
       tax: taxAmount,
+      pricesIncludeTax: applyTax && pricesIncludeTax,
       discount,
       grandTotal,
       originalGrandTotal: grandTotal,
@@ -347,7 +357,6 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     setSupplierInvoiceNumber('');
     setReceiveWarehouseId('main');
     setSerialTexts({});
-    setApplyTax(false);
     setDiscount(0);
     setInvoiceItems([
       {
