@@ -407,7 +407,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
       inv('i4', '2026-07-01', [it('c', 1, 200, 150)], { customerId: 'c1', customerName: 'ورشة', paymentMethod: 'مختلط (دفع مقسّم)', payments: [{ method: 'آجل (شكك / حساب ورشة)', amount: 120 }, { method: 'كاش (نقدي)', amount: 80 }] }),
       inv('i5', '2026-10-10', [it('c', 1, 500, 300)], { customerId: 'c1', customerName: 'ورشة', paymentMethod: 'آجل (شكك / حساب ورشة)' }),
     ],
-    salesReturns: [{ id: 'r1', date: '2026-10-20', totalRefundAmount: 100, items: [{ partNumber: 'A', partName: 'صنف a', quantity: 1, unitPrice: 100, total: 100 }] }],
+    salesReturns: [{ id: 'r1', invoiceId: 'i1', invoiceNumber: 'INV-1', date: '2026-10-20', totalRefundAmount: 100, items: [{ partNumber: 'A', partName: 'صنف a', quantity: 1, unitPrice: 100, total: 100 }] }],
     purchaseInvoices: [{ id: 'p1', date: '2026-10-05', supplierName: 'مورد', grandTotal: 1000, amountPaid: 400 }, { id: 'p2', date: '2026-10-06', supplierName: 'مورد', grandTotal: 500, amountPaid: 500 }],
     parts: [
       { id: 'a', partNumber: 'A', name: 'صنف a', category: 'فلاتر وزيوت', stockQuantity: 10, minAlertStock: 3, costPrice: 60, salePrice: 100 },
