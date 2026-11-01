@@ -192,11 +192,19 @@ export function computeVoidPlan(inv: VoidInput): VoidPlan {
   const actualRemaining = round2(remaining.reduce((total, payment) => total + payment.amount, 0));
   const adjustment = round2(actualRemaining - targetRemaining);
   if (adjustment > 0) {
+    let left = adjustment;
     for (const payment of remaining) {
-      const cut = Math.min(payment.amount, adjustment);
+      const cut = Math.min(payment.amount, left);
       payment.amount = round2(payment.amount - cut);
-      if (round2(adjustment - cut) <= 0) break;
+      left = round2(left - cut);
+      if (left <= 0) break;
     }
+  } else if (adjustment < 0 && remaining.length > 0) {
+    const totalOriginal = inv.payments.reduce((total, payment) => total + payment.amount, 0);
+    remaining.forEach((payment, index) => {
+      const original = inv.payments[index]?.amount || 0;
+      payment.amount = round2(payment.amount + (totalOriginal > 0 ? (-adjustment * original / totalOriginal) : (index === 0 ? -adjustment : 0)));
+    });
   }
   const creditAmount = round2(remaining.filter(payment => isCreditPayment(payment.method)).reduce((total, payment) => total + payment.amount, 0));
   const refunds = remaining
