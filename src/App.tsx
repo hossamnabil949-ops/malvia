@@ -1432,8 +1432,14 @@ export default function App() {
     const exact = ret.items.find(item => item.lineId === lineId);
     if (exact) return exact;
     const line = inv.items[index];
-    const matches = ret.items.filter(item => item.partId ? item.partId === line.partId : item.partNumber === line.partNumber && item.partName === line.partName);
-    return matches.length === 1 ? matches[0] : undefined; // لا نخمن عند تكرار السطر
+    const sameInvoiceLines = inv.items.filter(candidate => line.partId
+      ? candidate.partId === line.partId
+      : candidate.partNumber === line.partNumber && candidate.partName === line.partName);
+    if (sameInvoiceLines.length !== 1) return undefined; // الفواتير القديمة بلا lineId لا يمكن تخمين سطرها عند التكرار
+    const matches = ret.items.filter(item => item.partId
+      ? item.partId === line.partId
+      : item.partNumber === line.partNumber && item.partName === line.partName);
+    return matches.length === 1 ? matches[0] : undefined;
   };
 
   const handleAddSalesReturn = (rawReturn: SalesReturn) => {
@@ -1444,7 +1450,7 @@ export default function App() {
           ...rawReturn,
           items: rawReturn.items.map(r => {
             const lineIndex = r.lineId ? Number(r.lineId.slice(r.lineId.lastIndexOf(':') + 1)) : -1;
-            const it = lineIndex >= 0 && origInv.items[lineIndex] ? origInv.items[lineIndex] : origInv.items.find(x => r.partId ? x.partId === r.partId : x.partNumber === r.partNumber && x.partName === r.partName);
+            const it = r.lineId ? (lineIndex >= 0 ? origInv.items[lineIndex] : undefined) : (() => { const matches = origInv.items.filter(x => r.partId ? x.partId === r.partId : x.partNumber === r.partNumber && x.partName === r.partName); return matches.length === 1 ? matches[0] : undefined; })();
             if (!it?.serials?.length) return r;
             return { ...r, serials: trackReturn(it, r.quantity, r.serials, 1).unitsToStock };
           }),
