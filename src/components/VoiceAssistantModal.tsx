@@ -88,6 +88,8 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   const [micError, setMicError] = useState<string | null>(null);
   const [pending, setPending] = useState<{ result: AICommandResult; question: string; warning?: string } | null>(null);
   const [supplierPlanDraft, setSupplierPlanDraft] = useState<any>(null);
+  const supplierPlanDraftRef = useRef<any>(null);
+  const updateSupplierPlanDraft = (next: any) => { supplierPlanDraftRef.current = next; setSupplierPlanDraft(next); };
 
   // سجل المحادثة المعروض (مستخدم/مساعد) + لغة الميكروفون
   const [messages, setMessages] = useState<Array<{ id: number; role: 'user' | 'assistant'; text: string; kind?: 'confirm' | 'audit'; partId?: string }>>([]);
@@ -410,18 +412,20 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       .replace(/[٬،]/g, ',')
       .replace(/٫/g, '.');
     const q = normalizeArabic(digitText);
+    const supplierContextStart = /^حساب\s+(?:الشركه|شركه|مؤسسه)\s+/.test(q);
     const isCreate = /(جدول|جدوله|قسم|قسّم|توزيع|مستحقات المورد|المستحق للمورد|دفعات اسبوع|دفعات شهري|كل يوم|كل اسبوع|كل شهر)/.test(q);
-    if (!supplierPlanDraft && !isCreate) return false;
+    if (!supplierPlanDraftRef.current && !isCreate && !supplierContextStart) return false;
     if (/^(الغاء|الغي|كنسل|cancel)$/.test(q)) {
-      setSupplierPlanDraft(null); pushMessage('assistant','تم إلغاء إعداد الجدول، ولم يتم حفظ أي شيء.'); return true;
+      updateSupplierPlanDraft(null); pushMessage('assistant','تم إلغاء إعداد الجدول، ولم يتم حفظ أي شيء.'); return true;
     }
 
-    const draft = { ...(supplierPlanDraft || { recurrence: 'weekly', weekdays: [], notes: 'إنشاء صوتي' }), source: raw };
+    const activeDraft = supplierPlanDraftRef.current;
+    const draft = { ...(activeDraft || { recurrence: 'weekly', weekdays: [], notes: 'إنشاء صوتي' }), source: raw };
     const numericOnly = q.match(/^(\d{1,4})$/);
-    const waitingForInterval = Boolean(supplierPlanDraft && supplierPlanDraft.recurrence === 'every_n_days' && !supplierPlanDraft.intervalDays);
+    const waitingForInterval = Boolean(activeDraft && activeDraft.recurrence === 'every_n_days' && !activeDraft.intervalDays);
     if (numericOnly && waitingForInterval) {
       draft.intervalDays = Number(numericOnly[1]);
-    } else if (numericOnly && supplierPlanDraft && !supplierPlanDraft.installmentCount) {
+    } else if (numericOnly && activeDraft && !activeDraft.installmentCount) {
       draft.installmentCount = Number(numericOnly[1]);
     } else {
       // Amount is recognized by its currency suffix, even when supplier details precede it.
@@ -462,16 +466,16 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       if (/^(تاكيد|اكد|احفظ|موافق|نعم|تمام)$/.test(q)) {
         const rows=draft.preview as import('../types/autoParts').SupplierPaymentSchedule[];
         const saved=onCreateSupplierPaymentSchedules?.(rows) ?? false;
-        if (saved) { setSupplierPlanDraft(null); pushMessage('assistant','تم حفظ جدول الدفعات. لم يتم تسجيل أي سداد أو حركة خزينة.'); }
+        if (saved) { updateSupplierPlanDraft(null); pushMessage('assistant','تم حفظ جدول الدفعات. لم يتم تسجيل أي سداد أو حركة خزينة.'); }
         else pushMessage('assistant','تعذر حفظ الجدول. لم يتم تسجيل أي حركة مالية.');
         return true;
       }
-      if (/^(لا|الغاء|الغي|كنسل)$/.test(q)) { setSupplierPlanDraft(null); pushMessage('assistant','تم إلغاء الجدول ولم يتم حفظه.'); return true; }
+      if (/^(لا|الغاء|الغي|كنسل)$/.test(q)) { updateSupplierPlanDraft(null); pushMessage('assistant','تم إلغاء الجدول ولم يتم حفظه.'); return true; }
     }
 
     const missing = !draft.supplierId ? 'اسم المورد المسجل' : !draft.totalAmount ? 'إجمالي المبلغ' : !draft.startDate ? 'تاريخ بداية أول دفعة (يوم-شهر-سنة)' : draft.recurrence==='weekly' && !draft.weekdays?.length ? 'يوم أو أيام السداد' : draft.recurrence==='every_n_days' && !draft.intervalDays ? 'عدد الأيام بين الدفعات' : !draft.installmentCount ? 'عدد الدفعات' : null;
     if (missing) {
-      setSupplierPlanDraft(draft);
+      updateSupplierPlanDraft(draft);
       const msg='محتاج أعرف '+missing+' عشان أكمل إعداد الجدول. اذكر المعلومة فقط.';
       pushMessage('assistant',msg); if(speechEnabled) speakArabic(msg); return true;
     }
@@ -481,7 +485,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       const planId='SP-'+Date.now();
       const now=new Date().toISOString();
       const preview=dates.map((dueDate,i)=>({ id:planId+'-'+(i+1), planId, sequenceNumber:i+1, planTotalInstallments:dates.length, recurrence:draft.recurrence, recurrenceInterval:draft.intervalDays, recurrenceWeekdays:draft.weekdays, supplierId:draft.supplierId, supplierName:draft.supplierName, amount:amounts[i], amountPaid:0, dueDate, status:'scheduled' as const, notes:'إنشاء صوتي', createdAt:now, updatedAt:now }));
-      draft.preview=preview; setSupplierPlanDraft(draft);
+      draft.preview=preview; updateSupplierPlanDraft(draft);
       const summary=preview.map(x=>x.dueDate+': '+x.amount.toLocaleString('ar-EG')+' جنيه').join('\n');
       const msg='معاينة جدول '+draft.supplierName+' بإجمالي '+draft.totalAmount.toLocaleString('ar-EG')+' جنيه:\n'+summary+'\nهل تؤكد حفظ الجدول؟ لن تُسجل أي حركة خزينة.';
       pushMessage('assistant',msg); if(speechEnabled) speakArabic('تم تجهيز المعاينة. هل تؤكد حفظ الجدول؟');
@@ -493,6 +497,9 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     if (!textToExecute) return;
 
     stopListening(true);
+    // Keep every utterance visible and in context, including locally handled schedule turns.
+    conversationRef.current = [...conversationRef.current, { role: 'user' as const, content: textToExecute }].slice(-12);
+    pushMessage('user', textToExecute);
     if (handleSupplierPlanTurn(textToExecute)) { setTranscript(''); return; }
 
     // While a command waits for confirmation, "تأكيد" / "إلغاء" answer it.
@@ -530,12 +537,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
             : normalizedGreeting === 'اهلا' || normalizedGreeting === 'اهلا وسهلا'
               ? 'أهلاً بيك! أنا معاك، أقدر أساعدك في إيه؟'
               : 'صباح النور! أنا معاك، أقدر أساعدك في إيه؟';
-      conversationRef.current = [
-        ...conversationRef.current,
-        { role: 'user' as const, content: textToExecute },
-        { role: 'assistant' as const, content: reply },
-      ].slice(-12);
-      pushMessage('user', textToExecute);
+      conversationRef.current = [...conversationRef.current, { role: 'assistant' as const, content: reply }].slice(-12);
       setTranscript('');
       const instantResult: AICommandResult = {
         action: 'GENERAL_ANSWER',
@@ -555,8 +557,6 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     setMicError(null);
 
     try {
-      conversationRef.current = [...conversationRef.current, { role: 'user' as const, content: textToExecute }].slice(-12);
-      pushMessage('user', textToExecute);
       setTranscript('');
       const shop = buildShopSnapshot(parts, invoices, suppliers, currentSession, shopName, supplierPaymentSchedules);
       const result = await sendVoiceCommandToServer(
