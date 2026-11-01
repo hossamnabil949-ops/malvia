@@ -201,7 +201,7 @@ export interface Invoice {
   loyaltyEarned?: number;         // نقاط ولاء اكتسبها العميل من هذه الفاتورة
   loyaltyRedeemedPoints?: number; // نقاط استبدلها العميل كخصم في هذه الفاتورة
   loyaltyDiscount?: number;       // قيمة الخصم الناتج عن النقاط (ج.م) وهو جزء من discount
-  status?: 'مسددة' | 'مرتجع جزئي' | 'مرتجع كلي' | 'ملغاة';
+  status?: 'آجلة' | 'مسددة جزئياً' | 'مسددة' | 'مرتجع جزئي' | 'مرتجع كلي' | 'ملغاة';
   returnedAmount?: number;
   voidedAt?: string;        // ISO — وقت الإلغاء
   voidedBy?: string;        // من نفّذ الإلغاء
