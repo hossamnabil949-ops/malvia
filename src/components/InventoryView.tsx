@@ -225,15 +225,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   };
 
   return (
-    <div className="space-y-5 pb-12">
+    <div className="space-y-3 sm:space-y-5 pb-12 min-w-0">
       {/* Top Header */}
-      <div className="p-5 rounded-3xl bg-surface-2 border border-neutral-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-3 sm:p-5 rounded-2xl sm:rounded-3xl bg-surface-2 border border-neutral-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         <div>
           <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase mb-1">
             <Boxes className="w-4 h-4" />
             <span>إدارة المخزون والمحل</span>
           </div>
-          <h2 className="text-xl font-black text-white">قطع الغيار، الأسعار، وأماكن الرفوف</h2>
+          <h2 className="text-base sm:text-xl font-black text-white leading-6">قطع الغيار، الأسعار، وأماكن الرفوف</h2>
           <p className="text-xs text-neutral-400 mt-1">
             متاح تعديل أسعار الشراء والبيع مباشرة، تتبع كميات المستودع وتنبيهات النواقص
           </p>
