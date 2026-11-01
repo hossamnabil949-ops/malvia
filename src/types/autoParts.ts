@@ -410,6 +410,7 @@ export interface SalesReturnItem {
   quantity: number;
   unitPrice: number;
   total: number;
+  taxAmount?: number; // نصيب الضريبة في مبلغ المرتجع
   reason?: string;
   serials?: string[]; // الأرقام التسلسلية المرتجعة فعلاً
 }
