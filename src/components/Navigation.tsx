@@ -343,13 +343,13 @@ export const Navigation: React.FC<NavigationProps> = ({
             <span className="hidden sm:inline">خروج</span>
           </button>
         </header>
-        <main className="flex-1 w-full max-w-[1600px] mx-auto p-3 sm:p-6">{children}</main>
+        <main className="flex-1 w-full max-w-none min-w-0 mx-0 px-3 sm:px-5 xl:px-7 2xl:px-9 py-4 sm:py-5 pb-24 lg:pb-6">{children}</main>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen w-full flex bg-surface-0">
       {/* ===== Desktop sidebar (right side in RTL) ===== */}
       <aside
         className={`hidden lg:flex flex-col fixed inset-y-0 start-0 z-40 bg-nav-bg border-e border-nav-line transition-[width] duration-200 ${
@@ -411,12 +411,12 @@ export const Navigation: React.FC<NavigationProps> = ({
 
       {/* ===== Content column ===== */}
       <div
-        className={`flex-1 min-w-0 flex flex-col transition-[padding] duration-200 ${
+        className={`flex-1 min-w-0 min-h-screen flex flex-col transition-[padding] duration-200 ${
           collapsed ? 'lg:ps-[72px]' : 'lg:ps-64'
         }`}
       >
         {/* Top bar */}
-        <header className="sticky top-0 z-30 h-16 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 text-white shadow-lg">
+        <header className="sticky top-0 z-30 h-14 sm:h-16 bg-nav-bg/95 backdrop-blur-xl border-b border-nav-line text-nav-strong shadow-sm">
           <div className="h-full flex items-center justify-between gap-3 px-3 sm:px-6">
             {/* Start side: menu button (mobile) + page title */}
             <div className="flex items-center gap-3 min-w-0">
