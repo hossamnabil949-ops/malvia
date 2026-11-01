@@ -461,6 +461,25 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     if (ranked.length && (!ranked[1] || ranked[0].hits > ranked[1].hits || ranked[0].coverage > ranked[1].coverage + 0.2)) {
       draft.supplierId = ranked[0].s.id;
       draft.supplierName = ranked[0].s.name;
+      draft.supplierBalance = Number(ranked[0].s.deferredDebt ?? ranked[0].s.balance ?? 0);
+      // For a supplier-account request, use the registered outstanding balance as the
+      // proposed schedule total. The user can still state a different amount afterward.
+      if (!draft.totalAmount && draft.supplierBalance > 0) {
+        draft.totalAmount = draft.supplierBalance;
+        draft.amountFromSupplierBalance = true;
+      }
+    }
+
+    if (supplierContextStart && draft.supplierId && !draft.balanceShown) {
+      draft.balanceShown = true;
+      updateSupplierPlanDraft(draft);
+      const balance = Number(draft.supplierBalance || 0);
+      const msg = balance > 0
+        ? 'حساب المورد ' + draft.supplierName + ' عليه مستحقات قدرها ' + balance.toLocaleString('ar-EG') + ' جنيه. هستخدم المبلغ ده مبدئياً لجدول الدفعات، وتقدر تحدد مبلغ مختلف. ' + (!draft.startDate ? 'ما تاريخ أول دفعة؟' : !draft.installmentCount ? 'هتقسم المبلغ على كام دفعة؟' : 'نكمل إعداد الجدول.')
+        : 'تم العثور على المورد ' + draft.supplierName + '، لكن رصيد المستحقات المسجل صفر. ما إجمالي المبلغ المطلوب جدولته؟';
+      pushMessage('assistant', msg);
+      if (speechEnabled) speakArabic(msg);
+      return true;
     }
 
     if (draft.preview) {
