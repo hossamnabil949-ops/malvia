@@ -1042,8 +1042,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   </button>
                 </div>
 
-                <div className="border border-neutral-800 rounded-2xl overflow-hidden">
-                  <table className="w-full text-right text-xs">
+                <div className="border border-neutral-800 rounded-2xl overflow-x-auto overscroll-x-contain">
+                  <table className="w-full min-w-[760px] text-right text-xs">
                     <thead className="bg-surface-1 text-neutral-400 text-[11px] border-b border-neutral-800">
                       <tr>
                         <th className="p-2.5">اختيار من المخزن أو صنف جديد</th>
