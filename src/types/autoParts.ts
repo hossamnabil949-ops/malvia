@@ -120,6 +120,7 @@ export type PaymentMethod =
   | string;
 
 export interface InvoiceItem {
+  lineId?: string; // معرف ثابت لسطر الفاتورة حتى مع تكرار الصنف أو اختلاف السعر
   partId?: string; // معرّف الصنف (المطابقة به أدق من الاسم/الرقم)
   partNumber: string;
   partName: string;
@@ -399,6 +400,8 @@ export interface PurchaseInvoice {
 }
 
 export interface SalesReturnItem {
+  lineId?: string; // يربط المرتجع بسطر الفاتورة الأصلي
+  partId?: string; // يربط حركة المخزون بمعرّف الصنف
   partNumber: string;
   partName: string;
   quantity: number;
@@ -416,6 +419,7 @@ export interface SalesReturn {
   date: string;
   time: string;
   customerName: string;
+  customerId?: string;
   items: SalesReturnItem[];
   totalRefundAmount: number;
   refundMethod: 'نقدي (خصم من الخزنة)' | 'خصم من رصيد العميل الآجل' | 'إنستاباي / محفظة';
