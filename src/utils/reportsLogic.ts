@@ -244,26 +244,39 @@ export function reportSalesReconciliation(d: ReportData, r: DateRange): ReportTa
 
 export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
   const inv = active(d, r);
-  const sales = sum(inv, i => i.subtotal - i.discount);
-  const returns = sum(d.salesReturns.filter(x => inRange(x.date, r)), x => x.totalRefundAmount);
-  const cogs = sum(inv, i => sum(i.items, it => netQty(it) * (it.costPrice ?? 0)));
-  const expenses = sum(d.expenses.filter(e => inRange(e.date, r)), e => e.amount);\n  const drawerShortage = sum(d.treasury.filter(t => inRange(t.date, r) && t.category === 'عجز درج (تسوية وردية)' && t.type === 'صرف'), t => t.amount);
+  const sales = sum(inv, i => Math.max(0, i.subtotal - i.discount - (i.pricesIncludeTax ? (i.tax || 0) : 0)));
+  const validIds = new Set(inv.map(i => i.id));
+  const invoiceById = new Map(inv.map(i => [i.id, i]));
+  const returns = sum(
+    d.salesReturns.filter(ret => validIds.has(ret.invoiceId) && inRange(ret.date, r)),
+    ret => {
+      const invoice = invoiceById.get(ret.invoiceId)!;
+      const base = Number(invoice.subtotal) || sum(invoice.items, item => item.total);
+      const netBase = Math.max(0, base - (invoice.discount || 0) - (invoice.pricesIncludeTax ? (invoice.tax || 0) : 0));
+      return ret.totalRefundAmount * (base > 0 ? netBase / base : 1);
+    }
+  );
+  const costFallback = new Map(d.parts.map(part => [part.id, part.costPrice]));
+  const cogs = sum(inv, invoice => sum(invoice.items, item => netQty(item) * (item.costPrice ?? costFallback.get(item.partId ?? '') ?? 0)));
+  const expenses = sum(d.expenses.filter(e => inRange(e.date, r)), e => e.amount);
+  const drawerShortage = sum(d.treasury.filter(t => inRange(t.date, r) && t.category === 'عجز درج (تسوية وردية)' && t.type === 'صرف'), t => t.amount);
   const net = sales - returns;
   const gross = net - cogs;
   const rows = [
     { item: 'المبيعات (قبل الضريبة وبعد الخصم)', amount: r2(sales) },
-    { item: 'يخصم: المرتجعات', amount: r2(-returns) },
+    { item: 'يخصم: المرتجعات (قبل الضريبة)', amount: r2(-returns) },
     { item: 'صافي المبيعات', amount: r2(net) },
     { item: 'يخصم: تكلفة البضاعة المباعة', amount: r2(-cogs) },
     { item: 'مجمل الربح', amount: r2(gross) },
     { item: 'يخصم: المصروفات', amount: r2(-expenses) },
-    { item: 'صافي الربح', amount: r2(gross - expenses) },
+    { item: 'يخصم: عجز الدرج', amount: r2(-drawerShortage) },
+    { item: 'صافي الربح', amount: r2(gross - expenses - drawerShortage) },
   ];
   return {
     id: 'profit-loss', title: 'ملخص الأرباح والخسائر',
     columns: [{ key: 'item', label: 'البند' }, { key: 'amount', label: 'المبلغ (ج.م)', kind: 'money' }],
     rows,
-    note: 'التكلفة تُحسب بتكلفة الصنف المسجّلة على كل فاتورة وقت البيع. لا يشمل توزيعات الشركاء ورأس المال.',
+    note: 'الإيراد قبل الضريبة وبعد الخصم والمرتجعات. تكلفة البضاعة من تكلفة السطر وقت البيع، ثم تكلفة الصنف كبديل عند غيابها. لا يشمل توزيعات الشركاء ورأس المال.',
   };
 }
 
@@ -327,21 +340,44 @@ export function reportSlowMoving(d: ReportData, today: string, days = 90): Repor
   const lastSale = new Map<string, string>();
   for (const inv of d.invoices) {
     if (inv.status === 'ملغاة') continue;
-    for (const it of inv.items) {
-      const k = it.partId || it.partNumber;
-      const prev = lastSale.get(k);
-      if (!prev || inv.date > prev) lastSale.set(k, inv.date.slice(0, 10));
+    for (const item of inv.items) {
+      const key = item.partId || item.partNumber;
+      const date = inv.date.slice(0, 10);
+      const previous = lastSale.get(key);
+      if (!previous || date > previous) lastSale.set(key, date);
     }
   }
-  const rows = d.parts.filter(p => p.stockQuantity > 0).map(p => {
-    const last = lastSale.get(p.id) ?? lastSale.get(p.partNumber) ?? '';
-    const idle = last ? daysBetween(last, today) : 9999;
-    return { number: p.partNumber, name: p.name, stock: p.stockQuantity, frozen: r2(p.stockQuantity * p.costPrice), last: last || 'لم يُبع', idle: idle === 9999 ? 'بدون مبيعات' : idle, _i: idle };
-  }).filter(x => x._i >= days).sort((a, b) => b.frozen - a.frozen)
+  const lastPurchase = new Map<string, string>();
+  for (const purchase of d.purchaseInvoices) {
+    for (const item of purchase.items) {
+      const key = item.partId || item.partNumber;
+      const date = purchase.date.slice(0, 10);
+      const previous = lastPurchase.get(key);
+      if (!previous || date > previous) lastPurchase.set(key, date);
+    }
+  }
+  const rows = d.parts.filter(part => part.stockQuantity > 0).map(part => {
+    const activityDates = [
+      lastSale.get(part.id) ?? lastSale.get(part.partNumber),
+      lastPurchase.get(part.id) ?? lastPurchase.get(part.partNumber),
+      part.createdAt,
+    ].filter((value): value is string => Boolean(value)).map(value => value.slice(0, 10));
+    const lastActivity = activityDates.sort().at(-1) ?? '';
+    const idle = lastActivity ? Math.max(0, daysBetween(lastActivity, today)) : 0;
+    return {
+      number: part.partNumber, name: part.name, stock: part.stockQuantity,
+      frozen: r2(part.stockQuantity * part.costPrice), last: lastActivity || '—',
+      idle, _i: idle,
+    };
+  }).filter(row => row._i >= days).sort((a, b) => b.frozen - a.frozen)
     .map(({ _i, ...rest }) => rest);
   return {
-    id: 'slow-moving', title: `الأصناف الراكدة (بلا مبيعات منذ ${days} يوماً)`,
-    columns: [{ key: 'number', label: 'رقم الصنف' }, { key: 'name', label: 'الصنف' }, { key: 'stock', label: 'الرصيد', kind: 'int' }, { key: 'frozen', label: 'تكلفة مجمّدة', kind: 'money' }, { key: 'last', label: 'آخر نشاط (بيع/توريد/إنشاء)', kind: 'date' }, { key: 'idle', label: 'أيام الركود' }],
+    id: 'slow-moving', title: `الأصناف الراكدة (بلا نشاط منذ ${days} يوماً)`,
+    columns: [
+      { key: 'number', label: 'رقم الصنف' }, { key: 'name', label: 'الصنف' },
+      { key: 'stock', label: 'الرصيد', kind: 'int' }, { key: 'frozen', label: 'تكلفة مجمّدة', kind: 'money' },
+      { key: 'last', label: 'آخر نشاط (بيع/توريد/إنشاء)', kind: 'date' }, { key: 'idle', label: 'أيام الركود' },
+    ],
     rows,
     totals: { number: '', name: 'الإجمالي', stock: sum(rows, x => x.stock), frozen: r2(sum(rows, x => x.frozen)), last: '', idle: '' },
   };
