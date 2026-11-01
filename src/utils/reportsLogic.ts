@@ -80,6 +80,15 @@ export interface ReportData {
 }
 
 const r2 = (n: number): number => Math.round(n * 100) / 100;
+/** Net sales per invoice: pre-tax revenue after invoice discount and tax-inclusive refunds. */
+export function netSales(invoice: Invoice): number {
+  const preTaxAfterDiscount = Math.max(0, invoice.subtotal - invoice.discount);
+  const refundBeforeTax = invoice.grandTotal > 0
+    ? (invoice.returnedAmount || 0) * (preTaxAfterDiscount / invoice.grandTotal)
+    : 0;
+  return r2(Math.max(0, preTaxAfterDiscount - refundBeforeTax));
+}
+
 const inRange = (date: string | undefined, r: DateRange): boolean => {
   if (!date) return false;
   const d = date.slice(0, 10);
@@ -98,13 +107,13 @@ function group<T>(list: T[], key: (x: T) => string): Map<string, T[]> {
 // ---------------- المبيعات ----------------
 export function reportDailySales(d: ReportData, r: DateRange): ReportTable {
   const inv = active(d, r);
-  const rets = d.salesReturns.filter(x => inRange(x.date, r));
-  const days = new Set<string>([...inv.map(i => i.date.slice(0, 10)), ...rets.map(x => x.date.slice(0, 10))]);
+  const days = new Set<string>(inv.map(i => i.date.slice(0, 10)));
   const rows = [...days].sort().map(day => {
     const di = inv.filter(i => i.date.slice(0, 10) === day);
-    const total = sum(di, i => i.grandTotal);
-    const ret = sum(rets.filter(x => x.date.slice(0, 10) === day), x => x.totalRefundAmount);
-    return { date: day, count: di.length, total: r2(total), discount: r2(sum(di, i => i.discount)), tax: r2(sum(di, i => i.tax)), returns: r2(ret), net: r2(total - ret) };
+    const grossPreTax = sum(di, i => Math.max(0, i.subtotal - i.discount));
+    const net = sum(di, netSales);
+    const ret = Math.max(0, grossPreTax - net);
+    return { date: day, count: di.length, total: r2(grossPreTax), discount: r2(sum(di, i => i.discount)), tax: r2(sum(di, i => i.tax)), returns: r2(ret), net: r2(net) };
   });
   return {
     id: 'daily-sales', title: 'المبيعات اليومية',
@@ -114,7 +123,7 @@ export function reportDailySales(d: ReportData, r: DateRange): ReportTable {
     ],
     rows,
     totals: { date: 'الإجمالي', count: sum(rows, x => x.count), total: r2(sum(rows, x => x.total)), discount: r2(sum(rows, x => x.discount)), tax: r2(sum(rows, x => x.tax)), returns: r2(sum(rows, x => x.returns)), net: r2(sum(rows, x => x.net)) },
-    note: 'الصافي = إجمالي الفواتير غير الملغاة ناقص المرتجعات المسجّلة في نفس اليوم.',
+    note: 'المبيعات منسوبة إلى تاريخ الفاتورة، قبل الضريبة وبعد الخصم، وصافيها بعد المرتجعات المسجلة على الفاتورة.',
   };
 }
 
@@ -127,8 +136,12 @@ export function reportSalesByItem(d: ReportData, r: DateRange): ReportTable {
       if (q <= 0) continue;
       const key = it.partId || it.partNumber;
       const row = m.get(key) ?? { number: it.partNumber, name: it.partName, qty: 0, revenue: 0, cost: 0 };
+      const lineGross = it.total || (it.quantity * it.unitPrice);
+      const invoiceDiscountShare = inv.subtotal > 0 ? inv.discount * (lineGross / inv.subtotal) : 0;
+      const netLineBeforeReturns = Math.max(0, lineGross - invoiceDiscountShare);
+      const netLineRevenue = it.quantity > 0 ? netLineBeforeReturns * (q / it.quantity) : 0;
       row.qty += q;
-      row.revenue += q * it.unitPrice;
+      row.revenue += netLineRevenue;
       row.cost += q * (it.costPrice ?? costFallback.get(it.partId ?? '') ?? 0);
       m.set(key, row);
     }
@@ -144,7 +157,7 @@ export function reportSalesByItem(d: ReportData, r: DateRange): ReportTable {
     ],
     rows,
     totals: { number: '', name: 'الإجمالي', qty: sum(rows, x => x.qty), revenue: r2(rev), cost: r2(sum(rows, x => x.cost)), profit: r2(prof), margin: rev > 0 ? r2((prof / rev) * 100) : 0 },
-    note: 'القيم قبل خصم الفاتورة العام والضريبة، وبعد استبعاد الكميات المرتجعة والفواتير الملغاة.',
+    note: 'قيمة كل سطر بعد توزيع خصم الفاتورة عليه نسبياً، وقبل الضريبة وبعد خصم الكميات المرتجعة والفواتير الملغاة. تكلفة البيع المحفوظة على السطر هي الأساس.',
   };
 }
 
@@ -153,7 +166,7 @@ export function reportSalesByCustomer(d: ReportData, r: DateRange): ReportTable 
   const g = group(active(d, r), i => i.customerId || `name:${i.customerName}`);
   const rows = [...g.entries()].map(([k, list]) => {
     const c = bal.get(list[0].customerId ?? '');
-    const total = sum(list, i => i.grandTotal - (i.returnedAmount ?? 0));
+    const total = sum(list, netSales);
     return { name: c?.name ?? list[0].customerName, count: list.length, total: r2(total), avg: r2(total / list.length), last: list.map(i => i.date.slice(0, 10)).sort().at(-1) ?? '', balance: r2(c?.balance ?? 0) };
   }).sort((a, b) => b.total - a.total);
   return {
@@ -170,7 +183,7 @@ export function reportSalesByCashier(d: ReportData, r: DateRange): ReportTable {
   const names = new Set([...inv.map(i => i.cashierName), ...voided.map(i => i.cashierName)]);
   const rows = [...names].map(n => {
     const mine = inv.filter(i => i.cashierName === n);
-    const total = sum(mine, i => i.grandTotal);
+    const total = sum(mine, netSales);
     return { name: n, count: mine.length, total: r2(total), avg: mine.length ? r2(total / mine.length) : 0, voided: voided.filter(i => i.cashierName === n).length };
   }).sort((a, b) => b.total - a.total);
   return {
@@ -186,7 +199,7 @@ export function reportSalesByPayment(d: ReportData, r: DateRange): ReportTable {
   for (const inv of active(d, r)) {
     for (const p of paymentLines(inv)) {
       const row = m.get(p.method) ?? { count: 0, amount: 0 };
-      row.count += 1; row.amount += p.amount; m.set(p.method, row);
+      row.count += 1; row.amount += (inv.grandTotal > 0 ? p.amount * (netSales(inv) / inv.grandTotal) : 0); m.set(p.method, row);
     }
   }
   const total = sum([...m.values()], x => x.amount);
