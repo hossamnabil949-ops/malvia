@@ -2,7 +2,7 @@ import { TreasuryTransaction } from '../types/autoParts';
 import { DateRange, inDateRange } from './dateRange';
 
 // حسابات الخزنة: كل طريقة دفع تُحسب في حساب مستقل (كاش، إنستاباي، فيزا، محفظة).
-export type TreasuryAccountKey = 'cash' | 'instapay' | 'visa' | 'wallet';
+export type TreasuryAccountKey = 'cash' | 'instapay' | 'visa' | 'wallet' | 'bank';
 
 export interface TreasuryAccountMeta {
   key: TreasuryAccountKey;
@@ -16,15 +16,20 @@ export const TREASURY_ACCOUNTS: TreasuryAccountMeta[] = [
   { key: 'instapay', label: 'إنستاباي InstaPay', shortLabel: 'إنستاباي', color: '#a855f7' },
   { key: 'visa', label: 'فيزا / بطاقة بنكية', shortLabel: 'فيزا', color: '#3b82f6' },
   { key: 'wallet', label: 'محافظ إلكترونية (فودافون كاش...)', shortLabel: 'محافظ', color: '#06b6d4' },
+  { key: 'bank', label: 'تحويلات وشيكات بنكية', shortLabel: 'بنك', color: '#64748b' },
 ];
 
 /** يحوّل نص طريقة الدفع (بكل صيغه القديمة والجديدة) إلى حساب خزنة. */
 export const accountOf = (method?: string): TreasuryAccountKey => {
-  const m = (method || '').toLowerCase();
+  const m = String(method || '').trim().toLowerCase();
+  if (!m) throw new Error('طريقة الدفع غير محددة؛ لا يمكن تصنيف حركة الخزنة.');
+  if (m.includes('آجل') || m.includes('حساب ورشة') || m === 'credit') throw new Error('طريقة الآجل ليست حركة خزنة.');
+  if (m.includes('شيك') || m.includes('تحويل بنكي') || m.includes('حوالة بنكية') || m.includes('bank transfer') || m.includes('wire transfer') || m === 'bank') return 'bank';
   if (m.includes('انستا') || m.includes('إنستا') || m.includes('insta')) return 'instapay';
   if (m.includes('محفظ') || m.includes('فودافون') || m.includes('wallet')) return 'wallet';
-  if (m.includes('فيزا') || m.includes('بطاقة') || m.includes('شبكة') || m.includes('مدى') || m.includes('بنك') || m.includes('visa')) return 'visa';
-  return 'cash';
+  if (m.includes('فيزا') || m.includes('بطاقة') || m.includes('شبكة') || m.includes('مدى') || m.includes('visa') || m.includes('card')) return 'visa';
+  if (m === 'كاش' || m === 'نقدي' || m === 'نقداً' || m === 'نقدا' || m === 'cash' || m.includes('كاشير')) return 'cash';
+  throw new Error(`طريقة دفع غير معروفة ولا يمكن افتراض أنها نقدية: ${method}`);
 };
 
 /** الآجل ليس حساب خزنة: لا تدخل به نقدية فعلية. */
