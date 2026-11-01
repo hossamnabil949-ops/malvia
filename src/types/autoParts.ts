@@ -369,6 +369,7 @@ export interface PurchaseInvoiceItem {
   costPrice: number;
   salePrice: number;
   total: number;
+  taxAmount?: number;
   returnedQuantity?: number;
   tracking?: import('../utils/trackingLogic').TrackingMode; // للصنف الجديد عند أول توريد
   batchNo?: string;
@@ -388,6 +389,7 @@ export interface PurchaseInvoice {
   items: PurchaseInvoiceItem[];
   subtotal: number;
   tax: number;
+  pricesIncludeTax?: boolean;
   discount: number;
   grandTotal: number;
   originalGrandTotal?: number;
