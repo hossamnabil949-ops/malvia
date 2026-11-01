@@ -413,7 +413,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         INVALID_PRICE: 'سعر غير صالح في الفاتورة',
         DISCOUNT_EXCEEDS_SUBTOTAL: 'الخصم أكبر من قيمة الفاتورة',
         PAYMENT_MISMATCH: 'مجموع المدفوعات لا يساوي إجمالي الفاتورة',
-        CREDIT_REQUIRES_CUSTOMER: 'البيع الآجل يتطلب اختيار عميل أو كتابة اسمه',
+        CREDIT_REQUIRES_CUSTOMER: 'البيع الآجل يتطلب اختيار عميل مسجل في النظام',
         CREDIT_LIMIT_EXCEEDED: `البيع الآجل يتجاوز حد ائتمان العميل (الحد ${(selectedCustomer?.creditLimit ?? 0).toLocaleString()} ج.م، مديونيته الحالية ${Math.max(0, selectedCustomer?.balance ?? 0).toLocaleString()} ج.م)`,
         EMPTY_CART: 'السلة فارغة',
       };
