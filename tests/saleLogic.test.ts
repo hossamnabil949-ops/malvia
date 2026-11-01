@@ -409,7 +409,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
       { id: 'a', partNumber: 'A', name: 'صنف a', category: 'فلاتر وزيوت', stockQuantity: 10, minAlertStock: 3, costPrice: 60, salePrice: 100 },
       { id: 'b', partNumber: 'B', name: 'صنف b', category: 'فلاتر وزيوت', stockQuantity: 2, minAlertStock: 5, costPrice: 30, salePrice: 50 },
       { id: 'c', partNumber: 'C', name: 'صنف c', category: 'فرامل ومكابح', stockQuantity: 4, minAlertStock: 1, costPrice: 150, salePrice: 200 },
-      { id: 'd', partNumber: 'D', name: 'صنف d', category: 'فرامل ومكابح', stockQuantity: 5, minAlertStock: 1, costPrice: 10, salePrice: 20 },
+      { id: 'd', partNumber: 'D', name: 'صنف d', category: 'فرامل ومكابح', stockQuantity: 5, minAlertStock: 1, costPrice: 10, salePrice: 20, createdAt: '2026-01-01' },
     ],
     customers: [{ id: 'c1', name: 'ورشة', balance: 1000 }, { id: 'c2', name: 'عميل بدون فواتير', balance: 300 }],
     suppliers: [{ id: 's1', name: 'مورد', balance: 700, storeCredit: 0, totalPaid: 900, lastPaymentDate: '2026-10-01' }, { id: 's2', name: 'مسدد', balance: 0, storeCredit: 0, totalPaid: 5 }],
@@ -472,7 +472,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
   tb = RP.reportLowStock(data);
   assert.deepEqual(tb.rows.map(x => [x.number, x.suggest]), [['B', 8]]);
   assert.deepEqual(RP.reportSlowMoving(data, today, 90).rows.map(x => x.number), ['D']);           // لم يُبع قط
-  assert.equal(RP.reportSlowMoving(data, today, 90).rows[0].idle, 'بدون مبيعات');
+  assert.equal(RP.reportSlowMoving(data, today, 90).rows[0].last, '2026-01-01');
   assert.deepEqual(RP.reportSlowMoving(data, today, 10).rows.map(x => x.number), ['C', 'D']);      // c آخر بيع قبل 14 يوماً، مرتبة بالتكلفة المجمّدة
   tb = RP.reportExpiry(data, today);
   assert.deepEqual(tb.rows.map(x => [x.batch, x.state, x.qty, x.value]), [['OLD', 'منتهية', 2, 120], ['LATE', 'سليمة', 3, 180]]);   // الفارغة مستبعدة والأقدم أولاً
@@ -486,7 +486,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
   assert.deepEqual(tb.rows.map(x => [x.name, x.dues, x.paid]), [['مورد', 700, 900]]);
   tb = RP.reportCheques(data, today);
   assert.deepEqual(tb.rows.map(x => [x.dir, x.number, x.days, x.state, x.amount]), [['وارد', '1', -2, 'متأخر', 700], ['صادر', '2', 3, 'يستحق قريباً', 300]]);
-  assert.deepEqual([tb.totals!.amount, tb.totals!.party], [1000, 'واردة 700 · صادرة 300']);
+  assert.deepEqual([tb.totals!.amount, tb.totals!.incoming, tb.totals!.outgoing], [1000, 700, 300]);
   tb = RP.reportLoyalty(data, '2026-10-24T23:59:59.000Z');
   assert.deepEqual(tb.rows.map(x => [x.name, x.points, x.value]), [['ورشة', 200, 100]]);
   tb = RP.reportSalesByCustomer(data, R);
