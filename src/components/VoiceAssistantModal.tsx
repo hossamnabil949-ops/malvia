@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { AutoPart, Customer, Invoice, Supplier, UserSession } from '../types/autoParts';
 import { executeAgentAction } from '../services/agentExecutionService';
+import { generateSupplierScheduleDates, splitSupplierScheduleAmount } from '../utils/supplierPaymentSchedule';
 import { 
   sendVoiceCommandToServer, 
   AICommandResult, 
@@ -43,11 +44,13 @@ interface VoiceAssistantModalProps {
   onSettleSupplier?: (supplierName: string, amount: number) => void;
   onCollectCustomer?: (customerName: string, amount: number) => void;
   onAddPurchase?: (supplierName: string, amount: number) => void;
+  onCreateSupplierPaymentSchedules?: (rows: import('../types/autoParts').SupplierPaymentSchedule[]) => boolean;
   onOpenNotifications: () => void;
   onNavigateTab: (tab: any) => void;
   currentSession: UserSession;
   invoices?: Invoice[];
   suppliers?: Supplier[];
+  supplierPaymentSchedules?: Array<{ id: string; supplierId: string; supplierName: string; amount: number; amountPaid: number; dueDate: string; status: string; notes?: string }>;
   shopName?: string;
   allowedActions: { sale: boolean; inventory: boolean; treasury: boolean; purchases: boolean };
 }
@@ -64,11 +67,13 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   onSettleSupplier,
   onCollectCustomer,
   onAddPurchase,
+  onCreateSupplierPaymentSchedules,
   onOpenNotifications,
   onNavigateTab,
   currentSession,
   invoices = [],
   suppliers = [],
+  supplierPaymentSchedules = [],
   shopName,
   allowedActions,
 }) => {
@@ -82,6 +87,9 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
   const [micError, setMicError] = useState<string | null>(null);
   const [pending, setPending] = useState<{ result: AICommandResult; question: string; warning?: string } | null>(null);
+  const [supplierPlanDraft, setSupplierPlanDraft] = useState<any>(null);
+  const supplierPlanDraftRef = useRef<any>(null);
+  const updateSupplierPlanDraft = (next: any) => { supplierPlanDraftRef.current = next; setSupplierPlanDraft(next); };
 
   // سجل المحادثة المعروض (مستخدم/مساعد) + لغة الميكروفون
   const [messages, setMessages] = useState<Array<{ id: number; role: 'user' | 'assistant'; text: string; kind?: 'confirm' | 'audit'; partId?: string }>>([]);
@@ -116,6 +124,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       stopListening();
       stopArabicSpeech();
       conversationRef.current = [];
+      updateSupplierPlanDraft(null);
       setMessages([]);
     }
   }, [isOpen]);
@@ -293,7 +302,21 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   // Runs the (already verified and, when needed, confirmed) action.
   const runAction = async (result: AICommandResult) => {
     let feedback = result.spokenFeedback;
-    const serverActions = ['EXECUTE_SALE', 'RESTOCK_ITEM', 'ADD_EXPENSE', 'SETTLE_SUPPLIER', 'COLLECT_CUSTOMER', 'ADD_PURCHASE'];
+
+    // Defense in depth: even a stale/pending AI confirmation must never settle a supplier.
+    if (result.action === 'SETTLE_SUPPLIER') {
+      setPending(null);
+      feedback = result.lang === 'en'
+        ? 'Supplier payments must be reviewed and completed manually on the suppliers screen. No payment or treasury movement was created.'
+        : 'يجب مراجعة سداد المورد وتنفيذه يدوياً من شاشة الموردين. لم يتم تسجيل أي دفعة أو حركة خزينة.';
+      onNavigateTab('suppliers');
+      const safeResult: AICommandResult = { ...result, spokenFeedback: feedback };
+      setLastResult(safeResult);
+      if (speechEnabled) speakArabic(feedback);
+      return;
+    }
+
+    const serverActions = ['EXECUTE_SALE', 'RESTOCK_ITEM', 'ADD_EXPENSE', 'COLLECT_CUSTOMER', 'ADD_PURCHASE'];
     let serverExecuted = false;
     if (serverActions.includes(result.action)) {
       try {
@@ -340,14 +363,6 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
         ? 'تم قبول تسجيل المصروف داخل التطبيق. تحقق من حالة المزامنة لتأكيد وصوله إلى السحابة.'
         : 'تعذر قبول تسجيل المصروف؛ لم يتم تأكيد نجاح العملية.';
       if (!accepted) { setLastResult({ ...result, spokenFeedback: feedback }); if (speechEnabled) speakArabic(feedback); return; }
-    } else if (result.action === 'SETTLE_SUPPLIER') {
-      if (onSettleSupplier && result.supplierName && result.supplierPaymentAmount) {
-        onSettleSupplier(result.supplierName, result.supplierPaymentAmount);
-        feedback = describe(result).done;
-      } else {
-        feedback = 'لتسجيل سداد المورد افتح صفحة الموردين واختر المورد. لم أنفذ أي شيء.';
-        onNavigateTab('suppliers');
-      }
     } else if (result.action === 'COLLECT_CUSTOMER') {
       if (onCollectCustomer && result.customerName && result.customerCollectionAmount) {
         onCollectCustomer(result.customerName, result.customerCollectionAmount);
@@ -398,11 +413,147 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     else if (continuousModeRef.current && isOpen) startListening();
   };
 
+  const handleSupplierPlanTurn = (raw: string): boolean => {
+    const digitText = raw
+      .replace(/[٠-٩۰-۹]/g, d => String('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'.indexOf(d) % 10))
+      .replace(/[٬،]/g, ',')
+      .replace(/٫/g, '.');
+    const q = normalizeArabic(digitText);
+    const supplierContextStart = /^حساب\s+(?:الشركه|شركه|مؤسسه)\s+/.test(q);
+    const isCreate = /(جدول|جدوله|قسم|قسّم|توزيع|مستحقات المورد|المستحق للمورد|دفعات اسبوع|دفعات شهري|كل يوم|كل اسبوع|كل شهر)/.test(q);
+    if (!supplierPlanDraftRef.current && !isCreate && !supplierContextStart) return false;
+    if (/^(الغاء|الغي|كنسل|cancel)$/.test(q)) {
+      updateSupplierPlanDraft(null); pushMessage('assistant','تم إلغاء إعداد الجدول، ولم يتم حفظ أي شيء.'); return true;
+    }
+
+    const activeDraft = supplierPlanDraftRef.current;
+    const draft = { ...(activeDraft || { recurrence: 'weekly', weekdays: [], notes: 'إنشاء صوتي' }), source: raw };
+    const numericOnly = q.match(/^(\d{1,4})$/);
+    const waitingForInterval = Boolean(activeDraft && activeDraft.recurrence === 'every_n_days' && !activeDraft.intervalDays);
+    if (numericOnly && waitingForInterval) {
+      draft.intervalDays = Number(numericOnly[1]);
+    } else if (numericOnly && activeDraft && !activeDraft.installmentCount) {
+      draft.installmentCount = Number(numericOnly[1]);
+    } else {
+      // Amount is recognized by its currency suffix, even when supplier details precede it.
+      const amountMatch = digitText.match(/([0-9][0-9,.]*)\s*(?:جنيه|ج\.?)/i);
+      if (amountMatch) {
+        const parsedAmount = Number(amountMatch[1].replace(/,/g, ''));
+        if (Number.isFinite(parsedAmount) && parsedAmount > 0) draft.totalAmount = parsedAmount;
+      }
+      const countMatch = q.match(/(?:على|عدد|لعدد)\s*(\d{1,3})\s*(?:دفعات|دفعة|قسط|اقساط)?|^(\d{1,3})\s*(?:دفعات|دفعة|قسط)?$/);
+      if (countMatch) draft.installmentCount = Number(countMatch[1] || countMatch[2]);
+    }
+
+    if (/اسبوع|اسبوعي|اسبوعيا/.test(q)) draft.recurrence = 'weekly';
+    if (/شهري|شهريا|كل شهر/.test(q)) draft.recurrence = 'monthly';
+    if (/كل يوم|يوميا|كل (\d+) يوم/.test(q)) { draft.recurrence = 'every_n_days'; const n=q.match(/كل (\d+) يوم/); if(n) draft.intervalDays=Number(n[1]); }
+
+    const weekdayMap: Record<string,number> = { الاحد:0, الاثنين:1, الثلاثاء:2, الاربعاء:3, الخميس:4, الجمعة:5, السبت:6 };
+    const dayHits = Object.keys(weekdayMap).filter(day => q.includes(normalizeArabic(day)));
+    if (dayHits.length) draft.weekdays = [...new Set(dayHits.map(day => weekdayMap[day]))];
+
+    const dateMatch = digitText.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (dateMatch) draft.startDate = [dateMatch[3],dateMatch[2].padStart(2,'0'),dateMatch[1].padStart(2,'0')].join('-');
+
+    // Match supplier names by normalized tokens and prefixes, not exact full-token equality.
+    const stop = new Set(['جدول','جدوله','دفعات','دفعة','المبلغ','قسم','حساب','اقسم','توزيع','الي','الى','اسبوعي','اسبوعيا','شهري','شهريا','مورد','للمورد','المورد','جنيه','بداية','من','كل','يوم','على','المستحق','مستحق','اجمالي','الاجمالي','الشركه']);
+    const supplierTokens = q.split(' ').filter(w => w.length > 1 && !/^\d+$/.test(w) && !stop.has(w));
+    const ranked = suppliers.map(s => {
+      const tokens = normalizeArabic(s.name).split(' ').filter(w => w.length > 1);
+      const hits = supplierTokens.filter(t => tokens.some(n => n === t || (t.length >= 3 && n.startsWith(t)) || (n.length >= 3 && t.startsWith(n)))).length;
+      return { s, hits, coverage: hits / Math.max(1, tokens.length) };
+    }).filter(x => x.hits > 0).sort((a,b) => b.hits-a.hits || b.coverage-a.coverage);
+    if (ranked.length && (!ranked[1] || ranked[0].hits > ranked[1].hits || ranked[0].coverage > ranked[1].coverage + 0.2)) {
+      draft.supplierId = ranked[0].s.id;
+      draft.supplierName = ranked[0].s.name;
+      draft.supplierBalance = Number(ranked[0].s.deferredDebt ?? ranked[0].s.balance ?? 0);
+      // For a supplier-account request, use the registered outstanding balance as the
+      // proposed schedule total. The user can still state a different amount afterward.
+      if (!draft.totalAmount && draft.supplierBalance > 0) {
+        draft.totalAmount = draft.supplierBalance;
+        draft.amountFromSupplierBalance = true;
+      }
+    }
+
+    if (supplierContextStart && draft.supplierId && !draft.balanceShown) {
+      draft.balanceShown = true;
+      updateSupplierPlanDraft(draft);
+      const balance = Number(draft.supplierBalance || 0);
+      const msg = balance > 0
+        ? 'حساب المورد ' + draft.supplierName + ' عليه مستحقات قدرها ' + balance.toLocaleString('ar-EG') + ' جنيه. هستخدم المبلغ ده مبدئياً لجدول الدفعات، وتقدر تحدد مبلغ مختلف. ' + (!draft.startDate ? 'ما تاريخ أول دفعة؟' : !draft.installmentCount ? 'هتقسم المبلغ على كام دفعة؟' : 'نكمل إعداد الجدول.')
+        : 'تم العثور على المورد ' + draft.supplierName + '، لكن رصيد المستحقات المسجل صفر. ما إجمالي المبلغ المطلوب جدولته؟';
+      pushMessage('assistant', msg);
+      if (speechEnabled) speakArabic(msg);
+      return true;
+    }
+
+    if (draft.preview) {
+      if (/^(تاكيد|اكد|احفظ|موافق|نعم|تمام)$/.test(q)) {
+        const rows=draft.preview as import('../types/autoParts').SupplierPaymentSchedule[];
+        const saved=onCreateSupplierPaymentSchedules?.(rows) ?? false;
+        if (saved) { updateSupplierPlanDraft(null); pushMessage('assistant','تم حفظ جدول الدفعات. لم يتم تسجيل أي سداد أو حركة خزينة.'); }
+        else pushMessage('assistant','تعذر حفظ الجدول. لم يتم تسجيل أي حركة مالية.');
+        return true;
+      }
+      if (/^(لا|الغاء|الغي|كنسل)$/.test(q)) { updateSupplierPlanDraft(null); pushMessage('assistant','تم إلغاء الجدول ولم يتم حفظه.'); return true; }
+    }
+
+    const missing = !draft.supplierId ? 'اسم المورد المسجل' : !draft.totalAmount ? 'إجمالي المبلغ' : !draft.startDate ? 'تاريخ بداية أول دفعة (يوم-شهر-سنة)' : draft.recurrence==='weekly' && !draft.weekdays?.length ? 'يوم أو أيام السداد' : draft.recurrence==='every_n_days' && !draft.intervalDays ? 'عدد الأيام بين الدفعات' : !draft.installmentCount ? 'عدد الدفعات' : null;
+    if (missing) {
+      updateSupplierPlanDraft(draft);
+      const msg='محتاج أعرف '+missing+' عشان أكمل إعداد الجدول. اذكر المعلومة فقط.';
+      pushMessage('assistant',msg); if(speechEnabled) speakArabic(msg); return true;
+    }
+    try {
+      const dates=generateSupplierScheduleDates({ recurrence:draft.recurrence, startDate:draft.startDate, installmentCount:draft.installmentCount, intervalDays:draft.intervalDays, weekdays:draft.weekdays });
+      const amounts=splitSupplierScheduleAmount(draft.totalAmount,draft.installmentCount);
+      const planId='SP-'+Date.now();
+      const now=new Date().toISOString();
+      const preview=dates.map((dueDate,i)=>({ id:planId+'-'+(i+1), planId, sequenceNumber:i+1, planTotalInstallments:dates.length, recurrence:draft.recurrence, recurrenceInterval:draft.intervalDays, recurrenceWeekdays:draft.weekdays, supplierId:draft.supplierId, supplierName:draft.supplierName, amount:amounts[i], amountPaid:0, dueDate, status:'scheduled' as const, notes:'إنشاء صوتي', createdAt:now, updatedAt:now }));
+      draft.preview=preview; updateSupplierPlanDraft(draft);
+      const summary=preview.map(x=>x.dueDate+': '+x.amount.toLocaleString('ar-EG')+' جنيه').join('\n');
+      const msg='معاينة جدول '+draft.supplierName+' بإجمالي '+draft.totalAmount.toLocaleString('ar-EG')+' جنيه:\n'+summary+'\nهل تؤكد حفظ الجدول؟ لن تُسجل أي حركة خزينة.';
+      pushMessage('assistant',msg); if(speechEnabled) speakArabic('تم تجهيز المعاينة. هل تؤكد حفظ الجدول؟');
+    } catch(e) { pushMessage('assistant',e instanceof Error?e.message:'تعذر إعداد الجدول.'); }
+    return true;
+  };
   const handleExecuteCommand = async (commandText: string) => {
     const textToExecute = commandText.trim();
     if (!textToExecute) return;
 
     stopListening(true);
+    // Keep every utterance visible and in context, including locally handled schedule turns.
+    conversationRef.current = [...conversationRef.current, { role: 'user' as const, content: textToExecute }].slice(-12);
+    pushMessage('user', textToExecute);
+    // Supplier settlement is intentionally human-operated.
+    // Voice may locate the saved installment and open the supplier screen,
+    // but it must never create a payment, treasury movement, or change balances.
+    const settlementIntent = /(?:سدد|سدّد|دفع|ادفع|سداد|تسديد|settle|pay)\s*(?:دفعة|قسط|مستحقات|مستحق|مبلغ|supplier|installment)?/i.test(normalizeArabic(textToExecute));
+    if (settlementIntent) {
+      const normalizedCommand = normalizeArabic(textToExecute);
+      const requestedDate = normalizedCommand.match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1]
+        || (() => {
+          const m = textToExecute.match(/(?:^|\s)(\d{2})[-/](\d{2})[-/](\d{4})(?:\s|$)/);
+          return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+        })();
+      const supplier = suppliers.find(s => normalizedCommand.includes(normalizeArabic(s.name)));
+      const schedule = supplierPaymentSchedules.find(x =>
+        x.status === 'scheduled' &&
+        (!supplier || x.supplierId === supplier.id) &&
+        (!requestedDate || x.dueDate === requestedDate)
+      );
+      const msg = schedule
+        ? `وجدت قسطاً محفوظاً للمورد ${schedule.supplierName} بتاريخ ${schedule.dueDate} بقيمة ${Number(schedule.amount - schedule.amountPaid).toLocaleString('ar-EG')} جنيه. سأفتح شاشة الموردين لتراجع البيانات وتنفذ السداد بنفسك. لم يتم تسجيل أي دفعة أو حركة خزينة.`
+        : 'سأفتح شاشة الموردين لتبحث عن المورد والقسط المطلوب وتراجع بياناته. لن يتم تسجيل أي دفعة أو حركة خزينة من خلال المساعد الصوتي.';
+      setPending(null);
+      pushMessage('assistant', msg);
+      if (speechEnabled) speakArabic(msg);
+      setTranscript('');
+      onNavigateTab('suppliers');
+      return;
+    }
+    if (handleSupplierPlanTurn(textToExecute)) { setTranscript(''); return; }
 
     // While a command waits for confirmation, "تأكيد" / "إلغاء" answer it.
     if (pending) {
@@ -420,16 +571,49 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setPending(null);
     }
 
+    // Instant local handling for standalone greetings; do not spend an AI request on small talk.
+    const normalizedGreeting = normalizeArabic(textToExecute).replace(/[.!؟?،,]+/g, '').trim();
+    const instantGreetings = new Set([
+      'صباح الخير', 'صباح النور', 'مساء الخير', 'مساء النور',
+      'السلام عليكم', 'وعليكم السلام', 'اهلا', 'اهلا وسهلا',
+      'ازيك', 'عامل ايه', 'اخبارك ايه',
+      'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
+    ]);
+    if (instantGreetings.has(normalizedGreeting)) {
+      const lang = detectLang(textToExecute, voiceLangRef.current === 'en-US' ? 'en' : 'ar');
+      const reply = lang === 'en'
+        ? 'Hello! I’m here and ready to help.'
+        : normalizedGreeting === 'السلام عليكم' || normalizedGreeting === 'وعليكم السلام'
+          ? 'وعليكم السلام ورحمة الله وبركاته، أهلاً بيك! أقدر أساعدك في إيه؟'
+          : normalizedGreeting === 'مساء الخير' || normalizedGreeting === 'مساء النور'
+            ? 'مساء النور! أنا معاك، أقدر أساعدك في إيه؟'
+            : normalizedGreeting === 'اهلا' || normalizedGreeting === 'اهلا وسهلا'
+              ? 'أهلاً بيك! أنا معاك، أقدر أساعدك في إيه؟'
+              : 'صباح النور! أنا معاك، أقدر أساعدك في إيه؟';
+      conversationRef.current = [...conversationRef.current, { role: 'assistant' as const, content: reply }].slice(-12);
+      setTranscript('');
+      const instantResult: AICommandResult = {
+        action: 'GENERAL_ANSWER',
+        lang,
+        spokenFeedback: reply,
+        timestamp: new Date().toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US'),
+      };
+      setLastResult(instantResult);
+      if (speechEnabled) speakArabic(reply, () => {
+        if (continuousModeRef.current && isOpen) startListening();
+      });
+      else if (continuousModeRef.current && isOpen) startListening();
+      return;
+    }
+
     setIsProcessing(true);
     setMicError(null);
 
     try {
-      conversationRef.current = [...conversationRef.current, { role: 'user' as const, content: textToExecute }].slice(-12);
-      pushMessage('user', textToExecute);
       setTranscript('');
-      const shop = buildShopSnapshot(parts, invoices, suppliers, currentSession, shopName);
+      const shop = buildShopSnapshot(parts, invoices, suppliers, currentSession, shopName, supplierPaymentSchedules);
       const result = await sendVoiceCommandToServer(
-        textToExecute, parts, customers, conversationRef.current.slice(0, -1), shop,
+        textToExecute, parts, customers, suppliers, conversationRef.current.slice(0, -1), shop,
         voiceLangRef.current === 'en-US' ? 'en' : 'ar'
       );
 
