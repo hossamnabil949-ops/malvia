@@ -64,7 +64,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [type, setType] = useState<'ورشة فنية' | 'عميل تجزئة' | 'أسطول شركات'>('ورشة فنية');
-  const [newCreditLimit, setNewCreditLimit] = useState('');
+  const [newCreditLimit, setNewCreditLimit] = useState('5000');
   const [limitModalCustomer, setLimitModalCustomer] = useState<Customer | null>(null);
   const [limitValue, setLimitValue] = useState('');
   const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
@@ -86,12 +86,12 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       monthlyPurchases: 0,
       invoicesCount: 0,
       lastVisit: 'اليوم',
-      creditLimit: Math.max(0, Number(newCreditLimit) || 0),
+      creditLimit: Math.max(0, Number(newCreditLimit) || 5000),
     });
 
     setName('');
     setPhone('');
-    setNewCreditLimit('');
+    setNewCreditLimit('5000');
     setShowAddModal(false);
   };
 
