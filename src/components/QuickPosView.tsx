@@ -199,6 +199,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       monthlyPurchases: 0,
       invoicesCount: 0,
       lastVisit: new Date().toISOString().split('T')[0],
+      creditLimit: 5000,
     };
     onAddCustomer(created);
     setSelectedCustomerId(created.id);
@@ -464,7 +465,9 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       payments: payments.map((p) => ({ method: p.method, amount: p.amount })),
       cashierId,
       cashierName: cashierName || 'كاشير المحل',
-      status: 'مسددة',
+      status: payments.some(payment => isCreditPayment(payment.method))
+        ? (payments.every(payment => isCreditPayment(payment.method)) ? 'آجلة' : 'مسددة جزئياً')
+        : 'مسددة',
     };
 
     const accepted = onCheckoutComplete(newInvoice);
