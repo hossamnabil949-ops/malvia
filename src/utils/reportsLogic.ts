@@ -357,10 +357,16 @@ export function reportExpiry(d: ReportData, today: string): ReportTable {
 // ---------------- الذمم والالتزامات ----------------
 /** أعمار ديون العملاء: يُوزَّع رصيد العميل على فواتيره الآجلة من الأحدث للأقدم، والباقي يُعدّ قديماً (أكثر من 90). */
 export function reportCustomerAging(d: ReportData, today: string): ReportTable {
-  const creditOf = (i: Invoice): number => sum(paymentLines(i).filter(p => p.isCredit), p => p.amount);
+  const creditOf = (i: Invoice): number => {
+    const creditPayments = sum(paymentLines(i).filter(p => p.isCredit), p => p.amount);
+    const creditReturns = sum(d.salesReturns.filter(ret =>
+      ret.invoiceId === i.id && ret.refundMethod === 'خصم من رصيد العميل الآجل'
+    ), ret => ret.totalRefundAmount);
+    return Math.max(0, creditPayments - creditReturns);
+  };
   const byCustomer = group(d.invoices.filter(i => i.status !== 'ملغاة' && creditOf(i) > 0), i => i.customerId || `name:${i.customerName}`);
   const rows = d.customers.filter(c => c.balance > 0).map(c => {
-    const list = (byCustomer.get(c.id) ?? byCustomer.get(`name:${c.name}`) ?? []).sort((a, b) => b.date.localeCompare(a.date));
+    const list = (byCustomer.get(c.id) ?? byCustomer.get(`name:${c.name}`) ?? []).sort((a, b) => a.date.localeCompare(b.date));
     const b = { b0: 0, b30: 0, b60: 0, b90: 0 };
     let left = c.balance;
     for (const inv of list) {
@@ -378,7 +384,7 @@ export function reportCustomerAging(d: ReportData, today: string): ReportTable {
     columns: [{ key: 'name', label: 'العميل' }, { key: 'b0', label: '0–30 يوماً', kind: 'money' }, { key: 'b30', label: '31–60', kind: 'money' }, { key: 'b60', label: '61–90', kind: 'money' }, { key: 'b90', label: 'أكثر من 90', kind: 'money' }, { key: 'total', label: 'إجمالي الدين', kind: 'money' }],
     rows,
     totals: { name: 'الإجمالي', b0: r2(sum(rows, x => x.b0)), b30: r2(sum(rows, x => x.b30)), b60: r2(sum(rows, x => x.b60)), b90: r2(sum(rows, x => x.b90)), total: r2(sum(rows, x => x.total)) },
-    note: 'الدين يُوزَّع على أحدث الفواتير الآجلة أولاً (الأقدم هو الأخير سداداً). الرصيد الذي لا تغطيه فواتير مسجّلة يُحسب «أكثر من 90».',
+    note: 'الدين يُوزَّع على أقدم الفواتير الآجلة أولاً (FIFO)، مع خصم المرتجعات التي خُصمت من حساب العميل. الرصيد الذي لا تغطيه فواتير مسجّلة يُحسب «أكثر من 90».',
   };
 }
 
