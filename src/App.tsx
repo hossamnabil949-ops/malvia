@@ -2619,7 +2619,8 @@ export default function App() {
                   const originalCredit = invoice.creditAmount ?? (invoice.payments?.filter(payment => isCreditPayment(String(payment.method))).reduce((sum, payment) => sum + payment.amount, 0)
                     ?? (isCreditPayment(String(invoice.paymentMethod)) ? invoice.grandTotal : 0));
                   const alreadySettled = (invoice.settlementPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
-                  const outstanding = Math.max(0, originalCredit - alreadySettled);
+                  const creditReturns = salesReturns.filter(ret => ret.invoiceId === invoice.id && ret.refundMethod === 'خصم من رصيد العميل الآجل').reduce((sum, ret) => sum + ret.totalRefundAmount, 0);
+                  const outstanding = Math.max(0, originalCredit - alreadySettled - creditReturns);
                   if (outstanding <= 0.005) continue;
                   const applied = Math.min(remaining, outstanding);
                   const settlementPayments = [...(invoice.settlementPayments || []), {
