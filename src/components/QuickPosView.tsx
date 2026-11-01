@@ -53,6 +53,8 @@ interface QuickPosViewProps {
   onClearCart: () => void;
   onCheckoutComplete: (invoice: Invoice) => boolean | void;
   vatRate?: number;            // نسبة الضريبة من إعدادات المحل (%)
+  taxRegistered?: boolean;
+  pricesIncludeVat?: boolean;
   canSellBelowCost?: boolean;  // (غير مستخدم) البيع بأقل من التكلفة ممنوع للجميع حسب سياسة الخصم
   employees?: Employee[];      // للتحقق من باسورد المالك عند فتح تعديل السعر
   warehouses?: Warehouse[];    // المخازن/الفروع (لو فيه أكثر من مخزن يظهر اختيار مخزن البيع)
@@ -87,6 +89,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   onClearCart,
   onCheckoutComplete,
   vatRate = 14,
+  taxRegistered = false,
+  pricesIncludeVat = false,
   canSellBelowCost = false,
   employees = [],
   warehouses = [],
@@ -285,7 +289,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   };
   useBarcodeWedge(handleBarcodeScan, true);
 
-  const [applyVat, setApplyVat] = useState<boolean>(false);
+  const applyVat = taxRegistered;
 
   const brandCounts = useMemo(() => {
     const m: Record<string, number> = {};
@@ -340,8 +344,10 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const discountAll = Math.min(subtotal, Math.round((discount + loyaltyDiscount) * 100) / 100);
 
   const taxableAmount = Math.max(0, subtotal - discountAll);
-  const tax = applyVat ? Math.round((taxableAmount * vatRate) / 100 * 100) / 100 : 0;
-  const grandTotal = Math.round((taxableAmount + tax) * 100) / 100;
+  const tax = applyVat
+    ? Math.round((pricesIncludeVat ? (taxableAmount * vatRate) / (100 + vatRate) : (taxableAmount * vatRate) / 100) * 100) / 100
+    : 0;
+  const grandTotal = Math.round((applyVat && pricesIncludeVat ? taxableAmount : taxableAmount + tax) * 100) / 100;
 
   // الدفع المقسّم: الطريقة الأساسية تغطي الباقي بعد المبلغ الثاني
   const splitValue = splitEnabled ? Math.min(grandTotal, Math.max(0, Number(splitAmount) || 0)) : 0;
@@ -386,7 +392,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         discountAll,
         maxDiscountPercent
       );
-      const totals = computeTotals(lines, discountAll, vatRate, applyVat);
+      const totals = computeTotals(lines, discountAll, vatRate, applyVat, pricesIncludeVat);
       const hasCredit = payments.some((p) => isCreditPayment(p.method));
       const hasNewName = selectedCustomerId === 'cash' && customerNameInput.trim().length > 0;
       validateSale(
@@ -1139,17 +1145,13 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               <Percent className="w-3.5 h-3.5 text-amber-400" />
               <span className="text-neutral-300 font-bold">ضريبة القيمة المضافة ({vatRate}%):</span>
             </div>
-            <button
-              type="button"
-              onClick={() => setApplyVat(!applyVat)}
-              className={`px-3 py-1 rounded-lg text-xs font-black transition-all border ${
-                applyVat
-                  ? 'bg-amber-500 text-neutral-950 border-amber-400 shadow-sm'
-                  : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white'
-              }`}
-            >
-              {applyVat ? `مطبقة (+${vatRate}%) ✓` : 'بدون ضريبة (0%)'}
-            </button>
+            <span className={`px-3 py-1 rounded-lg text-xs font-black border ${applyVat
+              ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+              : 'bg-neutral-800 text-neutral-400 border-neutral-700'}`}>
+              {applyVat
+                ? (pricesIncludeVat ? `مستخرجة من السعر (${vatRate}%) ✓` : `تضاف تلقائياً (${vatRate}%) ✓`)
+                : 'المنشأة غير خاضعة للضريبة'}
+            </span>
           </div>
 
           <div className="space-y-1 text-xs text-neutral-400 border-t border-neutral-800/60 pt-2">
