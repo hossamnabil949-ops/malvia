@@ -321,6 +321,8 @@ export async function sendVoiceCommandToServer(
 
   const internalAnswer = answerInternalShopQuery(command, parts, customers || [], suppliers || [], shop, uiLang);
   if (internalAnswer) return internalAnswer;
+  // Financial installment records are local-only; never include them in the external AI payload.
+  const { supplierPaymentSchedules: _privateSchedules, ...externalShop } = shop || {};
   let response: Response;
   try {
     response = await fetch('/api/ai/command', {
@@ -332,7 +334,7 @@ export async function sendVoiceCommandToServer(
       body: JSON.stringify({
         command,
         uiLang,
-        shop,
+        shop: externalShop,
         conversationHistory: conversationHistory.slice(-12).map((m) => ({ role: m.role, content: String(m.content).slice(0, 600) })),
         parts: parts.map((p) => ({
           id: p.id,
