@@ -43,7 +43,8 @@ export function buildShopSnapshot(
   invoices: Invoice[],
   suppliers: Supplier[],
   session?: { employeeName?: string; role?: string },
-  shopName?: string
+  shopName?: string,
+  supplierPaymentSchedules: Array<{ id: string; supplierId: string; supplierName: string; amount: number; amountPaid: number; dueDate: string; status: string; notes?: string }> = []
 ) {
   const today = new Date().toISOString().slice(0, 10);
   const month = today.slice(0, 7);
@@ -68,6 +69,7 @@ export function buildShopSnapshot(
     userName: session?.employeeName,
     role: session?.role,
     suppliers: suppliers.map((s) => s.name).slice(0, 200),
+    supplierPaymentSchedules: supplierPaymentSchedules.map(p => ({ ...p })),
     summary: {
       partsCount: parts.length,
       outOfStockCount: out.length,
@@ -92,6 +94,28 @@ function answerInternalShopQuery(command: string, parts: AutoPart[], customers: 
   const time = new Date().toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const q = normalizeArabic(command);
   const answer = (spokenFeedback: string, extra: Partial<AICommandResult> = {}): AICommandResult => ({ action: 'GENERAL_ANSWER', spokenFeedback, timestamp: time, lang, ...extra });
+
+  // Supplier installment questions are answered locally from the tenant's saved schedule.
+  const scheduleIntent = /(دفعة|الدفعات|الدفعة|ميعاد الدف|موعد الدف|القادمه|الجايه|متاخره|المتأخره)/.test(q);
+  if (scheduleIntent) {
+    const rows = (shop as any)?.supplierPaymentSchedules as Array<{supplierId:string;supplierName:string;amount:number;amountPaid:number;dueDate:string;status:string}> | undefined;
+    if (!rows || rows.length === 0) return answer('لا توجد دفعات موردين مجدولة في النظام حتى الآن.');
+    const supplierTerms = suppliers.map(x => ({ supplier:x, tokens: normalizeArabic(x.name).split(' ').filter(w => w.length > 2) }));
+    const spoken = q.split(' ').filter(w => w.length > 2 && !['دفعة','الدفعات','الدفعة','القادمة','القادمه','الجاية','الجايه','مورد','المورد','ميعاد','موعد','كام','امتى'].includes(w));
+    const matched = supplierTerms.map(x => ({...x, score: spoken.filter(w => x.tokens.includes(w)).length})).filter(x => x.score > 0).sort((a,b)=>b.score-a.score);
+    if (spoken.length && (!matched.length || (matched[1] && matched[1].score === matched[0].score))) return answer('لم أستطع تحديد المورد بشكل فريد. اذكر اسم المورد كما هو مسجل.');
+    const selected = matched[0]?.supplier;
+    const today = new Date().toISOString().slice(0,10);
+    const pending = rows.filter(x => x.status === 'scheduled' && x.amount > x.amountPaid && (!selected || x.supplierId === selected.id)).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
+    if (!pending.length) return answer(selected ? 'لا توجد دفعات مجدولة متبقية للمورد ' + selected.name + '.' : 'لا توجد دفعات مجدولة متبقية.');
+    const overdue = pending.filter(x => x.dueDate < today);
+    if (/(متاخره|المتأخره)/.test(q)) {
+      const list = overdue.slice(0,8).map(x => x.supplierName + ': ' + (x.amount-x.amountPaid).toLocaleString('ar-EG') + ' جنيه، ' + x.dueDate).join('؛ ');
+      return answer(list || 'لا توجد دفعات متأخرة.');
+    }
+    const next = pending[0];
+    return answer('الدفعة القادمة للمورد ' + next.supplierName + ': ' + (next.amount-next.amountPaid).toLocaleString('ar-EG') + ' جنيه، وموعدها ' + next.dueDate + (next.dueDate < today ? ' (متأخرة)' : '') + '.');
+  }
 
   // Local inventory lookup: no network or model call.
   if (/(كم|باقي|فاضل|متبقي|رصيد|مخزون|عندنا|الموجود|جرد|شوفلي)/.test(q)) {
