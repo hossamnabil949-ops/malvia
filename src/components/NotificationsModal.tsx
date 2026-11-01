@@ -131,12 +131,12 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div 
-        className="w-full max-w-4xl max-h-[92vh] rounded-3xl bg-surface-2 border border-neutral-800 shadow-2xl flex flex-col text-neutral-100 overflow-hidden"
+        className="w-full max-w-4xl h-[96dvh] sm:h-auto max-h-[96dvh] sm:max-h-[92vh] rounded-t-2xl sm:rounded-3xl bg-surface-2 border border-neutral-800 shadow-2xl flex flex-col text-neutral-100 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 sm:p-6 border-b border-neutral-800 bg-gradient-to-r from-surface-3 via-surface-2 to-surface-2 flex items-center justify-between">
+        <div className="p-3 sm:p-6 border-b border-neutral-800 bg-gradient-to-r from-surface-3 via-surface-2 to-surface-2 flex items-start sm:items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 relative">
               <Bell className="w-6 h-6" />
@@ -151,14 +151,14 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-black text-white">
+                <h3 className="text-sm sm:text-lg font-black text-white leading-5">
                   مركز إشعارات الأصناف المستنفدة
                 </h3>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
                   {outOfStockParts.length} أصناف مستنفدة
                 </span>
               </div>
-              <p className="text-xs text-neutral-400 mt-0.5">
+              <p className="hidden sm:block text-xs text-neutral-400 mt-0.5">
                 تنبيهات الأصناف التي نفد رصيدها بالكامل فقط. الأصناف التي وصلت للحد الأدنى تظهر في صفحة «المخزون الحرج».
               </p>
             </div>
@@ -290,7 +290,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
           </div>
         ) : (
           <>
-            <div className="p-4 bg-surface-2 border-b border-neutral-800/80 grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="p-2.5 sm:p-4 bg-surface-2 border-b border-neutral-800/80 grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3 shrink-0">
               <div className="p-3 rounded-2xl bg-surface-1 border border-rose-500/20">
                 <div className="flex items-center justify-between text-neutral-400 text-xs">
                   <span>نفد بالكامل (0 حبة)</span>
@@ -325,7 +325,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               </div>
             </div>
 
-            <div className="p-4 border-b border-neutral-800 bg-surface-2 flex flex-wrap items-center justify-between gap-3">
+            <div className="p-3 sm:p-4 border-b border-neutral-800 bg-surface-2 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-2 shrink-0">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/10 text-rose-300 border border-rose-500/20">
                   الأصناف المستنفدة بالكامل ({outOfStockParts.length})
@@ -389,7 +389,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5 divide-y divide-neutral-800/80 max-h-[50vh] no-scrollbar">
+            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 divide-y divide-neutral-800/80 max-h-none no-scrollbar overscroll-contain">
               {filteredParts.length === 0 ? (
                 <div className="py-12 text-center">
                   <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3">
@@ -420,7 +420,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                           <span className="font-mono text-xs font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
                             {part.partNumber}
                           </span>
-                          <span className="text-sm font-bold text-white truncate">
+                          <span className="text-sm sm:text-base font-bold text-white leading-6 break-words">
                             {part.name}
                           </span>
                           <span className="text-[10px] px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-semibold">
@@ -471,7 +471,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 self-end md:self-center flex-shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 self-stretch md:self-center flex-shrink-0">
                         <div className="flex items-center gap-1 bg-surface-2 p-1 rounded-xl border border-neutral-700/80">
                           <input
                             type="number"
@@ -481,7 +481,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                             value={currentRestockInput}
                             onChange={(e) => handleSetRestockQty(part.id, e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') handleRestock(part); }}
-                            className="w-20 h-7 text-center font-mono text-xs font-bold bg-surface-1 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-amber-400"
+                            className="w-24 h-10 text-center font-mono text-sm font-bold bg-surface-1 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-amber-400"
                           />
                           <span className="text-[10px] text-neutral-400 px-1">{part.unit}</span>
                         </div>
