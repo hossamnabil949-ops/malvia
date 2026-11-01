@@ -413,10 +413,19 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setSupplierPlanDraft(null); pushMessage('assistant','تم إلغاء إعداد الجدول، ولم يتم حفظ أي شيء.'); return true;
     }
     const draft = { ...(supplierPlanDraft || { recurrence: 'weekly', weekdays: [], notes: 'إنشاء صوتي' }), source: raw };
-    const amountMatch = digitText.match(/(?:بمبلغ|مبلغ|المبلغ|اجمالي|إجمالي)?\s*([0-9][0-9,،.]*)(?:\s*جنيه|\s*جنيه)?/);
-    if (amountMatch && Number(amountMatch[1].replace(/[,.،]/g,'')) > 0) draft.totalAmount = Number(amountMatch[1].replace(/[,.،]/g,''));
-    const countMatch = q.match(/(?:على|عدد|لعدد)\s*(\d{1,3})\s*(?:دفعات|دفعة|قسط|اقساط)?|^(\d{1,3})\s*(?:دفعات|دفعة|قسط)?$/);
-    if (countMatch) draft.installmentCount = Number(countMatch[1] || countMatch[2]);
+    // Numeric-only replies answer the missing field currently requested.
+    const numericOnly = q.match(/^(\\d{1,4})$/);
+    const waitingForInterval = Boolean(supplierPlanDraft && supplierPlanDraft.recurrence === 'every_n_days' && !supplierPlanDraft.intervalDays);
+    if (numericOnly && waitingForInterval) {
+      draft.intervalDays = Number(numericOnly[1]);
+    } else if (numericOnly && supplierPlanDraft && !supplierPlanDraft.installmentCount) {
+      draft.installmentCount = Number(numericOnly[1]);
+    } else {
+      const amountMatch = digitText.match(/(?:بمبلغ|مبلغ|المبلغ|اجمالي|إجمالي|المستحق)\\s*([0-9][0-9,،.]*)/);
+      if (amountMatch && Number(amountMatch[1].replace(/[,.،]/g,'')) > 0) draft.totalAmount = Number(amountMatch[1].replace(/[,.،]/g,''));
+      const countMatch = q.match(/(?:على|عدد|لعدد)\\s*(\\d{1,3})\\s*(?:دفعات|دفعة|قسط|اقساط)?|^(\\d{1,3})\\s*(?:دفعات|دفعة|قسط)?$/);
+      if (countMatch) draft.installmentCount = Number(countMatch[1] || countMatch[2]);
+    }
     if (/اسبوع|اسبوعي|اسبوعيا/.test(q)) draft.recurrence = 'weekly';
     if (/شهري|شهريا|كل شهر/.test(q)) draft.recurrence = 'monthly';
     if (/كل يوم|يوميا|كل (\d+) يوم/.test(q)) { draft.recurrence = 'every_n_days'; const n=q.match(/كل (\d+) يوم/); if(n) draft.intervalDays=Number(n[1]); }
