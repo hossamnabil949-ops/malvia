@@ -34,6 +34,7 @@ import * as XLSX from 'xlsx';
 import { 
   Supplier, 
   SupplierPayment, 
+  SupplierPaymentSchedule,
   PurchaseInvoice, 
   PurchaseReturn, 
   PaymentMethod 
@@ -42,6 +43,8 @@ import {
 interface SuppliersViewProps {
   suppliers: Supplier[];
   supplierPayments: SupplierPayment[];
+  supplierPaymentSchedules: SupplierPaymentSchedule[];
+  onChangeSupplierPaymentSchedules: (next: SupplierPaymentSchedule[]) => void;
   purchaseInvoices: PurchaseInvoice[];
   purchaseReturns?: PurchaseReturn[];
   treasuryBalance: number;
@@ -62,6 +65,8 @@ interface SuppliersViewProps {
 export const SuppliersView: React.FC<SuppliersViewProps> = ({
   suppliers,
   supplierPayments,
+  supplierPaymentSchedules,
+  onChangeSupplierPaymentSchedules,
   purchaseInvoices,
   purchaseReturns = [],
   treasuryBalance,
@@ -73,13 +78,18 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'suppliers' | 'payments' | 'returns'>('suppliers');
+  const [activeTab, setActiveTab] = useState<'suppliers' | 'payments' | 'schedules' | 'returns'>('suppliers');
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
   const [settleModalSupplier, setSettleModalSupplier] = useState<Supplier | null>(null);
   const [returnModalSupplier, setReturnModalSupplier] = useState<Supplier | null>(null);
   const [statementSupplier, setStatementSupplier] = useState<Supplier | null>(null);
+  const [scheduleSupplierId, setScheduleSupplierId] = useState('');
+  const [scheduleAmount, setScheduleAmount] = useState('');
+  const [scheduleDueDate, setScheduleDueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [scheduleInvoiceId, setScheduleInvoiceId] = useState('');
+  const [scheduleNotes, setScheduleNotes] = useState('');
 
   // Settle Payment State
   const [settleAmount, setSettleAmount] = useState<number>(1000);
@@ -519,6 +529,10 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
           <span>سجل دفعات السداد وتواريخها ({supplierPayments.length})</span>
         </button>
 
+        <button onClick={() => setActiveTab('schedules')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${activeTab === 'schedules' ? 'bg-amber-500 text-slate-950' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`}>
+          <Calendar className="w-4 h-4" /><span>جدولة الدفعات ({supplierPaymentSchedules.length})</span>
+        </button>
+
         <button
           onClick={() => setActiveTab('returns')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
@@ -733,6 +747,20 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'schedules' && (
+        <div className="space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-6 gap-3">
+            <select value={scheduleSupplierId} onChange={e => setScheduleSupplierId(e.target.value)} className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"><option value="">اختر المورد</option>{suppliers.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+            <input type="number" min="0.01" step="0.01" value={scheduleAmount} onChange={e => setScheduleAmount(e.target.value)} placeholder="قيمة الدفعة" className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" />
+            <input type="date" value={scheduleDueDate} onChange={e => setScheduleDueDate(e.target.value)} className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" />
+            <select value={scheduleInvoiceId} onChange={e => setScheduleInvoiceId(e.target.value)} className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"><option value="">بدون فاتورة محددة</option>{purchaseInvoices.filter(x => !scheduleSupplierId || x.supplierId === scheduleSupplierId).map(x => <option key={x.id} value={x.id}>{x.invoiceNumber}</option>)}</select>
+            <input value={scheduleNotes} onChange={e => setScheduleNotes(e.target.value)} placeholder="ملاحظات" className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" />
+            <button onClick={() => { const supplier = suppliers.find(x => x.id === scheduleSupplierId); const amount = Number(scheduleAmount); if (!supplier || !Number.isFinite(amount) || amount <= 0 || !scheduleDueDate) return; const invoice = purchaseInvoices.find(x => x.id === scheduleInvoiceId); const now = new Date().toISOString(); const row: SupplierPaymentSchedule = { id: 'SPS-' + Date.now() + '-' + Math.random().toString(36).slice(2,7), supplierId: supplier.id, supplierName: supplier.name, purchaseInvoiceId: invoice?.id, purchaseInvoiceNumber: invoice?.invoiceNumber, amount, amountPaid: 0, dueDate: scheduleDueDate, status: 'scheduled', notes: scheduleNotes, createdAt: now, updatedAt: now }; onChangeSupplierPaymentSchedules([row, ...supplierPaymentSchedules]); setScheduleAmount(''); setScheduleNotes(''); setScheduleInvoiceId(''); }} className="bg-amber-500 text-slate-950 rounded-xl px-3 py-2 text-xs font-black">إضافة دفعة مجدولة</button>
+          </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-right text-xs"><thead className="bg-slate-950 text-slate-400"><tr><th className="p-3">المورد</th><th className="p-3">الفاتورة</th><th className="p-3">تاريخ الاستحقاق</th><th className="p-3">المبلغ</th><th className="p-3">الحالة</th><th className="p-3">ملاحظات</th><th className="p-3">إجراء</th></tr></thead><tbody className="divide-y divide-slate-800">{supplierPaymentSchedules.slice().sort((a,b)=>a.dueDate.localeCompare(b.dueDate)).map(x => { const status = x.status === 'cancelled' ? 'ملغاة' : x.status === 'paid' ? 'مسددة' : x.dueDate < new Date().toISOString().slice(0,10) ? 'متأخرة' : x.dueDate === new Date().toISOString().slice(0,10) ? 'مستحقة اليوم' : 'قادمة'; return <tr key={x.id}><td className="p-3 text-white font-bold">{x.supplierName}</td><td className="p-3">{x.purchaseInvoiceNumber || '-'}</td><td className="p-3 font-mono">{x.dueDate}</td><td className="p-3 text-amber-400 font-black">{x.amount.toLocaleString()} ج.م</td><td className="p-3">{status}</td><td className="p-3">{x.notes || '-'}</td><td className="p-3">{x.status === 'scheduled' && <button onClick={() => onChangeSupplierPaymentSchedules(supplierPaymentSchedules.map(y => y.id === x.id ? {...y,status:'cancelled',updatedAt:new Date().toISOString()} : y))} className="text-rose-400">إلغاء</button>}</td></tr>; })}{supplierPaymentSchedules.length===0 && <tr><td colSpan={7} className="p-8 text-center text-slate-500">لا توجد دفعات مجدولة بعد</td></tr>}</tbody></table></div></div>
         </div>
       )}
 
