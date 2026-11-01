@@ -2436,6 +2436,8 @@ export default function App() {
             onClearCart={handleClearCart}
             onCheckoutComplete={handleCreateInvoice}
             vatRate={settings.vatRate}
+            taxRegistered={settings.taxRegistered}
+            pricesIncludeVat={settings.pricesIncludeVat}
             canSellBelowCost={currentUser?.role === 'مدير عام'}
             employees={employees}
             maxDiscountPercent={10}
