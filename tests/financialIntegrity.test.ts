@@ -9,10 +9,10 @@ import { cairoDateKey, salesForDate } from '../src/utils/reportsLogic.ts';
 
 // FIN-1 / AI-4: dashboard sales use Cairo's calendar day and one consistent eligible-invoice set.
 const dashboardInvoices: any[] = [
-  { id: 'today-a', date: '2026-11-01', status: 'مدفوعة', grandTotal: 120, returnedAmount: 20 },
-  { id: 'today-b', date: '2026-11-01', status: 'آجلة', grandTotal: 80, returnedAmount: 0 },
-  { id: 'today-void', date: '2026-11-01', status: 'ملغاة', grandTotal: 900, returnedAmount: 0 },
-  { id: 'yesterday', date: '2026-10-31', status: 'مدفوعة', grandTotal: 500, returnedAmount: 0 },
+  { id: 'today-a', date: '2026-11-01', status: 'مدفوعة', subtotal: 120, discount: 0, tax: 0, grandTotal: 120, returnedAmount: 20 },
+  { id: 'today-b', date: '2026-11-01', status: 'آجلة', subtotal: 80, discount: 0, tax: 0, grandTotal: 80, returnedAmount: 0 },
+  { id: 'today-void', date: '2026-11-01', status: 'ملغاة', subtotal: 900, discount: 0, tax: 0, grandTotal: 900, returnedAmount: 0 },
+  { id: 'yesterday', date: '2026-10-31', status: 'مدفوعة', subtotal: 500, discount: 0, tax: 0, grandTotal: 500, returnedAmount: 0 },
 ];
 const todaySummary = salesForDate(dashboardInvoices, '2026-11-01');
 assert.equal(todaySummary.count, 2);
