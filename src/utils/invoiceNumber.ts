@@ -1,6 +1,7 @@
 // ترقيم فواتير البيع محلياً دون إنترنت: لكل تثبيت/جهاز بادئة مستقلة ثابتة.
 // يمنع تصادم الرقم التسلسلي بين جهازين يعملان Offline ثم تتم مزامنتهما لاحقاً.
 const DEVICE_KEY = 'malvia_invoice_device_code_v1';
+let ephemeralDeviceCode: string | undefined;
 
 export const getInvoiceDeviceCode = (): string => {
   try {
@@ -17,7 +18,12 @@ export const getInvoiceDeviceCode = (): string => {
   } catch {
     // Storage may be unavailable in private/restricted browser contexts.
   }
-  return 'LOCAL1';
+  if (!ephemeralDeviceCode) {
+    ephemeralDeviceCode = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().replace(/-/g, '')
+      : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`).slice(0, 6).toUpperCase();
+  }
+  return ephemeralDeviceCode;
 };
 
 export const nextSalesInvoiceNumber = (
