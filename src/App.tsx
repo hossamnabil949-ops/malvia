@@ -1772,7 +1772,7 @@ export default function App() {
           costPrice: Math.round((purchaseCostTotal / qty) * 100) / 100,
           salePrice: item.salePrice,
           stockQuantity: qty,
-          minAlertStock: 2,
+          minAlertStock: Math.max(0, Math.floor(settings.defaultMinAlertStock ?? 2)),
           unit: 'حبة',
           createdAt: today,
           updatedAt: today,
