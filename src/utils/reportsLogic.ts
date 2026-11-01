@@ -168,7 +168,8 @@ export function reportSalesByPayment(d: ReportData, r: DateRange): ReportTable {
   for (const inv of active(d, r)) {
     for (const p of paymentLines(inv)) {
       const row = m.get(p.method) ?? { count: 0, amount: 0 };
-      row.count += 1; row.amount += p.amount; m.set(p.method, row);
+      const netRatio = inv.grandTotal > 0 ? netSales(inv) / inv.grandTotal : 0;
+      row.count += 1; row.amount += p.amount * netRatio; m.set(p.method, row);
     }
   }
   const total = sum([...m.values()], x => x.amount);
@@ -203,7 +204,8 @@ export function reportReturns(d: ReportData, r: DateRange): ReportTable {
 // ---------------- المشتريات والمالية ----------------
 export function reportPurchasesBySupplier(d: ReportData, r: DateRange): ReportTable {
   const g = group(d.purchaseInvoices.filter(i => inRange(i.date, r)), i => i.supplierId || `unknown:${i.supplierName}`);
-  const rows = [...g.entries()].map(([name, list]) => {
+  const rows = [...g.entries()].map(([supplierId, list]) => {
+    const name = list[0]?.supplierName || supplierId;
     const total = sum(list, i => i.grandTotal);
     const paid = sum(list, i => i.amountPaid ?? 0);
     return { name, count: list.length, total: r2(total), paid: r2(paid), remaining: r2(Math.max(0, total - paid)) };
@@ -220,8 +222,8 @@ export function reportPurchasesBySupplier(d: ReportData, r: DateRange): ReportTa
 export function reportSalesReconciliation(d: ReportData, r: DateRange): ReportTable {
   const inv = active(d, r);
   const reference = r2(sum(inv, netSales));
-  const customerTotal = r2(sum([...group(inv, i => i.customerId || 'unassigned').values()].map(list => sum(list, netSales), n => n)));
-  const cashierTotal = r2(sum([...group(inv, i => i.cashierId || i.cashierName).values()].map(list => sum(list, netSales), n => n)));
+  const customerTotal = r2(sum([...group(inv, i => i.customerId || 'unassigned').values()].map(list => sum(list, netSales)), n => n));
+  const cashierTotal = r2(sum([...group(inv, i => i.cashierId || i.cashierName).values()].map(list => sum(list, netSales)), n => n));
   const itemReport = reportSalesByItem(d, r);
   const paymentReport = reportSalesByPayment(d, r);
   const dailyReport = reportDailySales(d, r);
@@ -404,7 +406,7 @@ export function reportExpiry(d: ReportData, today: string): ReportTable {
 /** أعمار ديون العملاء: يُوزَّع رصيد العميل على فواتيره الآجلة من الأحدث للأقدم، والباقي يُعدّ قديماً (أكثر من 90). */
 export function reportCustomerAging(d: ReportData, today: string): ReportTable {
   const creditOf = (i: Invoice): number => {\n    const credit = sum(paymentLines(i).filter(p => p.isCredit), p => p.amount);\n    const returnedToCredit = sum(d.salesReturns.filter(ret => ret.invoiceId === i.id && ret.refundMethod === 'خصم من رصيد العميل الآجل'), ret => ret.totalRefundAmount);\n    return Math.max(0, credit - returnedToCredit);\n  };
-  const byCustomer = group(d.invoices.filter(i => i.status !== 'ملغاة' && creditOf(i) > 0), i => i.customerId || `name:${i.customerName}`);
+  const byCustomer = group(d.invoices.filter(i => i.status !== 'ملغاة' && Boolean(i.customerId) && creditOf(i) > 0), i => i.customerId!);
   const rows = d.customers.filter(c => c.balance > 0).map(c => {
     const list = (byCustomer.get(c.id) ?? []).sort((a, b) => a.date.localeCompare(b.date));
     const b = { b0: 0, b30: 0, b60: 0, b90: 0 };
