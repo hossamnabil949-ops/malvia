@@ -37,7 +37,7 @@ export interface ShiftSummary {
   cashIn: number;
   cashOut: number;
   cashSales: number;
-  nonCash: { instapay: number; visa: number; wallet: number };
+  nonCash: { instapay: number; visa: number; wallet: number; bank: number };
   invoiceCount: number;
   breakdown: ShiftCashLine[];
   expectedCash: number;
@@ -45,7 +45,7 @@ export interface ShiftSummary {
 
 export const summarizeShift = (shift: Pick<Shift, 'id' | 'openingCash'>, txs: TreasuryTransaction[]): ShiftSummary => {
   let cashIn = 0, cashOut = 0, cashSales = 0;
-  const nonCash = { instapay: 0, visa: 0, wallet: 0 };
+  const nonCash = { instapay: 0, visa: 0, wallet: 0, bank: 0 };
   const invoices = new Set<string>();
   const byCat = new Map<string, number>(); // موجب = قبض، سالب = صرف
 
@@ -72,7 +72,7 @@ export const summarizeShift = (shift: Pick<Shift, 'id' | 'openingCash'>, txs: Tr
     cashIn: round2(cashIn),
     cashOut: round2(cashOut),
     cashSales: round2(cashSales),
-    nonCash: { instapay: round2(nonCash.instapay), visa: round2(nonCash.visa), wallet: round2(nonCash.wallet) },
+    nonCash: { instapay: round2(nonCash.instapay), visa: round2(nonCash.visa), wallet: round2(nonCash.wallet), bank: round2(nonCash.bank) },
     invoiceCount: invoices.size,
     breakdown,
     expectedCash: round2((Number(shift.openingCash) || 0) + cashIn - cashOut),
