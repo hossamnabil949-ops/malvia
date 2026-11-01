@@ -19,12 +19,13 @@ const txs = [
   tx({ id: 'c', amount: 50, shiftId: 'S1', type: 'صرف', category: 'مصروفات تشغيلية' }),     // مصروف كاش
   tx({ id: 'd', amount: 999, shiftId: 'S0' }),                                              // وردية أخرى
   tx({ id: 'e', amount: 70, shiftId: 'S1', category: 'تحصيل من عميل / ورشة', paymentMethod: 'إنستاباي' }),
+  tx({ id: 'g', amount: 50, shiftId: 'S1', category: 'تحصيل شيك', paymentMethod: 'شيك (حساب بنكي)' }),
   tx({ id: 'f', amount: 20, shiftId: 'S1', category: 'عجز درج (تسوية وردية)', type: 'صرف' }), // لا يدخل الحساب
 ];
 const s = summarizeShift(shift, txs as any);
 assert.equal(s.cashIn, 300); assert.equal(s.cashOut, 50); assert.equal(s.cashSales, 300);
 assert.equal(s.expectedCash, 750);
-assert.equal(s.nonCash.visa, 200); assert.equal(s.nonCash.instapay, 70);
+assert.equal(s.nonCash.visa, 200); assert.equal(s.nonCash.instapay, 70); assert.equal(s.nonCash.bank, 50);
 assert.equal(s.invoiceCount, 1);
 
 // عجز / زيادة / مطابق
