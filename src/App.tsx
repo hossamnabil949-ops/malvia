@@ -2398,6 +2398,8 @@ export default function App() {
             onClearCart={handleClearCart}
             onCheckoutComplete={handleCreateInvoice}
             vatRate={settings.vatRate}
+            vatEnabled={settings.vatEnabled}
+            pricesIncludeTax={settings.pricesIncludeTax}
             canSellBelowCost={currentUser?.role === 'مدير عام'}
             employees={employees}
             maxDiscountPercent={10}
@@ -2909,9 +2911,9 @@ export default function App() {
                 total
               }],
               subtotal: total,
-              tax: 0,
+              tax: settings.vatEnabled ? Math.round(total * (settings.pricesIncludeTax ? settings.vatRate / (100 + settings.vatRate) : settings.vatRate / 100) * 100) / 100 : 0,
               discount: 0,
-              grandTotal: total,
+              grandTotal: settings.vatEnabled && !settings.pricesIncludeTax ? Math.round(total * (1 + settings.vatRate / 100) * 100) / 100 : total,
               paymentMethod: payMethod as PaymentMethod,
               status: 'مسددة',
               cashierName: currentUser?.employeeName || 'الكاشير'
