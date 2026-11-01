@@ -1313,6 +1313,10 @@ export default function App() {
       returnedAmount: inv.returnedAmount,
       items: inv.items,
       payments: payments.map(p => ({ method: String(p.method), amount: p.amount })),
+      priorRefunds: salesReturns.filter(ret => ret.invoiceId === inv.id).map(ret => ({
+        refundMethod: ret.refundMethod,
+        totalRefundAmount: ret.totalRefundAmount,
+      })),
     });
     const fraction = plan.fraction;
     // عكس الولاء: تُسحب النقاط المتبقية من الفاتورة وتُرد النقاط المستبدلة
