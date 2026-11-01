@@ -807,13 +807,15 @@ export default function App() {
   };
 
   /** تطبيق أثر مرتجع (أو حذفه) على الدفعات والسيريال. يرجع الأسطر المحدّثة للفاتورة. */
-  const applyReturnTracking = (inv: Invoice, retItems: { partNumber: string; partName: string; quantity: number; serials?: string[] }[], direction: 1 | -1) => {
+  const applyReturnTracking = (inv: Invoice, retItems: { lineId?: string; partId?: string; partNumber: string; partName: string; quantity: number; unitPrice?: number; serials?: string[] }[], direction: 1 | -1) => {
     const batchOps: { batchId: string; qty: number }[] = [];
     const toStock = new Set<string>();
     const toSold = new Set<string>();
     const touchedPartIds = new Map<string, string>(); // serial -> partId
     retItems.forEach(r => {
-      const it = inv.items.find(x => x.partNumber === r.partNumber && x.partName === r.partName);
+      const it = inv.items.find((x, index) => r.lineId && (x.lineId || `${inv.id}:${index}`) === r.lineId)
+        || (r.partId ? inv.items.find(x => x.partId === r.partId && (r.unitPrice === undefined || x.unitPrice === r.unitPrice)) : undefined)
+        || inv.items.find(x => x.partNumber === r.partNumber && x.partName === r.partName && (r.unitPrice === undefined || x.unitPrice === r.unitPrice));
       if (!it) return;
       const res = trackReturn(it, r.quantity, r.serials, direction);
       batchOps.push(...res.batchOps);
@@ -1430,13 +1432,25 @@ export default function App() {
   const handleAddSalesReturn = (rawReturn: SalesReturn) => {
     // تثبيت السيريالات المرتجعة فعلياً داخل سجل المرتجع (المختارة من الشاشة أو تلقائياً)
     const origInv = invoices.find(i => i.id === rawReturn.invoiceId);
+    if (origInv?.status === 'ملغاة') {
+      window.alert('لا يمكن إنشاء مرتجع لفاتورة ملغاة.');
+      return;
+    }
     const salesReturn: SalesReturn = origInv
       ? {
           ...rawReturn,
+          customerId: rawReturn.customerId || origInv.customerId,
           items: rawReturn.items.map(r => {
-            const it = origInv.items.find(x => x.partNumber === r.partNumber && x.partName === r.partName);
-            if (!it?.serials?.length) return r;
-            return { ...r, serials: trackReturn(it, r.quantity, r.serials, 1).unitsToStock };
+            const index = origInv.items.findIndex((x, i) => r.lineId && (x.lineId || `${origInv.id}:${i}`) === r.lineId);
+            const byPartId = r.partId ? origInv.items.findIndex(x => x.partId === r.partId && x.unitPrice === r.unitPrice) : -1;
+            const fallback = origInv.items.findIndex(x => x.partNumber === r.partNumber && x.partName === r.partName && x.unitPrice === r.unitPrice && (x.quantity - (x.returnedQuantity || 0)) >= r.quantity);
+            const lineIndex = index >= 0 ? index : byPartId >= 0 ? byPartId : fallback;
+            const it = lineIndex >= 0 ? origInv.items[lineIndex] : undefined;
+            if (!it) return r;
+            const lineId = it.lineId || `${origInv.id}:${lineIndex}`;
+            const enriched = { ...r, lineId, partId: r.partId || it.partId };
+            if (!it.serials?.length) return enriched;
+            return { ...enriched, serials: trackReturn(it, r.quantity, r.serials, 1).unitsToStock };
           }),
         }
       : rawReturn;
@@ -1451,9 +1465,13 @@ export default function App() {
     setInvoices(prev => {
       const updated = prev.map(inv => {
         if (inv.id !== salesReturn.invoiceId) return inv;
-        const items = inv.items.map(it => {
-          const r = salesReturn.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
-          return r ? { ...trackedInvoiceItem(it, r, 1), returnedQuantity: (it.returnedQuantity || 0) + r.quantity } : it;
+        const items = inv.items.map((it, index) => {
+          const lineId = it.lineId || `${inv.id}:${index}`;
+          const r = salesReturn.items.find(i => i.lineId === lineId)
+            || (it.partId ? salesReturn.items.find(i => i.partId === it.partId && i.unitPrice === it.unitPrice) : undefined);
+          return r
+            ? { ...trackedInvoiceItem({ ...it, lineId }, r, 1), lineId, returnedQuantity: (it.returnedQuantity || 0) + r.quantity }
+            : { ...it, lineId };
         });
         const allReturned = items.every(it => (it.returnedQuantity || 0) >= it.quantity);
         return {
@@ -1470,20 +1488,27 @@ export default function App() {
     // Restock parts if returned
     if (salesReturn.items && salesReturn.items.length > 0) {
       const moves: Parameters<typeof logStockMovements>[0] = [];
-      const updated = parts.map(part => {
-        const item = salesReturn.items.find(i => i.partNumber === part.partNumber);
-        if (item) {
-          moves.push({ part, qtyDelta: item.quantity, type: 'sales_return', refId: salesReturn.id, refNumber: salesReturn.returnNumber });
-          return { ...part, stockQuantity: part.stockQuantity + item.quantity, updatedAt: todayISO() };
+      const qtyByPartId = new Map<string, number>();
+      salesReturn.items.forEach(item => {
+        let partId = item.partId;
+        if (!partId) {
+          const matches = parts.filter(p => p.partNumber === item.partNumber && p.name === item.partName);
+          if (matches.length === 1) partId = matches[0].id;
         }
-        return part;
+        if (partId) qtyByPartId.set(partId, (qtyByPartId.get(partId) || 0) + item.quantity);
+      });
+      const updated = parts.map(part => {
+        const qty = qtyByPartId.get(part.id) || 0;
+        if (qty <= 0) return part;
+        moves.push({ part, qtyDelta: qty, type: 'sales_return', refId: salesReturn.id, refNumber: salesReturn.returnNumber });
+        return { ...part, stockQuantity: part.stockQuantity + qty, updatedAt: todayISO() };
       });
       setParts(updated);
       persistChanges({ parts: updated });
       logStockMovements(moves);
     }
     shiftWarehouseStock(invoices.find(i => i.id === salesReturn.invoiceId)?.warehouseId,
-      (salesReturn.items || []).map(i => ({ partNumber: i.partNumber, qty: i.quantity })), 1);
+      (salesReturn.items || []).map(i => ({ partId: i.partId, partNumber: i.partNumber, qty: i.quantity })), 1);
     {
       const inv = invoices.find(i => i.id === salesReturn.invoiceId);
       if (inv) {
@@ -1498,13 +1523,10 @@ export default function App() {
     if (salesReturn.refundMethod === 'خصم من رصيد العميل الآجل') {
       const original = invoices.find(i => i.id === salesReturn.invoiceId);
       setCustomers(prev => {
-        const nameKey = normKey(salesReturn.customerName);
-        const phoneKey = normKey(original?.customerPhone);
-        const updated = prev.map(c =>
-          ((phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey)
-            ? { ...c, balance: c.balance - salesReturn.totalRefundAmount }
-            : c
-        );
+        const customerId = salesReturn.customerId || original?.customerId;
+        const updated = customerId
+          ? prev.map(c => c.id === customerId ? { ...c, balance: c.balance - salesReturn.totalRefundAmount } : c)
+          : prev;
         persistChanges({ customers: updated });
         return updated;
       });
@@ -1553,9 +1575,13 @@ export default function App() {
     setInvoices(prev => {
       const updated = prev.map(inv => {
         if (inv.id !== ret.invoiceId) return inv;
-        const items = inv.items.map(it => {
-          const r = ret.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
-          return r ? { ...trackedInvoiceItem(it, r, -1), returnedQuantity: Math.max(0, (it.returnedQuantity || 0) - r.quantity) } : it;
+        const items = inv.items.map((it, index) => {
+          const lineId = it.lineId || `${inv.id}:${index}`;
+          const r = ret.items.find(i => i.lineId === lineId)
+            || (it.partId ? ret.items.find(i => i.partId === it.partId && i.unitPrice === it.unitPrice) : undefined);
+          return r
+            ? { ...trackedInvoiceItem({ ...it, lineId }, r, -1), lineId, returnedQuantity: Math.max(0, (it.returnedQuantity || 0) - r.quantity) }
+            : { ...it, lineId };
         });
         const returnedAmount = Math.max(0, (inv.returnedAmount || 0) - ret.totalRefundAmount);
         const anyReturned = items.some(it => (it.returnedQuantity || 0) > 0);
@@ -1574,18 +1600,27 @@ export default function App() {
     // عكس المخزن: الكمية التي رجعت بالمرتجع تُسحب مرة أخرى
     {
       const moves: Parameters<typeof logStockMovements>[0] = [];
+      const qtyByPartId = new Map<string, number>();
+      ret.items.forEach(item => {
+        let partId = item.partId;
+        if (!partId) {
+          const matches = parts.filter(p => p.partNumber === item.partNumber && p.name === item.partName);
+          if (matches.length === 1) partId = matches[0].id;
+        }
+        if (partId) qtyByPartId.set(partId, (qtyByPartId.get(partId) || 0) + item.quantity);
+      });
       const updated = parts.map(part => {
-        const item = ret.items.find(i => i.partNumber === part.partNumber);
-        if (!item) return part;
-        moves.push({ part, qtyDelta: -item.quantity, type: 'sales_return_delete', refId: ret.id, refNumber: ret.returnNumber });
-        return { ...part, stockQuantity: Math.max(0, part.stockQuantity - item.quantity), updatedAt: todayISO() };
+        const qty = qtyByPartId.get(part.id) || 0;
+        if (qty <= 0) return part;
+        moves.push({ part, qtyDelta: -qty, type: 'sales_return_delete', refId: ret.id, refNumber: ret.returnNumber });
+        return { ...part, stockQuantity: Math.max(0, part.stockQuantity - qty), updatedAt: todayISO() };
       });
       setParts(updated);
       persistChanges({ parts: updated });
       logStockMovements(moves);
     }
     shiftWarehouseStock(invoices.find(i => i.id === ret.invoiceId)?.warehouseId,
-      ret.items.map(i => ({ partNumber: i.partNumber, qty: i.quantity })), -1);
+      ret.items.map(i => ({ partId: i.partId, partNumber: i.partNumber, qty: i.quantity })), -1);
     {
       const inv = invoices.find(i => i.id === ret.invoiceId);
       if (inv) {
@@ -1601,13 +1636,10 @@ export default function App() {
     if (ret.refundMethod === 'خصم من رصيد العميل الآجل') {
       const original = invoices.find(i => i.id === ret.invoiceId);
       setCustomers(prev => {
-        const nameKey = normKey(ret.customerName);
-        const phoneKey = normKey(original?.customerPhone);
-        const updated = prev.map(c =>
-          ((phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey)
-            ? { ...c, balance: c.balance + ret.totalRefundAmount }
-            : c
-        );
+        const customerId = ret.customerId || original?.customerId;
+        const updated = customerId
+          ? prev.map(c => c.id === customerId ? { ...c, balance: c.balance + ret.totalRefundAmount } : c)
+          : prev;
         persistChanges({ customers: updated });
         return updated;
       });
