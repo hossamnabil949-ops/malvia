@@ -196,6 +196,31 @@ export function reportSalesByCashier(d: ReportData, r: DateRange): ReportTable {
   };
 }
 
+export function reportSalesReconciliation(d: ReportData, r: DateRange): ReportTable {
+  const invoices = active(d, r);
+  const sourceTotal = r2(sum(invoices, netSales));
+  const daily = reportDailySales(d, r);
+  const byCustomer = reportSalesByCustomer(d, r);
+  const byCashier = reportSalesByCashier(d, r);
+  const byItem = reportSalesByItem(d, r);
+  const byPayment = reportSalesByPayment(d, r);
+  const values = [
+    { item: 'إجمالي الفواتير المؤهلة (المرجع الموحد)', amount: sourceTotal },
+    { item: 'مجموع التقرير اليومي', amount: r2(sum(daily.rows, row => Number(row.net) || 0)) },
+    { item: 'مجموع تقرير العملاء', amount: r2(sum(byCustomer.rows, row => Number(row.total) || 0)) },
+    { item: 'مجموع تقرير الكاشير', amount: r2(sum(byCashier.rows, row => Number(row.total) || 0)) },
+    { item: 'مجموع تقرير الأصناف', amount: r2(sum(byItem.rows, row => Number(row.revenue) || 0)) },
+    { item: 'مجموع طرق الدفع بعد توزيع المرتجعات والضريبة', amount: r2(sum(byPayment.rows, row => Number(row.amount) || 0)) },
+  ];
+  return {
+    id: 'sales-reconciliation', title: 'مطابقة صافي المبيعات بين التقارير',
+    columns: [{ key: 'item', label: 'مصدر الإجمالي' }, { key: 'amount', label: 'صافي المبيعات (ج.م)', kind: 'money' }, { key: 'difference', label: 'الفرق عن المرجع', kind: 'money' }],
+    rows: values.map(row => ({ ...row, difference: r2(row.amount - sourceTotal) })),
+    totals: { item: 'فرق التقارير (يجب أن يكون صفراً)', amount: sourceTotal, difference: 0 },
+    note: 'جميع المقارنات تستخدم الفواتير غير الملغاة وصافي المبيعات بعد الخصم والمرتجعات وقبل الضريبة. أي فرق غير صفري يستحق مراجعة توزيع المرتجع أو الدفعة.',
+  };
+}
+
 export function reportSalesByPayment(d: ReportData, r: DateRange): ReportTable {
   const m = new Map<string, { count: number; amount: number }>();
   for (const inv of active(d, r)) {
@@ -521,6 +546,7 @@ export const REPORT_DEFS: ReportDef[] = [
   { id: 'sales-by-customer', group: 'المبيعات', title: 'المبيعات حسب العميل', usesRange: true, build: (d, r) => reportSalesByCustomer(d, r) },
   { id: 'sales-by-cashier', group: 'المبيعات', title: 'المبيعات حسب الموظف', usesRange: true, build: (d, r) => reportSalesByCashier(d, r) },
   { id: 'sales-by-payment', group: 'المبيعات', title: 'المبيعات حسب طريقة الدفع', usesRange: true, build: (d, r) => reportSalesByPayment(d, r) },
+  { id: 'sales-reconciliation', group: 'المبيعات', title: 'مطابقة صافي المبيعات بين التقارير', usesRange: true, build: (d, r) => reportSalesReconciliation(d, r) },
   { id: 'returns', group: 'المبيعات', title: 'تحليل المرتجعات', usesRange: true, build: (d, r) => reportReturns(d, r) },
   { id: 'profit-loss', group: 'المالية', title: 'الأرباح والخسائر', usesRange: true, build: (d, r) => reportProfitLoss(d, r) },
   { id: 'vat-summary', group: 'المالية', title: 'ملخص ضريبة القيمة المضافة', usesRange: true, build: (d, r) => reportVatSummary(d, r) },
