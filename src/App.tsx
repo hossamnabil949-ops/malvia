@@ -1113,9 +1113,14 @@ export default function App() {
       ? invoice.payments
       : [{ method: invoice.paymentMethod, amount: invoice.grandTotal }];
     const requestedCredit = requestedPayments.filter(p => isCreditPayment(String(p.method))).reduce((sum, p) => sum + p.amount, 0);
-    if (requestedCredit > 0 && (!invoice.customerId || !customers.some(c => c.id === invoice.customerId))) {
-      window.alert('البيع الآجل يتطلب اختيار عميل مسجل في النظام وتحديد حد ائتمان موجب له.');
-      return false;
+    if (requestedCredit > 0) {
+      const creditCustomer = invoice.customerId ? customers.find(c => c.id === invoice.customerId) : undefined;
+      const creditLimit = Number(creditCustomer?.creditLimit) || 0;
+      const exposure = (Number(creditCustomer?.balance) || 0) + (Number(creditCustomer?.chequesPending) || 0) + requestedCredit;
+      if (!creditCustomer || !(creditLimit > 0) || exposure > creditLimit) {
+        window.alert('البيع الآجل مرفوض: اختر عميلاً مسجلاً واضبط له حد ائتمان موجباً يكفي للمديونية الجديدة.');
+        return false;
+      }
     }
     if (settings.requireShiftForSales && !findOpenShift(shifts)) {
       window.alert('لازم تفتح وردية الأول (وتعدّ كاش الدرج) قبل ما تبيع.');
@@ -1490,7 +1495,7 @@ export default function App() {
       setCustomers(prev => {
         const updated = prev.map(c =>
           (salesReturn.customerId && c.id === salesReturn.customerId)
-            ? { ...c, balance: c.balance - salesReturn.totalRefundAmount }
+            ? { ...c, balance: c.balance - salesReturn.totalRefundAmount, totalPurchases: Math.max(0, (c.totalPurchases || 0) - salesReturn.totalRefundAmount), monthlyPurchases: Math.max(0, (c.monthlyPurchases || 0) - salesReturn.totalRefundAmount) }
             : c
         );
         persistChanges({ customers: updated });
@@ -1591,7 +1596,7 @@ export default function App() {
       setCustomers(prev => {
         const updated = prev.map(c =>
           (ret.customerId && c.id === ret.customerId)
-            ? { ...c, balance: c.balance + ret.totalRefundAmount }
+            ? { ...c, balance: c.balance + ret.totalRefundAmount, totalPurchases: (c.totalPurchases || 0) + ret.totalRefundAmount, monthlyPurchases: (c.monthlyPurchases || 0) + ret.totalRefundAmount }
             : c
         );
         persistChanges({ customers: updated });
