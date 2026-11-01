@@ -542,3 +542,49 @@ import { computeVoidPlan } from '../src/utils/saleLogic.ts';
   assert.equal(full.restock.length, 0); assert.equal(full.refunds.length, 0); assert.equal(full.creditAmount, 0);
   console.log('void: كل الاختبارات نجحت');
 }
+
+
+ // ---------- مواعيد دفعات الموردين ----------
+ import { generateSupplierScheduleDates } from '../src/utils/supplierPaymentSchedule.ts';
+ {
+   assert.deepEqual(
+     generateSupplierScheduleDates({ recurrence: 'monthly', startDate: '2026-11-20', installmentCount: 3, dayOfMonth: 5 }),
+     ['2026-12-05', '2027-01-05', '2027-02-05']
+   );
+ }
+
+ // ---------- تصنيف حسابات الخزنة ومعرّفات الحركات ----------
+ import { accountOf, isCreditMethod } from '../src/utils/treasuryAccounts.ts';
+ import { nextTreasuryTransactionNumber } from '../src/utils/transactionNumber.ts';
+ {
+   assert.equal(accountOf('تحويل بنكي'), 'bank');
+   assert.equal(accountOf('شيك (حساب بنكي)'), 'bank');
+   assert.equal(accountOf('فيزا'), 'visa');
+   assert.equal(accountOf('بطاقة بنك'), 'visa');
+   assert.equal(accountOf('كاش'), 'cash');
+   assert.equal(accountOf('credit'), 'unclassified');
+   assert.equal(accountOf('طريقة غير معروفة'), 'unclassified');
+   assert.equal(isCreditMethod('credit'), true);
+   const ids = new Set(Array.from({ length: 500 }, () => nextTreasuryTransactionNumber()));
+   assert.equal(ids.size, 500);
+ }
+
+ // ---------- ترقيم فواتير البيع لكل جهاز ----------
+ import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
+ {
+   const storage = new Map<string, string>();
+   (globalThis as any).localStorage = {
+     getItem: (key: string) => storage.get(key) ?? null,
+     setItem: (key: string, value: string) => storage.set(key, value),
+   };
+   const date = new Date(2026, 10, 1);
+   const first = nextSalesInvoiceNumber([], date);
+   const second = nextSalesInvoiceNumber([{ invoiceNumber: first }], date);
+   assert.match(first, /^INV-2026-[A-F0-9]{8}-0001$/);
+   assert.match(second, /^INV-2026-[A-F0-9]{8}-0002$/);
+   const deviceA = storage.get('malvia_invoice_device_code_v1');
+   storage.set('malvia_invoice_device_code_v1', 'ABCDEF12');
+   const deviceB = nextSalesInvoiceNumber([], date);
+   assert.notEqual(deviceA, 'ABCDEF12');
+   assert.match(deviceB, /^INV-2026-ABCDEF12-0001$/);
+ }
