@@ -29,10 +29,12 @@ import {
   Legend 
 } from 'recharts';
 import { LoyaltyEntry, LOYALTY_TYPE_LABEL, analyzeLoyalty, withRunningBalance } from '../utils/loyaltyLogic';
-import { Customer } from '../types/autoParts';
+import { Customer, Invoice } from '../types/autoParts';
+import { cairoDateKey, netSales } from '../utils/reportsLogic';
 
 interface CustomersViewProps {
   customers: Customer[];
+  invoices?: Invoice[];
   onAddCustomer: (customer: Customer) => void;
   onSettleBalance: (customerId: string, amount: number) => void;
   onUpdateCreditLimit?: (customerId: string, limit: number) => void;
@@ -46,6 +48,7 @@ const COLORS = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'];
 
 export const CustomersView: React.FC<CustomersViewProps> = ({
   customers,
+  invoices = [],
   onAddCustomer,
   onSettleBalance,
   onUpdateCreditLimit,
@@ -114,9 +117,23 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     }
   };
 
-  const totalOutstandingCredit = customers.reduce((sum, c) => sum + Math.max(0, c.balance), 0);
+  const currentMonth = cairoDateKey(new Date()).slice(0, 7);
+  const customerRows = customers.map(customer => {
+    const ownInvoices = invoices.filter(invoice => invoice.status !== 'ملغاة' && invoice.customerId === customer.id);
+    const currentMonthInvoices = ownInvoices.filter(invoice => (invoice.date || '').slice(0, 7) === currentMonth);
+    const lastVisit = ownInvoices.map(invoice => invoice.date).sort().at(-1) || customer.lastVisit;
+    return {
+      ...customer,
+      totalPurchases: ownInvoices.reduce((total, invoice) => total + netSales(invoice), 0),
+      monthlyPurchases: currentMonthInvoices.reduce((total, invoice) => total + netSales(invoice), 0),
+      invoicesCount: ownInvoices.length,
+      lastVisit,
+    };
+  });
 
-  const top5Customers = [...customers]
+  const totalOutstandingCredit = customerRows.reduce((sum, c) => sum + Math.max(0, c.balance), 0);
+
+  const top5Customers = [...customerRows]
     .sort((a, b) => (b.monthlyPurchases || 0) - (a.monthlyPurchases || 0))
     .slice(0, 5)
     .map((c, index) => ({
@@ -201,7 +218,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           </div>
           <h2 className="text-xl font-black text-white">إدارة حسابات الورش الفنية والعملاء</h2>
           <div className="flex items-center gap-4 text-xs text-neutral-400 mt-1">
-            <span>إجمالي الورش والعملاء: <strong className="text-white font-mono">{customers.length}</strong></span>
+            <span>إجمالي الورش والعملاء: <strong className="text-white font-mono">{customerRows.length}</strong></span>
             <span>·</span>
             <span>إجمالي المبالغ الآجلة المستحقة: <strong className="text-rose-400 font-mono">{totalOutstandingCredit.toLocaleString()} ج.م</strong></span>
           </div>
@@ -384,13 +401,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
             <Users className="w-4 h-4 text-amber-400" />
-            <span>كافة حسابات الورش والعملاء ({customers.length})</span>
+            <span>كافة حسابات الورش والعملاء ({customerRows.length})</span>
           </h3>
           <span className="text-xs text-neutral-400">مرتبة حسب تاريخ النشاط</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {customers.map((c) => (
+          {customerRows.map((c) => (
             <div
               key={c.id}
               className="p-5 rounded-3xl bg-surface-2 border border-neutral-800 flex flex-col justify-between shadow-md space-y-4 hover:border-neutral-700 transition-all"
