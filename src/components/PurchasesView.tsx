@@ -321,6 +321,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           batchNo: mode === 'batch' ? it.batchNo?.trim() || undefined : undefined,
           expiryDate: mode === 'batch' ? it.expiryDate || undefined : undefined,
           serials: mode === 'serial' ? parseSerialList(serialTexts[i] || '') : undefined,
+          taxAmount: subtotal > 0 ? Math.round(taxAmount * (Number(it.quantity) * Number(it.costPrice) / subtotal) * 100) / 100 : 0,
         };
       });
     if (validItems.length === 0) return;
