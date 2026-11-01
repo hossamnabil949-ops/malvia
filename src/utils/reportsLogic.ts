@@ -184,8 +184,10 @@ export function reportReturns(d: ReportData, r: DateRange): ReportTable {
 
 // ---------------- المشتريات والمالية ----------------
 export function reportPurchasesBySupplier(d: ReportData, r: DateRange): ReportTable {
-  const g = group(d.purchaseInvoices.filter(i => inRange(i.date, r)), i => i.supplierName);
-  const rows = [...g.entries()].map(([name, list]) => {
+  const supplierNames = new Map(d.suppliers.map(s => [s.id, s.name]));
+  const g = group(d.purchaseInvoices.filter(i => inRange(i.date, r)), i => i.supplierId || `legacy-name:${i.supplierName}`);
+  const rows = [...g.entries()].map(([supplierKey, list]) => {
+    const name = list[0]?.supplierName || supplierNames.get(supplierKey) || supplierKey;
     const total = sum(list, i => i.grandTotal);
     const paid = sum(list, i => i.amountPaid ?? 0);
     return { name, count: list.length, total: r2(total), paid: r2(paid), remaining: r2(Math.max(0, total - paid)) };
@@ -267,7 +269,7 @@ export function reportInventoryValuation(d: ReportData): ReportTable {
 }
 
 export function reportLowStock(d: ReportData): ReportTable {
-  const rows = d.parts.filter(p => p.stockQuantity <= p.minAlertStock)
+  const rows = d.parts.filter(p => p.minAlertStock > 0 && p.stockQuantity <= p.minAlertStock)
     .map(p => ({ number: p.partNumber, name: p.name, stock: p.stockQuantity, min: p.minAlertStock, suggest: Math.max(0, p.minAlertStock * 2 - p.stockQuantity), cost: r2(Math.max(0, p.minAlertStock * 2 - p.stockQuantity) * p.costPrice) }))
     .sort((a, b) => a.stock - b.stock);
   return {
@@ -280,20 +282,32 @@ export function reportLowStock(d: ReportData): ReportTable {
 }
 
 export function reportSlowMoving(d: ReportData, today: string, days = 90): ReportTable {
-  const lastSale = new Map<string, string>();
+  const lastActivity = new Map<string, string>();
+  const recordActivity = (key: string | undefined, date: string | undefined) => {
+    const normalizedDate = date?.slice(0, 10);
+    if (!key || !normalizedDate) return;
+    const previous = lastActivity.get(key);
+    if (!previous || normalizedDate > previous) lastActivity.set(key, normalizedDate);
+  };
   for (const inv of d.invoices) {
     if (inv.status === 'ملغاة') continue;
     for (const it of inv.items) {
-      const k = it.partId || it.partNumber;
-      const prev = lastSale.get(k);
-      if (!prev || inv.date > prev) lastSale.set(k, inv.date.slice(0, 10));
+      recordActivity(it.partId, inv.date);
+      if (!it.partId) recordActivity(it.partNumber, inv.date);
+    }
+  }
+  for (const purchase of d.purchaseInvoices) {
+    for (const it of purchase.items) {
+      recordActivity(it.partId, purchase.date);
+      if (!it.partId) recordActivity(it.partNumber, purchase.date);
     }
   }
   const rows = d.parts.filter(p => p.stockQuantity > 0).map(p => {
-    const last = lastSale.get(p.id) ?? lastSale.get(p.partNumber) ?? '';
-    const idle = last ? daysBetween(last, today) : 9999;
-    return { number: p.partNumber, name: p.name, stock: p.stockQuantity, frozen: r2(p.stockQuantity * p.costPrice), last: last || 'لم يُبع', idle: idle === 9999 ? 'بدون مبيعات' : idle, _i: idle };
-  }).filter(x => x._i >= days).sort((a, b) => b.frozen - a.frozen)
+    const last = [lastActivity.get(p.id), lastActivity.get(p.partNumber), p.createdAt?.slice(0, 10)]
+      .filter((x): x is string => Boolean(x)).sort().at(-1) ?? '';
+    const idle = last ? Math.max(0, daysBetween(last, today)) : 0;
+    return { number: p.partNumber, name: p.name, stock: p.stockQuantity, frozen: r2(p.stockQuantity * p.costPrice), last: last || 'تاريخ غير متاح', idle: last ? idle : 'تاريخ غير متاح', _i: idle };
+  }).filter(x => x._i >= days && x.last !== 'تاريخ غير متاح').sort((a, b) => b.frozen - a.frozen)
     .map(({ _i, ...rest }) => rest);
   return {
     id: 'slow-moving', title: `الأصناف الراكدة (بلا مبيعات منذ ${days} يوماً)`,
@@ -361,15 +375,15 @@ export function reportSupplierPayables(d: ReportData): ReportTable {
 export function reportCheques(d: ReportData, today: string): ReportTable {
   const rows = d.cheques.filter(isOpen).sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(c => {
     const st = dueState(c, today);
-    return { dir: c.direction === 'incoming' ? 'وارد' : 'صادر', party: c.partyName, number: c.number, bank: c.bankName, due: c.dueDate, days: daysBetween(today, c.dueDate), state: st === 'overdue' ? 'متأخر' : st === 'due_soon' ? 'يستحق قريباً' : 'لاحقاً', amount: r2(c.amount), _in: c.direction === 'incoming' ? c.amount : 0, _out: c.direction === 'outgoing' ? c.amount : 0 };
+    return { dir: c.direction === 'incoming' ? 'وارد' : 'صادر', party: c.partyName, number: c.number, bank: c.bankName, due: c.dueDate, days: daysBetween(today, c.dueDate), state: st === 'overdue' ? 'متأخر' : st === 'due_soon' ? 'يستحق قريباً' : 'لاحقاً', amount: r2(c.amount), incoming: c.direction === 'incoming' ? r2(c.amount) : 0, outgoing: c.direction === 'outgoing' ? r2(c.amount) : 0 };
   });
-  const inn = sum(rows, x => x._in), out = sum(rows, x => x._out);
+  const inn = sum(rows, x => x.incoming), out = sum(rows, x => x.outgoing);
   return {
     id: 'cheques', title: 'الشيكات المفتوحة حسب الاستحقاق',
-    columns: [{ key: 'dir', label: 'النوع' }, { key: 'party', label: 'الطرف' }, { key: 'number', label: 'رقم الشيك' }, { key: 'bank', label: 'البنك' }, { key: 'due', label: 'الاستحقاق', kind: 'date' }, { key: 'days', label: 'الأيام المتبقية' }, { key: 'state', label: 'الحالة' }, { key: 'amount', label: 'المبلغ', kind: 'money' }],
-    rows: rows.map(({ _in, _out, ...rest }) => rest),
-    totals: { dir: 'الإجمالي', party: `واردة ${r2(inn)} · صادرة ${r2(out)}`, number: '', bank: '', due: '', days: '', state: '', amount: r2(inn + out) },
-    note: 'الأيام السالبة = متأخر عن الاستحقاق.',
+    columns: [{ key: 'dir', label: 'النوع' }, { key: 'party', label: 'الطرف' }, { key: 'number', label: 'رقم الشيك' }, { key: 'bank', label: 'البنك' }, { key: 'due', label: 'الاستحقاق', kind: 'date' }, { key: 'days', label: 'الأيام المتبقية' }, { key: 'state', label: 'الحالة' }, { key: 'amount', label: 'المبلغ', kind: 'money' }, { key: 'incoming', label: 'إجمالي الوارد', kind: 'money' }, { key: 'outgoing', label: 'إجمالي الصادر', kind: 'money' }],
+    rows,
+    totals: { dir: 'الإجمالي', party: '', number: '', bank: '', due: '', days: '', state: '', amount: r2(inn + out), incoming: r2(inn), outgoing: r2(out) },
+    note: 'الأيام السالبة = متأخر عن الاستحقاق. إجمالي الشيكات الواردة والصادرة معروض كلٌّ على حدة.'
   };
 }
 
