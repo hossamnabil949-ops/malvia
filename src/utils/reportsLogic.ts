@@ -114,7 +114,7 @@ export function reportSalesByItem(d: ReportData, r: DateRange): ReportTable {
       row.qty += q;
       row.revenue += netItemRevenue(inv, it);
       const numberMatches = costByNumber.get(it.partNumber) ?? [];
-      const fallbackCost = it.partId ? costFallback.get(it.partId) : numberMatches.length === 1 ? numberMatches[0].costPrice : undefined;
+      const fallbackCost = costFallback.get(it.partId ?? '') ?? (numberMatches.length === 1 ? numberMatches[0].costPrice : undefined);
       row.cost += q * (it.costPrice ?? fallbackCost ?? 0);
       m.set(key, row);
     }
@@ -277,7 +277,7 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
   d.parts.forEach(part => costByNumber.set(part.partNumber, [...(costByNumber.get(part.partNumber) ?? []), part]));
   const cogs = sum(inv, invoice => sum(invoice.items, item => {
     const matches = costByNumber.get(item.partNumber) ?? [];
-    const fallback = item.partId ? costFallback.get(item.partId) : matches.length === 1 ? matches[0].costPrice : undefined;
+    const fallback = costFallback.get(item.partId ?? '') ?? (matches.length === 1 ? matches[0].costPrice : undefined);
     return netQty(item) * (item.costPrice ?? fallback ?? 0);
   }));
   const expenses = sum(d.expenses.filter(e => inRange(e.date, r)), e => e.amount);
