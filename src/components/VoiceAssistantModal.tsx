@@ -363,14 +363,6 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
         ? 'تم قبول تسجيل المصروف داخل التطبيق. تحقق من حالة المزامنة لتأكيد وصوله إلى السحابة.'
         : 'تعذر قبول تسجيل المصروف؛ لم يتم تأكيد نجاح العملية.';
       if (!accepted) { setLastResult({ ...result, spokenFeedback: feedback }); if (speechEnabled) speakArabic(feedback); return; }
-    } else if (result.action === 'SETTLE_SUPPLIER') {
-      if (onSettleSupplier && result.supplierName && result.supplierPaymentAmount) {
-        onSettleSupplier(result.supplierName, result.supplierPaymentAmount);
-        feedback = describe(result).done;
-      } else {
-        feedback = 'لتسجيل سداد المورد افتح صفحة الموردين واختر المورد. لم أنفذ أي شيء.';
-        onNavigateTab('suppliers');
-      }
     } else if (result.action === 'COLLECT_CUSTOMER') {
       if (onCollectCustomer && result.customerName && result.customerCollectionAmount) {
         onCollectCustomer(result.customerName, result.customerCollectionAmount);
