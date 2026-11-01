@@ -129,6 +129,7 @@ export interface InvoiceItem {
   originalPrice?: number;
   costPrice?: number; // تكلفة الوحدة وقت البيع (لحساب تكلفة البضاعة المباعة بدقة)
   total: number;
+  taxAmount?: number; // حصة الضريبة المحسوبة على هذا السطر
   returnedQuantity?: number;
   batchAllocations?: import('../utils/trackingLogic').BatchAllocation[]; // الدفعات المسحوبة (للأصناف ذات الدفعات)
   serials?: string[];          // الأرقام التسلسلية المباعة
@@ -377,6 +378,7 @@ export interface PurchaseInvoiceItem {
   costPrice: number;
   salePrice: number;
   total: number;
+  taxAmount?: number; // حصة ضريبة المدخلات لهذا السطر
   returnedQuantity?: number;
   tracking?: import('../utils/trackingLogic').TrackingMode; // للصنف الجديد عند أول توريد
   batchNo?: string;
