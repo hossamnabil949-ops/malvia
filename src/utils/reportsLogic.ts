@@ -426,13 +426,13 @@ export function reportSlowMoving(d: ReportData, today: string, days = 90): Repor
   };
   for (const inv of d.invoices) {
     if (inv.status === 'ملغاة') continue;
-    for (const it of inv.items) {
+    for (const it of inv.items || []) {
       recordActivity(it.partId, inv.date);
       if (!it.partId) recordActivity(it.partNumber, inv.date);
     }
   }
   for (const purchase of d.purchaseInvoices) {
-    for (const it of purchase.items) {
+    for (const it of purchase.items || []) {
       recordActivity(it.partId, purchase.date);
       if (!it.partId) recordActivity(it.partNumber, purchase.date);
     }
