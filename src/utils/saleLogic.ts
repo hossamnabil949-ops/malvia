@@ -112,7 +112,13 @@ export function deductStock<T extends StockPart>(parts: T[], lines: CartLine[], 
 /** المبلغ المسترد لصنف مرتجع = نصيب الكمية من إجمالي سطر الفاتورة (بعد الخصم ومع الضريبة). */
 export function refundForLine(lineTotalEgp: number, lineQty: number, returnQty: number, alreadyReturnedQty: number): number {
   if (returnQty <= 0 || returnQty + alreadyReturnedQty > lineQty) throw new SaleError('INVALID_QTY', { returnQty, remaining: lineQty - alreadyReturnedQty });
-  return toEgp(Math.round((toPiasters(lineTotalEgp) * returnQty) / lineQty));
+  const total = toPiasters(lineTotalEgp);
+  const previouslyReturned = Math.round((total * alreadyReturnedQty) / lineQty);
+  const isFinalReturn = returnQty + alreadyReturnedQty === lineQty;
+  const amount = isFinalReturn
+    ? total - previouslyReturned
+    : Math.round((total * returnQty) / lineQty);
+  return toEgp(amount);
 }
 
 // ---------- إلغاء فاتورة (Void) ----------
