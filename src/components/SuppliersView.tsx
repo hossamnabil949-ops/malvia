@@ -516,10 +516,10 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-stretch gap-2 border-b border-slate-800 pb-3 min-w-0">
         <button
           onClick={() => setActiveTab('suppliers')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+          className={`flex min-w-0 w-full sm:w-auto items-center justify-center gap-2 px-2 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold leading-tight text-center transition ${
             activeTab === 'suppliers'
               ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
               : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
@@ -531,7 +531,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
 
         <button
           onClick={() => setActiveTab('payments')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+          className={`flex min-w-0 w-full sm:w-auto items-center justify-center gap-2 px-2 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold leading-tight text-center transition ${
             activeTab === 'payments'
               ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
               : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
@@ -541,20 +541,20 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
           <span>سجل دفعات السداد وتواريخها ({supplierPayments.length})</span>
         </button>
 
-        <button onClick={() => setActiveTab('schedules')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${activeTab === 'schedules' ? 'bg-amber-500 text-slate-950' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`}>
+        <button onClick={() => setActiveTab('schedules')} className={`flex min-w-0 w-full sm:w-auto items-center justify-center gap-2 px-2 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold leading-tight text-center transition ${activeTab === 'schedules' ? 'bg-amber-500 text-slate-950' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`}>
           <Calendar className="w-4 h-4" /><span>جدولة الدفعات ({supplierPaymentSchedules.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('returns')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+          className={`flex min-w-0 w-full sm:w-auto items-center justify-center gap-2 px-2 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold leading-tight text-center transition ${
             activeTab === 'returns'
               ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
               : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
           }`}
         >
           <RotateCcw className="w-4 h-4" />
-          <span>مرتجعات البضائع والأرصدة ({purchaseReturns.length})</span>
+          <span className="min-w-0">مرتجعات البضائع والأرصدة ({purchaseReturns.length})</span>
         </button>
       </div>
 
@@ -696,7 +696,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
       {/* Tab 2: Payments History Table */}
       {activeTab === 'payments' && (
         <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
-          <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
+          <div className="p-3 sm:p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-950/40">
             <div>
               <h3 className="text-sm font-black text-white">سجل دفعات سداد الموردين بتواريخ السداد والربط المالي</h3>
               <p className="text-[11px] text-slate-400">سندات الصرف المعتمدة والمخصومة من الخزينة</p>

@@ -524,10 +524,10 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="p-1 rounded-2xl bg-surface-1 border border-neutral-700 flex items-center gap-1">
+          <div className="p-1 rounded-2xl bg-surface-1 border border-neutral-700 flex flex-wrap items-center gap-1 max-w-full">
             <button
               onClick={() => setCurrentTab('invoices')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              className={`px-2 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-bold leading-tight whitespace-nowrap transition-all ${
                 currentTab === 'invoices'
                   ? 'bg-amber-500 text-neutral-950 font-black shadow-sm'
                   : 'text-neutral-400 hover:text-white'
@@ -537,7 +537,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             </button>
             <button
               onClick={() => setCurrentTab('returns')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-2 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-bold leading-tight whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 currentTab === 'returns'
                   ? 'bg-rose-500 text-[#ffffff] font-black shadow-sm'
                   : 'text-rose-400 hover:text-rose-300'
@@ -894,11 +894,11 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
       {showCreateModal && (
         <div 
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto overscroll-contain"
           onClick={() => setShowCreateModal(false)}
         >
           <div 
-            className="w-full max-w-4xl bg-surface-2 text-white rounded-3xl p-6 shadow-2xl border border-neutral-800 space-y-5 my-8 max-h-[90vh] overflow-y-auto"
+            className="w-full max-w-4xl min-w-0 bg-surface-2 text-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-2xl border border-neutral-800 space-y-4 sm:space-y-5 my-2 sm:my-8 max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] overflow-y-auto overflow-x-hidden overscroll-contain"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
