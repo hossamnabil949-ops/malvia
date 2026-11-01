@@ -1,6 +1,8 @@
 // منطق البيع كدوال نقية (بدون React ولا تخزين) => قابلة للاختبار وإعادة الاستخدام من الكاشير والمساعد الصوتي.
 // كل الحسابات بالقروش (أعداد صحيحة) لتفادي أخطاء الفاصلة العشرية.
 
+export const DEFAULT_CUSTOMER_CREDIT_LIMIT = 5000;
+
 export type SaleErrorCode =
   | 'EMPTY_CART' | 'INVALID_QTY' | 'INVALID_PRICE' | 'OUT_OF_STOCK' | 'PRICE_BELOW_COST'
   | 'DISCOUNT_EXCEEDS_SUBTOTAL' | 'DISCOUNT_OVER_LIMIT' | 'PAYMENT_MISMATCH' | 'CREDIT_REQUIRES_CUSTOMER' | 'CREDIT_LIMIT_EXCEEDED';
@@ -90,7 +92,7 @@ export function validateSale(lines: CartLine[], stock: StockPart[], totals: Tota
   const credit = payments.filter(p => isCreditPayment(p.method)).reduce((s, p) => s + toPiasters(p.amount), 0);
   if (credit > 0) {
     if (!opt.customerId) throw new SaleError('CREDIT_REQUIRES_CUSTOMER');
-    const limit = opt.customerCreditLimit ?? 0;
+    const limit = (opt.customerCreditLimit ?? 0) > 0 ? (opt.customerCreditLimit as number) : DEFAULT_CUSTOMER_CREDIT_LIMIT;
     if (limit > 0 && toPiasters(opt.customerBalance ?? 0) + credit > toPiasters(limit)) {
       throw new SaleError('CREDIT_LIMIT_EXCEEDED', { limit, balance: opt.customerBalance ?? 0 });
     }
