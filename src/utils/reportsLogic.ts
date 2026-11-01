@@ -296,6 +296,40 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
   };
 }
 
+export function reportVatSummary(d: ReportData, r: DateRange): ReportTable {
+  const outputVat = sum(active(d, r), invoice => invoice.tax || 0);
+  const outputVatReturns = sum(d.salesReturns.filter(ret => {
+    const original = d.invoices.find(invoice => invoice.id === ret.invoiceId);
+    return inRange(ret.date, r) && Boolean(original) && original!.status !== 'ملغاة' && original!.grandTotal > 0;
+  }), ret => {
+    const original = d.invoices.find(invoice => invoice.id === ret.invoiceId)!;
+    return ret.totalRefundAmount * ((original.tax || 0) / original.grandTotal);
+  });
+  const inputVat = sum(d.purchaseInvoices.filter(invoice => inRange(invoice.date, r)), invoice => invoice.tax || 0);
+  const inputVatReturns = sum(d.purchaseReturns.filter(ret => inRange(ret.date, r)), ret => {
+    const original = d.purchaseInvoices.find(invoice => invoice.id === ret.purchaseInvoiceId);
+    return original && original.grandTotal > 0
+      ? ret.totalReturnAmount * ((original.tax || 0) / original.grandTotal)
+      : 0;
+  });
+  const outputNet = Math.max(0, outputVat - outputVatReturns);
+  const inputNet = Math.max(0, inputVat - inputVatReturns);
+  return {
+    id: 'vat-summary', title: 'ملخص ضريبة القيمة المضافة',
+    columns: [{ key: 'item', label: 'البند' }, { key: 'amount', label: 'المبلغ (ج.م)', kind: 'money' }],
+    rows: [
+      { item: 'ضريبة المخرجات على المبيعات', amount: r2(outputVat) },
+      { item: 'يخصم: ضريبة مرتجعات المبيعات', amount: r2(-outputVatReturns) },
+      { item: 'صافي ضريبة المخرجات', amount: r2(outputNet) },
+      { item: 'ضريبة المدخلات على المشتريات', amount: r2(inputVat) },
+      { item: 'يخصم: ضريبة مرتجعات المشتريات', amount: r2(-inputVatReturns) },
+      { item: 'صافي ضريبة المدخلات', amount: r2(inputNet) },
+      { item: 'صافي الضريبة المستحقة / الرصيد الدائن', amount: r2(outputNet - inputNet) },
+    ],
+    note: 'ملخص تجميعي للضريبة المسجلة على الفواتير والمرتجعات خلال الفترة. لا يمثل إقراراً ضريبياً رسمياً ولا يغني عن مراجعة المحاسب.',
+  };
+}
+
 export function reportExpensesByCategory(d: ReportData, r: DateRange): ReportTable {
   const list = d.expenses.filter(e => inRange(e.date, r));
   const total = sum(list, e => e.amount);
@@ -489,6 +523,7 @@ export const REPORT_DEFS: ReportDef[] = [
   { id: 'sales-by-payment', group: 'المبيعات', title: 'المبيعات حسب طريقة الدفع', usesRange: true, build: (d, r) => reportSalesByPayment(d, r) },
   { id: 'returns', group: 'المبيعات', title: 'تحليل المرتجعات', usesRange: true, build: (d, r) => reportReturns(d, r) },
   { id: 'profit-loss', group: 'المالية', title: 'الأرباح والخسائر', usesRange: true, build: (d, r) => reportProfitLoss(d, r) },
+  { id: 'vat-summary', group: 'المالية', title: 'ملخص ضريبة القيمة المضافة', usesRange: true, build: (d, r) => reportVatSummary(d, r) },
   { id: 'expenses', group: 'المالية', title: 'المصروفات حسب البند', usesRange: true, build: (d, r) => reportExpensesByCategory(d, r) },
   { id: 'treasury', group: 'المالية', title: 'حركة الخزنة', usesRange: true, build: (d, r) => reportTreasury(d, r) },
   { id: 'purchases-by-supplier', group: 'المالية', title: 'المشتريات حسب المورد', usesRange: true, build: (d, r) => reportPurchasesBySupplier(d, r) },
