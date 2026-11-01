@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { paymentLines } from '../utils/paymentLines';
+import { netSales } from '../utils/reportsLogic';
 import { Invoice, SalesReturn, SalesReturnItem, PaymentMethod } from '../types/autoParts';
 import { DateRangeFilter } from './DateRangeFilter';
 import { verifyManagerApproval } from '../services/approvalService';
@@ -156,7 +157,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     });
   }, [salesReturns, searchQuery, dateRange]);
 
-  const totalSalesRevenue = useMemo(() => invoices.reduce((acc, inv) => inv.status === 'ملغاة' ? acc : acc + inv.grandTotal - (inv.returnedAmount || 0), 0), [invoices]);
+  const totalSalesRevenue = useMemo(() => invoices.reduce((acc, inv) => inv.status === 'ملغاة' ? acc : acc + netSales(inv), 0), [invoices]);
   const totalRefundsFromTreasury = useMemo(() => {
     return salesReturns
       .filter(r => r.treasuryDeducted || r.refundMethod === 'نقدي (خصم من الخزنة)')
