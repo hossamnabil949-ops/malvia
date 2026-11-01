@@ -173,17 +173,23 @@ export function computeVoidPlan(inv: VoidInput): VoidPlan {
     for (const prior of inv.priorRefunds.filter(r => refundClass(r.refundMethod) !== 'credit')) {
       let remaining = prior.totalRefundAmount;
       const wantedClass = refundClass(prior.refundMethod);
-      let candidates = nonCreditPayments.map((p, index) => ({ p, index }))
+      const matching = nonCreditPayments.map((p, index) => ({ p, index }))
         .filter(x => paymentClass(x.p.method) === wantedClass && remainingByIndex[x.index] > 0);
-      // A refund can be issued through a different channel than the original payment; preserve that actual channel's value by reducing the largest remaining original bucket.
-      if (!candidates.length) candidates = nonCreditPayments.map((p, index) => ({ p, index }))
-        .filter(x => remainingByIndex[x.index] > 0)
-        .sort((a, b) => remainingByIndex[b.index] - remainingByIndex[a.index]);
-      for (const candidate of candidates) {
-        if (remaining <= 0.005) break;
-        const applied = Math.min(remaining, remainingByIndex[candidate.index]);
-        remainingByIndex[candidate.index] = round2(remainingByIndex[candidate.index] - applied);
-        remaining = round2(remaining - applied);
+      const applyTo = (candidates: { p: PaymentLine; index: number }[]) => {
+        for (const candidate of candidates) {
+          if (remaining <= 0.005) break;
+          const applied = Math.min(remaining, remainingByIndex[candidate.index]);
+          remainingByIndex[candidate.index] = round2(remainingByIndex[candidate.index] - applied);
+          remaining = round2(remaining - applied);
+        }
+      };
+      applyTo(matching);
+      // If the actual refund channel exceeds its original payment bucket, offset the remainder against other outstanding payment buckets.
+      if (remaining > 0.005) {
+        const fallback = nonCreditPayments.map((p, index) => ({ p, index }))
+          .filter(x => remainingByIndex[x.index] > 0)
+          .sort((a, b) => remainingByIndex[b.index] - remainingByIndex[a.index]);
+        applyTo(fallback);
       }
     }
     refunds = nonCreditPayments.map((payment, index) => ({
