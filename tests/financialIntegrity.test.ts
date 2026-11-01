@@ -5,6 +5,23 @@ import { registrationEffect, actionEffect } from '../src/utils/chequeLogic.ts';
 import { refundForLine } from '../src/utils/saleLogic.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
+import { cairoDateKey, salesForDate } from '../src/utils/reportsLogic.ts';
+
+// FIN-1 / AI-4: dashboard sales use Cairo's calendar day and one consistent eligible-invoice set.
+const dashboardInvoices: any[] = [
+  { id: 'today-a', date: '2026-11-01', status: 'مدفوعة', grandTotal: 120, returnedAmount: 20 },
+  { id: 'today-b', date: '2026-11-01', status: 'آجلة', grandTotal: 80, returnedAmount: 0 },
+  { id: 'today-void', date: '2026-11-01', status: 'ملغاة', grandTotal: 900, returnedAmount: 0 },
+  { id: 'yesterday', date: '2026-10-31', status: 'مدفوعة', grandTotal: 500, returnedAmount: 0 },
+];
+const todaySummary = salesForDate(dashboardInvoices, '2026-11-01');
+assert.equal(todaySummary.count, 2);
+assert.equal(todaySummary.sales, 180);
+assert.equal(todaySummary.average, 90);
+assert.deepEqual(todaySummary.invoices.map(invoice => invoice.id), ['today-a', 'today-b']);
+assert.equal(salesForDate(dashboardInvoices, '2026-11-02').count, 0);
+assert.equal(salesForDate(dashboardInvoices, '2026-11-02').average, 0);
+assert.equal(cairoDateKey(new Date('2026-10-31T22:30:00.000Z')), '2026-11-01');
 
 // FIN-14: monthly schedule must never begin before the configured start date.
 assert.deepEqual(
