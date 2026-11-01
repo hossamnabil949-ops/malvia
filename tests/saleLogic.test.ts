@@ -497,7 +497,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
   // السجل: كل تقرير يُبنى بلا أخطاء وأعمدته مطابقة لمفاتيح صفوفه وإجمالياته، ومجموعاته معروفة
   const reconcile = RP.reportSalesReconciliation(data, R);
   assert.ok(reconcile.rows.every(row => Math.abs(Number(row.difference)) < 0.01));
-  assert.equal(RP.REPORT_DEFS.length, 19);
+  assert.equal(RP.REPORT_DEFS.length, 20);
   for (const def of RP.REPORT_DEFS) {
     const t = def.build(data, R, today);
     assert.ok(t.title && t.columns.length > 0, def.id);
