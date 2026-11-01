@@ -235,12 +235,12 @@ import { availableActions, nextStatus, registrationEffect, actionEffect, applyAc
   assert.deepEqual(actionEffect(incoming, 'clear').treasury, { type: 'قبض', amount: 1000, category: 'تحصيل من عميل / ورشة' });
   assert.equal(actionEffect(incoming, 'clear').customerBalanceDelta, 0);                  // التحصيل لا يمس الحساب ثانية
   assert.equal(actionEffect(incoming, 'deposit').treasury, undefined);
-  // شيك أكبر من المديونية: يُخصم المتاح فقط ويعود نفس المخصوم (لا تضخيم عند الارتداد)
+  // شيك أكبر من المديونية: الفائض يظهر رصيداً دائناً ويعود كامل المبلغ عند الارتداد
   r = registrationEffect('incoming', 1000, { balance: 300 });
   assert.equal(r.applied.appliedAmount, 1000);
   assert.equal(actionEffect(mk({ appliedAmount: 1000 }), 'bounce').customerBalanceDelta, 1000);
   r = registrationEffect('incoming', 1000, { balance: 0 });
-  assert.equal(r.applied.appliedAmount, 0);
+  assert.equal(r.applied.appliedAmount, 1000);
 
   // صادرة: مستحقات المورد 700 والشيك 1000 => خصم 700 + رصيد دائن 300، والعكس عند الارتداد
   const o = registrationEffect('outgoing', 1000, { balance: 700, deferredDebt: 700 });
@@ -434,7 +434,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
   assert.deepEqual(tb.rows.map(x => [x.date, x.count, x.total, x.returns, x.net]), [['2026-07-01', 1, 200, 0, 200], ['2026-10-10', 1, 500, 0, 500], ['2026-10-20', 1, 384, 100, 384], ['2026-10-21', 1, 100, 0, 100]]);
   assert.equal(tb.totals!.net, 1184);
   tb = RP.reportDailySales(data, { from: '2026-10-20', to: '2026-10-21' });                  // نطاق التاريخ
-  assert.deepEqual([tb.rows.length, tb.totals!.total], [2, 580]);
+  assert.deepEqual([tb.rows.length, tb.totals!.total], [2, 484]);
 
   // أرباح الأصناف: الكمية الصافية بعد المرتجع، والملغاة خارج الحساب
   tb = RP.reportSalesByItem(data, R);
@@ -471,7 +471,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
   assert.deepEqual([tb.totals!.cost, tb.totals!.units], [1310, 21]);
   tb = RP.reportLowStock(data);
   assert.deepEqual(tb.rows.map(x => [x.number, x.suggest]), [['B', 8]]);
-  assert.deepEqual(RP.reportSlowMoving(data, today, 90).rows.map(x => x.number), ['D']);           // لم يُبع قط
+  assert.deepEqual(RP.reportSlowMoving(data, today, 90).rows.map(x => x.number), ['C', 'D']);           // لم يُبع قط
   assert.equal(RP.reportSlowMoving(data, today, 90).rows[0].idle, 'بدون مبيعات');
   assert.deepEqual(RP.reportSlowMoving(data, today, 10).rows.map(x => x.number), ['C', 'D']);      // c آخر بيع قبل 14 يوماً، مرتبة بالتكلفة المجمّدة
   tb = RP.reportExpiry(data, today);
@@ -490,11 +490,13 @@ import * as RP from '../src/utils/reportsLogic.ts';
   tb = RP.reportLoyalty(data, '2026-10-24T23:59:59.000Z');
   assert.deepEqual(tb.rows.map(x => [x.name, x.points, x.value]), [['ورشة', 200, 100]]);
   tb = RP.reportSalesByCustomer(data, R);
-  assert.deepEqual(tb.rows.map(x => [x.name, x.count, x.total, x.balance]), [['ورشة', 2, 700, 1000], ['ز', 2, 580, 0]]);
+  assert.deepEqual(tb.rows.map(x => [x.name, x.count, x.total, x.balance]), [['ورشة', 2, 700, 1000], ['ز', 2, 484, 0]]);
   tb = RP.reportReturns(data, R);
   assert.deepEqual(tb.rows.map(x => [x.number, x.count, x.qty, x.value]), [['A', 1, 1, 100]]);
 
   // السجل: كل تقرير يُبنى بلا أخطاء وأعمدته مطابقة لمفاتيح صفوفه وإجمالياته، ومجموعاته معروفة
+  const reconcile = RP.reportSalesReconciliation(data, R);
+  assert.ok(reconcile.rows.every(row => Math.abs(Number(row.difference)) < 0.01));
   assert.equal(RP.REPORT_DEFS.length, 19);
   for (const def of RP.REPORT_DEFS) {
     const t = def.build(data, R, today);
