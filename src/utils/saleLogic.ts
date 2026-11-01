@@ -142,10 +142,65 @@ export function computeVoidPlan(inv: VoidInput): VoidPlan {
   const restock = inv.items
     .map(it => ({ partId: it.partId, partNumber: it.partNumber, qty: Math.max(0, it.quantity - (it.returnedQuantity || 0)) }))
     .filter(r => r.qty > 0);
-  const creditAmount = round2(inv.payments.filter(p => isCreditPayment(p.method)).reduce((s, p) => s + p.amount, 0) * fraction);
-  const refunds = inv.payments
-    .filter(p => !isCreditPayment(p.method))
-    .map(p => ({ method: p.method, amount: round2(p.amount * fraction) }))
-    .filter(r => r.amount > 0);
+
+  const remaining = inv.payments.map(payment => ({ method: payment.method, amount: round2(payment.amount) }));
+  if (inv.previousRefunds?.length) {
+    const bucket = (method: string) => {
+      if (isCreditPayment(method)) return 'credit';
+      const value = String(method || '').toLowerCase();
+      if (/نقدي|كاش|cash/.test(value)) return 'cash';
+      if (/إنستا|انستا|insta|محفظ|wallet|فودافون/.test(value)) return 'wallet';
+      if (/فيزا|بطاقة|شبكة|مدى|visa|card/.test(value)) return 'card';
+      if (/شيك|تحويل بنكي|تحويل بنكى|bank/.test(value)) return 'bank';
+      return 'other';
+    };
+    for (const refund of inv.previousRefunds) {
+      let left = round2(Math.max(0, refund.amount));
+      const target = bucket(refund.method);
+      const matching = remaining.map((payment, index) => ({ payment, index }))
+        .filter(({ payment }) => bucket(payment.method) === target && payment.amount > 0);
+      const candidates = matching.length > 0
+        ? matching
+        : remaining.map((payment, index) => ({ payment, index })).filter(({ payment }) => payment.amount > 0);
+      const available = candidates.reduce((total, item) => total + item.payment.amount, 0);
+      const deduct = Math.min(left, available);
+      let assigned = 0;
+      candidates.forEach((candidate, index) => {
+        const share = index === candidates.length - 1
+          ? round2(deduct - assigned)
+          : round2(deduct * candidate.payment.amount / available);
+        const actual = Math.min(candidate.payment.amount, share);
+        remaining[candidate.index].amount = round2(remaining[candidate.index].amount - actual);
+        assigned = round2(assigned + actual);
+      });
+      left = round2(left - assigned);
+      if (left > 0) {
+        for (const candidate of remaining.map((payment, index) => ({ payment, index })).filter(x => x.payment.amount > 0)) {
+          const actual = Math.min(left, candidate.payment.amount);
+          remaining[candidate.index].amount = round2(candidate.payment.amount - actual);
+          left = round2(left - actual);
+          if (left <= 0) break;
+        }
+      }
+    }
+  } else if (fraction < 1) {
+    remaining.forEach(payment => { payment.amount = round2(payment.amount * fraction); });
+  }
+
+  // اجعل مجموع المبالغ المتبقية مطابقاً تماماً للمتبقي من الفاتورة بعد كل المرتجعات.
+  const targetRemaining = round2(Math.max(0, inv.grandTotal - (inv.returnedAmount || 0)));
+  const actualRemaining = round2(remaining.reduce((total, payment) => total + payment.amount, 0));
+  const adjustment = round2(actualRemaining - targetRemaining);
+  if (adjustment > 0) {
+    for (const payment of remaining) {
+      const cut = Math.min(payment.amount, adjustment);
+      payment.amount = round2(payment.amount - cut);
+      if (round2(adjustment - cut) <= 0) break;
+    }
+  }
+  const creditAmount = round2(remaining.filter(payment => isCreditPayment(payment.method)).reduce((total, payment) => total + payment.amount, 0));
+  const refunds = remaining
+    .filter(payment => !isCreditPayment(payment.method) && payment.amount > 0)
+    .map(payment => ({ method: payment.method, amount: round2(payment.amount) }));
   return { fraction, restock, creditAmount, refunds };
 }
