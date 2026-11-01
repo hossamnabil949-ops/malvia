@@ -63,7 +63,8 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
   };
 
   const dailyData: SalesPoint[] = useMemo(() => {
-    const todayStr = new Date().toLocaleDateString('en-CA');
+    const localNow = new Date();
+    const todayStr = `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, '0')}-${String(localNow.getDate()).padStart(2, '0')}`;
     const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, label: `${String(hour).padStart(2, '0')}:00`, sales: 0, profit: 0, volume: 0 }));
     const unknown = { hour: -1, label: 'وقت غير محدد', sales: 0, profit: 0, volume: 0 };
     const todayInvoices = invoices.filter(inv => inv.status !== 'ملغاة' && inv.date.slice(0, 10) === todayStr);
@@ -83,8 +84,7 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
       label, sales: Math.round(sales), profit: Math.round(profit), volume: Math.round(volume),
     }));
     if (unknown.sales > 0 || unknown.volume > 0) points.push({ label: unknown.label, sales: Math.round(unknown.sales), profit: Math.round(unknown.profit), volume: Math.round(unknown.volume) });
-    // reportDailySales مرجع إجمالي اليوم؛ لا نوزع فرقاً مجهولاً على ساعات فعلية.
-    if (reportTotal < points.reduce((n, point) => n + point.sales, 0)) return points;
+    // نعرض الساعات الفعلية فقط، ونضيف الوقت غير المحدد كبند مستقل دون توزيع تقديري.
     return points;
   }, [invoices, reportData, salesReturns]);
 
