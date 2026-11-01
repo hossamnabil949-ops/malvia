@@ -5,6 +5,7 @@ import { registrationEffect, actionEffect } from '../src/utils/chequeLogic.ts';
 import { refundForLine } from '../src/utils/saleLogic.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
+import { validateSale, SaleError } from '../src/utils/saleLogic.ts';
 import { cairoDateKey, salesForDate, netSales, reportDailySales, reportSalesByItem } from '../src/utils/reportsLogic.ts';
 
 // FIN-1 / AI-4: dashboard sales use Cairo's calendar day and one consistent eligible-invoice set.
@@ -44,6 +45,18 @@ const itemReport = reportSalesByItem(reportInput, { from: '2026-11-01', to: '202
 assert.equal(itemReport.totals?.revenue, 630);
 assert.equal(itemReport.totals?.cost, 300);
 assert.equal(itemReport.totals?.profit, 330);
+
+// FIN-15: an unset/zero credit limit is not unlimited; it uses the explicit default cap.
+assert.throws(
+  () => validateSale(
+    [{ partId: 'p1', qty: 1, unitPrice: 100, unitCost: 50 }],
+    [{ id: 'p1', stockQuantity: 10 }],
+    { subtotal: 100, discount: 0, tax: 0, grandTotal: 100 },
+    [{ method: 'آجل', amount: 100 }],
+    { allowBelowCost: false, customerId: 'c1', customerBalance: 5000, customerCreditLimit: 0 },
+  ),
+  (error: any) => error instanceof SaleError && error.code === 'CREDIT_LIMIT_EXCEEDED',
+);
 
 // FIN-14: monthly schedule must never begin before the configured start date.
 assert.deepEqual(
