@@ -272,8 +272,8 @@ export function answerCustomerBalanceLookup(
 
   const balance = Number(top.record.balance);
   return answer(lang === 'ar'
-    ? (hasSupplier ? 'المستحق للمورد ' : 'رصيد العميل ') + top.record.name + ': ' + (Number.isFinite(balance) ? balance.toLocaleString('ar-EG') : 'غير متاح') + ' جنيه.'
-    : (hasSupplier ? 'Amount payable to ' : 'Customer balance for ') + top.record.name + ': ' + (Number.isFinite(balance) ? balance.toLocaleString() : 'unavailable') + '.');
+    ? (kindIsSupplier ? 'المستحق للمورد ' : 'رصيد العميل ') + top.record.name + ': ' + (Number.isFinite(balance) ? balance.toLocaleString('ar-EG') : 'غير متاح') + ' جنيه.'
+    : (kindIsSupplier ? 'Amount payable to ' : 'Customer balance for ') + top.record.name + ': ' + (Number.isFinite(balance) ? balance.toLocaleString() : 'unavailable') + '.');
 }
 
 export async function sendVoiceCommandToServer(
