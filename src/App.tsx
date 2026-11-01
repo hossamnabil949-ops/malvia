@@ -2377,6 +2377,7 @@ export default function App() {
           <HomeDashboard
             parts={parts}
             invoices={invoices}
+            salesReturns={salesReturns}
             treasuryTransactions={treasury}
             onOpenTreasuryReports={() => setCurrentTab('finance')}
             currentSession={currentUser && effectiveRole && effectivePermissions ? { ...currentUser, role: effectiveRole, permissions: effectivePermissions } : currentUser}
