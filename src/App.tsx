@@ -927,7 +927,7 @@ export default function App() {
   const applyChequeEffectToParty = (cheque: Cheque, effect: ChequeEffect, isRegistration: boolean) => {
     if (cheque.partyType === 'customer' && effect.customerBalanceDelta) {
       setCustomers(prev => {
-        const updated = prev.map(c => (c.id === cheque.partyId ? { ...c, balance: Math.max(0, c.balance + effect.customerBalanceDelta) } : c));
+        const updated = prev.map(c => (c.id === cheque.partyId ? { ...c, balance: c.balance + effect.customerBalanceDelta } : c));
         persistChanges({ customers: updated });
         return updated;
       });
