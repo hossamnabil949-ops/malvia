@@ -196,7 +196,7 @@ export function answerCustomerBalanceLookup(
   const words = q.split(' ').filter(Boolean);
   const hasSupplier = words.some(w => supplierWords.has(w));
   const hasCustomer = words.some(w => customerWords.has(w));
-  const balanceIntent = /\b(رصيد|ارصده|مديونيه|مديون|مستحق|مستحقات|حساب|باقي)\b/.test(q);
+  const balanceIntent = /(رصيد|ارصده|مديونيه|مديون|مستحق|مستحقات|حساب|باقي)/.test(q);
   if (!balanceIntent) return null;
 
   // Aggregate questions belong to reports, not an individual-record lookup.
