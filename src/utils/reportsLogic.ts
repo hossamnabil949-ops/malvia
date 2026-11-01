@@ -250,20 +250,30 @@ export function reportSalesReconciliation(d: ReportData, r: DateRange): ReportTa
 
 /** ملخص ضريبة المخرجات والمدخلات من الضرائب المخزنة على المستندات. */
 export function reportVatSummary(d: ReportData, r: DateRange): ReportTable {
+  const validSalesIds = new Set(d.invoices.filter(invoice => invoice.status !== 'ملغاة').map(invoice => invoice.id));
+  const validPurchaseIds = new Set(d.purchaseInvoices.map(invoice => invoice.id));
   const salesInvoices = active(d, r);
   const purchaseInvoices = d.purchaseInvoices.filter(invoice => inRange(invoice.date, r));
-  const outputTax = r2(sum(salesInvoices, invoice => invoice.tax || 0));
-  const inputTax = r2(sum(purchaseInvoices, invoice => invoice.tax || 0));
+  const returnedOutputTax = sum(
+    d.salesReturns.filter(ret => validSalesIds.has(ret.invoiceId) && inRange(ret.date, r)),
+    ret => sum(ret.items, item => item.taxAmount || 0)
+  );
+  const returnedInputTax = sum(
+    d.purchaseReturns.filter(ret => validPurchaseIds.has(ret.purchaseInvoiceId) && inRange(ret.date, r)),
+    ret => sum(ret.items, item => item.taxAmount || 0)
+  );
+  const outputTax = r2(sum(salesInvoices, invoice => invoice.tax || 0) - returnedOutputTax);
+  const inputTax = r2(sum(purchaseInvoices, invoice => invoice.tax || 0) - returnedInputTax);
   return {
     id: 'vat-summary', title: 'ملخص ضريبة القيمة المضافة',
     columns: [{ key: 'kind', label: 'نوع الضريبة' }, { key: 'amount', label: 'المبلغ', kind: 'money' }],
     rows: [
-      { kind: 'ضريبة المخرجات على فواتير البيع', amount: outputTax },
-      { kind: 'ضريبة المدخلات على فواتير الشراء', amount: inputTax },
+      { kind: 'ضريبة المخرجات على فواتير البيع بعد المرتجعات', amount: outputTax },
+      { kind: 'ضريبة المدخلات على فواتير الشراء بعد المرتجعات', amount: inputTax },
       { kind: 'صافي الضريبة (مخرجات − مدخلات)', amount: r2(outputTax - inputTax) },
     ],
     totals: { kind: 'صافي الضريبة', amount: r2(outputTax - inputTax) },
-    note: 'التجميع مبني على قيمة الضريبة المحفوظة في كل فاتورة. راجع أثر المرتجعات الضريبية ومستندات الإشعار الدائن مع المحاسب قبل الإقرار الرسمي.',
+    note: 'التجميع مبني على الضريبة المحفوظة في الفواتير وسطور المرتجعات. راجع مستندات الإشعار الدائن ومتطلبات الإقرار مع المحاسب قبل الاستخدام الرسمي.',
   };
 }
 
