@@ -6,7 +6,7 @@ import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
 import { validateSale, SaleError, computeTotals } from '../src/utils/saleLogic.ts';
-import { cairoDateKey, salesForDate, netSales, reportDailySales, reportSalesByItem } from '../src/utils/reportsLogic.ts';
+import { cairoDateKey, salesForDate, netSales, reportDailySales, reportSalesByItem, reportVatSummary } from '../src/utils/reportsLogic.ts';
 
 // FIN-1 / AI-4: dashboard sales use Cairo's calendar day and one consistent eligible-invoice set.
 const dashboardInvoices: any[] = [
@@ -45,6 +45,23 @@ const itemReport = reportSalesByItem(reportInput, { from: '2026-11-01', to: '202
 assert.equal(itemReport.totals?.revenue, 630);
 assert.equal(itemReport.totals?.cost, 300);
 assert.equal(itemReport.totals?.profit, 330);
+
+// FIN-13: input/output VAT report nets sales and purchase returns in their return period.
+const vatInput: any = {
+  ...reportInput,
+  salesReturns: [{ id: 'sr1', invoiceId: 'report-1', date: '2026-11-01', totalRefundAmount: 307.8 }],
+  purchaseInvoices: [{
+    id: 'pur1', invoiceNumber: 'PUR-1', date: '2026-11-01', grandTotal: 570, tax: 70,
+    subtotal: 500, discount: 0, items: [],
+  }],
+  purchaseReturns: [{
+    id: 'pr1', purchaseInvoiceId: 'pur1', date: '2026-11-01', totalReturnAmount: 57,
+  }],
+};
+const vatReport = reportVatSummary(vatInput, { from: '2026-11-01', to: '2026-11-01' });
+assert.equal(vatReport.rows[2].amount, 88.2);
+assert.equal(vatReport.rows[5].amount, 63);
+assert.equal(vatReport.rows[6].amount, 25.2);
 
 // FIN-13: tenant tax settings support inclusive and exclusive selling prices.
 const exclusiveTax = computeTotals([{ partId: 'p1', qty: 1, unitPrice: 100, unitCost: 50 }], 0, 14, true, false);
