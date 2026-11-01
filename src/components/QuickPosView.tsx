@@ -463,9 +463,14 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       grandTotal: Number(grandTotal.toFixed(2)),
       paymentMethod: payments.length > 1 ? 'مختلط (دفع مقسّم)' : paymentMethod,
       payments: payments.map((p) => ({ method: p.method, amount: p.amount })),
+      creditAmount: payments.filter(payment => isCreditPayment(payment.method)).reduce((total, payment) => total + payment.amount, 0),
+      settlementPayments: [],
       cashierId,
       cashierName: cashierName || 'كاشير المحل',
       status: payments.some(payment => isCreditPayment(payment.method))
+        ? (payments.every(payment => isCreditPayment(payment.method)) ? 'آجلة' : 'مسددة جزئياً')
+        : 'مسددة',
+      paymentStatus: payments.some(payment => isCreditPayment(payment.method))
         ? (payments.every(payment => isCreditPayment(payment.method)) ? 'آجلة' : 'مسددة جزئياً')
         : 'مسددة',
     };
