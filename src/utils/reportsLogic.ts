@@ -86,7 +86,7 @@ export function reportDailySales(d: ReportData, r: DateRange): ReportTable {
     const di = inv.filter(i => i.date.slice(0, 10) === day);
     const total = sum(di, netSales);
     const ret = sum(rets.filter(x => x.date.slice(0, 10) === day), x => x.totalRefundAmount);
-    return { date: day, count: di.length, total: r2(total), discount: r2(sum(di, i => i.discount)), tax: 0, returns: r2(ret), net: r2(total) };
+    return { date: day, count: di.length, total: r2(total), discount: r2(sum(di, i => i.discount)), tax: r2(sum(di, i => i.tax || 0)), returns: r2(ret), net: r2(total) };
   });
   return {
     id: 'daily-sales', title: 'المبيعات اليومية',
@@ -102,6 +102,8 @@ export function reportDailySales(d: ReportData, r: DateRange): ReportTable {
 
 export function reportSalesByItem(d: ReportData, r: DateRange): ReportTable {
   const costFallback = new Map(d.parts.map(p => [p.id, p.costPrice]));
+  const costByNumber = new Map<string, AutoPart[]>();
+  d.parts.forEach(part => costByNumber.set(part.partNumber, [...(costByNumber.get(part.partNumber) ?? []), part]));
   const m = new Map<string, { number: string; name: string; qty: number; revenue: number; cost: number }>();
   for (const inv of active(d, r)) {
     for (const it of inv.items) {
@@ -111,7 +113,9 @@ export function reportSalesByItem(d: ReportData, r: DateRange): ReportTable {
       const row = m.get(key) ?? { number: it.partNumber, name: it.partName, qty: 0, revenue: 0, cost: 0 };
       row.qty += q;
       row.revenue += netItemRevenue(inv, it);
-      row.cost += q * (it.costPrice ?? costFallback.get(it.partId ?? '') ?? 0);
+      const numberMatches = costByNumber.get(it.partNumber) ?? [];
+      const fallbackCost = it.partId ? costFallback.get(it.partId) : numberMatches.length === 1 ? numberMatches[0].costPrice : undefined;
+      row.cost += q * (it.costPrice ?? fallbackCost ?? 0);
       m.set(key, row);
     }
   }
@@ -126,7 +130,7 @@ export function reportSalesByItem(d: ReportData, r: DateRange): ReportTable {
     ],
     rows,
     totals: { number: '', name: 'الإجمالي', qty: sum(rows, x => x.qty), revenue: r2(rev), cost: r2(sum(rows, x => x.cost)), profit: r2(prof), margin: rev > 0 ? r2((prof / rev) * 100) : 0 },
-    note: 'القيم قبل خصم الفاتورة العام والضريبة، وبعد استبعاد الكميات المرتجعة والفواتير الملغاة.',
+    note: 'قيمة الأصناف بعد توزيع خصم الفاتورة نسبيًا واستبعاد الكميات المرتجعة والفواتير الملغاة، وقبل ضريبة القيمة المضافة.',
   };
 }
 
@@ -259,7 +263,13 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
     }
   );
   const costFallback = new Map(d.parts.map(part => [part.id, part.costPrice]));
-  const cogs = sum(inv, invoice => sum(invoice.items, item => netQty(item) * (item.costPrice ?? costFallback.get(item.partId ?? '') ?? 0)));
+  const costByNumber = new Map<string, AutoPart[]>();
+  d.parts.forEach(part => costByNumber.set(part.partNumber, [...(costByNumber.get(part.partNumber) ?? []), part]));
+  const cogs = sum(inv, invoice => sum(invoice.items, item => {
+    const matches = costByNumber.get(item.partNumber) ?? [];
+    const fallback = item.partId ? costFallback.get(item.partId) : matches.length === 1 ? matches[0].costPrice : undefined;
+    return netQty(item) * (item.costPrice ?? fallback ?? 0);
+  }));
   const expenses = sum(d.expenses.filter(e => inRange(e.date, r)), e => e.amount);
   const drawerShortage = sum(d.treasury.filter(t => inRange(t.date, r) && t.category === 'عجز درج (تسوية وردية)' && t.type === 'صرف'), t => t.amount);
   const net = sales - returns;
