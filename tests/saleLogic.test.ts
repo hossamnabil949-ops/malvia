@@ -19,6 +19,10 @@ assert.equal(deductStock([{ id: 'p1', stockQuantity: 5 }], [line])[0].stockQuant
 
 // مرتجع: سطر إجماليه 205.20 لكمية 2 => رجوع قطعة = 102.60 (وليس 100 = سعر الوحدة)
 assert.equal(refundForLine(205.2, 2, 1, 0), 102.6);
+const partial1 = refundForLine(100, 3, 1, 0, 0);
+const partial2 = refundForLine(100, 3, 1, 1, partial1);
+const partial3 = refundForLine(100, 3, 1, 2, partial1 + partial2);
+assert.equal(Number((partial1 + partial2 + partial3).toFixed(2)), 100);
 assert.equal(code(() => { refundForLine(205.2, 2, 2, 1); }), 'INVALID_QTY');
 
 // ---------- سياسة الخصم (10% كحد أقصى، ولا أقل من التكلفة) ----------
@@ -45,7 +49,7 @@ import { validateDiscountPolicy } from '../src/utils/saleLogic.ts';
   const base = { allowBelowCost: false, customerId: 'c1' };
   validateSale([L], stock, tt, credit, { ...base, customerBalance: 400, customerCreditLimit: 500 });                 // 400+100 = الحد بالضبط: مقبول
   assert.equal(code(() => validateSale([L], stock, tt, credit, { ...base, customerBalance: 401, customerCreditLimit: 500 })), 'CREDIT_LIMIT_EXCEEDED');
-  validateSale([L], stock, tt, credit, { ...base, customerBalance: 99999, customerCreditLimit: 0 });                 // بدون حد = غير محدود
+  assert.equal(code(() => validateSale([L], stock, tt, credit, { ...base, customerBalance: 0, customerCreditLimit: 0 })), 'CREDIT_LIMIT_EXCEEDED'); // بلا حد موجب: ممنوع الآجل
   validateSale([L], stock, tt, [{ method: 'كاش', amount: 100 }], { ...base, customerBalance: 99999, customerCreditLimit: 500 }); // الدفع النقدي لا يتأثر
 }
 
@@ -235,12 +239,12 @@ import { availableActions, nextStatus, registrationEffect, actionEffect, applyAc
   assert.deepEqual(actionEffect(incoming, 'clear').treasury, { type: 'قبض', amount: 1000, category: 'تحصيل من عميل / ورشة' });
   assert.equal(actionEffect(incoming, 'clear').customerBalanceDelta, 0);                  // التحصيل لا يمس الحساب ثانية
   assert.equal(actionEffect(incoming, 'deposit').treasury, undefined);
-  // شيك أكبر من المديونية: يُخصم المتاح فقط ويعود نفس المخصوم (لا تضخيم عند الارتداد)
+  // شيك أكبر من المديونية: الفائض يظهر رصيداً دائناً ويعود كامل المبلغ عند الارتداد
   r = registrationEffect('incoming', 1000, { balance: 300 });
-  assert.equal(r.applied.appliedAmount, 300);
-  assert.equal(actionEffect(mk({ appliedAmount: 300 }), 'bounce').customerBalanceDelta, 300);
+  assert.equal(r.applied.appliedAmount, 1000);
+  assert.equal(actionEffect(mk({ appliedAmount: 1000 }), 'bounce').customerBalanceDelta, 1000);
   r = registrationEffect('incoming', 1000, { balance: 0 });
-  assert.equal(r.applied.appliedAmount, 0);
+  assert.equal(r.applied.appliedAmount, 1000);
 
   // صادرة: مستحقات المورد 700 والشيك 1000 => خصم 700 + رصيد دائن 300، والعكس عند الارتداد
   const o = registrationEffect('outgoing', 1000, { balance: 700, deferredDebt: 700 });
@@ -403,7 +407,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
       inv('i4', '2026-07-01', [it('c', 1, 200, 150)], { customerId: 'c1', customerName: 'ورشة', paymentMethod: 'مختلط (دفع مقسّم)', payments: [{ method: 'آجل (شكك / حساب ورشة)', amount: 120 }, { method: 'كاش (نقدي)', amount: 80 }] }),
       inv('i5', '2026-10-10', [it('c', 1, 500, 300)], { customerId: 'c1', customerName: 'ورشة', paymentMethod: 'آجل (شكك / حساب ورشة)' }),
     ],
-    salesReturns: [{ id: 'r1', date: '2026-10-20', totalRefundAmount: 100, items: [{ partNumber: 'A', partName: 'صنف a', quantity: 1, unitPrice: 100, total: 100 }] }],
+    salesReturns: [{ id: 'r1', invoiceId: 'i1', invoiceNumber: 'INV-1', date: '2026-10-20', totalRefundAmount: 100, items: [{ partNumber: 'A', partName: 'صنف a', quantity: 1, unitPrice: 100, total: 100 }] }],
     purchaseInvoices: [{ id: 'p1', date: '2026-10-05', supplierName: 'مورد', grandTotal: 1000, amountPaid: 400 }, { id: 'p2', date: '2026-10-06', supplierName: 'مورد', grandTotal: 500, amountPaid: 500 }],
     parts: [
       { id: 'a', partNumber: 'A', name: 'صنف a', category: 'فلاتر وزيوت', stockQuantity: 10, minAlertStock: 3, costPrice: 60, salePrice: 100 },
@@ -431,22 +435,22 @@ import * as RP from '../src/utils/reportsLogic.ts';
 
   // المبيعات اليومية: الملغاة مستبعدة، والمرتجع يخصم من يومه
   let tb = RP.reportDailySales(data, R);
-  assert.deepEqual(tb.rows.map(x => [x.date, x.count, x.total, x.returns, x.net]), [['2026-07-01', 1, 200, 0, 200], ['2026-10-10', 1, 500, 0, 500], ['2026-10-20', 1, 480, 100, 380], ['2026-10-21', 1, 100, 0, 100]]);
-  assert.equal(tb.totals!.net, 1180);
+  assert.deepEqual(tb.rows.map(x => [x.date, x.count, x.total, x.returns, x.net]), [['2026-07-01', 1, 200, 0, 200], ['2026-10-10', 1, 500, 0, 500], ['2026-10-20', 1, 384, 100, 384], ['2026-10-21', 1, 100, 0, 100]]);
+  assert.equal(tb.totals!.net, 1184);
   tb = RP.reportDailySales(data, { from: '2026-10-20', to: '2026-10-21' });                  // نطاق التاريخ
-  assert.deepEqual([tb.rows.length, tb.totals!.total], [2, 580]);
+  assert.deepEqual([tb.rows.length, tb.totals!.total], [2, 484]);
 
   // أرباح الأصناف: الكمية الصافية بعد المرتجع، والملغاة خارج الحساب
   tb = RP.reportSalesByItem(data, R);
   const a = tb.rows.find(x => x.number === 'A')!;
-  assert.deepEqual([a.qty, a.revenue, a.cost, a.profit, a.margin], [4, 400, 240, 160, 40]);       // (3 من i1 + 1 من i2) لا 9 الملغاة
-  assert.deepEqual(tb.rows.map(x => [x.number, x.profit]), [['C', 250], ['A', 160], ['B', 40]]);   // الأعلى ربحاً أولاً
-  assert.equal(tb.totals!.profit, 450);
+  assert.deepEqual([a.qty, a.revenue, a.cost, a.profit, a.margin], [4, 388, 240, 148, 38.14]);       // (3 من i1 + 1 من i2) لا 9 الملغاة
+  assert.deepEqual(tb.rows.map(x => [x.number, x.profit]), [['C', 250], ['A', 148], ['B', 36]]);   // الأعلى ربحاً أولاً
+  assert.equal(tb.totals!.profit, 434);
 
   // الدفع المقسّم يُحسب بكل طريقة
   tb = RP.reportSalesByPayment(data, R);
   const pay = Object.fromEntries(tb.rows.map(x => [x.method, x.amount]));
-  assert.equal(pay['آجل (شكك / حساب ورشة)'], 120 + 500); assert.equal(pay['كاش (نقدي)'], 480 + 100 + 80);
+  assert.equal(pay['آجل (شكك / حساب ورشة)'], 120 + 500); assert.equal(pay['كاش (نقدي)'], 384 + 100 + 80);
 
   // حسب الموظف: الملغاة تظهر في عمود الملغاة فقط
   tb = RP.reportSalesByCashier(data, R);
@@ -457,8 +461,8 @@ import * as RP from '../src/utils/reportsLogic.ts';
   tb = RP.reportProfitLoss(data, { from: '2026-10-01', to: '2026-10-31' });
   const pl = Object.fromEntries(tb.rows.map(x => [x.item, x.amount]));
   assert.deepEqual(
-    [pl['المبيعات (قبل الضريبة وبعد الخصم)'], pl['يخصم: المرتجعات'], pl['صافي المبيعات'], pl['يخصم: تكلفة البضاعة المباعة'], pl['مجمل الربح'], pl['يخصم: المصروفات'], pl['صافي الربح']],
-    [1080, -100, 980, -600, 380, -400, -20]
+    [pl['المبيعات (قبل الضريبة وبعد الخصم)'], pl['يخصم: المرتجعات (قبل الضريبة)'], pl['صافي المبيعات'], pl['يخصم: تكلفة البضاعة المباعة'], pl['مجمل الربح'], pl['يخصم: المصروفات'], pl['صافي الربح']],
+    [1080, -96, 984, -600, 384, -400, -16]
   );
   assert.equal(RP.reportExpensesByCategory(data, { from: '2026-10-01', to: '2026-10-31' }).totals!.amount, 400);   // القديم خارج الفترة
   tb = RP.reportTreasury(data, R);
@@ -471,7 +475,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
   assert.deepEqual([tb.totals!.cost, tb.totals!.units], [1310, 21]);
   tb = RP.reportLowStock(data);
   assert.deepEqual(tb.rows.map(x => [x.number, x.suggest]), [['B', 8]]);
-  assert.deepEqual(RP.reportSlowMoving(data, today, 90).rows.map(x => x.number), ['D']);           // لم يُبع قط
+  assert.deepEqual(RP.reportSlowMoving(data, today, 90).rows.map(x => x.number), ['D']);           // آخر نشاط قديم أو غير معروف
   assert.equal(RP.reportSlowMoving(data, today, 90).rows[0].idle, 'بدون مبيعات');
   assert.deepEqual(RP.reportSlowMoving(data, today, 10).rows.map(x => x.number), ['C', 'D']);      // c آخر بيع قبل 14 يوماً، مرتبة بالتكلفة المجمّدة
   tb = RP.reportExpiry(data, today);
@@ -490,12 +494,14 @@ import * as RP from '../src/utils/reportsLogic.ts';
   tb = RP.reportLoyalty(data, '2026-10-24T23:59:59.000Z');
   assert.deepEqual(tb.rows.map(x => [x.name, x.points, x.value]), [['ورشة', 200, 100]]);
   tb = RP.reportSalesByCustomer(data, R);
-  assert.deepEqual(tb.rows.map(x => [x.name, x.count, x.total, x.balance]), [['ورشة', 2, 700, 1000], ['ز', 2, 580, 0]]);
+  assert.deepEqual(tb.rows.map(x => [x.name, x.count, x.total, x.balance]), [['ورشة', 2, 700, 1000], ['ز', 1, 384, 0], ['ز', 1, 100, 0]]);
   tb = RP.reportReturns(data, R);
   assert.deepEqual(tb.rows.map(x => [x.number, x.count, x.qty, x.value]), [['A', 1, 1, 100]]);
 
   // السجل: كل تقرير يُبنى بلا أخطاء وأعمدته مطابقة لمفاتيح صفوفه وإجمالياته، ومجموعاته معروفة
-  assert.equal(RP.REPORT_DEFS.length, 18);
+  const reconcile = RP.reportSalesReconciliation(data, R);
+  assert.ok(reconcile.rows.every(row => Math.abs(Number(row.difference)) < 0.01));
+  assert.equal(RP.REPORT_DEFS.length, 20);
   for (const def of RP.REPORT_DEFS) {
     const t = def.build(data, R, today);
     assert.ok(t.title && t.columns.length > 0, def.id);
@@ -535,8 +541,66 @@ import { computeVoidPlan } from '../src/utils/saleLogic.ts';
   assert.deepEqual(partial.restock, [{ partId: 'p1', partNumber: 'A', qty: 2 }]);
   assert.deepEqual(partial.refunds, [{ method: 'كاش', amount: 200 }]);   // 300 - 100 رُدّت وقت المرتجع
 
+  // يُخصم المرتجع السابق من حساب طريقة الرد الفعلية بدلاً من توزيعه عشوائياً.
+  const methodAwareVoid = computeVoidPlan({
+    grandTotal: 200, returnedAmount: 50,
+    items: [{ partId: 'p1', partNumber: 'A', quantity: 2, returnedQuantity: 1 }],
+    payments: [{ method: 'كاش (نقدي)', amount: 100 }, { method: 'فيزا / بطاقة بنكية', amount: 100 }],
+    previousRefunds: [{ method: 'نقدي (خصم من الخزنة)', amount: 50 }],
+  });
+  assert.deepEqual(methodAwareVoid.refunds, [
+    { method: 'كاش (نقدي)', amount: 50 },
+    { method: 'فيزا / بطاقة بنكية', amount: 100 },
+  ]);
+
   // مرتجع كلي سابق ثم إلغاء: لا شيء يُعكس مرة ثانية
   const full = computeVoidPlan({ grandTotal: 300, returnedAmount: 300, items: [{ partNumber: 'A', quantity: 3, returnedQuantity: 3 }], payments: [{ method: 'كاش', amount: 300 }] });
   assert.equal(full.restock.length, 0); assert.equal(full.refunds.length, 0); assert.equal(full.creditAmount, 0);
   console.log('void: كل الاختبارات نجحت');
 }
+
+
+ // ---------- مواعيد دفعات الموردين ----------
+ import { generateSupplierScheduleDates } from '../src/utils/supplierPaymentSchedule.ts';
+ {
+   assert.deepEqual(
+     generateSupplierScheduleDates({ recurrence: 'monthly', startDate: '2026-11-20', installmentCount: 3, dayOfMonth: 5 }),
+     ['2026-12-05', '2027-01-05', '2027-02-05']
+   );
+ }
+
+ // ---------- تصنيف حسابات الخزنة ومعرّفات الحركات ----------
+ import { accountOf, isCreditMethod } from '../src/utils/treasuryAccounts.ts';
+ import { nextTreasuryTransactionNumber } from '../src/utils/transactionNumber.ts';
+ {
+   assert.equal(accountOf('تحويل بنكي'), 'bank');
+   assert.equal(accountOf('شيك (حساب بنكي)'), 'bank');
+   assert.equal(accountOf('فيزا'), 'visa');
+   assert.equal(accountOf('بطاقة بنك'), 'visa');
+   assert.equal(accountOf('كاش'), 'cash');
+   assert.equal(accountOf('credit'), 'unclassified');
+   assert.equal(accountOf('طريقة غير معروفة'), 'unclassified');
+   assert.equal(isCreditMethod('credit'), true);
+   const ids = new Set(Array.from({ length: 500 }, () => nextTreasuryTransactionNumber()));
+   assert.equal(ids.size, 500);
+ }
+
+ // ---------- ترقيم فواتير البيع لكل جهاز ----------
+ import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
+ {
+   const storage = new Map<string, string>();
+   (globalThis as any).localStorage = {
+     getItem: (key: string) => storage.get(key) ?? null,
+     setItem: (key: string, value: string) => storage.set(key, value),
+   };
+   const date = new Date(2026, 10, 1);
+   const first = nextSalesInvoiceNumber([], date);
+   const second = nextSalesInvoiceNumber([{ invoiceNumber: first }], date);
+   assert.match(first, /^INV-2026-[A-F0-9]{8}-0001$/);
+   assert.match(second, /^INV-2026-[A-F0-9]{8}-0002$/);
+   const deviceA = storage.get('malvia_invoice_device_code_v1');
+   storage.set('malvia_invoice_device_code_v1', 'ABCDEF12');
+   const deviceB = nextSalesInvoiceNumber([], date);
+   assert.notEqual(deviceA, 'ABCDEF12');
+   assert.match(deviceB, /^INV-2026-ABCDEF12-0001$/);
+ }

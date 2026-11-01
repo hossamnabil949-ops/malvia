@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Banknote, CreditCard, Zap, Smartphone, FileSpreadsheet, ArrowDownLeft, ArrowUpRight, Layers, Wallet } from 'lucide-react';
+import { Banknote, CreditCard, Zap, Smartphone, FileSpreadsheet, ArrowDownLeft, ArrowUpRight, Layers, Wallet, Landmark, CircleHelp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { TreasuryTransaction } from '../types/autoParts';
 import { DateRangeFilter } from './DateRangeFilter';
@@ -11,6 +11,8 @@ const ICONS: Record<TreasuryAccountKey, React.ComponentType<{ className?: string
   instapay: Zap,
   visa: CreditCard,
   wallet: Smartphone,
+  bank: Landmark,
+  unclassified: CircleHelp,
 };
 
 const fmt = (n: number) => n.toLocaleString('ar-EG', { maximumFractionDigits: 2 });

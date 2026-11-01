@@ -23,18 +23,18 @@ export interface StockPart { id: string; stockQuantity: number }
 export interface PaymentLine { method: string; amount: number }
 
 /** الآجل = لا يدخل نقدية للخزنة (يُسجَّل على حساب العميل) */
-export const isCreditPayment = (method: string): boolean => (method || '').includes('آجل');
+export const isCreditPayment = (method: string): boolean => /آجل|اجل|credit/i.test(method || '');
 
 export interface Totals { subtotal: number; discount: number; tax: number; grandTotal: number } // بالقروش
 
 /** الخصم قبل الضريبة. vatRatePercent من الإعدادات (لا تُكتب 0.14 داخل الشاشة). */
-export function computeTotals(lines: CartLine[], discountEgp: number, vatRatePercent: number, applyVat: boolean): Totals {
+export function computeTotals(lines: CartLine[], discountEgp: number, vatRatePercent: number, applyVat: boolean, pricesIncludeTax = false): Totals {
   const subtotal = lines.reduce((s, l) => s + Math.round(l.qty * toPiasters(l.unitPrice)), 0);
   const discount = toPiasters(discountEgp);
   if (discount < 0 || discount > subtotal) throw new SaleError('DISCOUNT_EXCEEDS_SUBTOTAL', { subtotal, discount });
   const taxable = subtotal - discount;
-  const tax = applyVat ? Math.round((taxable * vatRatePercent) / 100) : 0;
-  return { subtotal, discount, tax, grandTotal: taxable + tax };
+  const tax = applyVat ? Math.round((taxable * (pricesIncludeTax ? vatRatePercent / (100 + vatRatePercent) : vatRatePercent / 100))) : 0;
+  return { subtotal, discount, tax, grandTotal: pricesIncludeTax ? taxable : taxable + tax };
 }
 
 export interface DiscountPolicyLine { qty: number; listPrice: number; unitPrice: number; unitCost: number }
@@ -91,7 +91,8 @@ export function validateSale(lines: CartLine[], stock: StockPart[], totals: Tota
   if (credit > 0) {
     if (!opt.customerId) throw new SaleError('CREDIT_REQUIRES_CUSTOMER');
     const limit = opt.customerCreditLimit ?? 0;
-    if (limit > 0 && toPiasters(opt.customerBalance ?? 0) + credit > toPiasters(limit)) {
+    // لا يوجد ائتمان مفتوح افتراضياً: يجب ضبط حد موجب صريح لكل عميل قبل البيع الآجل.
+    if (!(limit > 0) || toPiasters(opt.customerBalance ?? 0) + credit > toPiasters(limit)) {
       throw new SaleError('CREDIT_LIMIT_EXCEEDED', { limit, balance: opt.customerBalance ?? 0 });
     }
   }
@@ -110,9 +111,14 @@ export function deductStock<T extends StockPart>(parts: T[], lines: CartLine[], 
 }
 
 /** المبلغ المسترد لصنف مرتجع = نصيب الكمية من إجمالي سطر الفاتورة (بعد الخصم ومع الضريبة). */
-export function refundForLine(lineTotalEgp: number, lineQty: number, returnQty: number, alreadyReturnedQty: number): number {
+export function refundForLine(lineTotalEgp: number, lineQty: number, returnQty: number, alreadyReturnedQty: number, alreadyRefundedAmount?: number): number {
   if (returnQty <= 0 || returnQty + alreadyReturnedQty > lineQty) throw new SaleError('INVALID_QTY', { returnQty, remaining: lineQty - alreadyReturnedQty });
-  return toEgp(Math.round((toPiasters(lineTotalEgp) * returnQty) / lineQty));
+  const totalCents = toPiasters(lineTotalEgp);
+  const previousCumulativeCents = alreadyRefundedAmount === undefined
+    ? Math.round((totalCents * alreadyReturnedQty) / lineQty)
+    : toPiasters(alreadyRefundedAmount);
+  const isFinalReturn = returnQty + alreadyReturnedQty === lineQty;
+  return toEgp(isFinalReturn ? Math.max(0, totalCents - previousCumulativeCents) : Math.round((totalCents * returnQty) / lineQty));
 }
 
 // ---------- إلغاء فاتورة (Void) ----------
@@ -121,6 +127,7 @@ export interface VoidInput {
   returnedAmount?: number;
   items: { partId?: string; partNumber: string; quantity: number; returnedQuantity?: number }[];
   payments: PaymentLine[];
+  previousRefunds?: { method: string; amount: number }[];
 }
 export interface VoidPlan {
   fraction: number;                                                   // نسبة ما لم يُرتجع من الفاتورة (0..1)
@@ -136,10 +143,73 @@ export function computeVoidPlan(inv: VoidInput): VoidPlan {
   const restock = inv.items
     .map(it => ({ partId: it.partId, partNumber: it.partNumber, qty: Math.max(0, it.quantity - (it.returnedQuantity || 0)) }))
     .filter(r => r.qty > 0);
-  const creditAmount = round2(inv.payments.filter(p => isCreditPayment(p.method)).reduce((s, p) => s + p.amount, 0) * fraction);
-  const refunds = inv.payments
-    .filter(p => !isCreditPayment(p.method))
-    .map(p => ({ method: p.method, amount: round2(p.amount * fraction) }))
-    .filter(r => r.amount > 0);
+
+  const remaining = inv.payments.map(payment => ({ method: payment.method, amount: round2(payment.amount) }));
+  if (inv.previousRefunds?.length) {
+    const bucket = (method: string) => {
+      if (isCreditPayment(method)) return 'credit';
+      const value = String(method || '').toLowerCase();
+      if (/نقدي|كاش|cash/.test(value)) return 'cash';
+      if (/إنستا|انستا|insta|محفظ|wallet|فودافون/.test(value)) return 'wallet';
+      if (/فيزا|بطاقة|شبكة|مدى|visa|card/.test(value)) return 'card';
+      if (/شيك|تحويل بنكي|تحويل بنكى|bank/.test(value)) return 'bank';
+      return 'other';
+    };
+    for (const refund of inv.previousRefunds) {
+      let left = round2(Math.max(0, refund.amount));
+      const target = bucket(refund.method);
+      const matching = remaining.map((payment, index) => ({ payment, index }))
+        .filter(({ payment }) => bucket(payment.method) === target && payment.amount > 0);
+      const candidates = matching.length > 0
+        ? matching
+        : remaining.map((payment, index) => ({ payment, index })).filter(({ payment }) => payment.amount > 0);
+      const available = candidates.reduce((total, item) => total + item.payment.amount, 0);
+      const deduct = Math.min(left, available);
+      let assigned = 0;
+      candidates.forEach((candidate, index) => {
+        const share = index === candidates.length - 1
+          ? round2(deduct - assigned)
+          : round2(deduct * candidate.payment.amount / available);
+        const actual = Math.min(candidate.payment.amount, share);
+        remaining[candidate.index].amount = round2(remaining[candidate.index].amount - actual);
+        assigned = round2(assigned + actual);
+      });
+      left = round2(left - assigned);
+      if (left > 0) {
+        for (const candidate of remaining.map((payment, index) => ({ payment, index })).filter(x => x.payment.amount > 0)) {
+          const actual = Math.min(left, candidate.payment.amount);
+          remaining[candidate.index].amount = round2(candidate.payment.amount - actual);
+          left = round2(left - actual);
+          if (left <= 0) break;
+        }
+      }
+    }
+  } else if (fraction < 1) {
+    remaining.forEach(payment => { payment.amount = round2(payment.amount * fraction); });
+  }
+
+  // اجعل مجموع المبالغ المتبقية مطابقاً تماماً للمتبقي من الفاتورة بعد كل المرتجعات.
+  const targetRemaining = round2(Math.max(0, inv.grandTotal - (inv.returnedAmount || 0)));
+  const actualRemaining = round2(remaining.reduce((total, payment) => total + payment.amount, 0));
+  const adjustment = round2(actualRemaining - targetRemaining);
+  if (adjustment > 0) {
+    let left = adjustment;
+    for (const payment of remaining) {
+      const cut = Math.min(payment.amount, left);
+      payment.amount = round2(payment.amount - cut);
+      left = round2(left - cut);
+      if (left <= 0) break;
+    }
+  } else if (adjustment < 0 && remaining.length > 0) {
+    const totalOriginal = inv.payments.reduce((total, payment) => total + payment.amount, 0);
+    remaining.forEach((payment, index) => {
+      const original = inv.payments[index]?.amount || 0;
+      payment.amount = round2(payment.amount + (totalOriginal > 0 ? (-adjustment * original / totalOriginal) : (index === 0 ? -adjustment : 0)));
+    });
+  }
+  const creditAmount = round2(remaining.filter(payment => isCreditPayment(payment.method)).reduce((total, payment) => total + payment.amount, 0));
+  const refunds = remaining
+    .filter(payment => !isCreditPayment(payment.method) && payment.amount > 0)
+    .map(payment => ({ method: payment.method, amount: round2(payment.amount) }));
   return { fraction, restock, creditAmount, refunds };
 }

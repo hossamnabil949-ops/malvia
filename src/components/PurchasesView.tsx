@@ -52,6 +52,9 @@ interface PurchasesViewProps {
   parts: AutoPart[];
   treasuryBalance: number;
   onAddPurchaseInvoice: (invoice: PurchaseInvoice) => void;
+  vatEnabled?: boolean;
+  vatRate?: number;
+  pricesIncludeTax?: boolean;
   serialUnits?: SerialUnit[]; // لمنع تكرار الأرقام التسلسلية عند التوريد
   warehouses?: import('../types/autoParts').Warehouse[]; // لو فيه مخازن/فروع يظهر اختيار «استلام في مخزن»
   onEditPurchaseInvoice?: (invoice: PurchaseInvoice) => void;
@@ -69,6 +72,9 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   parts,
   treasuryBalance,
   onAddPurchaseInvoice,
+  vatEnabled = false,
+  vatRate = 14,
+  pricesIncludeTax = false,
   warehouses = [],
   serialUnits = [],
   onEditPurchaseInvoice,
@@ -111,8 +117,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | string>('كاش (نقدي)');
   const [amountPaid, setAmountPaid] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
-  const [applyTax, setApplyTax] = useState<boolean>(false); // الضريبة اختيارية (الافتراضي: بدون)
-  const [taxPercent, setTaxPercent] = useState<number>(14);
+  const applyTax = vatEnabled;
+  const taxPercent = vatRate;
   const [notes, setNotes] = useState<string>('');
   const [receivedBy, setReceivedBy] = useState<string>('أمين المخزن');
 
@@ -172,12 +178,15 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
   const taxAmount = useMemo(() => {
     if (!applyTax) return 0;
-    return Math.round(Math.max(0, subtotal - discount) * (Math.min(100, Math.max(0, taxPercent)) / 100));
+    const taxable = Math.max(0, subtotal - discount);
+    const rate = Math.min(100, Math.max(0, taxPercent));
+    return Math.round(taxable * (pricesIncludeTax ? rate / (100 + rate) : rate / 100) * 100) / 100;
   }, [subtotal, discount, taxPercent, applyTax]);
 
   const grandTotal = useMemo(() => {
-    return Math.max(0, subtotal - discount + taxAmount);
-  }, [subtotal, discount, taxAmount]);
+    const taxable = Math.max(0, subtotal - discount);
+    return Math.max(0, pricesIncludeTax && applyTax ? taxable : taxable + taxAmount);
+  }, [subtotal, discount, taxAmount, pricesIncludeTax, applyTax]);
 
   const handlePaymentStatusChange = (status: 'مدفوعة نقداً' | 'آجل' | 'مسددة جزئياً') => {
     setPaymentStatus(status);
@@ -312,6 +321,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           batchNo: mode === 'batch' ? it.batchNo?.trim() || undefined : undefined,
           expiryDate: mode === 'batch' ? it.expiryDate || undefined : undefined,
           serials: mode === 'serial' ? parseSerialList(serialTexts[i] || '') : undefined,
+          taxAmount: subtotal > 0 ? Math.round(taxAmount * (Number(it.quantity) * Number(it.costPrice) / subtotal) * 100) / 100 : 0,
         };
       });
     if (validItems.length === 0) return;
@@ -330,6 +340,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       items: validItems,
       subtotal,
       tax: taxAmount,
+      pricesIncludeTax: applyTax && pricesIncludeTax,
       discount,
       grandTotal,
       originalGrandTotal: grandTotal,
@@ -347,7 +358,6 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     setSupplierInvoiceNumber('');
     setReceiveWarehouseId('main');
     setSerialTexts({});
-    setApplyTax(false);
     setDiscount(0);
     setInvoiceItems([
       {
@@ -373,6 +383,17 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     setReturnNotes('');
   };
 
+  const purchaseReturnLineAmount = (index: number, qty: number): number => {
+    if (!returnPurchaseInvoice || qty <= 0) return 0;
+    const item = returnPurchaseInvoice.items[index];
+    if (!item) return 0;
+    const lineGross = Number(item.total) || item.quantity * item.costPrice;
+    const discountShare = returnPurchaseInvoice.subtotal > 0 ? (returnPurchaseInvoice.discount || 0) * lineGross / returnPurchaseInvoice.subtotal : 0;
+    const taxShare = item.taxAmount ?? (returnPurchaseInvoice.subtotal > 0 ? (returnPurchaseInvoice.tax || 0) * lineGross / returnPurchaseInvoice.subtotal : 0);
+    const returnableLine = Math.max(0, lineGross - discountShare + (returnPurchaseInvoice.pricesIncludeTax ? 0 : taxShare));
+    return Math.round(returnableLine * qty / Math.max(1, item.quantity) * 100) / 100;
+  };
+
   const returnCalculation = useMemo(() => {
     if (!returnPurchaseInvoice) {
       return { totalReturnAmount: 0, unpaidBefore: 0, debtReduction: 0, unpaidAfter: 0, excessCash: 0, newGrandTotal: 0 };
@@ -380,7 +401,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
     const totalReturnAmount = returnPurchaseInvoice.items.reduce((acc, it, idx) => {
       const qty = returnItems[String(idx)] || 0;
-      return acc + (qty * it.costPrice);
+      return acc + purchaseReturnLineAmount(idx, qty);
     }, 0);
 
     const unpaidBefore = Math.max(0, returnPurchaseInvoice.grandTotal - returnPurchaseInvoice.amountPaid);
@@ -397,16 +418,20 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     if (!returnPurchaseInvoice || returnCalculation.totalReturnAmount <= 0) return;
 
     const returnedItemsList: PurchaseReturnItem[] = returnPurchaseInvoice.items
-      .map((it, idx) => ({ it, qty: returnItems[String(idx)] || 0 }))
+      .map((it, idx) => ({ it, idx, qty: returnItems[String(idx)] || 0 }))
       .filter(({ qty }) => qty > 0)
-      .map(({ it, qty }) => ({
+      .map(({ it, idx, qty }) => {
+        const taxShare = it.taxAmount ?? (returnPurchaseInvoice.subtotal > 0 ? (returnPurchaseInvoice.tax || 0) * (Number(it.total) || it.quantity * it.costPrice) / returnPurchaseInvoice.subtotal : 0);
+        return {
         partNumber: it.partNumber,
         partName: it.partName,
         quantity: qty,
         unitCost: it.costPrice,
-        total: qty * it.costPrice,
+        total: purchaseReturnLineAmount(idx, qty),
+        taxAmount: qty > 0 ? taxShare * (qty / it.quantity) : 0,
         reason: returnReason,
-      }));
+      };
+      });
 
     if (returnedItemsList.length === 0) return;
 
@@ -1288,31 +1313,10 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   <div className="flex items-center gap-4 text-xs text-neutral-400">
                     <span>المجموع: <strong className="text-white font-mono">{subtotal.toLocaleString()} ج.م</strong></span>
                     <span>·</span>
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={applyTax}
-                        onChange={(e) => setApplyTax(e.target.checked)}
-                        className="w-3.5 h-3.5 accent-amber-400"
-                      />
-                      <span>إضافة ضريبة</span>
-                    </label>
-                    {applyTax ? (
-                      <span className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={taxPercent}
-                          onChange={(e) => setTaxPercent(Number(e.target.value))}
-                          className="w-14 h-6 px-1.5 rounded bg-surface-2 border border-neutral-600 text-white font-mono text-xs"
-                        />
-                        <span>% =</span>
-                        <strong className="text-white font-mono">{taxAmount.toLocaleString()} ج.م</strong>
-                      </span>
-                    ) : (
-                      <span className="text-neutral-500">بدون ضريبة</span>
-                    )}
+                    <span className="text-neutral-300">
+                      {applyTax ? `ضريبة المنشأة ${taxPercent}% ${pricesIncludeTax ? '(شاملة)' : '(تضاف)'}: ${taxAmount.toLocaleString()} ج.م` : 'المنشأة غير خاضعة للضريبة'}
+                    </span>
+
                   </div>
                   <div className="flex items-baseline gap-2">
                     <span className="text-xs text-neutral-400 font-bold">إجمالي الفاتورة النهائي:</span>

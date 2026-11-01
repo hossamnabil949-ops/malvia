@@ -52,6 +52,8 @@ interface QuickPosViewProps {
   onClearCart: () => void;
   onCheckoutComplete: (invoice: Invoice) => boolean | void;
   vatRate?: number;            // نسبة الضريبة من إعدادات المحل (%)
+  vatEnabled?: boolean;
+  pricesIncludeTax?: boolean;
   canSellBelowCost?: boolean;  // (غير مستخدم) البيع بأقل من التكلفة ممنوع للجميع حسب سياسة الخصم
   employees?: Employee[];      // للتحقق من باسورد المالك عند فتح تعديل السعر
   warehouses?: Warehouse[];    // المخازن/الفروع (لو فيه أكثر من مخزن يظهر اختيار مخزن البيع)
@@ -86,6 +88,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   onClearCart,
   onCheckoutComplete,
   vatRate = 14,
+  vatEnabled = false,
+  pricesIncludeTax = false,
   canSellBelowCost = false,
   employees = [],
   warehouses = [],
@@ -177,11 +181,13 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const handleQuickAddCustomer = () => {
     const name = newCustName.trim();
     if (!name || !onAddCustomer) return;
-    // منع التكرار: نفس الموبايل أو نفس الاسم => نختار العميل الموجود بدل إنشاء نسخة ثانية
+    // إنشاء عميل جديد يتطلب هاتفاً؛ الاسم وحده ليس مفتاح هوية فريداً.
     const phone = normPhone(newCustPhone);
-    const existing = customers.find(
-      (c) => (phone.length >= 7 && normPhone(c.phone) === phone) || normText(c.name) === normText(name)
-    );
+    if (phone.length < 7) {
+      setNewCustNote('أدخل رقم هاتف صحيحاً (7 أرقام على الأقل) قبل إنشاء العميل.');
+      return;
+    }
+    const existing = customers.find(c => normPhone(c.phone) === phone);
     if (existing) {
       setSelectedCustomerId(existing.id);
       setCustomerPhoneInput(existing.phone || '');
@@ -282,7 +288,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   };
   useBarcodeWedge(handleBarcodeScan, true);
 
-  const [applyVat, setApplyVat] = useState<boolean>(false);
+  const applyVat = vatEnabled;
 
   const brandCounts = useMemo(() => {
     const m: Record<string, number> = {};
@@ -337,8 +343,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const discountAll = Math.min(subtotal, Math.round((discount + loyaltyDiscount) * 100) / 100);
 
   const taxableAmount = Math.max(0, subtotal - discountAll);
-  const tax = applyVat ? Math.round((taxableAmount * vatRate) / 100 * 100) / 100 : 0;
-  const grandTotal = Math.round((taxableAmount + tax) * 100) / 100;
+  const tax = applyVat ? Math.round(taxableAmount * (pricesIncludeTax ? vatRate / (100 + vatRate) : vatRate / 100) * 100) / 100 : 0;
+  const grandTotal = Math.round((pricesIncludeTax && applyVat ? taxableAmount : taxableAmount + tax) * 100) / 100;
 
   // الدفع المقسّم: الطريقة الأساسية تغطي الباقي بعد المبلغ الثاني
   const splitValue = splitEnabled ? Math.min(grandTotal, Math.max(0, Number(splitAmount) || 0)) : 0;
@@ -383,9 +389,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         discountAll,
         maxDiscountPercent
       );
-      const totals = computeTotals(lines, discountAll, vatRate, applyVat);
+      const totals = computeTotals(lines, discountAll, vatRate, applyVat, pricesIncludeTax);
       const hasCredit = payments.some((p) => isCreditPayment(p.method));
-      const hasNewName = selectedCustomerId === 'cash' && customerNameInput.trim().length > 0;
       validateSale(
         lines,
         parts.map((p) => ({ id: p.id, stockQuantity: stockHere(p) })),
@@ -393,7 +398,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         payments,
         {
           allowBelowCost: false, // سياسة المحل: لا بيع بأقل من التكلفة لأي مستخدم
-          customerId: hasCredit ? (selectedCustomerId !== 'cash' ? selectedCustomerId : hasNewName ? 'new' : undefined) : undefined,
+          customerId: hasCredit && selectedCustomerId !== 'cash' ? selectedCustomerId : undefined,
           customerBalance: (selectedCustomer?.balance ?? 0) + (selectedCustomer?.chequesPending ?? 0),
           customerCreditLimit: selectedCustomer?.creditLimit ?? 0,
         }
@@ -408,7 +413,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         INVALID_PRICE: 'سعر غير صالح في الفاتورة',
         DISCOUNT_EXCEEDS_SUBTOTAL: 'الخصم أكبر من قيمة الفاتورة',
         PAYMENT_MISMATCH: 'مجموع المدفوعات لا يساوي إجمالي الفاتورة',
-        CREDIT_REQUIRES_CUSTOMER: 'البيع الآجل يتطلب اختيار عميل أو كتابة اسمه',
+        CREDIT_REQUIRES_CUSTOMER: 'البيع الآجل يتطلب اختيار عميل مسجل في النظام',
         CREDIT_LIMIT_EXCEEDED: `البيع الآجل يتجاوز حد ائتمان العميل (الحد ${(selectedCustomer?.creditLimit ?? 0).toLocaleString()} ج.م، مديونيته الحالية ${Math.max(0, selectedCustomer?.balance ?? 0).toLocaleString()} ج.م)`,
         EMPTY_CART: 'السلة فارغة',
       };
@@ -450,6 +455,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           originalPrice: item.part.salePrice,
           costPrice: item.part.costPrice,
           total: effectivePrice * item.quantity,
+          taxAmount: subtotal > 0 ? Math.round(tax * (effectivePrice * item.quantity / subtotal) * 100) / 100 : 0,
           ...(item.part.tracking === 'serial' ? { serials: serialSel[item.part.id] ?? [] } : {}),
         };
       }),
@@ -458,12 +464,15 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       loyaltyRedeemedPoints: redeemUsed > 0 ? redeemUsed : undefined,
       loyaltyDiscount: loyaltyDiscount > 0 ? loyaltyDiscount : undefined,
       tax: Number(tax.toFixed(2)),
+      pricesIncludeTax: applyVat && pricesIncludeTax,
       grandTotal: Number(grandTotal.toFixed(2)),
       paymentMethod: payments.length > 1 ? 'مختلط (دفع مقسّم)' : paymentMethod,
       payments: payments.map((p) => ({ method: p.method, amount: p.amount })),
       cashierId,
       cashierName: cashierName || 'كاشير المحل',
-      status: 'مسددة',
+      status: payments.some(p => isCreditPayment(p.method))
+        ? (payments.filter(p => isCreditPayment(p.method)).reduce((sum, p) => sum + p.amount, 0) >= grandTotal ? 'آجلة' : 'مسددة جزئياً')
+        : 'مسددة',
     };
 
     const accepted = onCheckoutComplete(newInvoice);
@@ -1129,17 +1138,9 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               <Percent className="w-3.5 h-3.5 text-amber-400" />
               <span className="text-neutral-300 font-bold">ضريبة القيمة المضافة ({vatRate}%):</span>
             </div>
-            <button
-              type="button"
-              onClick={() => setApplyVat(!applyVat)}
-              className={`px-3 py-1 rounded-lg text-xs font-black transition-all border ${
-                applyVat
-                  ? 'bg-amber-500 text-neutral-950 border-amber-400 shadow-sm'
-                  : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white'
-              }`}
-            >
-              {applyVat ? `مطبقة (+${vatRate}%) ✓` : 'بدون ضريبة (0%)'}
-            </button>
+            <span className={`px-3 py-1 rounded-lg text-xs font-black border ${applyVat ? 'bg-amber-500 text-neutral-950 border-amber-400' : 'bg-neutral-800 text-neutral-400 border-neutral-700'}`}>
+              {applyVat ? `مطبقة حسب إعداد المنشأة (${vatRate}%) ✓` : 'المنشأة غير خاضعة / بدون ضريبة'}
+            </span>
           </div>
 
           <div className="space-y-1 text-xs text-neutral-400 border-t border-neutral-800/60 pt-2">
@@ -1160,7 +1161,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               </div>
             )}
             <div className="flex justify-between">
-              <span>ضريبة القيمة المضافة:</span>
+              <span>ضريبة القيمة المضافة {pricesIncludeTax ? '(مستخرجة من السعر الشامل)' : '(مضافة إلى السعر)'}:</span>
               <span className={`font-mono ${applyVat ? 'text-amber-400 font-bold' : 'text-neutral-500'}`}>
                 {applyVat ? `${tax.toFixed(2)} ج.م (${vatRate}%)` : 'معفى / 0.00 ج.م'}
               </span>

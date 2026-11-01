@@ -96,6 +96,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [taxId, setTaxId] = useState(settings.taxId || '');
   const [currency, setCurrency] = useState(settings.currency || 'ج.م');
   const [vatRate, setVatRate] = useState(settings.vatRate || 14);
+  const [vatEnabled, setVatEnabled] = useState(Boolean(settings.vatEnabled));
+  const [pricesIncludeTax, setPricesIncludeTax] = useState(Boolean(settings.pricesIncludeTax));
   const [invoiceFooterNotes, setInvoiceFooterNotes] = useState(settings.invoiceFooterNotes || '');
 
   const ownerAccount = employees.find(e => e.role === 'مدير عام' || e.username === 'admin') || employees[0];
@@ -117,6 +119,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTaxId(settings.taxId || '');
     setCurrency(settings.currency || 'ج.م');
     setVatRate(settings.vatRate || 14);
+    setVatEnabled(Boolean(settings.vatEnabled));
+    setPricesIncludeTax(Boolean(settings.pricesIncludeTax));
     setInvoiceFooterNotes(settings.invoiceFooterNotes || '');
   }, [settings]);
 
@@ -189,6 +193,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       taxId,
       currency,
       vatRate: Number(vatRate),
+      vatEnabled,
+      pricesIncludeTax,
       invoiceFooterNotes,
     };
 
@@ -788,6 +794,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       />
                     </div>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <label className="flex items-center gap-2 rounded-xl border border-neutral-700 bg-surface-2 p-3 text-neutral-200">
+                    <input type="checkbox" checked={vatEnabled} onChange={e => setVatEnabled(e.target.checked)} />
+                    المنشأة خاضعة لضريبة القيمة المضافة
+                  </label>
+                  <label className="flex items-center gap-2 rounded-xl border border-neutral-700 bg-surface-2 p-3 text-neutral-200">
+                    <input type="checkbox" checked={pricesIncludeTax} onChange={e => setPricesIncludeTax(e.target.checked)} disabled={!vatEnabled} />
+                    أسعار البيع والشراء المدخلة شاملة الضريبة
+                  </label>
                 </div>
 
                 <div className="text-xs">

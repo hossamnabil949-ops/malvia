@@ -942,6 +942,8 @@ export const INITIAL_SHOP_SETTINGS: ShopSettings = {
   taxId: '394-882-105',
   currency: 'جنيه مصري (ج.م)',
   vatRate: 14,
+  vatEnabled: false,
+  pricesIncludeTax: false,
   invoiceFooterNotes: 'شكراً لتعاملكم مع MALVIA. القطع الكهربائية مشمولة بضمان التجربة. الاستبدال خلال 14 يوماً بالفاتورة الأصلية.',
   activeEmployeeId: 'emp-1'
 };

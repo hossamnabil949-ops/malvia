@@ -44,9 +44,11 @@ import {
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
 import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands';
-import { isCreditMethod } from './utils/treasuryAccounts';
+import { isCreditMethod, accountOf } from './utils/treasuryAccounts';
 import { findOpenShift, findOpenShifts, summarizeShift, stampNewTreasury, nextShiftNumber, countTotal, round2, varianceOf } from './utils/shiftLogic';
 import { nextSalesInvoiceNumber } from './utils/invoiceNumber';
+import { nextTreasuryTransactionNumber } from './utils/transactionNumber';
+import { netSales } from './utils/reportsLogic';
 import { SaleError, computeVoidPlan, deductStock, isCreditPayment } from './utils/saleLogic';
 import type { AuditEntry, StockMovement, InvoicePayment, Warehouse, StockLevel, StockTransfer } from './types/autoParts';
 import { MAIN_WAREHOUSE_ID, normalizeWarehouseId, availableIn, adjustLevels, validateTransfer, applyTransfer, TransferError } from './utils/warehouseLogic';
@@ -73,7 +75,8 @@ const SALE_ERROR_MESSAGES: Record<string, string> = {
   PRICE_BELOW_COST: 'السعر أقل من التكلفة (يحتاج صلاحية المدير)',
   DISCOUNT_EXCEEDS_SUBTOTAL: 'الخصم أكبر من قيمة الفاتورة',
   PAYMENT_MISMATCH: 'مجموع المدفوعات لا يساوي إجمالي الفاتورة',
-  CREDIT_REQUIRES_CUSTOMER: 'البيع الآجل يتطلب اختيار أو كتابة اسم العميل',
+  CREDIT_REQUIRES_CUSTOMER: 'البيع الآجل يتطلب اختيار عميل مسجل في النظام',
+  CREDIT_LIMIT_EXCEEDED: 'تجاوز البيع الآجل حد ائتمان العميل أو لم يتم تحديد حد موجب.',
   EMPTY_CART: 'السلة فارغة',
 };
 const MAX_LOG_ENTRIES = 5000; // سقف السجلات حتى لا تكبر مساحة التخزين بلا حد
@@ -332,11 +335,29 @@ export default function App() {
     }
   }, [licenses]);
 
-  // Auto-persist changes to active tenant
+  // اجمع كل موارد العملية الواحدة قبل الحفظ؛ لا تنفّذ آثاراً جانبية داخل state updater.
+  const pendingPersistRef = useRef<{ tenantId: string; data: Parameters<typeof saveTenantStoreData>[1] } | null>(null);
   const persistChanges = useCallback((updates: Parameters<typeof saveTenantStoreData>[1]) => {
     if (!activeTenantId) return;
-    saveTenantStoreData(activeTenantId, updates);
+    const pending = pendingPersistRef.current;
+    if (pending && pending.tenantId !== activeTenantId) {
+      saveTenantStoreData(pending.tenantId, pending.data);
+      pendingPersistRef.current = null;
+    }
+    const current = pendingPersistRef.current;
+    pendingPersistRef.current = {
+      tenantId: activeTenantId,
+      data: { ...(current?.tenantId === activeTenantId ? current.data : {}), ...updates },
+    };
   }, [activeTenantId]);
+
+  // يتم الحفظ مرة واحدة بعد اكتمال تحديثات React المجمّعة؛ تكرار StrictMode لا يكرر الحفظ.
+  useEffect(() => {
+    const pending = pendingPersistRef.current;
+    if (!pending) return;
+    pendingPersistRef.current = null;
+    saveTenantStoreData(pending.tenantId, pending.data);
+  });
 
   // سجل التدقيق: من فعل ماذا ومتى (يمنع التلاعب ويكشفه)
   const logAudit = (action: AuditEntry['action'], summary: string, entityId?: string, amount?: number) => {
@@ -449,7 +470,7 @@ export default function App() {
       const amt = Math.abs(variance);
       const tx: TreasuryTransaction = {
         id: `TX-SHV-${Date.now()}`,
-        txNumber: `TX-SV-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: nextTreasuryTransactionNumber(),
         date: nowISO.split('T')[0],
         time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         type: isShort ? 'صرف' : 'قبض',
@@ -719,10 +740,26 @@ export default function App() {
     [loyaltyLedger, loyaltyTick]
   );
   const chequesExposure = useMemo(() => pendingIncomingByCustomer(cheques), [cheques]);
-  const customersWithPoints = useMemo(
-    () => customers.map(c => ({ ...c, loyaltyPoints: loyaltyAvailable.get(c.id) ?? 0, chequesPending: chequesExposure.get(c.id) ?? 0 })),
-    [customers, loyaltyAvailable, chequesExposure]
-  );
+  const customersWithPoints = useMemo(() => {
+    const month = todayISO().slice(0, 7);
+    return customers.map(customer => {
+      const customerInvoices = invoices.filter(invoice => invoice.customerId === customer.id && invoice.status !== 'ملغاة');
+      const totalPurchases = customerInvoices.reduce((total, invoice) => total + netSales(invoice), 0);
+      const monthlyPurchases = customerInvoices
+        .filter(invoice => invoice.date.slice(0, 7) === month)
+        .reduce((total, invoice) => total + netSales(invoice), 0);
+      const lastVisit = customerInvoices.map(invoice => invoice.date).sort().at(-1) || '';
+      return {
+        ...customer,
+        totalPurchases: Math.round(totalPurchases * 100) / 100,
+        monthlyPurchases: Math.round(monthlyPurchases * 100) / 100,
+        invoicesCount: customerInvoices.length,
+        lastVisit,
+        loyaltyPoints: loyaltyAvailable.get(customer.id) ?? 0,
+        chequesPending: chequesExposure.get(customer.id) ?? 0,
+      };
+    });
+  }, [customers, invoices, loyaltyAvailable, chequesExposure]);
 
   useEffect(() => {
     const t = setInterval(() => setLoyaltyTick(x => x + 1), 60 * 60 * 1000);
@@ -807,13 +844,15 @@ export default function App() {
   };
 
   /** تطبيق أثر مرتجع (أو حذفه) على الدفعات والسيريال. يرجع الأسطر المحدّثة للفاتورة. */
-  const applyReturnTracking = (inv: Invoice, retItems: { partNumber: string; partName: string; quantity: number; serials?: string[] }[], direction: 1 | -1) => {
+  const applyReturnTracking = (inv: Invoice, retItems: { lineId?: string; partId?: string; partNumber: string; partName: string; quantity: number; unitPrice?: number; serials?: string[] }[], direction: 1 | -1) => {
     const batchOps: { batchId: string; qty: number }[] = [];
     const toStock = new Set<string>();
     const toSold = new Set<string>();
     const touchedPartIds = new Map<string, string>(); // serial -> partId
     retItems.forEach(r => {
-      const it = inv.items.find(x => x.partNumber === r.partNumber && x.partName === r.partName);
+      const exactIndex = r.lineId ? inv.items.findIndex((x, index) => r.lineId === `${inv.id}:${index}`) : -1;
+      const fallbackMatches = inv.items.filter(x => (r.partId ? x.partId === r.partId : x.partNumber === r.partNumber && x.partName === r.partName) && (r.unitPrice === undefined || x.unitPrice === r.unitPrice));
+      const it = exactIndex >= 0 ? inv.items[exactIndex] : fallbackMatches.length === 1 ? fallbackMatches[0] : undefined;
       if (!it) return;
       const res = trackReturn(it, r.quantity, r.serials, direction);
       batchOps.push(...res.batchOps);
@@ -927,7 +966,7 @@ export default function App() {
   const applyChequeEffectToParty = (cheque: Cheque, effect: ChequeEffect, isRegistration: boolean) => {
     if (cheque.partyType === 'customer' && effect.customerBalanceDelta) {
       setCustomers(prev => {
-        const updated = prev.map(c => (c.id === cheque.partyId ? { ...c, balance: Math.max(0, c.balance + effect.customerBalanceDelta) } : c));
+        const updated = prev.map(c => (c.id === cheque.partyId ? { ...c, balance: c.balance + effect.customerBalanceDelta } : c));
         persistChanges({ customers: updated });
         return updated;
       });
@@ -1007,7 +1046,7 @@ export default function App() {
       const t = effect.treasury;
       const tx: TreasuryTransaction = {
         id: `TX-CHQ-${Date.now()}`,
-        txNumber: `TX-Q-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: nextTreasuryTransactionNumber(),
         date: todayISO(),
         time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         type: t.type,
@@ -1107,7 +1146,30 @@ export default function App() {
   };
 
   const handleCreateInvoice = (invoice: Invoice): boolean => {
+    const duplicateNumber = invoices.find(existing => existing.invoiceNumber === invoice.invoiceNumber && existing.id !== invoice.id);
+    if (duplicateNumber) {
+      window.alert(`رقم الفاتورة ${invoice.invoiceNumber} مستخدم بالفعل. أعد إنشاء الرقم ثم حاول مرة أخرى.`);
+      return false;
+    }
     // إلزام الوردية: لا بيع بدون وردية مفتوحة (لو الإعداد مفعّل) حتى يكون الدرج محسوباً
+    const requestedPayments: InvoicePayment[] = invoice.payments && invoice.payments.length > 0
+      ? invoice.payments
+      : [{ method: invoice.paymentMethod, amount: invoice.grandTotal }];
+    const unknownPayment = requestedPayments.find(p => !isCreditPayment(String(p.method)) && accountOf(String(p.method)) === 'unclassified');
+    if (unknownPayment) {
+      window.alert(`طريقة الدفع «${unknownPayment.method}» غير معروفة؛ اختر طريقة دفع مصنفة قبل إتمام البيع.`);
+      return false;
+    }
+    const requestedCredit = requestedPayments.filter(p => isCreditPayment(String(p.method))).reduce((sum, p) => sum + p.amount, 0);
+    if (requestedCredit > 0) {
+      const creditCustomer = invoice.customerId ? customers.find(c => c.id === invoice.customerId) : undefined;
+      const creditLimit = Number(creditCustomer?.creditLimit) || 0;
+      const exposure = (Number(creditCustomer?.balance) || 0) + (Number(creditCustomer?.chequesPending) || 0) + requestedCredit;
+      if (!creditCustomer || !(creditLimit > 0) || exposure > creditLimit) {
+        window.alert('البيع الآجل مرفوض: اختر عميلاً مسجلاً واضبط له حد ائتمان موجباً يكفي للمديونية الجديدة.');
+        return false;
+      }
+    }
     if (settings.requireShiftForSales && !findOpenShift(shifts)) {
       window.alert('لازم تفتح وردية الأول (وتعدّ كاش الدرج) قبل ما تبيع.');
       setCurrentTab('shifts');
@@ -1221,44 +1283,16 @@ export default function App() {
     })));
 
     // 5) المدفوعات: كل طريقة دفع في حسابها بالخزنة، والآجل على حساب العميل
-    const payments: InvoicePayment[] = finalInvoice.payments && finalInvoice.payments.length > 0
-      ? finalInvoice.payments
-      : [{ method: finalInvoice.paymentMethod, amount: finalInvoice.grandTotal }];
-    const creditAmount = payments.filter(p => isCreditPayment(String(p.method))).reduce((s, p) => s + p.amount, 0);
+    const payments: InvoicePayment[] = requestedPayments;
+    const creditAmount = requestedCredit;
 
-    if (creditAmount > 0) {
+    // إحصاءات العميل المسجّل تُحدّث لكل فاتورة (نقدي أو آجل) وبالمعرّف فقط.
+    if (finalInvoice.customerId) {
       setCustomers(prev => {
-        const nameKey = normKey(finalInvoice.customerName);
-        const phoneKey = normKey(finalInvoice.customerPhone);
-        const idx = prev.findIndex(c =>
-          (finalInvoice.customerId && c.id === finalInvoice.customerId) ||
-          (phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey
-        );
-        let updated: Customer[];
-        if (idx >= 0) {
-          updated = prev.map((c, i) => i === idx ? {
-            ...c,
-            balance: c.balance + creditAmount,
-            totalPurchases: (c.totalPurchases || 0) + finalInvoice.grandTotal,
-            monthlyPurchases: (c.monthlyPurchases || 0) + finalInvoice.grandTotal,
-            invoicesCount: (c.invoicesCount || 0) + 1,
-            lastVisit: finalInvoice.date,
-            phone: c.phone || finalInvoice.customerPhone || '',
-          } : c);
-        } else {
-          const created: Customer = {
-            id: `cust-${Date.now()}`,
-            name: finalInvoice.customerName || 'عميل آجل',
-            type: finalInvoice.customerType === 'ورشة' ? 'ورشة فنية' : 'عميل تجزئة',
-            phone: finalInvoice.customerPhone || '',
-            balance: creditAmount,
-            totalPurchases: finalInvoice.grandTotal,
-            monthlyPurchases: finalInvoice.grandTotal,
-            invoicesCount: 1,
-            lastVisit: finalInvoice.date,
-          };
-          updated = [created, ...prev];
-        }
+        const updated = prev.map(customer => customer.id === finalInvoice.customerId ? {
+          ...customer,
+          balance: customer.balance + creditAmount,
+        } : customer);
         persistChanges({ customers: updated });
         return updated;
       });
@@ -1271,7 +1305,7 @@ export default function App() {
         running += p.amount;
         return {
           id: `TX-SALE-${Date.now()}-${i}`,
-          txNumber: `TX-${Math.floor(1000 + Math.random() * 9000)}`,
+          txNumber: nextTreasuryTransactionNumber(),
           date: finalInvoice.date,
           time: finalInvoice.time || new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
           type: 'قبض' as const,
@@ -1325,6 +1359,7 @@ export default function App() {
       returnedAmount: inv.returnedAmount,
       items: inv.items,
       payments: payments.map(p => ({ method: String(p.method), amount: p.amount })),
+      previousRefunds: salesReturns.filter(ret => ret.invoiceId === inv.id).map(ret => ({ method: ret.refundMethod, amount: ret.totalRefundAmount })),
     });
     const fraction = plan.fraction;
     // عكس الولاء: تُسحب النقاط المتبقية من الفاتورة وتُرد النقاط المستبدلة
@@ -1375,21 +1410,12 @@ export default function App() {
     // 3) المدفوعات: رد كل طريقة دفع من حسابها، وتخفيض مديونية العميل الآجل
     const creditAmount = plan.creditAmount;
 
-    if (creditAmount > 0) {
+    if (inv.customerId) {
       setCustomers(prev => {
-        const nameKey = normKey(inv.customerName);
-        const phoneKey = normKey(inv.customerPhone);
-        const updated = prev.map(c =>
-          ((inv.customerId && c.id === inv.customerId) || (phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey)
-            ? {
-                ...c,
-                balance: c.balance - creditAmount,
-                totalPurchases: Math.max(0, (c.totalPurchases || 0) - inv.grandTotal * fraction),
-                monthlyPurchases: Math.max(0, (c.monthlyPurchases || 0) - inv.grandTotal * fraction),
-                invoicesCount: Math.max(0, (c.invoicesCount || 0) - 1),
-              }
-            : c
-        );
+        const updated = prev.map(c => c.id === inv.customerId ? {
+          ...c,
+          balance: c.balance - creditAmount,
+        } : c);
         persistChanges({ customers: updated });
         return updated;
       });
@@ -1402,7 +1428,7 @@ export default function App() {
         running -= r.amount;
         return {
           id: `TX-VOID-${Date.now()}-${i}`,
-          txNumber: `TX-V-${Math.floor(1000 + Math.random() * 9000)}`,
+          txNumber: nextTreasuryTransactionNumber(),
           date: todayISO(),
           time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
           type: 'صرف' as const,
@@ -1427,19 +1453,52 @@ export default function App() {
   };
 
   // Handlers for Sales Returns
+  const findReturnLineItem = (ret: SalesReturn, inv: Invoice, index: number) => {
+    const lineId = `${inv.id}:${index}`;
+    const exact = ret.items.find(item => item.lineId === lineId);
+    if (exact) return exact;
+    const line = inv.items[index];
+    const sameInvoiceLines = inv.items.filter(candidate => line.partId
+      ? candidate.partId === line.partId
+      : candidate.partNumber === line.partNumber && candidate.partName === line.partName);
+    if (sameInvoiceLines.length !== 1) return undefined; // الفواتير القديمة بلا lineId لا يمكن تخمين سطرها عند التكرار
+    const matches = ret.items.filter(item => item.partId
+      ? item.partId === line.partId
+      : item.partNumber === line.partNumber && item.partName === line.partName);
+    return matches.length === 1 ? matches[0] : undefined;
+  };
+
   const handleAddSalesReturn = (rawReturn: SalesReturn) => {
+    const sourceInvoice = invoices.find(i => i.id === rawReturn.invoiceId);
+    if (!sourceInvoice) {
+      window.alert('الفاتورة الأصلية غير موجودة؛ لا يمكن تسجيل المرتجع.');
+      return;
+    }
+    if (sourceInvoice.status === 'ملغاة') {
+      window.alert('لا يمكن إنشاء مرتجع لفاتورة ملغاة.');
+      return;
+    }
     // تثبيت السيريالات المرتجعة فعلياً داخل سجل المرتجع (المختارة من الشاشة أو تلقائياً)
     const origInv = invoices.find(i => i.id === rawReturn.invoiceId);
     const salesReturn: SalesReturn = origInv
       ? {
           ...rawReturn,
+          customerId: rawReturn.customerId || origInv.customerId,
           items: rawReturn.items.map(r => {
-            const it = origInv.items.find(x => x.partNumber === r.partNumber && x.partName === r.partName);
-            if (!it?.serials?.length) return r;
-            return { ...r, serials: trackReturn(it, r.quantity, r.serials, 1).unitsToStock };
+            const lineIndex = r.lineId ? Number(r.lineId.slice(r.lineId.lastIndexOf(':') + 1)) : -1;
+            const it = r.lineId ? (lineIndex >= 0 ? origInv.items[lineIndex] : undefined) : (() => { const matches = origInv.items.filter(x => r.partId ? x.partId === r.partId : x.partNumber === r.partNumber && x.partName === r.partName); return matches.length === 1 ? matches[0] : undefined; })();
+            if (!it) return r;
+            const resolvedIndex = origInv.items.indexOf(it);
+            const enriched = { ...r, lineId: `${origInv.id}:${resolvedIndex}`, partId: r.partId || it.partId };
+            if (!it.serials?.length) return enriched;
+            return { ...enriched, serials: trackReturn(it, r.quantity, r.serials, 1).unitsToStock };
           }),
         }
       : rawReturn;
+    if (origInv && salesReturn.items.some(item => !origInv.items.some((line, index) => item.lineId === `${origInv.id}:${index}`))) {
+      window.alert('تعذر تحديد سطر الفاتورة الأصلي لهذا المرتجع بأمان. راجع الأصناف المتشابهة واختر السطر الصحيح.');
+      return;
+    }
     if (origInv) applyReturnTracking(origInv, salesReturn.items, 1);
     setSalesReturns(prev => {
       const updated = [salesReturn, ...prev];
@@ -1452,7 +1511,7 @@ export default function App() {
       const updated = prev.map(inv => {
         if (inv.id !== salesReturn.invoiceId) return inv;
         const items = inv.items.map(it => {
-          const r = salesReturn.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
+          const r = findReturnLineItem(salesReturn, inv, inv.items.indexOf(it));
           return r ? { ...trackedInvoiceItem(it, r, 1), returnedQuantity: (it.returnedQuantity || 0) + r.quantity } : it;
         });
         const allReturned = items.every(it => (it.returnedQuantity || 0) >= it.quantity);
@@ -1471,10 +1530,11 @@ export default function App() {
     if (salesReturn.items && salesReturn.items.length > 0) {
       const moves: Parameters<typeof logStockMovements>[0] = [];
       const updated = parts.map(part => {
-        const item = salesReturn.items.find(i => i.partNumber === part.partNumber);
-        if (item) {
-          moves.push({ part, qtyDelta: item.quantity, type: 'sales_return', refId: salesReturn.id, refNumber: salesReturn.returnNumber });
-          return { ...part, stockQuantity: part.stockQuantity + item.quantity, updatedAt: todayISO() };
+        const legacyMatches = salesReturn.items.filter(i => !i.partId && i.partNumber === part.partNumber && i.partName === part.name);
+        const item = salesReturn.items.filter(i => i.partId === part.id).reduce((n, i) => n + i.quantity, 0) + (parts.filter(p => p.partNumber === part.partNumber && p.name === part.name).length === 1 ? legacyMatches.reduce((n, i) => n + i.quantity, 0) : 0);
+        if (item > 0) {
+          moves.push({ part, qtyDelta: item, type: 'sales_return', refId: salesReturn.id, refNumber: salesReturn.returnNumber });
+          return { ...part, stockQuantity: part.stockQuantity + item, updatedAt: todayISO() };
         }
         return part;
       });
@@ -1483,7 +1543,7 @@ export default function App() {
       logStockMovements(moves);
     }
     shiftWarehouseStock(invoices.find(i => i.id === salesReturn.invoiceId)?.warehouseId,
-      (salesReturn.items || []).map(i => ({ partNumber: i.partNumber, qty: i.quantity })), 1);
+      (salesReturn.items || []).map(i => ({ partId: i.partId, partNumber: i.partNumber, qty: i.quantity })), 1);
     {
       const inv = invoices.find(i => i.id === salesReturn.invoiceId);
       if (inv) {
@@ -1496,13 +1556,10 @@ export default function App() {
 
     // المرتجع على حساب العميل الآجل: يُخصم من مديونيته (وإن زاد عنها يصبح له رصيد دائن ظاهر بالسالب)
     if (salesReturn.refundMethod === 'خصم من رصيد العميل الآجل') {
-      const original = invoices.find(i => i.id === salesReturn.invoiceId);
       setCustomers(prev => {
-        const nameKey = normKey(salesReturn.customerName);
-        const phoneKey = normKey(original?.customerPhone);
         const updated = prev.map(c =>
-          ((phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey)
-            ? { ...c, balance: c.balance - salesReturn.totalRefundAmount }
+          (salesReturn.customerId && c.id === salesReturn.customerId)
+            ? { ...c, balance: c.balance - salesReturn.totalRefundAmount, }
             : c
         );
         persistChanges({ customers: updated });
@@ -1516,7 +1573,7 @@ export default function App() {
       const refundViaWallet = salesReturn.refundMethod === 'إنستاباي / محفظة';
       const newTx: TreasuryTransaction = {
         id: `TX-RET-${Date.now()}`,
-        txNumber: `TX-R-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: nextTreasuryTransactionNumber(),
         date: salesReturn.date,
         time: salesReturn.time || new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         type: 'صرف',
@@ -1554,7 +1611,7 @@ export default function App() {
       const updated = prev.map(inv => {
         if (inv.id !== ret.invoiceId) return inv;
         const items = inv.items.map(it => {
-          const r = ret.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
+          const r = findReturnLineItem(ret, inv, inv.items.indexOf(it));
           return r ? { ...trackedInvoiceItem(it, r, -1), returnedQuantity: Math.max(0, (it.returnedQuantity || 0) - r.quantity) } : it;
         });
         const returnedAmount = Math.max(0, (inv.returnedAmount || 0) - ret.totalRefundAmount);
@@ -1575,17 +1632,18 @@ export default function App() {
     {
       const moves: Parameters<typeof logStockMovements>[0] = [];
       const updated = parts.map(part => {
-        const item = ret.items.find(i => i.partNumber === part.partNumber);
-        if (!item) return part;
-        moves.push({ part, qtyDelta: -item.quantity, type: 'sales_return_delete', refId: ret.id, refNumber: ret.returnNumber });
-        return { ...part, stockQuantity: Math.max(0, part.stockQuantity - item.quantity), updatedAt: todayISO() };
+        const legacyMatches = ret.items.filter(i => !i.partId && i.partNumber === part.partNumber && i.partName === part.name);
+        const qty = ret.items.filter(i => i.partId === part.id).reduce((n, i) => n + i.quantity, 0) + (parts.filter(p => p.partNumber === part.partNumber && p.name === part.name).length === 1 ? legacyMatches.reduce((n, i) => n + i.quantity, 0) : 0);
+        if (qty <= 0) return part;
+        moves.push({ part, qtyDelta: -qty, type: 'sales_return_delete', refId: ret.id, refNumber: ret.returnNumber });
+        return { ...part, stockQuantity: Math.max(0, part.stockQuantity - qty), updatedAt: todayISO() };
       });
       setParts(updated);
       persistChanges({ parts: updated });
       logStockMovements(moves);
     }
     shiftWarehouseStock(invoices.find(i => i.id === ret.invoiceId)?.warehouseId,
-      ret.items.map(i => ({ partNumber: i.partNumber, qty: i.quantity })), -1);
+      ret.items.map(i => ({ partId: i.partId, partNumber: i.partNumber, qty: i.quantity })), -1);
     {
       const inv = invoices.find(i => i.id === ret.invoiceId);
       if (inv) {
@@ -1599,13 +1657,10 @@ export default function App() {
 
     // عكس رصيد العميل الآجل
     if (ret.refundMethod === 'خصم من رصيد العميل الآجل') {
-      const original = invoices.find(i => i.id === ret.invoiceId);
       setCustomers(prev => {
-        const nameKey = normKey(ret.customerName);
-        const phoneKey = normKey(original?.customerPhone);
         const updated = prev.map(c =>
-          ((phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey)
-            ? { ...c, balance: c.balance + ret.totalRefundAmount }
+          (ret.customerId && c.id === ret.customerId)
+            ? { ...c, balance: c.balance + ret.totalRefundAmount, }
             : c
         );
         persistChanges({ customers: updated });
@@ -1618,7 +1673,7 @@ export default function App() {
       const refundTx = treasury.find(t => t.referenceId === ret.id);
       const tx: TreasuryTransaction = {
         id: `TX-RETDEL-${Date.now()}`,
-        txNumber: `TX-RD-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: nextTreasuryTransactionNumber(),
         date: todayISO(),
         time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         type: 'قبض',
@@ -1640,6 +1695,30 @@ export default function App() {
 
   // Handlers for Purchases
   const handleAddPurchaseInvoice = (invoice: PurchaseInvoice) => {
+    // تحقق قبل أي حفظ جزئي: لا نقبل دفعة أكبر من الفاتورة أو سطوراً غير صالحة.
+    if (!Number.isFinite(invoice.grandTotal) || invoice.grandTotal <= 0 ||
+        !Number.isFinite(invoice.amountPaid) || invoice.amountPaid < 0 ||
+        invoice.amountPaid > invoice.grandTotal + 0.001 ||
+        (invoice.amountPaid > 0 && !isCreditMethod(String(invoice.paymentMethod)) && accountOf(String(invoice.paymentMethod)) === 'unclassified') ||
+        invoice.items.some(item => !Number.isFinite(item.quantity) || item.quantity <= 0 || !Number.isFinite(item.costPrice) || item.costPrice < 0)) {
+      window.alert('بيانات فاتورة المشتريات غير صالحة أو المبلغ المدفوع أكبر من إجمالي الفاتورة.');
+      return;
+    }
+    try {
+      for (const item of invoice.items) {
+        const matches = item.partId
+          ? parts.filter(part => part.id === item.partId)
+          : parts.filter(part => normKey(part.partNumber) === normKey(item.partNumber) && normKey(part.name) === normKey(item.partName) && (!item.brand || part.brand === item.brand));
+        if (matches.length > 1) throw new Error(`الصنف ${item.partName} له أكثر من تطابق؛ اختر الصنف بمعرّفه قبل حفظ الفاتورة.`);
+        if (matches.length === 0 && (!(item.salePrice > 0) || !Number.isFinite(item.salePrice))) {
+          throw new Error(`أدخل سعر بيع صحيحاً للصنف الجديد: ${item.partName}.`);
+        }
+      }
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'تعذر التحقق من أصناف المشتريات.');
+      return;
+    }
+
     setPurchaseInvoices(prev => {
       const updated = [invoice, ...prev];
       persistChanges({ purchaseInvoices: updated });
@@ -1668,37 +1747,43 @@ export default function App() {
       return updated;
     });
 
-    // Increase stock for purchased parts — والأصناف الجديدة تُضاف للمخزن تلقائياً بالرصيد
+    // زيادة المخزون بمطابقة partId أولاً، مع متوسط تكلفة مرجّح لا آخر سعر شراء.
     {
       const today = todayISO();
-      // تجميع كميات كل صنف في الفاتورة (قد يتكرر الصنف في أكثر من سطر)
-      const byKey = new Map<string, { item: typeof invoice.items[number]; qty: number }>();
-      invoice.items.forEach(item => {
-        const key = normKey(item.partNumber) || normKey(item.partName);
-        const cur = byKey.get(key);
-        if (cur) byKey.set(key, { item, qty: cur.qty + item.quantity });
-        else byKey.set(key, { item, qty: item.quantity });
-      });
+      const grouped = new Map<string, { item: typeof invoice.items[number]; part?: AutoPart; qty: number; costValue: number }>();
+      for (const item of invoice.items) {
+        const candidates = item.partId
+          ? parts.filter(part => part.id === item.partId)
+          : parts.filter(part => normKey(part.partNumber) === normKey(item.partNumber) && normKey(part.name) === normKey(item.partName) && (!item.brand || part.brand === item.brand));
+        const part = candidates[0];
+        const key = part ? `part:${part.id}` : `new:${normKey(item.partNumber)}|${normKey(item.brand || GENERAL_BRAND)}|${normKey(item.partName)}`;
+        const previous = grouped.get(key);
+        if (previous) {
+          previous.qty += item.quantity;
+          previous.costValue += item.quantity * item.costPrice;
+        } else {
+          grouped.set(key, { item, part, qty: item.quantity, costValue: item.quantity * item.costPrice });
+        }
+      }
 
-      const matched = new Set<string>();
       const movements: Parameters<typeof logStockMovements>[0] = [];
       const updatedExisting = parts.map(part => {
-        const k1 = normKey(part.partNumber);
-        const hit = byKey.get(k1) ?? byKey.get(normKey(part.name));
-        if (!hit) return part;
-        matched.add(byKey.get(k1) ? k1 : normKey(part.name));
-        movements.push({ part, qtyDelta: hit.qty, type: 'purchase', refId: invoice.id, refNumber: invoice.invoiceNumber });
-        return {
-          ...part,
-          stockQuantity: part.stockQuantity + hit.qty,
-          costPrice: hit.item.costPrice || part.costPrice,
-          updatedAt: today,
-        };
+        const entry = grouped.get(`part:${part.id}`);
+        if (!entry) return part;
+        const oldQty = Math.max(0, Number(part.stockQuantity) || 0);
+        const incomingQty = entry.qty;
+        const incomingUnitCost = incomingQty > 0 ? entry.costValue / incomingQty : entry.item.costPrice;
+        const nextCost = oldQty + incomingQty > 0
+          ? ((oldQty * (Number(part.costPrice) || 0)) + entry.costValue) / (oldQty + incomingQty)
+          : incomingUnitCost;
+        movements.push({ part, qtyDelta: incomingQty, type: 'purchase', refId: invoice.id, refNumber: invoice.invoiceNumber });
+        return { ...part, stockQuantity: part.stockQuantity + incomingQty, costPrice: Math.round(nextCost * 100) / 100, updatedAt: today };
       });
 
       const newParts: AutoPart[] = [];
-      byKey.forEach(({ item, qty }, key) => {
-        if (matched.has(key)) return;
+      for (const [key, entry] of grouped) {
+        if (entry.part) continue;
+        const item = entry.item;
         const created: AutoPart = {
           id: `p-${Date.now()}-${newParts.length}`,
           partNumber: item.partNumber || `NEW-${Date.now().toString().slice(-6)}-${newParts.length + 1}`,
@@ -1708,9 +1793,9 @@ export default function App() {
           category: item.category,
           origin: 'تجاري درجة 1',
           shelfLocation: 'مستودع رئيسي',
-          costPrice: item.costPrice,
-          salePrice: item.salePrice || item.costPrice,
-          stockQuantity: qty,
+          costPrice: entry.qty > 0 ? entry.costValue / entry.qty : item.costPrice,
+          salePrice: item.salePrice,
+          stockQuantity: entry.qty,
           minAlertStock: 2,
           unit: 'حبة',
           createdAt: today,
@@ -1718,15 +1803,13 @@ export default function App() {
           ...(item.tracking && item.tracking !== 'none' ? { tracking: item.tracking } : {}),
         };
         newParts.push(created);
-        // الصنف الجديد: رصيده بعد الحركة = الكمية الموردة (الرصيد قبلها صفر)
-        movements.push({ part: { ...created, stockQuantity: 0 }, qtyDelta: qty, type: 'purchase', refId: invoice.id, refNumber: invoice.invoiceNumber });
-      });
+        movements.push({ part: { ...created, stockQuantity: 0 }, qtyDelta: entry.qty, type: 'purchase', refId: invoice.id, refNumber: invoice.invoiceNumber });
+      }
 
       const nextParts = [...newParts, ...updatedExisting];
       setParts(nextParts);
       persistChanges({ parts: nextParts });
       logStockMovements(movements);
-      // الاستلام في مخزن/فرع غير رئيسي: نحرّك رصيده بمعرّفات الأصناف (تشمل الأصناف الجديدة)
       shiftWarehouseStock(invoice.warehouseId, movements.map(m => ({ partId: m.part.id, qty: m.qtyDelta })), 1);
       registerPurchaseTracking(invoice, nextParts);
     }
@@ -1736,7 +1819,7 @@ export default function App() {
     if (invoice.amountPaid > 0) {
       const newTx: TreasuryTransaction = {
         id: `TX-PUR-${Date.now()}`,
-        txNumber: `TX-P-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: nextTreasuryTransactionNumber(),
         date: invoice.date,
         time: invoice.time || new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         type: 'صرف',
@@ -1852,7 +1935,7 @@ export default function App() {
     if (cashRefund > 0) {
       const newTx: TreasuryTransaction = {
         id: `TX-PR-${Date.now()}`,
-        txNumber: `TX-PR-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: nextTreasuryTransactionNumber(),
         date: purchaseReturn.date,
         time: purchaseReturn.time,
         type: 'قبض',
@@ -2030,7 +2113,7 @@ export default function App() {
       const refundTx = treasury.find(t => t.referenceId === ret.id);
       const tx: TreasuryTransaction = {
         id: `TX-PRDEL-${Date.now()}`,
-        txNumber: `TX-PD-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: nextTreasuryTransactionNumber(),
         date: todayISO(),
         time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         type: 'صرف',
@@ -2128,7 +2211,7 @@ export default function App() {
     if (action === 'خصم من أمين المخزن') {
       const tx: TreasuryTransaction = {
         id: `TX-ERR-${Date.now()}`,
-        txNumber: `TX-E-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: nextTreasuryTransactionNumber(),
         date: new Date().toISOString().split('T')[0],
         time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         type: 'قبض',
@@ -2157,7 +2240,7 @@ export default function App() {
     // Add to treasury
     const tx: TreasuryTransaction = {
       id: `TX-EXP-${Date.now()}`,
-      txNumber: `TX-EX-${Math.floor(1000 + Math.random() * 9000)}`,
+      txNumber: nextTreasuryTransactionNumber(),
       date: newExp.date,
       time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
       type: 'صرف',
@@ -2344,6 +2427,7 @@ export default function App() {
           <HomeDashboard
             parts={parts}
             invoices={invoices}
+            salesReturns={salesReturns}
             treasuryTransactions={treasury}
             onOpenTreasuryReports={() => setCurrentTab('finance')}
             currentSession={currentUser && effectiveRole && effectivePermissions ? { ...currentUser, role: effectiveRole, permissions: effectivePermissions } : currentUser}
@@ -2379,6 +2463,8 @@ export default function App() {
             onClearCart={handleClearCart}
             onCheckoutComplete={handleCreateInvoice}
             vatRate={settings.vatRate}
+            vatEnabled={settings.vatEnabled}
+            pricesIncludeTax={settings.pricesIncludeTax}
             canSellBelowCost={currentUser?.role === 'مدير عام'}
             employees={employees}
             maxDiscountPercent={10}
@@ -2507,6 +2593,9 @@ export default function App() {
             parts={parts}
             treasuryBalance={treasuryBalance}
             onAddPurchaseInvoice={handleAddPurchaseInvoice}
+            vatEnabled={settings.vatEnabled}
+            vatRate={settings.vatRate}
+            pricesIncludeTax={settings.pricesIncludeTax}
             onPurchaseReturn={handleAddPurchaseReturn}
             onDeletePurchaseReturn={handleDeletePurchaseReturn}
             onAddSupplier={(newSup: Supplier) => {
@@ -2547,7 +2636,7 @@ export default function App() {
               // التحصيل من العميل يدخل الخزنة (كان لا يُسجَّل في الخزنة)
               const tx: TreasuryTransaction = {
                 id: `TX-CUST-${Date.now()}`,
-                txNumber: `TX-C-${Math.floor(1000 + Math.random() * 9000)}`,
+                txNumber: nextTreasuryTransactionNumber(),
                 date: todayISO(),
                 time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
                 type: 'قبض',
@@ -2602,7 +2691,7 @@ export default function App() {
               const overpaid = Math.max(0, amount - debt);
               const updatedSuppliers = suppliers.map(s => s.id === supplierId ? { ...s, balance: newDebt, deferredDebt: newDebt, storeCredit: (s.storeCredit || 0) + overpaid, totalPaid: (s.totalPaid || 0) + amount, lastPaymentDate: paymentDate } : s);
               const paymentRecord: import('./types/autoParts').SupplierPayment = { id: paymentId, paymentNumber: paymentId.slice(-6), supplierId, supplierName: supplier.name, amount, paymentDate, paymentMethod, treasurySource: _treasurySource, notes, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات', scheduleId };
-              const tx: TreasuryTransaction = { id: txId, txNumber: `TX-S-${Math.floor(1000 + Math.random() * 9000)}`, date: paymentDate, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'سداد دفعة لمورد', amount, paymentMethod: paymentMethod as PaymentMethod, balanceAfter: treasuryBalance - amount, referenceId: paymentId, description: `سداد مورد #${supplierId}: ${notes}`, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات' };
+              const tx: TreasuryTransaction = { id: txId, txNumber: nextTreasuryTransactionNumber(), date: paymentDate, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'سداد دفعة لمورد', amount, paymentMethod: paymentMethod as PaymentMethod, balanceAfter: treasuryBalance - amount, referenceId: paymentId, description: `سداد مورد #${supplierId}: ${notes}`, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات' };
               const updatedPayments = [paymentRecord, ...supplierPayments];
               const updatedTreasury = [tx, ...treasury];
               setSuppliers(updatedSuppliers); persistChanges({ suppliers: updatedSuppliers });
@@ -2644,7 +2733,7 @@ export default function App() {
             onAddDistribution={(record: ProfitDistributionRecord) => {
               const tx: TreasuryTransaction = {
                 id: `TX-DIST-${Date.now()}`,
-                txNumber: `TX-D-${Math.floor(1000 + Math.random() * 9000)}`,
+                txNumber: nextTreasuryTransactionNumber(),
                 date: record.date,
                 time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
                 type: 'صرف',
@@ -2670,6 +2759,7 @@ export default function App() {
               invoices,
               salesReturns,
               purchaseInvoices,
+              purchaseReturns,
               parts,
               customers,
               suppliers,
@@ -2887,12 +2977,14 @@ export default function App() {
                 quantity,
                 unitPrice: part.salePrice,
                 costPrice: part.costPrice,
-                total
+                total,
+                taxAmount: settings.vatEnabled ? Math.round((settings.pricesIncludeTax ? total * settings.vatRate / (100 + settings.vatRate) : total * settings.vatRate / 100) * 100) / 100 : 0
               }],
               subtotal: total,
-              tax: 0,
+              tax: settings.vatEnabled ? Math.round(total * (settings.pricesIncludeTax ? settings.vatRate / (100 + settings.vatRate) : settings.vatRate / 100) * 100) / 100 : 0,
+              pricesIncludeTax: Boolean(settings.vatEnabled && settings.pricesIncludeTax),
               discount: 0,
-              grandTotal: total,
+              grandTotal: settings.vatEnabled && !settings.pricesIncludeTax ? Math.round(total * (1 + settings.vatRate / 100) * 100) / 100 : total,
               paymentMethod: payMethod as PaymentMethod,
               status: 'مسددة',
               cashierName: currentUser?.employeeName || 'الكاشير'

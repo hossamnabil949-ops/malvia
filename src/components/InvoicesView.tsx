@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { paymentLines } from '../utils/paymentLines';
+import { refundForLine } from '../utils/saleLogic';
 import { Invoice, SalesReturn, SalesReturnItem, PaymentMethod } from '../types/autoParts';
 import { DateRangeFilter } from './DateRangeFilter';
 import { verifyManagerApproval } from '../services/approvalService';
@@ -179,13 +180,29 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     }
   };
 
+  const returnLineAmount = (lineIndex: number, quantity: number): number => {
+    if (!returnInvoice || quantity <= 0) return 0;
+    const item = returnInvoice.items[lineIndex];
+    if (!item) return 0;
+    const lineId = `${returnInvoice.id}:${lineIndex}`;
+    const alreadyReturnedQty = item.returnedQuantity || 0;
+    const alreadyRefundedAmount = salesReturns
+      .filter(ret => ret.invoiceId === returnInvoice.id)
+      .flatMap(ret => ret.items)
+      .filter(retItem => retItem.lineId === lineId)
+      .reduce((total, retItem) => total + retItem.total, 0);
+    const lineGross = Number(item.total) || item.quantity * item.unitPrice;
+    const discountShare = returnInvoice.subtotal > 0 ? (returnInvoice.discount || 0) * lineGross / returnInvoice.subtotal : 0;
+    const taxShare = item.taxAmount ?? (returnInvoice.subtotal > 0 ? (returnInvoice.tax || 0) * lineGross / returnInvoice.subtotal : 0);
+    const refundableLineTotal = Math.max(0, lineGross - discountShare + (returnInvoice.pricesIncludeTax ? 0 : taxShare));
+    if (quantity + alreadyReturnedQty > item.quantity) return 0;
+    return refundForLine(refundableLineTotal, item.quantity, quantity, alreadyReturnedQty, alreadyRefundedAmount);
+  };
+
   const calculatedReturnTotal = useMemo(() => {
     if (!returnInvoice) return 0;
-    return returnInvoice.items.reduce((acc, it, idx) => {
-      const qty = returnItems[String(idx)] || 0;
-      return acc + (qty * it.unitPrice);
-    }, 0);
-  }, [returnInvoice, returnItems]);
+    return returnInvoice.items.reduce((total, item, index) => total + returnLineAmount(index, returnItems[String(index)] || 0), 0);
+  }, [returnInvoice, returnItems, salesReturns]);
 
   const handleConfirmReturn = (e: React.FormEvent) => {
     e.preventDefault();
@@ -194,15 +211,22 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     const itemsToReturn: SalesReturnItem[] = returnInvoice.items
       .map((it, idx) => ({ it, idx, qty: returnItems[String(idx)] || 0 }))
       .filter(({ qty }) => qty > 0)
-      .map(({ it, idx, qty }) => ({
+      .map(({ it, idx, qty }) => {
+        const lineRefund = returnLineAmount(idx, qty);
+        const taxShare = it.taxAmount ?? (returnInvoice.subtotal > 0 ? (returnInvoice.tax || 0) * (Number(it.total) || it.quantity * it.unitPrice) / returnInvoice.subtotal : 0);
+        return {
+        partId: it.partId,
+        lineId: `${returnInvoice.id}:${idx}`,
         partNumber: it.partNumber,
         partName: it.partName,
         quantity: qty,
-        unitPrice: it.unitPrice,
-        total: qty * it.unitPrice,
+        unitPrice: qty > 0 ? lineRefund / qty : 0,
+        total: lineRefund,
+        taxAmount: qty > 0 ? taxShare * (qty / it.quantity) : 0,
         reason: returnReason,
         ...(it.serials?.length ? { serials: (returnSerials[String(idx)] || []).slice(0, qty) } : {}),
-      }));
+      };
+      });
 
     if (itemsToReturn.length === 0) return;
 
@@ -214,6 +238,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       date: new Date().toISOString().split('T')[0],
       time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
       customerName: returnInvoice.customerName,
+      customerId: returnInvoice.customerId,
       items: itemsToReturn,
       totalRefundAmount: calculatedReturnTotal,
       refundMethod,

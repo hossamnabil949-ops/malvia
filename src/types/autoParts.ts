@@ -128,6 +128,7 @@ export interface InvoiceItem {
   originalPrice?: number;
   costPrice?: number; // تكلفة الوحدة وقت البيع (لحساب تكلفة البضاعة المباعة بدقة)
   total: number;
+  taxAmount?: number; // نصيب سطر الصنف من ضريبة الفاتورة
   returnedQuantity?: number;
   batchAllocations?: import('../utils/trackingLogic').BatchAllocation[]; // الدفعات المسحوبة (للأصناف ذات الدفعات)
   serials?: string[];          // الأرقام التسلسلية المباعة
@@ -190,6 +191,7 @@ export interface Invoice {
   items: InvoiceItem[];
   subtotal: number;
   tax: number; // ضريبة القيمة المضافة
+  pricesIncludeTax?: boolean; // هل الأسعار المسجلة شاملة الضريبة؟
   discount: number;
   grandTotal: number;
   paymentMethod: PaymentMethod | string;
@@ -201,7 +203,7 @@ export interface Invoice {
   loyaltyEarned?: number;         // نقاط ولاء اكتسبها العميل من هذه الفاتورة
   loyaltyRedeemedPoints?: number; // نقاط استبدلها العميل كخصم في هذه الفاتورة
   loyaltyDiscount?: number;       // قيمة الخصم الناتج عن النقاط (ج.م) وهو جزء من discount
-  status?: 'مسددة' | 'مرتجع جزئي' | 'مرتجع كلي' | 'ملغاة';
+  status?: 'آجلة' | 'مسددة جزئياً' | 'مسددة' | 'مرتجع جزئي' | 'مرتجع كلي' | 'ملغاة';
   returnedAmount?: number;
   voidedAt?: string;        // ISO — وقت الإلغاء
   voidedBy?: string;        // من نفّذ الإلغاء
@@ -220,7 +222,7 @@ export interface Customer {
   monthlyPurchases: number; // مشتريات الشهر الحالي
   invoicesCount?: number;
   lastVisit: string;
-  creditLimit?: number; // حد الائتمان (ج.م) — 0 أو بدون قيمة = غير محدود
+  creditLimit?: number; // حد الائتمان (ج.م) — يجب أن يكون موجباً للسماح بالبيع الآجل
   loyaltyPoints?: number; // رصيد نقاط الولاء (يُدمج بالفرق على السحابة)
   chequesPending?: number; // (محسوب وغير محفوظ) شيكات واردة مفتوحة تُحتسب ضمن مخاطر الائتمان
 }
@@ -367,6 +369,7 @@ export interface PurchaseInvoiceItem {
   costPrice: number;
   salePrice: number;
   total: number;
+  taxAmount?: number;
   returnedQuantity?: number;
   tracking?: import('../utils/trackingLogic').TrackingMode; // للصنف الجديد عند أول توريد
   batchNo?: string;
@@ -386,6 +389,7 @@ export interface PurchaseInvoice {
   items: PurchaseInvoiceItem[];
   subtotal: number;
   tax: number;
+  pricesIncludeTax?: boolean;
   discount: number;
   grandTotal: number;
   originalGrandTotal?: number;
@@ -399,11 +403,14 @@ export interface PurchaseInvoice {
 }
 
 export interface SalesReturnItem {
+  partId?: string;
+  lineId?: string; // `${invoiceId}:${index}`
   partNumber: string;
   partName: string;
   quantity: number;
   unitPrice: number;
   total: number;
+  taxAmount?: number; // نصيب الضريبة في مبلغ المرتجع
   reason?: string;
   serials?: string[]; // الأرقام التسلسلية المرتجعة فعلاً
 }
@@ -416,6 +423,7 @@ export interface SalesReturn {
   date: string;
   time: string;
   customerName: string;
+  customerId?: string;
   items: SalesReturnItem[];
   totalRefundAmount: number;
   refundMethod: 'نقدي (خصم من الخزنة)' | 'خصم من رصيد العميل الآجل' | 'إنستاباي / محفظة';
@@ -431,6 +439,7 @@ export interface PurchaseReturnItem {
   quantity: number;
   unitCost: number;
   total: number;
+  taxAmount?: number;
   reason?: string;
 }
 
@@ -522,7 +531,7 @@ export interface Shift {
   cashIn?: number;                // إجمالي القبض النقدي خلال الوردية
   cashOut?: number;               // إجمالي الصرف النقدي خلال الوردية
   cashSales?: number;
-  nonCash?: { instapay: number; visa: number; wallet: number };
+  nonCash?: { instapay: number; visa: number; wallet: number; bank?: number; unclassified?: number };
   invoiceCount?: number;
   breakdown?: ShiftCashLine[];    // تفصيل الحركات النقدية حسب البند
 }
@@ -580,6 +589,8 @@ export interface ShopSettings {
   taxId: string;
   currency: string;
   vatRate: number;
+  vatEnabled?: boolean; // خضوع المنشأة للضريبة — إعداد على مستوى المنشأة
+  pricesIncludeTax?: boolean; // الأسعار المدخلة شاملة الضريبة أم غير شاملة
   invoiceFooterNotes: string;
   activeEmployeeId: string;
   requireShiftForSales?: boolean; // إلزام فتح وردية قبل أي بيع في الكاشير
