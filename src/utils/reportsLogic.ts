@@ -269,18 +269,9 @@ export function reportVatSummary(d: ReportData, r: DateRange): ReportTable {
 
 export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
   const inv = active(d, r);
-  const sales = sum(inv, i => Math.max(0, i.subtotal - i.discount - (i.pricesIncludeTax ? (i.tax || 0) : 0)));
-  const validIds = new Set(inv.map(i => i.id));
-  const invoiceById = new Map(inv.map(i => [i.id, i]));
-  const returns = sum(
-    d.salesReturns.filter(ret => validIds.has(ret.invoiceId) && inRange(ret.date, r)),
-    ret => {
-      const invoice = invoiceById.get(ret.invoiceId)!;
-      const base = Number(invoice.subtotal) || sum(invoice.items, item => item.total);
-      const netBase = Math.max(0, base - (invoice.discount || 0) - (invoice.pricesIncludeTax ? (invoice.tax || 0) : 0));
-      return ret.totalRefundAmount * (base > 0 ? netBase / base : 1);
-    }
-  );
+  const sales = sum(inv, invoice => Math.max(0, invoice.subtotal - invoice.discount - (invoice.pricesIncludeTax ? (invoice.tax || 0) : 0)));
+  const net = sum(inv, netSales);
+  const returns = Math.max(0, sales - net);
   const costFallback = new Map(d.parts.map(part => [part.id, part.costPrice]));
   const costByNumber = new Map<string, AutoPart[]>();
   d.parts.forEach(part => costByNumber.set(part.partNumber, [...(costByNumber.get(part.partNumber) ?? []), part]));
@@ -291,7 +282,6 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
   }));
   const expenses = sum(d.expenses.filter(e => inRange(e.date, r)), e => e.amount);
   const drawerShortage = sum(d.treasury.filter(t => inRange(t.date, r) && t.category === 'عجز درج (تسوية وردية)' && t.type === 'صرف'), t => t.amount);
-  const net = sales - returns;
   const gross = net - cogs;
   const rows = [
     { item: 'المبيعات (قبل الضريبة وبعد الخصم)', amount: r2(sales) },
