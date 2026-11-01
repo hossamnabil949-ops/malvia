@@ -6,7 +6,7 @@ import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
 import { validateSale, SaleError, computeTotals } from '../src/utils/saleLogic.ts';
-import { cairoDateKey, salesForDate, netSales, reportDailySales, reportSalesByItem, reportVatSummary } from '../src/utils/reportsLogic.ts';
+import { cairoDateKey, salesForDate, netSales, reportDailySales, reportSalesByItem, reportVatSummary, reportSalesReconciliation } from '../src/utils/reportsLogic.ts';
 
 // FIN-1 / AI-4: dashboard sales use Cairo's calendar day and one consistent eligible-invoice set.
 const dashboardInvoices: any[] = [
@@ -27,7 +27,7 @@ assert.equal(cairoDateKey(new Date('2026-10-31T22:30:00.000Z')), '2026-11-01');
 // FIN-2 / FIN-6: report totals use the same discounted, pre-tax net-sales definition.
 const reportInvoice: any = {
   id: 'report-1', invoiceNumber: 'INV-1', date: '2026-11-01', time: '10:15 ص',
-  status: 'مسددة', customerName: 'Test', cashierName: 'Cashier',
+  status: 'مسددة', customerName: 'Test', customerId: 'c-test', cashierName: 'Cashier', paymentMethod: 'نقدي', payments: [{ method: 'نقدي', amount: 1026 }],
   subtotal: 1000, discount: 100, tax: 126, grandTotal: 1026, returnedAmount: 307.8,
   items: [
     { partId: 'p1', partNumber: 'A', partName: 'Part A', quantity: 2, returnedQuantity: 1, unitPrice: 300, costPrice: 100, total: 600 },
@@ -45,6 +45,8 @@ const itemReport = reportSalesByItem(reportInput, { from: '2026-11-01', to: '202
 assert.equal(itemReport.totals?.revenue, 630);
 assert.equal(itemReport.totals?.cost, 300);
 assert.equal(itemReport.totals?.profit, 330);
+const reconciliation = reportSalesReconciliation(reportInput, { from: '2026-11-01', to: '2026-11-01' });
+assert.ok(reconciliation.rows.every(row => Number(row.difference) === 0));
 
 // FIN-13: input/output VAT report nets sales and purchase returns in their return period.
 const vatInput: any = {
