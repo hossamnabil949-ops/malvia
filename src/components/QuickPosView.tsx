@@ -109,6 +109,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   onRemoveBrand,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [selectedBrand, setSelectedBrand] = useState<CarBrand>('شامل');
   const [selectedCategory, setSelectedCategory] = useState<string>('الكل');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('cash');
@@ -680,13 +681,14 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         </div>
       </div>
 
-      <div className="lg:col-span-5 bg-surface-2 rounded-2xl sm:rounded-3xl border border-amber-500/25 p-3 sm:p-5 flex flex-col justify-between shadow-xl space-y-3 sm:space-y-4 sticky bottom-2 z-20 max-h-[46dvh] lg:max-h-none overflow-y-auto overscroll-contain">
+      <div className={`${mobileCartOpen ? "fixed inset-x-0 bottom-0 z-50 max-h-[88dvh] rounded-t-3xl shadow-2xl" : "hidden"} lg:flex lg:static lg:z-auto lg:max-h-none lg:rounded-3xl lg:shadow-xl`}><div className="w-full bg-surface-2 rounded-t-3xl lg:rounded-3xl border border-amber-500/25 p-3 sm:p-5 flex flex-col justify-between shadow-xl space-y-3 sm:space-y-4 max-h-[88dvh] lg:max-h-none overflow-y-auto overscroll-contain">
         <div>
           <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
             <div className="flex items-center gap-2">
               <Receipt className="w-5 h-5 text-amber-400" />
               <div>
                 <h3 className="text-sm font-bold text-white">فاتورة البيع الحالية (الكاشير)</h3>
+                <button type="button" onClick={() => setMobileCartOpen(false)} className="lg:hidden p-2 rounded-xl bg-neutral-800 text-neutral-200" aria-label="إغلاق الفاتورة"><X className="w-4 h-4" /></button>
                 <span className="text-[10px] text-emerald-400 font-bold block">
                   ★ متاح تعديل سعر البيع مباشرة لكل صنف
                 </span>
@@ -1270,8 +1272,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
             <span>إصدار بون البيع وإيداع الكاش بالخزنة ({grandTotal.toFixed(2)} ج.م)</span>
           </button>
         </div>
-      </div>
-
+      </div></div>
+      <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 p-3 bg-surface-1/95 backdrop-blur border-t border-neutral-700"><button type="button" onClick={() => setMobileCartOpen(true)} className="w-full min-h-14 rounded-2xl bg-amber-500 text-neutral-950 px-4 flex items-center justify-between shadow-xl"><span className="flex items-center gap-2 font-black"><Receipt className="w-5 h-5" /> الفاتورة · {cart.reduce((sum, item) => sum + item.quantity, 0)} قطعة</span><span className="font-black">{grandTotal.toLocaleString()} ج.م · عرض وإتمام</span></button></div>{mobileCartOpen && <button type="button" aria-label="إغلاق الفاتورة" onClick={() => setMobileCartOpen(false)} className="lg:hidden fixed inset-0 z-40 bg-black/60" />}
       {showUnlockModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={closeUnlockModal}>
           <div
