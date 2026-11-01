@@ -31,9 +31,11 @@ import {
   ArrowRightLeft
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { generateSupplierScheduleDates, splitSupplierScheduleAmount } from '../utils/supplierPaymentSchedule';
 import { 
   Supplier, 
   SupplierPayment, 
+  SupplierPaymentSchedule,
   PurchaseInvoice, 
   PurchaseReturn, 
   PaymentMethod 
@@ -42,6 +44,8 @@ import {
 interface SuppliersViewProps {
   suppliers: Supplier[];
   supplierPayments: SupplierPayment[];
+  supplierPaymentSchedules: SupplierPaymentSchedule[];
+  onChangeSupplierPaymentSchedules: (next: SupplierPaymentSchedule[]) => void;
   purchaseInvoices: PurchaseInvoice[];
   purchaseReturns?: PurchaseReturn[];
   treasuryBalance: number;
@@ -53,7 +57,8 @@ interface SuppliersViewProps {
     paymentDate: string, 
     paymentMethod: PaymentMethod | string, 
     treasurySource: string, 
-    notes: string
+    notes: string,
+    scheduleId?: string
   ) => void;
   onAddPurchaseReturn?: (returnData: PurchaseReturn) => void;
   onSettlePurchaseReturn?: (returnId: string) => void;
@@ -62,6 +67,8 @@ interface SuppliersViewProps {
 export const SuppliersView: React.FC<SuppliersViewProps> = ({
   suppliers,
   supplierPayments,
+  supplierPaymentSchedules,
+  onChangeSupplierPaymentSchedules,
   purchaseInvoices,
   purchaseReturns = [],
   treasuryBalance,
@@ -73,13 +80,25 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'suppliers' | 'payments' | 'returns'>('suppliers');
+  const [activeTab, setActiveTab] = useState<'suppliers' | 'payments' | 'schedules' | 'returns'>('suppliers');
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
   const [settleModalSupplier, setSettleModalSupplier] = useState<Supplier | null>(null);
   const [returnModalSupplier, setReturnModalSupplier] = useState<Supplier | null>(null);
   const [statementSupplier, setStatementSupplier] = useState<Supplier | null>(null);
+  const [scheduleSupplierId, setScheduleSupplierId] = useState('');
+  const [scheduleAmount, setScheduleAmount] = useState('');
+  const [scheduleDueDate, setScheduleDueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [scheduleInvoiceId, setScheduleInvoiceId] = useState('');
+  const [scheduleNotes, setScheduleNotes] = useState('');
+  const [scheduleRecurrence, setScheduleRecurrence] = useState<'once' | 'weekly' | 'monthly' | 'every_n_days'>('once');
+  const [scheduleCount, setScheduleCount] = useState('1');
+  const [scheduleIntervalDays, setScheduleIntervalDays] = useState('15');
+  const [scheduleWeekdays, setScheduleWeekdays] = useState<number[]>([0, 3]);
+  const [scheduleDayOfMonth, setScheduleDayOfMonth] = useState('1');
+  const [pendingScheduleRows, setPendingScheduleRows] = useState<SupplierPaymentSchedule[] | null>(null);
+  const [settleSchedule, setSettleSchedule] = useState<SupplierPaymentSchedule | null>(null);
 
   // Settle Payment State
   const [settleAmount, setSettleAmount] = useState<number>(1000);
@@ -160,8 +179,11 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
       settleDate,
       settleMethod,
       treasurySource,
-      settleNotes || `دفعة سداد للمورد ${settleModalSupplier.name}`
+      settleNotes || `دفعة سداد للمورد ${settleModalSupplier.name}`,
+      settleSchedule?.id
     );
+
+    setSettleSchedule(null);
 
     setSettleModalSupplier(null);
   };
@@ -519,6 +541,10 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
           <span>سجل دفعات السداد وتواريخها ({supplierPayments.length})</span>
         </button>
 
+        <button onClick={() => setActiveTab('schedules')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${activeTab === 'schedules' ? 'bg-amber-500 text-slate-950' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`}>
+          <Calendar className="w-4 h-4" /><span>جدولة الدفعات ({supplierPaymentSchedules.length})</span>
+        </button>
+
         <button
           onClick={() => setActiveTab('returns')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
@@ -733,6 +759,33 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'schedules' && (
+        <div className="space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <select value={scheduleSupplierId} onChange={e => setScheduleSupplierId(e.target.value)} className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"><option value="">اختر المورد</option>{suppliers.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+              <input type="number" min="0.01" step="0.01" value={scheduleAmount} onChange={e => setScheduleAmount(e.target.value)} placeholder="إجمالي المبلغ المراد جدولته" className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" />
+              <input type="date" value={scheduleDueDate} onChange={e => setScheduleDueDate(e.target.value)} className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" />
+              <select value={scheduleInvoiceId} onChange={e => setScheduleInvoiceId(e.target.value)} className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"><option value="">بدون فاتورة محددة</option>{purchaseInvoices.filter(x => !scheduleSupplierId || x.supplierId === scheduleSupplierId).map(x => <option key={x.id} value={x.id}>{x.invoiceNumber}</option>)}</select>
+              <select value={scheduleRecurrence} onChange={e => setScheduleRecurrence(e.target.value as any)} className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"><option value="once">دفعة واحدة</option><option value="weekly">أسبوعي / عدة أيام أسبوعيًا</option><option value="monthly">شهري</option><option value="every_n_days">كل عدد أيام</option></select>
+              <input type="number" min="1" max="520" value={scheduleCount} onChange={e => setScheduleCount(e.target.value)} placeholder="عدد الدفعات" className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" />
+              {scheduleRecurrence === 'every_n_days' && <input type="number" min="1" max="366" value={scheduleIntervalDays} onChange={e => setScheduleIntervalDays(e.target.value)} placeholder="الفاصل بالأيام" className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" />}
+              {scheduleRecurrence === 'monthly' && <input type="number" min="1" max="31" value={scheduleDayOfMonth} onChange={e => setScheduleDayOfMonth(e.target.value)} placeholder="يوم الشهر" className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" />}
+              <input value={scheduleNotes} onChange={e => setScheduleNotes(e.target.value)} placeholder="ملاحظات" className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" />
+            </div>
+            {scheduleRecurrence === 'weekly' && <div className="flex flex-wrap gap-2 text-xs text-slate-200">{['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'].map((day,i)=><label key={day} className="flex items-center gap-1 bg-slate-950 px-2 py-1.5 rounded-lg"><input type="checkbox" checked={scheduleWeekdays.includes(i)} onChange={e=>setScheduleWeekdays(prev=>e.target.checked?[...prev,i]:prev.filter(x=>x!==i))}/>{day}</label>)}</div>}
+            <button onClick={() => { try { const supplier = suppliers.find(x => x.id === scheduleSupplierId); const total = Number(scheduleAmount); const count = scheduleRecurrence === 'once' ? 1 : Number(scheduleCount); if (!supplier) throw new Error('اختر المورد أولاً.'); const invoice = purchaseInvoices.find(x => x.id === scheduleInvoiceId); if (invoice && invoice.supplierId !== supplier.id) throw new Error('الفاتورة لا تخص المورد المحدد.'); const dates: string[] = generateSupplierScheduleDates({ recurrence:scheduleRecurrence, startDate:scheduleDueDate, installmentCount:count, intervalDays:Number(scheduleIntervalDays), weekdays:scheduleWeekdays, dayOfMonth:Number(scheduleDayOfMonth) }); const amounts: number[] = splitSupplierScheduleAmount(total, dates.length); const now = new Date().toISOString(); const planId = 'SPP-' + Date.now(); const rows: SupplierPaymentSchedule[] = dates.map((dueDate,i)=>({ id:planId+'-'+(i+1), planId, sequenceNumber:i+1, planTotalInstallments:dates.length, recurrence:scheduleRecurrence, recurrenceInterval:scheduleRecurrence==='every_n_days'?Number(scheduleIntervalDays):undefined, recurrenceWeekdays:scheduleRecurrence==='weekly'?scheduleWeekdays:undefined, recurrenceDayOfMonth:scheduleRecurrence==='monthly'?Number(scheduleDayOfMonth):undefined, supplierId:supplier.id, supplierName:supplier.name, purchaseInvoiceId:invoice?.id, purchaseInvoiceNumber:invoice?.invoiceNumber, amount:amounts[i], amountPaid:0, dueDate, status:'scheduled', notes:scheduleNotes, createdAt:now, updatedAt:now })); setPendingScheduleRows(rows); } catch(error) { window.alert(error instanceof Error?error.message:'تعذر إنشاء الجدول.'); } }} className="bg-amber-500 text-slate-950 rounded-xl px-4 py-2 text-xs font-black">إنشاء جدول الدفعات</button>
+            {pendingScheduleRows && <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 p-3 space-y-2">
+              <p className="text-sm font-bold text-amber-200">مراجعة الجدول قبل الحفظ — {pendingScheduleRows.length} دفعة بإجمالي {pendingScheduleRows.reduce((s,x)=>s+x.amount,0).toFixed(2)} ج.م</p>
+              <div className="max-h-40 overflow-y-auto text-xs text-slate-200">{pendingScheduleRows.map(x=><div key={x.id} className="flex justify-between border-b border-slate-800 py-1"><span>{x.sequenceNumber}. {x.dueDate}</span><b>{x.amount.toFixed(2)} ج.م</b></div>)}</div>
+              <p className="text-[11px] text-slate-400">لن يتم تسجيل سند صرف أو حركة خزينة عند حفظ الجدول.</p>
+              <div className="flex gap-2"><button onClick={()=>{ if(!pendingScheduleRows)return; onChangeSupplierPaymentSchedules([...pendingScheduleRows,...supplierPaymentSchedules]); setPendingScheduleRows(null); setScheduleAmount(''); setScheduleNotes(''); setScheduleInvoiceId(''); setScheduleCount('1'); }} className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-black text-slate-950">تأكيد وحفظ الجدول</button><button onClick={()=>setPendingScheduleRows(null)} className="rounded-lg bg-slate-700 px-4 py-2 text-xs">إلغاء</button></div>
+            </div>}
+          </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-right text-xs"><thead className="bg-slate-950 text-slate-400"><tr><th className="p-3">المورد</th><th className="p-3">الفاتورة</th><th className="p-3">تاريخ الاستحقاق</th><th className="p-3">المبلغ</th><th className="p-3">الحالة</th><th className="p-3">ملاحظات</th><th className="p-3">إجراء</th></tr></thead><tbody className="divide-y divide-slate-800">{supplierPaymentSchedules.slice().sort((a,b)=>a.dueDate.localeCompare(b.dueDate)).map(x => { const status = x.status === 'cancelled' ? 'ملغاة' : x.status === 'paid' ? 'مسددة' : x.dueDate < new Date().toISOString().slice(0,10) ? 'متأخرة' : x.dueDate === new Date().toISOString().slice(0,10) ? 'مستحقة اليوم' : 'قادمة'; return <tr key={x.id}><td className="p-3 text-white font-bold">{x.supplierName}</td><td className="p-3">{x.purchaseInvoiceNumber || '-'}</td><td className="p-3 font-mono">{x.dueDate}</td><td className="p-3 text-amber-400 font-black">{x.amount.toLocaleString()} ج.م</td><td className="p-3">{status}</td><td className="p-3">{x.notes || '-'}</td><td className="p-3">{x.status === 'scheduled' && <div className="flex items-center gap-2"><button onClick={() => { const supplier = suppliers.find(y => y.id === x.supplierId); if (!supplier) return; setSettleSchedule(x); setSettleModalSupplier(supplier); setSettleAmount(Math.max(0, x.amount-x.amountPaid)); setSettleDate(new Date().toISOString().slice(0,10)); setSettleMethod('نقدي'); setSettleNotes('سداد الدفعة المجدولة ' + x.id); }} className="text-emerald-400 font-bold">سداد</button><button onClick={() => onChangeSupplierPaymentSchedules(supplierPaymentSchedules.map(y => y.id === x.id ? {...y,status:'cancelled',updatedAt:new Date().toISOString()} : y))} className="text-rose-400">إلغاء</button></div>}</td></tr>; })}{supplierPaymentSchedules.length===0 && <tr><td colSpan={7} className="p-8 text-center text-slate-500">لا توجد دفعات مجدولة بعد</td></tr>}</tbody></table></div></div>
         </div>
       )}
 
