@@ -235,12 +235,13 @@ import { availableActions, nextStatus, registrationEffect, actionEffect, applyAc
   assert.deepEqual(actionEffect(incoming, 'clear').treasury, { type: 'قبض', amount: 1000, category: 'تحصيل من عميل / ورشة' });
   assert.equal(actionEffect(incoming, 'clear').customerBalanceDelta, 0);                  // التحصيل لا يمس الحساب ثانية
   assert.equal(actionEffect(incoming, 'deposit').treasury, undefined);
-  // شيك أكبر من المديونية: يُخصم المتاح فقط ويعود نفس المخصوم (لا تضخيم عند الارتداد)
+  // شيك أكبر من المديونية: يُسجل كاملاً، والزيادة رصيد دائن للعميل ويُعكس كامل المبلغ عند الارتداد.
   r = registrationEffect('incoming', 1000, { balance: 300 });
-  assert.equal(r.applied.appliedAmount, 300);
-  assert.equal(actionEffect(mk({ appliedAmount: 300 }), 'bounce').customerBalanceDelta, 300);
+  assert.equal(r.applied.appliedAmount, 1000);
+  assert.equal(r.effect.customerBalanceDelta, -1000);
+  assert.equal(actionEffect(mk({ appliedAmount: 1000 }), 'bounce').customerBalanceDelta, 1000);
   r = registrationEffect('incoming', 1000, { balance: 0 });
-  assert.equal(r.applied.appliedAmount, 0);
+  assert.equal(r.applied.appliedAmount, 1000);
 
   // صادرة: مستحقات المورد 700 والشيك 1000 => خصم 700 + رصيد دائن 300، والعكس عند الارتداد
   const o = registrationEffect('outgoing', 1000, { balance: 700, deferredDebt: 700 });
