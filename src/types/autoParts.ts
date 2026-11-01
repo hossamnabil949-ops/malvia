@@ -140,6 +140,14 @@ export interface InvoicePayment {
   amount: number;
 }
 
+export interface InvoiceSettlement {
+  amount: number;
+  date: string;
+  time: string;
+  paymentMethod: PaymentMethod | string;
+  receiptNumber: string;
+}
+
 export type AuditAction =
   | 'invoice.create' | 'invoice.price_override' | 'invoice.discount' | 'invoice.void'
   | 'sales_return.create' | 'sales_return.delete'
@@ -203,6 +211,7 @@ export interface Invoice {
   loyaltyRedeemedPoints?: number; // نقاط استبدلها العميل كخصم في هذه الفاتورة
   loyaltyDiscount?: number;       // قيمة الخصم الناتج عن النقاط (ج.م) وهو جزء من discount
   status?: 'آجلة' | 'مسددة جزئياً' | 'مسددة' | 'مرتجع جزئي' | 'مرتجع كلي' | 'ملغاة';
+  paymentStatus?: 'آجلة' | 'مسددة جزئياً' | 'مسددة';
   returnedAmount?: number;
   voidedAt?: string;        // ISO — وقت الإلغاء
   voidedBy?: string;        // من نفّذ الإلغاء
