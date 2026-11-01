@@ -504,15 +504,15 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-surface-2 via-surface-2 to-surface-2 p-5 rounded-3xl border border-neutral-800 shadow-xl">
+    <div className="space-y-3 sm:space-y-6 max-w-7xl mx-auto pb-12 min-w-0">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 bg-gradient-to-r from-surface-2 via-surface-2 to-surface-2 p-3 sm:p-5 rounded-2xl sm:rounded-3xl border border-neutral-800 shadow-xl">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-inner">
             <FileText className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-white">فواتير المشتريات والتوريد والمرتجعات</h1>
+              <h1 className="text-base sm:text-xl font-black text-white leading-6">فواتير المشتريات والتوريد والمرتجعات</h1>
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                 تعديل أسعار الشراء وجدولة الدفعات
               </span>

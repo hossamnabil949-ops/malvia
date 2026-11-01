@@ -392,17 +392,17 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 sm:space-y-6 min-w-0">
       
       {/* Top Header & Overview */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sm:gap-4 bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl p-3 sm:p-5 shadow-xl">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-600 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/20">
             <Truck className="w-6 h-6 stroke-[2.5]" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-white">الموردين وحسابات الموردين</h1>
+              <h1 className="text-base sm:text-xl font-black text-white leading-6">الموردين وحسابات الموردين</h1>
               <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold">
                 مرتبط بالخزينة
               </span>
@@ -572,7 +572,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
             return (
               <div
                 key={supplier.id}
-                className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl p-5 shadow-lg flex flex-col justify-between transition group"
+                className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-lg flex flex-col justify-between transition group min-w-0"
               >
                 <div>
                   <div className="flex items-start justify-between gap-2 border-b border-slate-800/80 pb-3">
