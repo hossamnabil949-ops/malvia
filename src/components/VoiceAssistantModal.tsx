@@ -542,6 +542,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       const msg = schedule
         ? `وجدت قسطاً محفوظاً للمورد ${schedule.supplierName} بتاريخ ${schedule.dueDate} بقيمة ${Number(schedule.amount - schedule.amountPaid).toLocaleString('ar-EG')} جنيه. سأفتح شاشة الموردين لتراجع البيانات وتنفذ السداد بنفسك. لم يتم تسجيل أي دفعة أو حركة خزينة.`
         : 'سأفتح شاشة الموردين لتبحث عن المورد والقسط المطلوب وتراجع بياناته. لن يتم تسجيل أي دفعة أو حركة خزينة من خلال المساعد الصوتي.';
+      setPending(null);
       pushMessage('assistant', msg);
       if (speechEnabled) speakArabic(msg);
       setTranscript('');
