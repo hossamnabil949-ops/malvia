@@ -5,7 +5,7 @@ import { registrationEffect, actionEffect } from '../src/utils/chequeLogic.ts';
 import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
-import { validateSale, SaleError } from '../src/utils/saleLogic.ts';
+import { validateSale, SaleError, computeTotals } from '../src/utils/saleLogic.ts';
 import { cairoDateKey, salesForDate, netSales, reportDailySales, reportSalesByItem } from '../src/utils/reportsLogic.ts';
 
 // FIN-1 / AI-4: dashboard sales use Cairo's calendar day and one consistent eligible-invoice set.
@@ -45,6 +45,14 @@ const itemReport = reportSalesByItem(reportInput, { from: '2026-11-01', to: '202
 assert.equal(itemReport.totals?.revenue, 630);
 assert.equal(itemReport.totals?.cost, 300);
 assert.equal(itemReport.totals?.profit, 330);
+
+// FIN-13: tenant tax settings support inclusive and exclusive selling prices.
+const exclusiveTax = computeTotals([{ partId: 'p1', qty: 1, unitPrice: 100, unitCost: 50 }], 0, 14, true, false);
+assert.equal(exclusiveTax.tax, 1400);
+assert.equal(exclusiveTax.grandTotal, 11400);
+const inclusiveTax = computeTotals([{ partId: 'p1', qty: 1, unitPrice: 114, unitCost: 50 }], 0, 14, true, true);
+assert.equal(inclusiveTax.tax, 1400);
+assert.equal(inclusiveTax.grandTotal, 11400);
 
 // FIN-15: an unset/zero credit limit is not unlimited; it uses the explicit default cap.
 assert.throws(
