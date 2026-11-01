@@ -5,6 +5,7 @@ import {
   Customer, 
   Supplier, 
   SupplierPayment,
+  SupplierPaymentSchedule,
   TreasuryTransaction, 
   Employee, 
   ShopSettings, 
@@ -182,6 +183,7 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     customers: loadResource<Customer[]>('customers', INITIAL_CUSTOMERS),
     suppliers: loadResource<Supplier[]>('suppliers', INITIAL_SUPPLIERS),
     supplierPayments: loadResource<SupplierPayment[]>('supplierPayments', INITIAL_SUPPLIER_PAYMENTS),
+    supplierPaymentSchedules: loadResource<SupplierPaymentSchedule[]>('supplierPaymentSchedules', []),
     treasuryTransactions: loadResource<TreasuryTransaction[]>('treasury', INITIAL_TREASURY_TRANSACTIONS),
     employees: loadResource<Employee[]>('employees', INITIAL_EMPLOYEES),
     settings: loadResource<ShopSettings>('settings', tenantSettings),
@@ -214,6 +216,7 @@ export function saveTenantStoreData(
     customers?: Customer[];
     suppliers?: Supplier[];
     supplierPayments?: SupplierPayment[];
+    supplierPaymentSchedules?: SupplierPaymentSchedule[];
     treasuryTransactions?: TreasuryTransaction[];
     employees?: Employee[];
     settings?: ShopSettings;
@@ -261,6 +264,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     localStorage.setItem(getTenantKey(tenantId, 'customers'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'suppliers'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'supplierPayments'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'supplierPaymentSchedules'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'treasury'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'salesReturns'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'purchaseInvoices'), emptyArrayJson);
@@ -286,7 +290,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     const ownerAccount = empsList.find(e => e.role === 'مدير عام' || e.username === 'admin') || INITIAL_EMPLOYEES[0];
     const cleanedStaff = [ownerAccount];
     localStorage.setItem(getTenantKey(tenantId, 'employees'), JSON.stringify(cleanedStaff));
-    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers','loyaltyLedger','cheques','stockBatches','serialUnits']);
+    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','supplierPaymentSchedules','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers','loyaltyLedger','cheques','stockBatches','serialUnits']);
 
     return cleanedStaff;
   } catch (err) {
