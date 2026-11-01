@@ -2933,6 +2933,7 @@ export default function App() {
           currentSession={currentUser!}
           invoices={invoices}
           suppliers={suppliers}
+          supplierPaymentSchedules={supplierPaymentSchedules}
           shopName={activeTenant.companyName}
         />
       )}
