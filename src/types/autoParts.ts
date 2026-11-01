@@ -204,6 +204,8 @@ export interface Invoice {
   grandTotal: number;
   paymentMethod: PaymentMethod | string;
   payments?: InvoicePayment[]; // الدفع المقسّم (كاش + فيزا ...). غيابه = دفعة واحدة بـ paymentMethod
+  creditAmount?: number; // الجزء الآجل من إجمالي الفاتورة
+  settlementPayments?: InvoiceSettlement[]; // التحصيلات المخصصة لهذه الفاتورة بالترتيب
   customerId?: string; // ربط الفاتورة بالعميل (بدل المطابقة بالاسم)
   cashierId?: string;
   cashierName: string;
