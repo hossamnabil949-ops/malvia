@@ -439,6 +439,7 @@ export interface PurchaseReturnItem {
   quantity: number;
   unitCost: number;
   total: number;
+  taxAmount?: number;
   reason?: string;
 }
 
