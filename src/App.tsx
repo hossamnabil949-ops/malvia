@@ -48,7 +48,8 @@ import { isCreditMethod } from './utils/treasuryAccounts';
 import { findOpenShift, findOpenShifts, summarizeShift, stampNewTreasury, nextShiftNumber, countTotal, round2, varianceOf } from './utils/shiftLogic';
 import { nextSalesInvoiceNumber } from './utils/invoiceNumber';
 import { uniqueTransactionNumber } from './utils/uniqueTransactionNumber';
-import { SaleError, computeVoidPlan, deductStock, isCreditPayment } from './utils/saleLogic';
+import { SaleError, computeVoidPlan, computeTotals, deductStock, isCreditPayment } from './utils/saleLogic';
+import { cairoDateKey } from './utils/reportsLogic';
 import type { AuditEntry, StockMovement, InvoicePayment, Warehouse, StockLevel, StockTransfer } from './types/autoParts';
 import { MAIN_WAREHOUSE_ID, normalizeWarehouseId, availableIn, adjustLevels, validateTransfer, applyTransfer, TransferError } from './utils/warehouseLogic';
 import { WarehousesView } from './components/WarehousesView';
@@ -2975,11 +2976,18 @@ export default function App() {
           }}
           onDirectSale={(part: AutoPart, quantity: number, custName: string, payMethod: string) => {
             const total = part.salePrice * quantity;
+            const aiTotals = computeTotals(
+              [{ partId: part.id, qty: quantity, unitPrice: part.salePrice, unitCost: part.costPrice }],
+              0,
+              settings.vatRate,
+              Boolean(settings.taxRegistered),
+              Boolean(settings.pricesIncludeVat),
+            );
             const newInv: Invoice = {
               id: `INV-V-${Date.now()}`,
               invoiceNumber: nextSalesInvoiceNumber(invoices),
-              date: new Date().toISOString().split('T')[0],
-              time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+              date: cairoDateKey(new Date()),
+              time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Cairo' }),
               customerName: custName,
               customerType: 'تجزئة',
               items: [{
@@ -2991,10 +2999,10 @@ export default function App() {
                 costPrice: part.costPrice,
                 total
               }],
-              subtotal: total,
-              tax: 0,
+              subtotal: aiTotals.subtotal / 100,
+              tax: aiTotals.tax / 100,
               discount: 0,
-              grandTotal: total,
+              grandTotal: aiTotals.grandTotal / 100,
               paymentMethod: payMethod as PaymentMethod,
               status: 'مسددة',
               cashierName: currentUser?.employeeName || 'الكاشير'
