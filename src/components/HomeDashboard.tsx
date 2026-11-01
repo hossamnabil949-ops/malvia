@@ -166,7 +166,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               <span className="text-xs font-normal text-neutral-400">ج.م</span>
             </div>
             <span className="text-[10px] text-neutral-400 mt-1 block">
-              شاملة ضريبة القيمة المضافة 14%
+              بعد الخصم والمرتجعات وقبل الضريبة
             </span>
           </div>
         </div>
