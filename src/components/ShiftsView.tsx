@@ -95,7 +95,7 @@ ${row('الكاش المعدود', fmtMoney(s.countedCash ?? 0), true)}
 ${row('النتيجة', vText, true)}
 </table>
 ${s.varianceNote ? `<hr><div>السبب: ${esc(s.varianceNote)}</div>` : ''}
-${s.nonCash ? `<hr><table>${row('إنستاباي', fmtMoney(s.nonCash.instapay))}${row('فيزا', fmtMoney(s.nonCash.visa))}${row('محافظ', fmtMoney(s.nonCash.wallet))}</table>` : ''}
+${s.nonCash ? `<hr><table>${row('إنستاباي', fmtMoney(s.nonCash.instapay))}${row('فيزا', fmtMoney(s.nonCash.visa))}${row('محافظ', fmtMoney(s.nonCash.wallet))}${row('تحويلات وشيكات بنكية', fmtMoney(s.nonCash.bank || 0))}</table>` : ''}
 <hr><div style="text-align:center;margin-top:24px">توقيع المسؤول: ____________</div>
 <script>window.onload=function(){window.print()}</script></body></html>`);
   w.document.close();
@@ -392,7 +392,7 @@ export const ShiftsView: React.FC<ShiftsViewProps> = ({
                     <div className="bg-surface-2 rounded-lg p-2"><div className="text-[10px] text-neutral-400">المدة</div><b className="text-white">{fmtDuration(s.openedAt, s.closedAt)}</b></div>
                   </div>
                   <div>مبيعات كاش: <b>{fmtMoney(s.cashSales ?? 0)}</b> — قبض نقدي: <b>{fmtMoney(s.cashIn ?? 0)}</b> — صرف نقدي: <b>{fmtMoney(s.cashOut ?? 0)}</b> — فواتير: <b>{s.invoiceCount ?? 0}</b></div>
-                  {s.nonCash && <div>إنستاباي: <b>{fmtMoney(s.nonCash.instapay)}</b> — فيزا: <b>{fmtMoney(s.nonCash.visa)}</b> — محافظ: <b>{fmtMoney(s.nonCash.wallet)}</b></div>}
+                  {s.nonCash && <div>إنستاباي: <b>{fmtMoney(s.nonCash.instapay)}</b> — فيزا: <b>{fmtMoney(s.nonCash.visa)}</b> — محافظ: <b>{fmtMoney(s.nonCash.wallet)}</b> — بنك: <b>{fmtMoney(s.nonCash.bank || 0)}</b></div>}
                   {s.carryOverDiff ? <div className="text-amber-300">فرق الافتتاح عن الوردية السابقة: {s.carryOverDiff > 0 ? 'زيادة' : 'عجز'} {fmtMoney(Math.abs(s.carryOverDiff))}{s.openingNote ? ` — ${s.openingNote}` : ''}</div> : null}
                   {s.varianceNote && <div>السبب: <b>{s.varianceNote}</b>{s.variancePosted ? ' (اتسجل في الخزنة)' : ' (لم يُسجَّل في الخزنة)'}</div>}
                   <button className={btnGhost + ' !h-9 text-xs flex items-center gap-1.5'} onClick={() => printShift(s)}><Printer className="w-4 h-4" /> طباعة</button>
