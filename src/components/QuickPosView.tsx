@@ -459,6 +459,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           originalPrice: item.part.salePrice,
           costPrice: item.part.costPrice,
           total: effectivePrice * item.quantity,
+          taxAmount: subtotal > 0 ? Number((tax * (effectivePrice * item.quantity / subtotal)).toFixed(2)) : 0,
           ...(item.part.tracking === 'serial' ? { serials: serialSel[item.part.id] ?? [] } : {}),
         };
       }),
