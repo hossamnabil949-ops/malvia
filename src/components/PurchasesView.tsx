@@ -383,6 +383,17 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     setReturnNotes('');
   };
 
+  const purchaseReturnLineAmount = (index: number, qty: number): number => {
+    if (!returnPurchaseInvoice || qty <= 0) return 0;
+    const item = returnPurchaseInvoice.items[index];
+    if (!item) return 0;
+    const lineGross = Number(item.total) || item.quantity * item.costPrice;
+    const discountShare = returnPurchaseInvoice.subtotal > 0 ? (returnPurchaseInvoice.discount || 0) * lineGross / returnPurchaseInvoice.subtotal : 0;
+    const taxShare = item.taxAmount ?? (returnPurchaseInvoice.subtotal > 0 ? (returnPurchaseInvoice.tax || 0) * lineGross / returnPurchaseInvoice.subtotal : 0);
+    const returnableLine = Math.max(0, lineGross - discountShare + (returnPurchaseInvoice.pricesIncludeTax ? 0 : taxShare));
+    return Math.round(returnableLine * qty / Math.max(1, item.quantity) * 100) / 100;
+  };
+
   const returnCalculation = useMemo(() => {
     if (!returnPurchaseInvoice) {
       return { totalReturnAmount: 0, unpaidBefore: 0, debtReduction: 0, unpaidAfter: 0, excessCash: 0, newGrandTotal: 0 };
@@ -390,7 +401,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
     const totalReturnAmount = returnPurchaseInvoice.items.reduce((acc, it, idx) => {
       const qty = returnItems[String(idx)] || 0;
-      return acc + (qty * it.costPrice);
+      return acc + purchaseReturnLineAmount(idx, qty);
     }, 0);
 
     const unpaidBefore = Math.max(0, returnPurchaseInvoice.grandTotal - returnPurchaseInvoice.amountPaid);
@@ -409,14 +420,18 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     const returnedItemsList: PurchaseReturnItem[] = returnPurchaseInvoice.items
       .map((it, idx) => ({ it, qty: returnItems[String(idx)] || 0 }))
       .filter(({ qty }) => qty > 0)
-      .map(({ it, qty }) => ({
+      .map(({ it, idx, qty }) => {
+        const taxShare = it.taxAmount ?? (returnPurchaseInvoice.subtotal > 0 ? (returnPurchaseInvoice.tax || 0) * (Number(it.total) || it.quantity * it.costPrice) / returnPurchaseInvoice.subtotal : 0);
+        return {
         partNumber: it.partNumber,
         partName: it.partName,
         quantity: qty,
         unitCost: it.costPrice,
-        total: qty * it.costPrice,
+        total: purchaseReturnLineAmount(idx, qty),
+        taxAmount: qty > 0 ? taxShare * (qty / it.quantity) : 0,
         reason: returnReason,
-      }));
+      };
+      });
 
     if (returnedItemsList.length === 0) return;
 
