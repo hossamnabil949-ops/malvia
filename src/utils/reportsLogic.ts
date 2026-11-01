@@ -405,7 +405,14 @@ export function reportExpiry(d: ReportData, today: string): ReportTable {
 // ---------------- الذمم والالتزامات ----------------
 /** أعمار ديون العملاء: يُوزَّع رصيد العميل على فواتيره الآجلة من الأحدث للأقدم، والباقي يُعدّ قديماً (أكثر من 90). */
 export function reportCustomerAging(d: ReportData, today: string): ReportTable {
-  const creditOf = (i: Invoice): number => {\n    const credit = sum(paymentLines(i).filter(p => p.isCredit), p => p.amount);\n    const returnedToCredit = sum(d.salesReturns.filter(ret => ret.invoiceId === i.id && ret.refundMethod === 'خصم من رصيد العميل الآجل'), ret => ret.totalRefundAmount);\n    return Math.max(0, credit - returnedToCredit);\n  };
+  const creditOf = (i: Invoice): number => {
+    const credit = sum(paymentLines(i).filter(p => p.isCredit), p => p.amount);
+    const returnedToCredit = sum(
+      d.salesReturns.filter(ret => ret.invoiceId === i.id && ret.refundMethod === 'خصم من رصيد العميل الآجل'),
+      ret => ret.totalRefundAmount
+    );
+    return Math.max(0, credit - returnedToCredit);
+  };
   const byCustomer = group(d.invoices.filter(i => i.status !== 'ملغاة' && Boolean(i.customerId) && creditOf(i) > 0), i => i.customerId!);
   const rows = d.customers.filter(c => c.balance > 0).map(c => {
     const list = (byCustomer.get(c.id) ?? []).sort((a, b) => a.date.localeCompare(b.date));
@@ -448,8 +455,8 @@ export function reportCheques(d: ReportData, today: string): ReportTable {
   const inn = sum(rows, x => x._in), out = sum(rows, x => x._out);
   return {
     id: 'cheques', title: 'الشيكات المفتوحة حسب الاستحقاق',
-    columns: [{ key: 'dir', label: 'النوع' }, { key: 'party', label: 'الطرف' }, { key: 'number', label: 'رقم الشيك' }, { key: 'bank', label: 'البنك' }, { key: 'due', label: 'الاستحقاق', kind: 'date' }, { key: 'days', label: 'الأيام المتبقية' }, { key: 'state', label: 'الحالة' }, { key: 'amount', label: 'المبلغ', kind: 'money' }],
-    rows: rows.map(({ _in, _out, ...rest }) => rest),
+    columns: [{ key: 'dir', label: 'النوع' }, { key: 'party', label: 'الطرف' }, { key: 'number', label: 'رقم الشيك' }, { key: 'bank', label: 'البنك' }, { key: 'due', label: 'الاستحقاق', kind: 'date' }, { key: 'days', label: 'الأيام المتبقية' }, { key: 'state', label: 'الحالة' }, { key: 'amount', label: 'المبلغ', kind: 'money' }, { key: 'incoming', label: 'الوارد', kind: 'money' }, { key: 'outgoing', label: 'الصادر', kind: 'money' }],
+    rows: rows.map(({ _in, _out, ...rest }) => ({ ...rest, incoming: _in, outgoing: _out })),
     totals: { dir: 'الإجمالي', party: `واردة ${r2(inn)} · صادرة ${r2(out)}`, number: '', bank: '', due: '', days: '', state: '', amount: r2(inn + out), incoming: r2(inn), outgoing: r2(out) },
     note: 'الأيام السالبة = متأخر عن الاستحقاق.',
   };
