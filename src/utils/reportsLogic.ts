@@ -131,8 +131,10 @@ export function reportSalesByItem(d: ReportData, r: DateRange): ReportTable {
   const costFallback = new Map(d.parts.map(p => [p.id, p.costPrice]));
   const m = new Map<string, { number: string; name: string; qty: number; revenue: number; cost: number }>();
   for (const inv of active(d, r)) {
+    const preTaxAfterDiscount = Math.max(0, inv.subtotal - inv.discount);
+    const invoiceNetRatio = preTaxAfterDiscount > 0 ? netSales(inv) / preTaxAfterDiscount : 0;
     for (const it of inv.items) {
-      const q = netQty(it);
+      const q = it.returnedQuantity !== undefined ? netQty(it) : it.quantity * invoiceNetRatio;
       if (q <= 0) continue;
       const key = it.partId || it.partNumber;
       const row = m.get(key) ?? { number: it.partNumber, name: it.partName, qty: 0, revenue: 0, cost: 0 };
