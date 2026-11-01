@@ -410,7 +410,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       .replace(/[٬،]/g, ',')
       .replace(/٫/g, '.');
     const q = normalizeArabic(digitText);
-    const isCreate = /(جدول|جدوله|قسم المبلغ|قسّم المبلغ|جدول دفعات|دفعات اسبوع|دفعات شهري|كل يوم|كل اسبوع|كل شهر)/.test(q);
+    const isCreate = /(جدول|جدوله|قسم المبلغ|قسّم المبلغ|قسم حساب|قسّم حساب|قسم .*دفعات|قسم .*دفعات|توزيع .*دفعات|مستحقات المورد|المستحق للمورد|دفعات اسبوع|دفعات شهري|كل يوم|كل اسبوع|كل شهر)/.test(q);
     if (!supplierPlanDraft && !isCreate) return false;
     if (/^(الغاء|الغي|كنسل|cancel)$/.test(q)) {
       setSupplierPlanDraft(null); pushMessage('assistant','تم إلغاء إعداد الجدول، ولم يتم حفظ أي شيء.'); return true;
@@ -424,7 +424,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     } else if (numericOnly && supplierPlanDraft && !supplierPlanDraft.installmentCount) {
       draft.installmentCount = Number(numericOnly[1]);
     } else {
-      const amountMatch = digitText.match(/(?:بمبلغ|مبلغ|المبلغ|اجمالي|إجمالي|المستحق)\\s*[:：]?\\s*([0-9][0-9,.]*)/);
+      const amountMatch = digitText.match(/(?:بمبلغ|مبلغ|المبلغ|اجمالي|إجمالي|المستحق)[\\s\\S]{0,120}?([0-9][0-9,.]*)\\s*(?:جنيه|ج\\.?)/i) || digitText.match(/([0-9][0-9,.]*)\\s*(?:جنيه|ج\\.?)/i);
       if (amountMatch) {
         const parsedAmount = Number(amountMatch[1].replace(/,/g, ''));
         if (Number.isFinite(parsedAmount) && parsedAmount > 0) draft.totalAmount = parsedAmount;
@@ -440,7 +440,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     if (dayHits.length) draft.weekdays = [...new Set(dayHits.map(day => weekdayMap[day]))];
     const dateMatch = digitText.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
     if (dateMatch) draft.startDate = [dateMatch[3],dateMatch[2].padStart(2,'0'),dateMatch[1].padStart(2,'0')].join('-');
-    const supplierTokens = q.split(' ').filter(w => w.length > 2 && !['جدول','دفعات','دفعة','المبلغ','قسم','اسبوعي','اسبوعيا','شهري','شهريا','مورد','للمورد','جنيه','بداية','من','كل','يوم','على'].includes(w));
+    const supplierTokens = q.split(' ').filter(w => w.length > 2 && !/^\\d+$/.test(w) && !['جدول','جدوله','دفعات','دفعة','المبلغ','قسم','حساب','اقسم','قسّم','قسموا','توزيع','الي','الى','اسبوعي','اسبوعيا','شهري','شهريا','مورد','للمورد','المورد','جنيه','بداية','من','كل','يوم','على','المستحق','اجمالي','الاجمالي'].includes(w));
     const ranked = suppliers.map(s => { const tokens=normalizeArabic(s.name).split(' '); return {s, hits:supplierTokens.filter(t=>tokens.includes(t)).length}; }).filter(x=>x.hits>0).sort((a,b)=>b.hits-a.hits);
     if (ranked.length && (!ranked[1] || ranked[0].hits>ranked[1].hits)) draft.supplierId=ranked[0].s.id, draft.supplierName=ranked[0].s.name;
     if (draft.preview) {
