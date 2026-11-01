@@ -258,9 +258,13 @@ export function answerCustomerBalanceLookup(
   const kind = kindIsSupplier ? 'المورد' : 'العميل أو الورشة';
   const top = matches[0];
   const second = matches[1];
+  // Accept a shortened registered name when every spoken token matches
+  // exactly one supplier/customer record (e.g. "مؤسسة الأهرام").
+  const uniqueCompleteTokenMatch = !!top && top.matched === queryTokens.length &&
+    matches.filter(item => item.matched === queryTokens.length).length === 1;
   const uniqueSingleTokenMatch = queryTokens.length === 1 && !!top && top.matched === 1 &&
     matches.filter(item => item.matched === 1).length === 1;
-  if (!top || (!top.exact && !uniqueSingleTokenMatch &&
+  if (!top || (!top.exact && !uniqueCompleteTokenMatch && !uniqueSingleTokenMatch &&
     (top.matched < queryTokens.length || top.score < 0.75))) {
     return answer(lang === 'ar'
       ? 'لم أجد ' + kind + ' بمطابقة مؤكدة للاسم "' + requestedName + '". من فضلك اكتب الاسم كما هو مسجل. لم يتم إرسال الطلب إلى خدمة خارجية.'
