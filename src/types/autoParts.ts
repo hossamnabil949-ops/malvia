@@ -128,6 +128,7 @@ export interface InvoiceItem {
   originalPrice?: number;
   costPrice?: number; // تكلفة الوحدة وقت البيع (لحساب تكلفة البضاعة المباعة بدقة)
   total: number;
+  taxAmount?: number; // نصيب سطر الصنف من ضريبة الفاتورة
   returnedQuantity?: number;
   batchAllocations?: import('../utils/trackingLogic').BatchAllocation[]; // الدفعات المسحوبة (للأصناف ذات الدفعات)
   serials?: string[];          // الأرقام التسلسلية المباعة
@@ -190,6 +191,7 @@ export interface Invoice {
   items: InvoiceItem[];
   subtotal: number;
   tax: number; // ضريبة القيمة المضافة
+  pricesIncludeTax?: boolean; // هل الأسعار المسجلة شاملة الضريبة؟
   discount: number;
   grandTotal: number;
   paymentMethod: PaymentMethod | string;
