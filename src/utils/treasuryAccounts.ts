@@ -27,7 +27,7 @@ export const accountOf = (method?: string): TreasuryAccountKey => {
   if (m.includes('آجل') || m.includes('اجل') || m.includes('credit')) return 'unclassified';
   if (m.includes('انستا') || m.includes('إنستا') || m.includes('insta')) return 'instapay';
   if (m.includes('محفظ') || m.includes('فودافون') || m.includes('wallet')) return 'wallet';
-  if (m.includes('شيك') || m.includes('تحويل بنكي') || m.includes('تحويل بنكى') || m.includes('bank transfer') || m.includes('bank')) return 'bank';
+  if (m.includes('شيك') || m.includes('تحويل بنكي') || m.includes('تحويل بنكى') || m === 'bank transfer' || m === 'bank') return 'bank';
   if (m.includes('فيزا') || m.includes('بطاقة') || m.includes('شبكة') || m.includes('مدى') || m.includes('visa') || m.includes('card')) return 'visa';
   if (m === 'نقدي' || m.includes('كاش') || m === 'cash') return 'cash';
   return 'unclassified';
