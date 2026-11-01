@@ -2592,6 +2592,48 @@ export default function App() {
             }}
             onSettleBalance={(customerId: string, amount: number) => {
               const cust = customers.find(c => c.id === customerId);
+              if (!cust || !Number.isFinite(amount) || amount <= 0 || amount > cust.balance + 0.005) {
+                window.alert('قيمة التحصيل غير صحيحة أو أكبر من رصيد العميل المستحق.');
+                return;
+              }
+              const receiptNumber = uniqueTransactionNumber('RCPT');
+              const collectedAt = new Date();
+              const collectedDate = todayISO();
+              const collectedTime = collectedAt.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+              // Allocate collections to this customer's oldest open credit invoices (FIFO).
+              setInvoices(prev => {
+                let remaining = amount;
+                const indices = prev.map((invoice, index) => ({ invoice, index }))
+                  .filter(({ invoice }) => invoice.customerId === customerId && invoice.status !== 'ملغاة')
+                  .sort((a, b) => a.invoice.date.localeCompare(b.invoice.date));
+                const next = [...prev];
+                for (const { invoice, index } of indices) {
+                  if (remaining <= 0.005) break;
+                  const originalCredit = invoice.creditAmount ?? (invoice.payments?.filter(payment => isCreditPayment(String(payment.method))).reduce((sum, payment) => sum + payment.amount, 0)
+                    ?? (isCreditPayment(String(invoice.paymentMethod)) ? invoice.grandTotal : 0));
+                  const alreadySettled = (invoice.settlementPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
+                  const outstanding = Math.max(0, originalCredit - alreadySettled);
+                  if (outstanding <= 0.005) continue;
+                  const applied = Math.min(remaining, outstanding);
+                  const settlementPayments = [...(invoice.settlementPayments || []), {
+                    amount: applied, date: collectedDate, time: collectedTime, paymentMethod: 'نقدي', receiptNumber,
+                  }];
+                  const newOutstanding = Math.max(0, outstanding - applied);
+                  const paymentStatus = newOutstanding <= 0.005 ? 'مسددة' as const
+                    : alreadySettled + applied > 0 ? 'مسددة جزئياً' as const : 'آجلة' as const;
+                  next[index] = {
+                    ...invoice,
+                    settlementPayments,
+                    paymentStatus,
+                    status: invoice.status === 'مرتجع جزئي' || invoice.status === 'مرتجع كلي'
+                      ? invoice.status
+                      : paymentStatus,
+                  };
+                  remaining -= applied;
+                }
+                persistChanges({ invoices: next });
+                return next;
+              });
               logAudit('customer.collect', `تحصيل ${amount} ج.م من ${cust?.name || customerId}`, customerId, amount);
               setCustomers(prev => {
                 const updated = prev.map(c => c.id === customerId ? { ...c, balance: Math.max(0, c.balance - amount) } : c);
@@ -2601,7 +2643,7 @@ export default function App() {
               // التحصيل من العميل يدخل الخزنة (كان لا يُسجَّل في الخزنة)
               const tx: TreasuryTransaction = {
                 id: `TX-CUST-${Date.now()}`,
-                txNumber: uniqueTransactionNumber('TX-C'),
+                txNumber: receiptNumber,
                 date: todayISO(),
                 time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
                 type: 'قبض',
