@@ -418,7 +418,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     if (!returnPurchaseInvoice || returnCalculation.totalReturnAmount <= 0) return;
 
     const returnedItemsList: PurchaseReturnItem[] = returnPurchaseInvoice.items
-      .map((it, idx) => ({ it, qty: returnItems[String(idx)] || 0 }))
+      .map((it, idx) => ({ it, idx, qty: returnItems[String(idx)] || 0 }))
       .filter(({ qty }) => qty > 0)
       .map(({ it, idx, qty }) => {
         const taxShare = it.taxAmount ?? (returnPurchaseInvoice.subtotal > 0 ? (returnPurchaseInvoice.tax || 0) * (Number(it.total) || it.quantity * it.costPrice) / returnPurchaseInvoice.subtotal : 0);
