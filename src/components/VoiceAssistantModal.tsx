@@ -48,6 +48,7 @@ interface VoiceAssistantModalProps {
   currentSession: UserSession;
   invoices?: Invoice[];
   suppliers?: Supplier[];
+  supplierPaymentSchedules?: Array<{ id: string; supplierId: string; supplierName: string; amount: number; amountPaid: number; dueDate: string; status: string; notes?: string }>;
   shopName?: string;
   allowedActions: { sale: boolean; inventory: boolean; treasury: boolean; purchases: boolean };
 }
@@ -69,6 +70,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   currentSession,
   invoices = [],
   suppliers = [],
+  supplierPaymentSchedules = [],
   shopName,
   allowedActions,
 }) => {
@@ -467,7 +469,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       conversationRef.current = [...conversationRef.current, { role: 'user' as const, content: textToExecute }].slice(-12);
       pushMessage('user', textToExecute);
       setTranscript('');
-      const shop = buildShopSnapshot(parts, invoices, suppliers, currentSession, shopName);
+      const shop = buildShopSnapshot(parts, invoices, suppliers, currentSession, shopName, supplierPaymentSchedules);
       const result = await sendVoiceCommandToServer(
         textToExecute, parts, customers, suppliers, conversationRef.current.slice(0, -1), shop,
         voiceLangRef.current === 'en-US' ? 'en' : 'ar'
