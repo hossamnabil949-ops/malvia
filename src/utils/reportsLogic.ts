@@ -216,6 +216,32 @@ export function reportPurchasesBySupplier(d: ReportData, r: DateRange): ReportTa
   };
 }
 
+/** تقرير مطابقة صافي المبيعات بين طرق العرض المختلفة باستخدام تعريف موحد. */
+export function reportSalesReconciliation(d: ReportData, r: DateRange): ReportTable {
+  const inv = active(d, r);
+  const reference = r2(sum(inv, netSales));
+  const customerTotal = r2(sum([...group(inv, i => i.customerId || 'unassigned').values()].map(list => sum(list, netSales), n => n)));
+  const cashierTotal = r2(sum([...group(inv, i => i.cashierId || i.cashierName).values()].map(list => sum(list, netSales), n => n)));
+  const itemReport = reportSalesByItem(d, r);
+  const paymentReport = reportSalesByPayment(d, r);
+  const dailyReport = reportDailySales(d, r);
+  const rows = [
+    { source: 'الفواتير (المرجع الموحد)', amount: reference, difference: 0 },
+    { source: 'حسب العميل', amount: customerTotal, difference: r2(customerTotal - reference) },
+    { source: 'حسب الكاشير', amount: cashierTotal, difference: r2(cashierTotal - reference) },
+    { source: 'حسب الأصناف', amount: Number(itemReport.totals?.revenue) || 0, difference: r2((Number(itemReport.totals?.revenue) || 0) - reference) },
+    { source: 'حسب طرق الدفع', amount: Number(paymentReport.totals?.amount) || 0, difference: r2((Number(paymentReport.totals?.amount) || 0) - reference) },
+    { source: 'حسب الأيام', amount: Number(dailyReport.totals?.net) || 0, difference: r2((Number(dailyReport.totals?.net) || 0) - reference) },
+  ];
+  return {
+    id: 'sales-reconciliation', title: 'مطابقة صافي المبيعات بين التقارير',
+    columns: [{ key: 'source', label: 'مصدر التقرير' }, { key: 'amount', label: 'صافي المبيعات', kind: 'money' }, { key: 'difference', label: 'الفرق عن المرجع', kind: 'money' }],
+    rows,
+    totals: { source: 'المرجع', amount: reference, difference: 0 },
+    note: 'كل القيم قبل الضريبة وبعد خصم الفاتورة والمرتجعات، والفاتورة الملغاة مستبعدة. أي فرق غير صفري يحتاج مراجعة بيانات الدفع أو ربط السطور.',
+  };
+}
+
 export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
   const inv = active(d, r);
   const sales = sum(inv, i => i.subtotal - i.discount);
@@ -341,7 +367,7 @@ export function reportExpiry(d: ReportData, today: string): ReportTable {
 // ---------------- الذمم والالتزامات ----------------
 /** أعمار ديون العملاء: يُوزَّع رصيد العميل على فواتيره الآجلة من الأحدث للأقدم، والباقي يُعدّ قديماً (أكثر من 90). */
 export function reportCustomerAging(d: ReportData, today: string): ReportTable {
-  const creditOf = (i: Invoice): number => sum(paymentLines(i).filter(p => p.isCredit), p => p.amount);
+  const creditOf = (i: Invoice): number => {\n    const credit = sum(paymentLines(i).filter(p => p.isCredit), p => p.amount);\n    const returnedToCredit = sum(d.salesReturns.filter(ret => ret.invoiceId === i.id && ret.refundMethod === 'خصم من رصيد العميل الآجل'), ret => ret.totalRefundAmount);\n    return Math.max(0, credit - returnedToCredit);\n  };
   const byCustomer = group(d.invoices.filter(i => i.status !== 'ملغاة' && creditOf(i) > 0), i => i.customerId || `name:${i.customerName}`);
   const rows = d.customers.filter(c => c.balance > 0).map(c => {
     const list = (byCustomer.get(c.id) ?? []).sort((a, b) => a.date.localeCompare(b.date));
@@ -413,6 +439,7 @@ export const REPORT_DEFS: ReportDef[] = [
   { id: 'sales-by-customer', group: 'المبيعات', title: 'المبيعات حسب العميل', usesRange: true, build: (d, r) => reportSalesByCustomer(d, r) },
   { id: 'sales-by-cashier', group: 'المبيعات', title: 'المبيعات حسب الموظف', usesRange: true, build: (d, r) => reportSalesByCashier(d, r) },
   { id: 'sales-by-payment', group: 'المبيعات', title: 'المبيعات حسب طريقة الدفع', usesRange: true, build: (d, r) => reportSalesByPayment(d, r) },
+  { id: 'sales-reconciliation', group: 'المبيعات', title: 'مطابقة صافي المبيعات', usesRange: true, build: (d, r) => reportSalesReconciliation(d, r) },
   { id: 'returns', group: 'المبيعات', title: 'تحليل المرتجعات', usesRange: true, build: (d, r) => reportReturns(d, r) },
   { id: 'profit-loss', group: 'المالية', title: 'الأرباح والخسائر', usesRange: true, build: (d, r) => reportProfitLoss(d, r) },
   { id: 'expenses', group: 'المالية', title: 'المصروفات حسب البند', usesRange: true, build: (d, r) => reportExpensesByCategory(d, r) },
