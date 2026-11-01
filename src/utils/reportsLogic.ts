@@ -413,11 +413,12 @@ export function reportCustomerAging(d: ReportData, today: string): ReportTable {
     const creditReturns = sum(d.salesReturns.filter(ret =>
       ret.invoiceId === i.id && ret.refundMethod === 'خصم من رصيد العميل الآجل'
     ), ret => ret.totalRefundAmount);
-    return Math.max(0, creditPayments - creditReturns);
+    const settled = sum(i.settlementPayments || [], payment => payment.amount);
+    return Math.max(0, creditPayments - creditReturns - settled);
   };
-  const byCustomer = group(d.invoices.filter(i => i.status !== 'ملغاة' && creditOf(i) > 0), i => i.customerId || `name:${i.customerName}`);
+  const byCustomer = group(d.invoices.filter(i => i.status !== 'ملغاة' && i.customerId && creditOf(i) > 0), i => i.customerId as string);
   const rows = d.customers.filter(c => c.balance > 0).map(c => {
-    const list = (byCustomer.get(c.id) ?? byCustomer.get(`name:${c.name}`) ?? []).sort((a, b) => a.date.localeCompare(b.date));
+    const list = (byCustomer.get(c.id) ?? []).sort((a, b) => a.date.localeCompare(b.date));
     const b = { b0: 0, b30: 0, b60: 0, b90: 0 };
     let left = c.balance;
     for (const inv of list) {
