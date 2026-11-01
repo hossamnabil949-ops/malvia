@@ -132,78 +132,42 @@ const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504];
 const sleep = (ms: number) =>
   new Promise(resolve => setTimeout(resolve, ms));
 
-async function callGeminiWithRetry(
+async function callGeminiOnce(
   url: string,
   apiKey: string,
-  payload: any
+  payload: any,
+  timeoutMs: number
 ): Promise<Response> {
-  const maxAttempts = 3;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-        body: JSON.stringify(payload),
-      });
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
 
-      const shouldRetry = RETRYABLE_STATUS_CODES.includes(response.status);
-
-      if (!shouldRetry || attempt === maxAttempts) {
-        return response;
-      }
-
-      const retryAfterHeader = response.headers.get('retry-after');
-      const retryAfterSeconds = retryAfterHeader
-        ? Number(retryAfterHeader)
-        : NaN;
-
-      const serverDelay =
-        Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
-          ? Math.min(retryAfterSeconds * 1000, 5000)
-          : 0;
-
-      const delay =
-        serverDelay ||
-        (800 * Math.pow(2, attempt - 1) +
-          Math.floor(Math.random() * 400));
-
-      console.warn(
-        `Gemini temporary error ${response.status}; retry ${attempt + 1}/${maxAttempts} after ${delay}ms`
-      );
-
-      await response.body?.cancel().catch(() => {});
-      await sleep(delay);
-
-    } catch (error) {
-      if (error instanceof GeminiUnavailableError) {
-        throw error;
-      }
-
-      if (attempt === maxAttempts) {
-        console.error(
-          'Gemini connection failed after retries:',
-          String(error).slice(0, 250)
-        );
-        throw new GeminiUnavailableError();
-      }
-
-      const delay =
-        800 * Math.pow(2, attempt - 1) +
-        Math.floor(Math.random() * 400);
-
-      console.warn(
-        `Gemini network error; retry ${attempt + 1}/${maxAttempts} after ${delay}ms`
-      );
-
-      await sleep(delay);
-    }
+    console.info(
+      `Gemini HTTP response received in ${Date.now() - startedAt}ms (status ${response.status}, timeout ${timeoutMs}ms)`
+    );
+    return response;
+  } catch (error) {
+    console.error(
+      `Gemini request failed after ${Date.now() - startedAt}ms (timeout ${timeoutMs}ms):`,
+      error instanceof Error
+        ? `${error.name}: ${error.message}`.slice(0, 250)
+        : String(error).slice(0, 250)
+    );
+    throw new GeminiUnavailableError();
+  } finally {
+    clearTimeout(timeout);
   }
-
-  throw new GeminiUnavailableError();
 }
 
 // =========================================================
@@ -373,11 +337,76 @@ export default async function handler(req: any, res: any) {
         responseMimeType: 'application/json',
         responseSchema: RESPONSE_SCHEMA,
         temperature: 0.5,
-        maxOutputTokens: 1024,
+        // Replies are intentionally concise; cap generation to reduce latency.
+        maxOutputTokens: 512,
       },
     };
 
-    const r = await callGeminiWithRetry(url, apiKey, payload);
+    const fallbackModel =
+      process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.6-flash';
+    const fallbackUrl =
+      `https://generativelanguage.googleapis.com/v1beta/models/${fallbackModel}:generateContent`;
+
+    // Log request shape only; never log prompts, inventory/customer data, or API keys.
+    const systemPromptChars = payload.systemInstruction.parts[0].text.length;
+    const historyChars = history.reduce(
+      (total: number, item: any) => total + (item.parts?.[0]?.text?.length || 0),
+      0
+    );
+    console.info('Gemini request diagnostics', {
+      primaryModel: model,
+      fallbackModel,
+      systemPromptChars,
+      historyChars,
+      commandChars: command.length,
+      partsCount: parts.length,
+      customersCount: customers.length,
+      suppliersCount: shop.suppliers.length,
+      payloadChars: JSON.stringify(payload).length,
+      primaryTimeoutMs: 10_000,
+      fallbackTimeoutMs: 8_000,
+    });
+
+    const geminiStartedAt = Date.now();
+    let r: Response | undefined;
+    let primaryFailure: string | undefined;
+
+    try {
+      r = await callGeminiOnce(url, apiKey, payload, 10_000);
+    } catch (error) {
+      // A network failure or timeout must also activate the fallback model.
+      primaryFailure = String(error).slice(0, 250);
+      console.warn(
+        `Gemini primary model ${model} failed; trying fallback ${fallbackModel}: ${primaryFailure}`
+      );
+    }
+
+    // Fallback is limited to one attempt and only for transient failures.
+    if (
+      (!r || [500, 502, 503, 504].includes(r.status)) &&
+      fallbackModel !== model
+    ) {
+      if (r) {
+        console.warn(
+          `Gemini model ${model} returned ${r.status}; trying fallback ${fallbackModel} once`
+        );
+        await r.body?.cancel().catch(() => {});
+      }
+
+      try {
+        r = await callGeminiOnce(fallbackUrl, apiKey, payload, 8_000);
+      } catch (error) {
+        console.error(
+          'Gemini fallback request failed or timed out:',
+          String(error).slice(0, 250)
+        );
+        throw new GeminiUnavailableError();
+      }
+    }
+
+    if (!r) {
+      throw new GeminiUnavailableError();
+    }
 
     // -----------------------------------------------------
     // GEMINI ERROR HANDLING
@@ -427,6 +456,14 @@ export default async function handler(req: any, res: any) {
     // -----------------------------------------------------
 
     const j: any = await r.json();
+    const usage = j?.usageMetadata || {};
+    console.info('Gemini completed', {
+      model: r.url.includes(encodeURIComponent(fallbackModel)) || r.url.includes(fallbackModel) ? fallbackModel : model,
+      elapsedMs: Date.now() - geminiStartedAt,
+      promptTokens: Number.isFinite(usage.promptTokenCount) ? usage.promptTokenCount : undefined,
+      outputTokens: Number.isFinite(usage.candidatesTokenCount) ? usage.candidatesTokenCount : undefined,
+      totalTokens: Number.isFinite(usage.totalTokenCount) ? usage.totalTokenCount : undefined,
+    });
 
     const text = (
       j?.candidates?.[0]?.content?.parts || []
