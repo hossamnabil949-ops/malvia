@@ -187,7 +187,7 @@ export function reportPurchasesBySupplier(d: ReportData, r: DateRange): ReportTa
   const supplierNames = new Map(d.suppliers.map(s => [s.id, s.name]));
   const g = group(d.purchaseInvoices.filter(i => inRange(i.date, r)), i => i.supplierId || `legacy-name:${i.supplierName}`);
   const rows = [...g.entries()].map(([supplierKey, list]) => {
-    const name = list[0]?.supplierName || supplierNames.get(supplierKey) || supplierKey;
+    const name = supplierNames.get(supplierKey) || list[0]?.supplierName || supplierKey;
     const total = sum(list, i => i.grandTotal);
     const paid = sum(list, i => i.amountPaid ?? 0);
     return { name, count: list.length, total: r2(total), paid: r2(paid), remaining: r2(Math.max(0, total - paid)) };
