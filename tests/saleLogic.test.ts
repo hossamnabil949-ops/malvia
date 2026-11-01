@@ -461,6 +461,15 @@ import * as RP from '../src/utils/reportsLogic.ts';
     [pl['المبيعات (قبل الضريبة وبعد الخصم)'], pl['يخصم: المرتجعات (قبل الضريبة وبعد الخصم)'], pl['صافي المبيعات'], pl['يخصم: تكلفة البضاعة المباعة'], pl['مجمل الربح'], pl['يخصم: المصروفات'], pl['صافي الربح']],
     [1080, -96, 984, -600, 384, -400, -16]
   );
+  const varianceData = {
+    ...data,
+    treasury: [...data.treasury,
+      { id: 'short', date: '2026-10-22', category: 'عجز درج (تسوية وردية)', amount: 10, type: 'صرف' },
+      { id: 'over', date: '2026-10-22', category: 'زيادة درج (تسوية وردية)', amount: 5, type: 'قبض' },
+    ],
+  };
+  const variancePL = Object.fromEntries(RP.reportProfitLoss(varianceData, { from: '2026-10-01', to: '2026-10-31' }).rows.map(x => [x.item, x.amount]));
+  assert.deepEqual([variancePL['يخصم: عجز الدرج'], variancePL['يضاف: زيادة الدرج'], variancePL['صافي الربح']], [-10, 5, -21]);
   assert.equal(RP.reportExpensesByCategory(data, { from: '2026-10-01', to: '2026-10-31' }).totals!.amount, 400);   // القديم خارج الفترة
   tb = RP.reportTreasury(data, R);
   assert.deepEqual([tb.totals!.inn, tb.totals!.out, tb.totals!.net], [500, 200, 300]);
