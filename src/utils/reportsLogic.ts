@@ -136,7 +136,7 @@ export function reportSalesByItem(d: ReportData, r: DateRange): ReportTable {
 
 export function reportSalesByCustomer(d: ReportData, r: DateRange): ReportTable {
   const bal = new Map(d.customers.map(c => [c.id, c]));
-  const g = group(active(d, r), i => i.customerId || `name:${i.customerName}`);
+  const g = group(active(d, r), i => i.customerId || `invoice:${i.id}`);
   const rows = [...g.entries()].map(([k, list]) => {
     const c = bal.get(list[0].customerId ?? '');
     const total = sum(list, netSales);
