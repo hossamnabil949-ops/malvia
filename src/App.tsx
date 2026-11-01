@@ -2610,7 +2610,18 @@ export default function App() {
               setTreasury(updatedTreasury); persistChanges({ treasuryTransactions: updatedTreasury });
               if (schedule) {
                 const paid = Math.min(schedule.amount, schedule.amountPaid + amount);
-                const updatedSchedules = supplierPaymentSchedules.map(x => x.id === schedule.id ? { ...x, amountPaid: paid, status: paid >= x.amount ? 'paid' as const : 'scheduled' as const, paymentId: paymentId, treasuryTransactionId: txId, updatedAt: new Date().toISOString() } : x);
+                const nextStatus: import('./types/autoParts').SupplierPaymentSchedule['status'] = paid >= schedule.amount ? 'paid' : 'scheduled';
+                const updatedSchedules = supplierPaymentSchedules.map((item) => {
+                  if (item.id !== schedule.id) return item;
+                  return {
+                    ...item,
+                    amountPaid: paid,
+                    status: nextStatus,
+                    paymentId,
+                    treasuryTransactionId: txId,
+                    updatedAt: new Date().toISOString(),
+                  };
+                });
                 setSupplierPaymentSchedules(updatedSchedules); persistChanges({ supplierPaymentSchedules: updatedSchedules });
               }
             }}
