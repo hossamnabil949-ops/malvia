@@ -1297,31 +1297,10 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   <div className="flex items-center gap-4 text-xs text-neutral-400">
                     <span>المجموع: <strong className="text-white font-mono">{subtotal.toLocaleString()} ج.م</strong></span>
                     <span>·</span>
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={applyTax}
-                        onChange={(e) => setApplyTax(e.target.checked)}
-                        className="w-3.5 h-3.5 accent-amber-400"
-                      />
-                      <span>إضافة ضريبة</span>
-                    </label>
-                    {applyTax ? (
-                      <span className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={taxPercent}
-                          onChange={(e) => setTaxPercent(Number(e.target.value))}
-                          className="w-14 h-6 px-1.5 rounded bg-surface-2 border border-neutral-600 text-white font-mono text-xs"
-                        />
-                        <span>% =</span>
-                        <strong className="text-white font-mono">{taxAmount.toLocaleString()} ج.م</strong>
-                      </span>
-                    ) : (
-                      <span className="text-neutral-500">بدون ضريبة</span>
-                    )}
+                    <span className="text-neutral-300">
+                      {applyTax ? `ضريبة المنشأة ${taxPercent}% ${pricesIncludeTax ? '(شاملة)' : '(تضاف)'}: ${taxAmount.toLocaleString()} ج.م` : 'المنشأة غير خاضعة للضريبة'}
+                    </span>
+
                   </div>
                   <div className="flex items-baseline gap-2">
                     <span className="text-xs text-neutral-400 font-bold">إجمالي الفاتورة النهائي:</span>
