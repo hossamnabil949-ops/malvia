@@ -177,8 +177,9 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const handleQuickAddCustomer = () => {
     const name = newCustName.trim();
     if (!name || !onAddCustomer) return;
-    // منع التكرار: نفس الموبايل أو نفس الاسم => نختار العميل الموجود بدل إنشاء نسخة ثانية
     const phone = normPhone(newCustPhone);
+    if (phone.length < 7) { setNewCustNote('أدخل رقم هاتف صحيحاً لا يقل عن 7 أرقام قبل حفظ العميل.'); return; }
+    // منع التكرار: نفس الموبايل أو نفس الاسم => نختار العميل الموجود بدل إنشاء نسخة ثانية
     const existing = customers.find(
       (c) => (phone.length >= 7 && normPhone(c.phone) === phone) || normText(c.name) === normText(name)
     );
