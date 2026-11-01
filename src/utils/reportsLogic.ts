@@ -375,11 +375,11 @@ export function reportSlowMoving(d: ReportData, today: string, days = 90): Repor
       part.createdAt,
     ].filter((value): value is string => Boolean(value)).map(value => value.slice(0, 10));
     const lastActivity = activityDates.sort().at(-1) ?? '';
-    const idle = lastActivity ? Math.max(0, daysBetween(lastActivity, today)) : 0;
+    const idle = lastActivity ? Math.max(0, daysBetween(lastActivity, today)) : 9999;
     return {
       number: part.partNumber, name: part.name, stock: part.stockQuantity,
-      frozen: r2(part.stockQuantity * part.costPrice), last: lastActivity || '—',
-      idle, _i: idle,
+      frozen: r2(part.stockQuantity * part.costPrice), last: lastActivity || 'بدون تاريخ نشاط',
+      idle: lastActivity ? idle : 'بدون مبيعات', _i: idle,
     };
   }).filter(row => row._i >= days).sort((a, b) => b.frozen - a.frozen)
     .map(({ _i, ...rest }) => rest);
