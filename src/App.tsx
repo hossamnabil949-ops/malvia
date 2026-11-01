@@ -2908,10 +2908,12 @@ export default function App() {
                 quantity,
                 unitPrice: part.salePrice,
                 costPrice: part.costPrice,
-                total
+                total,
+                taxAmount: settings.vatEnabled ? Math.round((settings.pricesIncludeTax ? total * settings.vatRate / (100 + settings.vatRate) : total * settings.vatRate / 100) * 100) / 100 : 0
               }],
               subtotal: total,
               tax: settings.vatEnabled ? Math.round(total * (settings.pricesIncludeTax ? settings.vatRate / (100 + settings.vatRate) : settings.vatRate / 100) * 100) / 100 : 0,
+              pricesIncludeTax: Boolean(settings.vatEnabled && settings.pricesIncludeTax),
               discount: 0,
               grandTotal: settings.vatEnabled && !settings.pricesIncludeTax ? Math.round(total * (1 + settings.vatRate / 100) * 100) / 100 : total,
               paymentMethod: payMethod as PaymentMethod,
