@@ -28,7 +28,7 @@ export const accountOf = (method?: string): TreasuryAccountKey => {
   if (m.includes('انستا') || m.includes('إنستا') || m.includes('insta')) return 'instapay';
   if (m.includes('محفظ') || m.includes('فودافون') || m.includes('wallet')) return 'wallet';
   if (m.includes('فيزا') || m.includes('بطاقة') || m.includes('شبكة') || m.includes('مدى') || m.includes('visa') || m.includes('card')) return 'visa';
-  if (m === 'كاش' || m === 'نقدي' || m === 'نقداً' || m === 'نقدا' || m === 'cash' || m.includes('كاشير')) return 'cash';
+  if (m.includes('كاش') || m.includes('نقد') || m === 'cash') return 'cash';
   throw new Error(`طريقة دفع غير معروفة ولا يمكن افتراض أنها نقدية: ${method}`);
 };
 
