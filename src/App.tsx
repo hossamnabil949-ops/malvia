@@ -74,7 +74,8 @@ const SALE_ERROR_MESSAGES: Record<string, string> = {
   PRICE_BELOW_COST: 'السعر أقل من التكلفة (يحتاج صلاحية المدير)',
   DISCOUNT_EXCEEDS_SUBTOTAL: 'الخصم أكبر من قيمة الفاتورة',
   PAYMENT_MISMATCH: 'مجموع المدفوعات لا يساوي إجمالي الفاتورة',
-  CREDIT_REQUIRES_CUSTOMER: 'البيع الآجل يتطلب اختيار أو كتابة اسم العميل',
+  CREDIT_REQUIRES_CUSTOMER: 'البيع الآجل يتطلب اختيار عميل مسجل في النظام',
+  CREDIT_LIMIT_EXCEEDED: 'تجاوز البيع الآجل حد ائتمان العميل أو لم يتم تحديد حد موجب.',
   EMPTY_CART: 'السلة فارغة',
 };
 const MAX_LOG_ENTRIES = 5000; // سقف السجلات حتى لا تكبر مساحة التخزين بلا حد
