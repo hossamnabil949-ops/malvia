@@ -385,7 +385,6 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       );
       const totals = computeTotals(lines, discountAll, vatRate, applyVat);
       const hasCredit = payments.some((p) => isCreditPayment(p.method));
-      const hasNewName = selectedCustomerId === 'cash' && customerNameInput.trim().length > 0;
       validateSale(
         lines,
         parts.map((p) => ({ id: p.id, stockQuantity: stockHere(p) })),
@@ -393,7 +392,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         payments,
         {
           allowBelowCost: false, // سياسة المحل: لا بيع بأقل من التكلفة لأي مستخدم
-          customerId: hasCredit ? (selectedCustomerId !== 'cash' ? selectedCustomerId : hasNewName ? 'new' : undefined) : undefined,
+          customerId: hasCredit && selectedCustomerId !== 'cash' ? selectedCustomerId : undefined,
           customerBalance: (selectedCustomer?.balance ?? 0) + (selectedCustomer?.chequesPending ?? 0),
           customerCreditLimit: selectedCustomer?.creditLimit ?? 0,
         }
@@ -463,7 +462,9 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       payments: payments.map((p) => ({ method: p.method, amount: p.amount })),
       cashierId,
       cashierName: cashierName || 'كاشير المحل',
-      status: 'مسددة',
+      status: payments.some(p => isCreditPayment(p.method))
+        ? (payments.filter(p => isCreditPayment(p.method)).reduce((sum, p) => sum + p.amount, 0) >= grandTotal ? 'آجلة' : 'مسددة جزئياً')
+        : 'مسددة',
     };
 
     const accepted = onCheckoutComplete(newInvoice);
