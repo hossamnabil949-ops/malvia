@@ -335,11 +335,29 @@ export default function App() {
     }
   }, [licenses]);
 
-  // Auto-persist changes to active tenant
+  // اجمع كل موارد العملية الواحدة قبل الحفظ؛ لا تنفّذ آثاراً جانبية داخل state updater.
+  const pendingPersistRef = useRef<{ tenantId: string; data: Parameters<typeof saveTenantStoreData>[1] } | null>(null);
   const persistChanges = useCallback((updates: Parameters<typeof saveTenantStoreData>[1]) => {
     if (!activeTenantId) return;
-    saveTenantStoreData(activeTenantId, updates);
+    const pending = pendingPersistRef.current;
+    if (pending && pending.tenantId !== activeTenantId) {
+      saveTenantStoreData(pending.tenantId, pending.data);
+      pendingPersistRef.current = null;
+    }
+    const current = pendingPersistRef.current;
+    pendingPersistRef.current = {
+      tenantId: activeTenantId,
+      data: { ...(current?.tenantId === activeTenantId ? current.data : {}), ...updates },
+    };
   }, [activeTenantId]);
+
+  // يتم الحفظ مرة واحدة بعد اكتمال تحديثات React المجمّعة؛ تكرار StrictMode لا يكرر الحفظ.
+  useEffect(() => {
+    const pending = pendingPersistRef.current;
+    if (!pending) return;
+    pendingPersistRef.current = null;
+    saveTenantStoreData(pending.tenantId, pending.data);
+  });
 
   // سجل التدقيق: من فعل ماذا ومتى (يمنع التلاعب ويكشفه)
   const logAudit = (action: AuditEntry['action'], summary: string, entityId?: string, amount?: number) => {
