@@ -124,6 +124,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       stopListening();
       stopArabicSpeech();
       conversationRef.current = [];
+      updateSupplierPlanDraft(null);
       setMessages([]);
     }
   }, [isOpen]);
