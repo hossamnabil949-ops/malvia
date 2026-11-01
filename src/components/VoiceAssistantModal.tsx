@@ -525,12 +525,12 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     // Supplier settlement is intentionally human-operated.
     // Voice may locate the saved installment and open the supplier screen,
     // but it must never create a payment, treasury movement, or change balances.
-    const settlementIntent = /(?:سدد|سدّد|دفع|ادفع|سداد|تسديد|settle|pay)\\s*(?:دفعة|قسط|مستحقات|مستحق|مبلغ|supplier|installment)?/i.test(normalizeArabic(textToExecute));
+    const settlementIntent = /(?:سدد|سدّد|دفع|ادفع|سداد|تسديد|settle|pay)\s*(?:دفعة|قسط|مستحقات|مستحق|مبلغ|supplier|installment)?/i.test(normalizeArabic(textToExecute));
     if (settlementIntent) {
       const normalizedCommand = normalizeArabic(textToExecute);
-      const requestedDate = normalizedCommand.match(/\\b(\\d{4}-\\d{2}-\\d{2})\\b/)?.[1]
+      const requestedDate = normalizedCommand.match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1]
         || (() => {
-          const m = textToExecute.match(/(?:^|\\s)(\\d{2})[-/](\\d{2})[-/](\\d{4})(?:\\s|$)/);
+          const m = textToExecute.match(/(?:^|\s)(\d{2})[-/](\d{2})[-/](\d{4})(?:\s|$)/);
           return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
         })();
       const supplier = suppliers.find(s => normalizedCommand.includes(normalizeArabic(s.name)));
