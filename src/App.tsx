@@ -2589,41 +2589,31 @@ export default function App() {
                 return updated;
               });
             }}
-            onSettleSupplierPayment={(supplierId, amount, paymentDate, paymentMethod, _treasurySource, notes) => {
+            onSettleSupplierPayment={(supplierId, amount, paymentDate, paymentMethod, _treasurySource, notes, scheduleId) => {
               const supplier = suppliers.find(s => s.id === supplierId);
-              setSuppliers(prev => {
-                const updated = prev.map(s => {
-                  if (s.id !== supplierId) return s;
-                  const debt = s.deferredDebt ?? s.balance ?? 0;
-                  const newDebt = Math.max(0, debt - amount);
-                  const overpaid = Math.max(0, amount - debt); // الزيادة عن المديونية = رصيد دائن للمحل عند المورد
-                  return { ...s, balance: newDebt, deferredDebt: newDebt, storeCredit: (s.storeCredit || 0) + overpaid, totalPaid: (s.totalPaid || 0) + amount, lastPaymentDate: paymentDate };
-                });
-                persistChanges({ suppliers: updated });
-                return updated;
-              });
-              const paymentRecord: import('./types/autoParts').SupplierPayment = { id: `SP-${Date.now()}`, paymentNumber: `SP-${Date.now().toString().slice(-6)}`, supplierId, supplierName: supplier?.name || supplierId, amount, paymentDate, paymentMethod, treasurySource: _treasurySource, notes, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات' };
-              setSupplierPayments(prev => { const updated = [paymentRecord, ...prev]; persistChanges({ supplierPayments: updated }); return updated; });
-              const tx: TreasuryTransaction = {
-                id: `TX-SUPP-${Date.now()}`,
-                txNumber: `TX-S-${Math.floor(1000 + Math.random() * 9000)}`,
-                date: paymentDate,
-                time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
-                type: 'صرف',
-                category: 'سداد دفعة لمورد',
-                amount,
-                paymentMethod: paymentMethod as PaymentMethod,
-                balanceAfter: treasuryBalance - amount,
-                referenceId: supplierId,
-                description: `سداد مورد #${supplierId}: ${notes}`,
-                recordedBy: currentUser?.employeeName || 'مسؤول المشتريات'
-              };
-              setTreasury(prev => {
-                const updated = [tx, ...prev];
-                persistChanges({ treasuryTransactions: updated });
-                return updated;
-              });
-            }}
+              const schedule = scheduleId ? supplierPaymentSchedules.find(x => x.id === scheduleId) : undefined;
+              if (scheduleId && (!schedule || schedule.status !== 'scheduled' || supplierPayments.some(p => p.scheduleId === scheduleId && p.amount >= schedule.amount - schedule.amountPaid))) return;
+              if (!supplier || !Number.isFinite(amount) || amount <= 0 || (schedule && amount > schedule.amount - schedule.amountPaid)) return;
+              const stamp = Date.now();
+              const paymentId = `SP-${stamp}-${Math.random().toString(36).slice(2,7)}`;
+              const txId = `TX-SUPP-${stamp}-${Math.random().toString(36).slice(2,7)}`;
+              const debt = supplier.deferredDebt ?? supplier.balance ?? 0;
+              const newDebt = Math.max(0, debt - amount);
+              const overpaid = Math.max(0, amount - debt);
+              const updatedSuppliers = suppliers.map(s => s.id === supplierId ? { ...s, balance: newDebt, deferredDebt: newDebt, storeCredit: (s.storeCredit || 0) + overpaid, totalPaid: (s.totalPaid || 0) + amount, lastPaymentDate: paymentDate } : s);
+              const paymentRecord: import('./types/autoParts').SupplierPayment = { id: paymentId, paymentNumber: paymentId.slice(-6), supplierId, supplierName: supplier.name, amount, paymentDate, paymentMethod, treasurySource: _treasurySource, notes, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات', scheduleId };
+              const tx: TreasuryTransaction = { id: txId, txNumber: `TX-S-${Math.floor(1000 + Math.random() * 9000)}`, date: paymentDate, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'سداد دفعة لمورد', amount, paymentMethod: paymentMethod as PaymentMethod, balanceAfter: treasuryBalance - amount, referenceId: paymentId, description: `سداد مورد #${supplierId}: ${notes}`, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات' };
+              const updatedPayments = [paymentRecord, ...supplierPayments];
+              const updatedTreasury = [tx, ...treasury];
+              setSuppliers(updatedSuppliers); persistChanges({ suppliers: updatedSuppliers });
+              setSupplierPayments(updatedPayments); persistChanges({ supplierPayments: updatedPayments });
+              setTreasury(updatedTreasury); persistChanges({ treasuryTransactions: updatedTreasury });
+              if (schedule) {
+                const paid = Math.min(schedule.amount, schedule.amountPaid + amount);
+                const updatedSchedules = supplierPaymentSchedules.map(x => x.id === schedule.id ? { ...x, amountPaid: paid, status: paid >= x.amount ? 'paid' as const : 'scheduled' as const, paymentId: paymentId, paymentIds: [...(x.paymentIds || []), paymentId], treasuryTransactionId: txId, treasuryTransactionIds: [...(x.treasuryTransactionIds || []), txId], updatedAt: new Date().toISOString() } : x);
+                setSupplierPaymentSchedules(updatedSchedules); persistChanges({ supplierPaymentSchedules: updatedSchedules });
+              }
+            }}}
           />
         )}
 
