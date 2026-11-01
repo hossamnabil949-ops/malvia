@@ -258,7 +258,10 @@ export function answerCustomerBalanceLookup(
   const kind = kindIsSupplier ? 'المورد' : 'العميل أو الورشة';
   const top = matches[0];
   const second = matches[1];
-  if (!top || (!top.exact && (top.matched < queryTokens.length || top.score < 0.75))) {
+  const uniqueSingleTokenMatch = queryTokens.length === 1 && !!top && top.matched === 1 &&
+    matches.filter(item => item.matched === 1).length === 1;
+  if (!top || (!top.exact && !uniqueSingleTokenMatch &&
+    (top.matched < queryTokens.length || top.score < 0.75))) {
     return answer(lang === 'ar'
       ? 'لم أجد ' + kind + ' بمطابقة مؤكدة للاسم "' + requestedName + '". من فضلك اكتب الاسم كما هو مسجل. لم يتم إرسال الطلب إلى خدمة خارجية.'
       : 'No confident ' + (hasSupplier ? 'supplier' : 'customer') + ' match was found. Please enter the registered name. This request was not sent externally.');
