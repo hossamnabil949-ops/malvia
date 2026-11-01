@@ -127,6 +127,14 @@ assert.deepEqual(voidAfterCashReturn.refunds, [
   { method: 'نقدي', amount: 30 },
   { method: 'فيزا', amount: 50 },
 ]);
+const voidCashRefundAboveOriginalCash = computeVoidPlan({
+  grandTotal: 100,
+  returnedAmount: 20,
+  items: [{ partId: 'p1', partNumber: 'A', quantity: 2, returnedQuantity: 1 }],
+  payments: [{ method: 'نقدي', amount: 10 }, { method: 'فيزا', amount: 90 }],
+  priorRefunds: [{ refundMethod: 'نقدي (خصم من الخزنة)', totalRefundAmount: 20 }],
+});
+assert.deepEqual(voidCashRefundAboveOriginalCash.refunds, [{ method: 'فيزا', amount: 80 }]);
 
 // FIN-17: final partial return takes the exact remaining cents.
 assert.equal(refundForLine(100.01, 3, 1, 0), 33.34);
