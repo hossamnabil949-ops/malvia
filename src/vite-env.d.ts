@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 /**
  * MALVIA local Vite environment typings.
  * Kept independent from the vite/client type package so TypeScript can
@@ -15,3 +16,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+// Allow TypeScript to recognize Vite CSS side-effect imports.
+declare module '*.css';
