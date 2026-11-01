@@ -35,8 +35,8 @@ assert.equal(actionEffect(cheque, 'clear').treasury?.amount, 150);
 
 // FIN-17: final partial return takes the exact remaining cents.
 assert.equal(refundForLine(100.01, 3, 1, 0), 33.34);
-assert.equal(refundForLine(100.01, 3, 1, 1), 33.34);
-assert.equal(refundForLine(100.01, 3, 1, 2), 33.33);
+assert.equal(refundForLine(100.01, 3, 1, 1), 33.33);
+assert.equal(refundForLine(100.01, 3, 1, 2), 33.34);
 assert.equal(
   refundForLine(100.01, 3, 1, 0) + refundForLine(100.01, 3, 1, 1) + refundForLine(100.01, 3, 1, 2),
   100.01,
