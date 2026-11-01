@@ -52,7 +52,7 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
 
   const parseInvoiceHour = (value: string): number | null => {
     const normalized = String(value || '').replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).trim();
-    const match = normalized.match(/(\\d{1,2}):(\\d{2})/);
+    const match = normalized.match(/(\d{1,2}):(\d{2})/);
     if (!match) return null;
     let hour = Number(match[1]);
     const isPM = /م|مساء|PM/i.test(normalized);
