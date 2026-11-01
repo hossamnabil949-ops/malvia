@@ -1110,6 +1110,16 @@ export default function App() {
   };
 
   const handleCreateInvoice = (invoice: Invoice): boolean => {
+    const initialPayments: InvoicePayment[] = invoice.payments?.length
+      ? invoice.payments
+      : [{ method: invoice.paymentMethod, amount: invoice.grandTotal }];
+    const initialCreditAmount = initialPayments
+      .filter(payment => isCreditPayment(String(payment.method)))
+      .reduce((total, payment) => total + payment.amount, 0);
+    if (initialCreditAmount > 0 && (!invoice.customerId || !customers.some(customer => customer.id === invoice.customerId))) {
+      window.alert('البيع الآجل يتطلب اختيار عميل مسجل. إذا كان العميل جديداً، أضفه أولاً مع رقم هاتف صحيح ثم اختره في الفاتورة.');
+      return false;
+    }
     const duplicateNumber = invoices.find(existing => existing.invoiceNumber === invoice.invoiceNumber && existing.id !== invoice.id);
     if (duplicateNumber) {
       window.alert(`رقم الفاتورة ${invoice.invoiceNumber} مستخدم بالفعل على جهاز آخر. حدّث الترقيم وحاول مرة أخرى.`);
@@ -1229,44 +1239,14 @@ export default function App() {
     })));
 
     // 5) المدفوعات: كل طريقة دفع في حسابها بالخزنة، والآجل على حساب العميل
-    const payments: InvoicePayment[] = finalInvoice.payments && finalInvoice.payments.length > 0
-      ? finalInvoice.payments
-      : [{ method: finalInvoice.paymentMethod, amount: finalInvoice.grandTotal }];
-    const creditAmount = payments.filter(p => isCreditPayment(String(p.method))).reduce((s, p) => s + p.amount, 0);
+    const payments: InvoicePayment[] = initialPayments;
+    const creditAmount = initialCreditAmount;
 
-    if (creditAmount > 0) {
+    if (creditAmount > 0 && finalInvoice.customerId) {
       setCustomers(prev => {
-        const nameKey = normKey(finalInvoice.customerName);
-        const phoneKey = normKey(finalInvoice.customerPhone);
-        const idx = prev.findIndex(c =>
-          (finalInvoice.customerId && c.id === finalInvoice.customerId) ||
-          (phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey
-        );
-        let updated: Customer[];
-        if (idx >= 0) {
-          updated = prev.map((c, i) => i === idx ? {
-            ...c,
-            balance: c.balance + creditAmount,
-            totalPurchases: (c.totalPurchases || 0) + finalInvoice.grandTotal,
-            monthlyPurchases: (c.monthlyPurchases || 0) + finalInvoice.grandTotal,
-            invoicesCount: (c.invoicesCount || 0) + 1,
-            lastVisit: finalInvoice.date,
-            phone: c.phone || finalInvoice.customerPhone || '',
-          } : c);
-        } else {
-          const created: Customer = {
-            id: `cust-${Date.now()}`,
-            name: finalInvoice.customerName || 'عميل آجل',
-            type: finalInvoice.customerType === 'ورشة' ? 'ورشة فنية' : 'عميل تجزئة',
-            phone: finalInvoice.customerPhone || '',
-            balance: creditAmount,
-            totalPurchases: finalInvoice.grandTotal,
-            monthlyPurchases: finalInvoice.grandTotal,
-            invoicesCount: 1,
-            lastVisit: finalInvoice.date,
-          };
-          updated = [created, ...prev];
-        }
+        const updated = prev.map(customer => customer.id === finalInvoice.customerId
+          ? { ...customer, balance: customer.balance + creditAmount }
+          : customer);
         persistChanges({ customers: updated });
         return updated;
       });
@@ -1385,19 +1365,11 @@ export default function App() {
 
     if (creditAmount > 0) {
       setCustomers(prev => {
-        const nameKey = normKey(inv.customerName);
-        const phoneKey = normKey(inv.customerPhone);
-        const updated = prev.map(c =>
-          ((inv.customerId && c.id === inv.customerId) || (phoneKey && normKey(c.phone) === phoneKey) || normKey(c.name) === nameKey)
-            ? {
-                ...c,
-                balance: c.balance - creditAmount,
-                totalPurchases: Math.max(0, (c.totalPurchases || 0) - inv.grandTotal * fraction),
-                monthlyPurchases: Math.max(0, (c.monthlyPurchases || 0) - inv.grandTotal * fraction),
-                invoicesCount: Math.max(0, (c.invoicesCount || 0) - 1),
-              }
-            : c
-        );
+        const updated = inv.customerId
+          ? prev.map(customer => customer.id === inv.customerId
+              ? { ...customer, balance: Math.max(0, customer.balance - creditAmount) }
+              : customer)
+          : prev;
         persistChanges({ customers: updated });
         return updated;
       });
