@@ -42,7 +42,7 @@ export function salesForDate(invoices: Invoice[], date: Date | string = new Date
   const selected = invoices.filter(invoice =>
     invoice.status !== 'ملغاة' && (invoice.date || '').slice(0, 10) === key
   );
-  const sales = r2(sum(selected, invoice => Math.max(0, invoice.grandTotal - (invoice.returnedAmount || 0))));
+  const sales = r2(sum(selected, netSales));
   return {
     date: key,
     invoices: selected,
