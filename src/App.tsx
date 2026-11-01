@@ -2613,7 +2613,7 @@ export default function App() {
                 const updatedSchedules = supplierPaymentSchedules.map(x => x.id === schedule.id ? { ...x, amountPaid: paid, status: paid >= x.amount ? 'paid' as const : 'scheduled' as const, paymentId: paymentId, paymentIds: [...(x.paymentIds || []), paymentId], treasuryTransactionId: txId, treasuryTransactionIds: [...(x.treasuryTransactionIds || []), txId], updatedAt: new Date().toISOString() } : x);
                 setSupplierPaymentSchedules(updatedSchedules); persistChanges({ supplierPaymentSchedules: updatedSchedules });
               }
-            }}}
+            }}
           />
         )}
 
