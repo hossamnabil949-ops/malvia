@@ -65,13 +65,13 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
   const dailyData: SalesPoint[] = useMemo(() => {
     const todayStr = new Date().toLocaleDateString('en-CA');
     const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, label: `${String(hour).padStart(2, '0')}:00`, sales: 0, profit: 0, volume: 0 }));
+    const unknown = { hour: -1, label: 'وقت غير محدد', sales: 0, profit: 0, volume: 0 };
     const todayInvoices = invoices.filter(inv => inv.status !== 'ملغاة' && inv.date.slice(0, 10) === todayStr);
     const dailyReport = reportDailySales(reportData, { from: todayStr, to: todayStr });
     const reportTotal = Number(dailyReport.totals?.net) || 0;
     todayInvoices.forEach(inv => {
       const hour = parseInvoiceHour(inv.time);
-      if (hour === null) return;
-      const bucket = hours[hour];
+      const bucket = hour === null ? unknown : hours[hour];
       bucket.sales += netSales(inv);
       const oneInvoiceData = { ...reportData, invoices: [inv], salesReturns: salesReturns.filter(ret => ret.invoiceId === inv.id) } as ReportData;
       const itemReport = reportSalesByItem(oneInvoiceData, { from: todayStr, to: todayStr });
@@ -79,11 +79,13 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({
       bucket.volume += inv.items.reduce((n, item) => n + Math.max(0, item.quantity - (item.returnedQuantity || 0)), 0);
     });
     // الفواتير ذات الوقت غير القابل للتحليل لا تُوزع تخمينياً؛ يظهر إجمالي التقرير الحقيقي في تنبيه مستقل.
-    return hours.map(({ label, sales, profit, volume }) => ({
+    const points = hours.map(({ label, sales, profit, volume }) => ({
       label, sales: Math.round(sales), profit: Math.round(profit), volume: Math.round(volume),
-    })).map((point, hour) => hour === 23 && reportTotal > hours.reduce((n, h) => n + h.sales, 0)
-      ? { ...point, label: 'وقت غير محدد', sales: Math.round(reportTotal - hours.reduce((n, h) => n + h.sales, 0)) }
-      : point);
+    }));
+    if (unknown.sales > 0 || unknown.volume > 0) points.push({ label: unknown.label, sales: Math.round(unknown.sales), profit: Math.round(unknown.profit), volume: Math.round(unknown.volume) });
+    // reportDailySales مرجع إجمالي اليوم؛ لا نوزع فرقاً مجهولاً على ساعات فعلية.
+    if (reportTotal < points.reduce((n, point) => n + point.sales, 0)) return points;
+    return points;
   }, [invoices, reportData, salesReturns]);
 
   const monthlyData: SalesPoint[] = useMemo(() => {
