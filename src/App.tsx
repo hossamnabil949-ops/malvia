@@ -47,6 +47,7 @@ import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands
 import { isCreditMethod } from './utils/treasuryAccounts';
 import { findOpenShift, findOpenShifts, summarizeShift, stampNewTreasury, nextShiftNumber, countTotal, round2, varianceOf } from './utils/shiftLogic';
 import { nextSalesInvoiceNumber } from './utils/invoiceNumber';
+import { uniqueTransactionNumber } from './utils/uniqueTransactionNumber';
 import { SaleError, computeVoidPlan, deductStock, isCreditPayment } from './utils/saleLogic';
 import type { AuditEntry, StockMovement, InvoicePayment, Warehouse, StockLevel, StockTransfer } from './types/autoParts';
 import { MAIN_WAREHOUSE_ID, normalizeWarehouseId, availableIn, adjustLevels, validateTransfer, applyTransfer, TransferError } from './utils/warehouseLogic';
@@ -449,7 +450,7 @@ export default function App() {
       const amt = Math.abs(variance);
       const tx: TreasuryTransaction = {
         id: `TX-SHV-${Date.now()}`,
-        txNumber: `TX-SV-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: uniqueTransactionNumber('TX-SV'),
         date: nowISO.split('T')[0],
         time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         type: isShort ? 'صرف' : 'قبض',
@@ -1009,7 +1010,7 @@ export default function App() {
       const t = effect.treasury;
       const tx: TreasuryTransaction = {
         id: `TX-CHQ-${Date.now()}`,
-        txNumber: `TX-Q-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: uniqueTransactionNumber('TX-Q'),
         date: todayISO(),
         time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         type: t.type,
@@ -1278,7 +1279,7 @@ export default function App() {
         running += p.amount;
         return {
           id: `TX-SALE-${Date.now()}-${i}`,
-          txNumber: `TX-${Math.floor(1000 + Math.random() * 9000)}`,
+          txNumber: uniqueTransactionNumber('TX'),
           date: finalInvoice.date,
           time: finalInvoice.time || new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
           type: 'قبض' as const,
@@ -1409,7 +1410,7 @@ export default function App() {
         running -= r.amount;
         return {
           id: `TX-VOID-${Date.now()}-${i}`,
-          txNumber: `TX-V-${Math.floor(1000 + Math.random() * 9000)}`,
+          txNumber: uniqueTransactionNumber('TX-V'),
           date: todayISO(),
           time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
           type: 'صرف' as const,
@@ -1543,7 +1544,7 @@ export default function App() {
       const refundViaWallet = salesReturn.refundMethod === 'إنستاباي / محفظة';
       const newTx: TreasuryTransaction = {
         id: `TX-RET-${Date.now()}`,
-        txNumber: `TX-R-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: uniqueTransactionNumber('TX-R'),
         date: salesReturn.date,
         time: salesReturn.time || new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         type: 'صرف',
@@ -1655,7 +1656,7 @@ export default function App() {
       const refundTx = treasury.find(t => t.referenceId === ret.id);
       const tx: TreasuryTransaction = {
         id: `TX-RETDEL-${Date.now()}`,
-        txNumber: `TX-RD-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: uniqueTransactionNumber('TX-RD'),
         date: todayISO(),
         time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         type: 'قبض',
@@ -1816,7 +1817,7 @@ export default function App() {
     if (invoice.amountPaid > 0) {
       const newTx: TreasuryTransaction = {
         id: `TX-PUR-${Date.now()}`,
-        txNumber: `TX-P-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: uniqueTransactionNumber('TX-P'),
         date: invoice.date,
         time: invoice.time || new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         type: 'صرف',
@@ -1932,7 +1933,7 @@ export default function App() {
     if (cashRefund > 0) {
       const newTx: TreasuryTransaction = {
         id: `TX-PR-${Date.now()}`,
-        txNumber: `TX-PR-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: uniqueTransactionNumber('TX-PR'),
         date: purchaseReturn.date,
         time: purchaseReturn.time,
         type: 'قبض',
@@ -2110,7 +2111,7 @@ export default function App() {
       const refundTx = treasury.find(t => t.referenceId === ret.id);
       const tx: TreasuryTransaction = {
         id: `TX-PRDEL-${Date.now()}`,
-        txNumber: `TX-PD-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: uniqueTransactionNumber('TX-PD'),
         date: todayISO(),
         time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         type: 'صرف',
@@ -2208,7 +2209,7 @@ export default function App() {
     if (action === 'خصم من أمين المخزن') {
       const tx: TreasuryTransaction = {
         id: `TX-ERR-${Date.now()}`,
-        txNumber: `TX-E-${Math.floor(1000 + Math.random() * 9000)}`,
+        txNumber: uniqueTransactionNumber('TX-E'),
         date: new Date().toISOString().split('T')[0],
         time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         type: 'قبض',
@@ -2237,7 +2238,7 @@ export default function App() {
     // Add to treasury
     const tx: TreasuryTransaction = {
       id: `TX-EXP-${Date.now()}`,
-      txNumber: `TX-EX-${Math.floor(1000 + Math.random() * 9000)}`,
+      txNumber: uniqueTransactionNumber('TX-EX'),
       date: newExp.date,
       time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
       type: 'صرف',
@@ -2627,7 +2628,7 @@ export default function App() {
               // التحصيل من العميل يدخل الخزنة (كان لا يُسجَّل في الخزنة)
               const tx: TreasuryTransaction = {
                 id: `TX-CUST-${Date.now()}`,
-                txNumber: `TX-C-${Math.floor(1000 + Math.random() * 9000)}`,
+                txNumber: uniqueTransactionNumber('TX-C'),
                 date: todayISO(),
                 time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
                 type: 'قبض',
@@ -2682,7 +2683,7 @@ export default function App() {
               const overpaid = Math.max(0, amount - debt);
               const updatedSuppliers = suppliers.map(s => s.id === supplierId ? { ...s, balance: newDebt, deferredDebt: newDebt, storeCredit: (s.storeCredit || 0) + overpaid, totalPaid: (s.totalPaid || 0) + amount, lastPaymentDate: paymentDate } : s);
               const paymentRecord: import('./types/autoParts').SupplierPayment = { id: paymentId, paymentNumber: paymentId.slice(-6), supplierId, supplierName: supplier.name, amount, paymentDate, paymentMethod, treasurySource: _treasurySource, notes, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات', scheduleId };
-              const tx: TreasuryTransaction = { id: txId, txNumber: `TX-S-${Math.floor(1000 + Math.random() * 9000)}`, date: paymentDate, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'سداد دفعة لمورد', amount, paymentMethod: paymentMethod as PaymentMethod, balanceAfter: treasuryBalance - amount, referenceId: paymentId, description: `سداد مورد #${supplierId}: ${notes}`, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات' };
+              const tx: TreasuryTransaction = { id: txId, txNumber: uniqueTransactionNumber('TX-S'), date: paymentDate, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'سداد دفعة لمورد', amount, paymentMethod: paymentMethod as PaymentMethod, balanceAfter: treasuryBalance - amount, referenceId: paymentId, description: `سداد مورد #${supplierId}: ${notes}`, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات' };
               const updatedPayments = [paymentRecord, ...supplierPayments];
               const updatedTreasury = [tx, ...treasury];
               setSuppliers(updatedSuppliers); persistChanges({ suppliers: updatedSuppliers });
@@ -2724,7 +2725,7 @@ export default function App() {
             onAddDistribution={(record: ProfitDistributionRecord) => {
               const tx: TreasuryTransaction = {
                 id: `TX-DIST-${Date.now()}`,
-                txNumber: `TX-D-${Math.floor(1000 + Math.random() * 9000)}`,
+                txNumber: uniqueTransactionNumber('TX-D'),
                 date: record.date,
                 time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
                 type: 'صرف',
