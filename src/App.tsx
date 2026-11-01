@@ -2611,17 +2611,17 @@ export default function App() {
               if (schedule) {
                 const paid = Math.min(schedule.amount, schedule.amountPaid + amount);
                 const nextStatus: import('./types/autoParts').SupplierPaymentSchedule['status'] = paid >= schedule.amount ? 'paid' : 'scheduled';
-                const updatedSchedules = supplierPaymentSchedules.map((item) => {
-                  if (item.id !== schedule.id) return item;
-                  return {
-                    ...item,
-                    amountPaid: paid,
-                    status: nextStatus,
-                    paymentId,
-                    treasuryTransactionId: txId,
-                    updatedAt: new Date().toISOString(),
-                  };
-                });
+                const updatedSchedules = supplierPaymentSchedules.map(item =>
+                  item.id === schedule.id
+                    ? Object.assign({}, item, {
+                        amountPaid: paid,
+                        status: nextStatus,
+                        paymentId,
+                        treasuryTransactionId: txId,
+                        updatedAt: new Date().toISOString(),
+                      })
+                    : item
+                );
                 setSupplierPaymentSchedules(updatedSchedules); persistChanges({ supplierPaymentSchedules: updatedSchedules });
               }
             }}
