@@ -317,6 +317,14 @@ export interface Supplier {
   notes?: string;
 }
 
+export type SupplierPaymentScheduleStatus = 'scheduled' | 'paid' | 'cancelled';
+
+export interface SupplierPaymentSchedule {
+  id: string; supplierId: string; supplierName: string; purchaseInvoiceId?: string; purchaseInvoiceNumber?: string;
+  amount: number; amountPaid: number; dueDate: string; status: SupplierPaymentScheduleStatus;
+  paymentId?: string; treasuryTransactionId?: string; notes?: string; createdAt: string; updatedAt: string;
+}
+
 export interface SupplierPayment {
   id: string;
   paymentNumber: string;
