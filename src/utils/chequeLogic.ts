@@ -75,7 +75,8 @@ export function registrationEffect(
   party: { balance: number; deferredDebt?: number }
 ): { effect: ChequeEffect; applied: Pick<Cheque, 'appliedAmount' | 'appliedDebt' | 'appliedCredit'> } {
   if (direction === 'incoming') {
-    const applied = Math.min(amount, Math.max(0, party.balance));
+    // تُخصم قيمة الشيك كاملة من المديونية؛ إذا زادت عن الدين يصبح الفرق رصيداً دائناً للعميل.
+    const applied = amount;
     return { effect: { customerBalanceDelta: -applied }, applied: { appliedAmount: applied } };
   }
   const debt = Math.max(0, party.deferredDebt ?? party.balance ?? 0);
