@@ -818,11 +818,11 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                 </span>
               </div>
             )}
-            {selectedCustomer && (selectedCustomer.creditLimit ?? 0) > 0 && (
+            {selectedCustomer && (
               <div className="p-2 rounded-lg bg-surface-1 text-[11px] text-sky-300 flex justify-between">
                 <span>حد الائتمان / المتاح:</span>
                 <span className="font-bold font-mono">
-                  {(selectedCustomer.creditLimit as number).toLocaleString()} / {Math.max(0, (selectedCustomer.creditLimit as number) - Math.max(0, selectedCustomer.balance) - (selectedCustomer.chequesPending ?? 0)).toLocaleString()} ج.م
+                  {((selectedCustomer.creditLimit ?? 0) > 0 ? selectedCustomer.creditLimit as number : 5000).toLocaleString()} / {Math.max(0, ((selectedCustomer.creditLimit ?? 0) > 0 ? selectedCustomer.creditLimit as number : 5000) - Math.max(0, selectedCustomer.balance) - (selectedCustomer.chequesPending ?? 0)).toLocaleString()} ج.م
                 </span>
               </div>
             )}
