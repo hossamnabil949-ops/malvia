@@ -23,7 +23,7 @@ export interface StockPart { id: string; stockQuantity: number }
 export interface PaymentLine { method: string; amount: number }
 
 /** الآجل = لا يدخل نقدية للخزنة (يُسجَّل على حساب العميل) */
-export const isCreditPayment = (method: string): boolean => (method || '').includes('آجل');
+export const isCreditPayment = (method: string): boolean => /آجل|اجل|credit/i.test(method || '');
 
 export interface Totals { subtotal: number; discount: number; tax: number; grandTotal: number } // بالقروش
 
@@ -91,7 +91,8 @@ export function validateSale(lines: CartLine[], stock: StockPart[], totals: Tota
   if (credit > 0) {
     if (!opt.customerId) throw new SaleError('CREDIT_REQUIRES_CUSTOMER');
     const limit = opt.customerCreditLimit ?? 0;
-    if (limit > 0 && toPiasters(opt.customerBalance ?? 0) + credit > toPiasters(limit)) {
+    // لا يوجد ائتمان مفتوح افتراضياً: يجب ضبط حد موجب صريح لكل عميل قبل البيع الآجل.
+    if (!(limit > 0) || toPiasters(opt.customerBalance ?? 0) + credit > toPiasters(limit)) {
       throw new SaleError('CREDIT_LIMIT_EXCEEDED', { limit, balance: opt.customerBalance ?? 0 });
     }
   }
@@ -112,7 +113,10 @@ export function deductStock<T extends StockPart>(parts: T[], lines: CartLine[], 
 /** المبلغ المسترد لصنف مرتجع = نصيب الكمية من إجمالي سطر الفاتورة (بعد الخصم ومع الضريبة). */
 export function refundForLine(lineTotalEgp: number, lineQty: number, returnQty: number, alreadyReturnedQty: number): number {
   if (returnQty <= 0 || returnQty + alreadyReturnedQty > lineQty) throw new SaleError('INVALID_QTY', { returnQty, remaining: lineQty - alreadyReturnedQty });
-  return toEgp(Math.round((toPiasters(lineTotalEgp) * returnQty) / lineQty));
+  const totalCents = toPiasters(lineTotalEgp);
+  const previousCumulativeCents = Math.round((totalCents * alreadyReturnedQty) / lineQty);
+  const isFinalReturn = returnQty + alreadyReturnedQty === lineQty;
+  return toEgp(isFinalReturn ? totalCents - previousCumulativeCents : Math.round((totalCents * returnQty) / lineQty));
 }
 
 // ---------- إلغاء فاتورة (Void) ----------
