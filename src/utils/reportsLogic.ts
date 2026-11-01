@@ -303,6 +303,8 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
     return netQty(it) * (frozenCost ?? fallbackCost);
   }));
   const expenses = sum(d.expenses.filter(e => inRange(e.date, r)), e => e.amount);
+  const drawerShortage = sum(d.treasury.filter(tx => inRange(tx.date, r) && tx.category === 'عجز درج (تسوية وردية)'), tx => tx.amount);
+  const drawerOverage = sum(d.treasury.filter(tx => inRange(tx.date, r) && tx.category === 'زيادة درج (تسوية وردية)'), tx => tx.amount);
   const net = sales - returns;
   const gross = net - cogs;
   const rows = [
@@ -312,13 +314,15 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
     { item: 'يخصم: تكلفة البضاعة المباعة', amount: r2(-cogs) },
     { item: 'مجمل الربح', amount: r2(gross) },
     { item: 'يخصم: المصروفات', amount: r2(-expenses) },
-    { item: 'صافي الربح', amount: r2(gross - expenses) },
+    { item: 'يخصم: عجز الدرج', amount: r2(-drawerShortage) },
+    { item: 'يضاف: زيادة الدرج', amount: r2(drawerOverage) },
+    { item: 'صافي الربح', amount: r2(gross - expenses - drawerShortage + drawerOverage) },
   ];
   return {
     id: 'profit-loss', title: 'ملخص الأرباح والخسائر',
     columns: [{ key: 'item', label: 'البند' }, { key: 'amount', label: 'المبلغ (ج.م)', kind: 'money' }],
     rows,
-    note: 'المرتجعات تُحوَّل إلى أساس الفاتورة الأصلية قبل الضريبة وبعد الخصم، وتُستبعد مرتجعات الفواتير الملغاة. تكلفة البضاعة تستخدم تكلفة البيع المحفوظة، ثم تكلفة الصنف الحالية فقط عند وجود تطابق وحيد. لا يشمل توزيعات الشركاء ورأس المال.',
+    note: 'المرتجعات تُحوَّل إلى أساس الفاتورة الأصلية قبل الضريبة وبعد الخصم، وتُستبعد مرتجعات الفواتير الملغاة. تكلفة البضاعة تستخدم تكلفة البيع المحفوظة، ثم تكلفة الصنف الحالية فقط عند وجود تطابق وحيد. يشمل عجز وزيادة الدرج المسجلين كتسويات ورديات، ولا يشمل توزيعات الشركاء ورأس المال.',
   };
 }
 
