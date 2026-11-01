@@ -127,6 +127,7 @@ export interface VoidInput {
   returnedAmount?: number;
   items: { partId?: string; partNumber: string; quantity: number; returnedQuantity?: number }[];
   payments: PaymentLine[];
+  previousRefunds?: { method: string; amount: number }[];
 }
 export interface VoidPlan {
   fraction: number;                                                   // نسبة ما لم يُرتجع من الفاتورة (0..1)
