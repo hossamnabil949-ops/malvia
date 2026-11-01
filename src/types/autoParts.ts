@@ -526,7 +526,7 @@ export interface Shift {
   cashIn?: number;                // إجمالي القبض النقدي خلال الوردية
   cashOut?: number;               // إجمالي الصرف النقدي خلال الوردية
   cashSales?: number;
-  nonCash?: { instapay: number; visa: number; wallet: number };
+  nonCash?: { instapay: number; visa: number; wallet: number; bank?: number };
   invoiceCount?: number;
   breakdown?: ShiftCashLine[];    // تفصيل الحركات النقدية حسب البند
 }
