@@ -128,6 +128,7 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 let poll: ReturnType<typeof setInterval> | null = null;
 let busy = false;
 const dirty = new Set<string>();
+let syncListenerCleanup: (() => void) | null = null;
 // Durable outbox: pending resources survive app restarts.
 const pendingKey = (tenant: string) => `malvia_sync_pending_v1_${tenant}`;
 function readPending(tenant: string): string[] {
@@ -307,6 +308,11 @@ export async function startSync(tenantId: string, licenseKey: string) {
   window.addEventListener('online', tick);
   document.addEventListener('visibilitychange', tick);
   window.addEventListener('focus', tick);
+  syncListenerCleanup = () => {
+    window.removeEventListener('online', tick);
+    document.removeEventListener('visibilitychange', tick);
+    window.removeEventListener('focus', tick);
+  };
   await tick();
   poll = setInterval(tick, 15000);
 }
@@ -314,6 +320,8 @@ export async function startSync(tenantId: string, licenseKey: string) {
 export function stopSync() {
   const previousTenant = active?.tenantId;
   active = null;
+  syncListenerCleanup?.();
+  syncListenerCleanup = null;
   if (timer) clearTimeout(timer);
   if (poll) clearInterval(poll);
   timer = poll = null;
