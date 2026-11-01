@@ -486,7 +486,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const buildLabel = typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : 'dev';
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pb-12">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-5 pb-28 lg:pb-12" data-mobile-pos="true">
       {activeWarehouses.length > 0 && (
         <div className="lg:col-span-12 flex items-center gap-2 text-xs">
           <span className="font-bold text-neutral-400">البيع من:</span>
@@ -504,7 +504,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         <Lock className="w-3 h-3" />
         <span>قفل الأسعار مفعّل · حد الخصم {maxDiscountPercent}% · إصدار {buildLabel}</span>
       </div>
-      <div className="lg:col-span-7 space-y-4">
+      <div className="lg:col-span-7 space-y-3 sm:space-y-4 min-w-0">
         {!shiftOpen && onOpenShifts && (
           <button
             onClick={onOpenShifts}
@@ -597,7 +597,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           ))}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[580px] overflow-y-auto no-scrollbar p-0.5">
+        <div className="grid grid-cols-2 sm:grid-cols-2 gap-2 sm:gap-3 max-h-[34dvh] sm:max-h-[440px] lg:max-h-[580px] overflow-y-auto overscroll-contain no-scrollbar p-0.5">
           {filteredParts.length === 0 ? (
             <div className="col-span-full py-12 text-center text-xs text-neutral-500 bg-surface-2 rounded-2xl border border-neutral-800">
               لا توجد قطع غيار مطابقة للبحث أو الماركة المحددة
@@ -631,11 +631,11 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                       </div>
                     </div>
 
-                    <h4 className="text-xs font-bold text-white mt-1.5 line-clamp-1">
+                    <h4 className="text-xs sm:text-sm font-bold text-white mt-1.5 line-clamp-2 leading-5">
                       {part.name}
                     </h4>
 
-                    <p className="text-[10px] text-neutral-400 mt-0.5 line-clamp-1">
+                    <p className="text-[10px] text-neutral-400 mt-0.5 line-clamp-2 leading-4">
                       {part.compatibleModels}
                     </p>
                   </div>
@@ -680,7 +680,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         </div>
       </div>
 
-      <div className="lg:col-span-5 bg-surface-2 rounded-3xl border border-neutral-800 p-5 flex flex-col justify-between shadow-xl space-y-4">
+      <div className="lg:col-span-5 bg-surface-2 rounded-2xl sm:rounded-3xl border border-amber-500/25 p-3 sm:p-5 flex flex-col justify-between shadow-xl space-y-3 sm:space-y-4 sticky bottom-2 z-20 max-h-[46dvh] lg:max-h-none overflow-y-auto overscroll-contain">
         <div>
           <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
             <div className="flex items-center gap-2">
@@ -868,7 +868,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
             />
           </div>
 
-          <div className="divide-y divide-neutral-800/80 max-h-60 overflow-y-auto no-scrollbar py-2">
+          <div className="divide-y divide-neutral-800/80 max-h-24 sm:max-h-60 overflow-y-auto overscroll-contain no-scrollbar py-2">
             {cart.length === 0 ? (
               <div className="py-10 text-center text-xs text-neutral-500">
                 لم تقم بإضافة أي قطعة إلى الفاتورة بعد. اضغط على أي صنف من القائمة لإضافته.
