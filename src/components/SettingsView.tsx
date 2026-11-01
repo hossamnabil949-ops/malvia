@@ -803,7 +803,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </label>
                   <label className="flex items-center gap-2 rounded-xl border border-neutral-700 bg-surface-2 p-3 text-neutral-200">
                     <input type="checkbox" checked={pricesIncludeTax} onChange={e => setPricesIncludeTax(e.target.checked)} disabled={!vatEnabled} />
-                    أسعار البيع المدخلة شاملة الضريبة
+                    أسعار البيع والشراء المدخلة شاملة الضريبة
                   </label>
                 </div>
 
