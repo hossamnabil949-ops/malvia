@@ -302,7 +302,21 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   // Runs the (already verified and, when needed, confirmed) action.
   const runAction = async (result: AICommandResult) => {
     let feedback = result.spokenFeedback;
-    const serverActions = ['EXECUTE_SALE', 'RESTOCK_ITEM', 'ADD_EXPENSE', 'SETTLE_SUPPLIER', 'COLLECT_CUSTOMER', 'ADD_PURCHASE'];
+
+    // Defense in depth: even a stale/pending AI confirmation must never settle a supplier.
+    if (result.action === 'SETTLE_SUPPLIER') {
+      setPending(null);
+      feedback = result.lang === 'en'
+        ? 'Supplier payments must be reviewed and completed manually on the suppliers screen. No payment or treasury movement was created.'
+        : 'يجب مراجعة سداد المورد وتنفيذه يدوياً من شاشة الموردين. لم يتم تسجيل أي دفعة أو حركة خزينة.';
+      onNavigateTab('suppliers');
+      const safeResult: AICommandResult = { ...result, spokenFeedback: feedback };
+      setLastResult(safeResult);
+      if (speechEnabled) speakArabic(feedback);
+      return;
+    }
+
+    const serverActions = ['EXECUTE_SALE', 'RESTOCK_ITEM', 'ADD_EXPENSE', 'COLLECT_CUSTOMER', 'ADD_PURCHASE'];
     let serverExecuted = false;
     if (serverActions.includes(result.action)) {
       try {
