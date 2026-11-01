@@ -19,6 +19,10 @@ assert.equal(deductStock([{ id: 'p1', stockQuantity: 5 }], [line])[0].stockQuant
 
 // مرتجع: سطر إجماليه 205.20 لكمية 2 => رجوع قطعة = 102.60 (وليس 100 = سعر الوحدة)
 assert.equal(refundForLine(205.2, 2, 1, 0), 102.6);
+const partial1 = refundForLine(100, 3, 1, 0, 0);
+const partial2 = refundForLine(100, 3, 1, 1, partial1);
+const partial3 = refundForLine(100, 3, 1, 2, partial1 + partial2);
+assert.equal(Number((partial1 + partial2 + partial3).toFixed(2)), 100);
 assert.equal(code(() => { refundForLine(205.2, 2, 2, 1); }), 'INVALID_QTY');
 
 // ---------- سياسة الخصم (10% كحد أقصى، ولا أقل من التكلفة) ----------
