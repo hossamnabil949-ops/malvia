@@ -490,7 +490,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
   tb = RP.reportLoyalty(data, '2026-10-24T23:59:59.000Z');
   assert.deepEqual(tb.rows.map(x => [x.name, x.points, x.value]), [['ورشة', 200, 100]]);
   tb = RP.reportSalesByCustomer(data, R);
-  assert.deepEqual(tb.rows.map(x => [x.name, x.count, x.total, x.balance]), [['ورشة', 2, 700, 1000], ['ز', 2, 484, 0]]);
+  assert.deepEqual(tb.rows.map(x => [x.name, x.count, x.total, x.balance]), [['ورشة', 2, 700, 1000], ['ز', 1, 384, 0], ['ز', 1, 100, 0]]);
   tb = RP.reportReturns(data, R);
   assert.deepEqual(tb.rows.map(x => [x.number, x.count, x.qty, x.value]), [['A', 1, 1, 100]]);
 
