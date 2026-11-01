@@ -41,7 +41,8 @@ export function generateSupplierScheduleDates(rule: SupplierScheduleRule): strin
   } else if (rule.recurrence === 'monthly') {
     const day = Math.floor(rule.dayOfMonth || start.getDate());
     if (day < 1 || day > 31) throw new Error('يوم الشهر يجب أن يكون من 1 إلى 31.');
-    dates = Array.from({length:count}, (_,i)=>formatDate(addMonthsClamped(start, i, day)));
+    const firstMonthOffset = day < start.getDate() ? 1 : 0;
+    dates = Array.from({length:count}, (_,i)=>formatDate(addMonthsClamped(start, i + firstMonthOffset, day)));
   } else if (rule.recurrence === 'weekly') {
     const weekdays = [...new Set((rule.weekdays || [start.getDay()]).map(Number))].filter(x=>Number.isInteger(x)&&x>=0&&x<=6).sort((a,b)=>a-b);
     if (!weekdays.length) throw new Error('اختر يومًا واحدًا على الأقل من أيام الأسبوع.');
