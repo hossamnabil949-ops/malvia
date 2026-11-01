@@ -202,15 +202,35 @@ export function reportPurchasesBySupplier(d: ReportData, r: DateRange): ReportTa
 
 export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
   const inv = active(d, r);
+  const invoiceById = new Map(inv.map(i => [i.id, i]));
+  const partCostByNumber = new Map<string, number[]>();
+  for (const part of d.parts) {
+    const list = partCostByNumber.get(part.partNumber) ?? [];
+    list.push(part.costPrice);
+    partCostByNumber.set(part.partNumber, list);
+  }
   const sales = sum(inv, i => i.subtotal - i.discount);
-  const returns = sum(d.salesReturns.filter(x => inRange(x.date, r)), x => x.totalRefundAmount);
-  const cogs = sum(inv, i => sum(i.items, it => netQty(it) * (it.costPrice ?? 0)));
+  const returns = sum(d.salesReturns.filter(ret => {
+    const original = d.invoices.find(i => i.id === ret.invoiceId);
+    return inRange(ret.date, r) && Boolean(original) && original!.status !== 'ملغاة';
+  }), ret => {
+    const original = invoiceById.get(ret.invoiceId) ?? d.invoices.find(i => i.id === ret.invoiceId);
+    if (!original || original.grandTotal <= 0) return 0;
+    const preTaxNet = Math.max(0, original.subtotal - original.discount);
+    return ret.totalRefundAmount * (preTaxNet / original.grandTotal);
+  });
+  const cogs = sum(inv, i => sum(i.items, it => {
+    const frozenCost = it.costPrice;
+    const matches = partCostByNumber.get(it.partNumber) ?? [];
+    const fallbackCost = matches.length === 1 ? matches[0] : 0;
+    return netQty(it) * (frozenCost ?? fallbackCost);
+  }));
   const expenses = sum(d.expenses.filter(e => inRange(e.date, r)), e => e.amount);
   const net = sales - returns;
   const gross = net - cogs;
   const rows = [
     { item: 'المبيعات (قبل الضريبة وبعد الخصم)', amount: r2(sales) },
-    { item: 'يخصم: المرتجعات', amount: r2(-returns) },
+    { item: 'يخصم: المرتجعات (قبل الضريبة وبعد الخصم)', amount: r2(-returns) },
     { item: 'صافي المبيعات', amount: r2(net) },
     { item: 'يخصم: تكلفة البضاعة المباعة', amount: r2(-cogs) },
     { item: 'مجمل الربح', amount: r2(gross) },
@@ -221,7 +241,7 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
     id: 'profit-loss', title: 'ملخص الأرباح والخسائر',
     columns: [{ key: 'item', label: 'البند' }, { key: 'amount', label: 'المبلغ (ج.م)', kind: 'money' }],
     rows,
-    note: 'التكلفة تُحسب بتكلفة الصنف المسجّلة على كل فاتورة وقت البيع. لا يشمل توزيعات الشركاء ورأس المال.',
+    note: 'المرتجعات تُحوَّل إلى أساس الفاتورة الأصلية قبل الضريبة وبعد الخصم، وتُستبعد مرتجعات الفواتير الملغاة. تكلفة البضاعة تستخدم تكلفة البيع المحفوظة، ثم تكلفة الصنف الحالية فقط عند وجود تطابق وحيد. لا يشمل توزيعات الشركاء ورأس المال.',
   };
 }
 
