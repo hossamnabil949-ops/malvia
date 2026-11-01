@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { TrendingUp, Receipt, Boxes, AlertTriangle, Search, Plus, ShoppingCart, ArrowUpRight, Printer, CheckCircle2, PackageCheck, Calculator, Bell, Truck, Mic, Sparkles } from 'lucide-react';
-import { AutoPart, Invoice, TreasuryTransaction, UserSession } from '../types/autoParts';
+import { AutoPart, Invoice, SalesReturn, TreasuryTransaction, UserSession } from '../types/autoParts';
 import { TreasuryAccountsWidget } from './TreasuryAccountsReport';
 import { ActiveTab } from './Navigation';
 import { SalesCharts } from './SalesCharts';
@@ -8,6 +8,7 @@ import { SalesCharts } from './SalesCharts';
 interface HomeDashboardProps {
   parts: AutoPart[];
   invoices: Invoice[];
+  salesReturns?: SalesReturn[];
   currentSession?: UserSession | null;
   treasuryTransactions?: TreasuryTransaction[];
   onOpenTreasuryReports?: () => void;
@@ -26,6 +27,7 @@ interface HomeDashboardProps {
 export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   parts,
   invoices,
+  salesReturns = [],
   currentSession,
   treasuryTransactions = [],
   onOpenTreasuryReports,
@@ -242,7 +244,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
       {/* 3. Sales & Profit Analytics */}
       {isOwnerOrManager && (
-        <SalesCharts invoices={invoices} parts={parts} currency="ج.م" />
+        <SalesCharts invoices={invoices} parts={parts} salesReturns={salesReturns} currency="ج.م" />
       )}
 
       {/* 4. Fast Part & OEM Search Bar */}
