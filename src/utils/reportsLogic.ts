@@ -16,6 +16,42 @@ import { paymentLines } from './paymentLines.ts';
 
 export interface DateRange { from: string; to: string }
 
+export interface SalesForDateSummary {
+  date: string;
+  invoices: Invoice[];
+  count: number;
+  sales: number;
+  average: number;
+}
+
+/** Calendar date in Egypt's business timezone, independent of the device timezone. */
+export function cairoDateKey(date: Date | string = new Date()): string {
+  if (typeof date === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(date)) return date;
+  const value = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(value.getTime())) throw new Error('تاريخ غير صالح لحساب مبيعات اليوم');
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(value);
+  const part = (type: string) => parts.find(x => x.type === type)?.value || '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+/** One source of truth for date-scoped sales: active invoices only, net of recorded returns. */
+export function salesForDate(invoices: Invoice[], date: Date | string = new Date()): SalesForDateSummary {
+  const key = cairoDateKey(date);
+  const selected = invoices.filter(invoice =>
+    invoice.status !== 'ملغاة' && (invoice.date || '').slice(0, 10) === key
+  );
+  const sales = r2(sum(selected, invoice => Math.max(0, invoice.grandTotal - (invoice.returnedAmount || 0))));
+  return {
+    date: key,
+    invoices: selected,
+    count: selected.length,
+    sales,
+    average: selected.length ? r2(sales / selected.length) : 0,
+  };
+}
+
 export type ColumnKind = 'text' | 'money' | 'int' | 'percent' | 'date';
 export interface ReportColumn { key: string; label: string; kind?: ColumnKind }
 export type Cell = string | number;
