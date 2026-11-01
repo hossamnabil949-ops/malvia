@@ -366,12 +366,15 @@ export async function sendVoiceCommandToServer(
 
   const data: AICommandResult & { reply?: string } = await response.json();
   const lang = data.lang || detectLang(command, uiLang);
+  // Remove occasional model/debug suffixes (for example "(index):1") from user-facing speech.
+  const cleanReply = String(data.reply || data.spokenFeedback || '').replace(/\\s*\\(index\\)\\s*:?\\s*\\d*\\s*$/i, '').trim();
+  if (!cleanReply) throw new Error(lang === 'ar' ? 'وصل رد غير مكتمل من المساعد. أعد صياغة الأمر؛ لم يتم تنفيذ أي شيء.' : 'The assistant returned an incomplete reply. Please rephrase; nothing was executed.');
   const context = conversationHistory.filter((m) => m.role === 'user').map((m) => m.content).join(' ');
   return verifyCommandResult(
     {
       ...data,
       lang,
-      spokenFeedback: data.reply || data.spokenFeedback,
+      spokenFeedback: cleanReply,
       timestamp: new Date().toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
     },
     command,
