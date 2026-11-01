@@ -48,6 +48,7 @@ import { isCreditMethod } from './utils/treasuryAccounts';
 import { findOpenShift, findOpenShifts, summarizeShift, stampNewTreasury, nextShiftNumber, countTotal, round2, varianceOf } from './utils/shiftLogic';
 import { nextSalesInvoiceNumber } from './utils/invoiceNumber';
 import { nextTreasuryTransactionNumber } from './utils/transactionNumber';
+import { netSales } from './utils/reportsLogic';
 import { SaleError, computeVoidPlan, deductStock, isCreditPayment } from './utils/saleLogic';
 import type { AuditEntry, StockMovement, InvoicePayment, Warehouse, StockLevel, StockTransfer } from './types/autoParts';
 import { MAIN_WAREHOUSE_ID, normalizeWarehouseId, availableIn, adjustLevels, validateTransfer, applyTransfer, TransferError } from './utils/warehouseLogic';
@@ -721,10 +722,26 @@ export default function App() {
     [loyaltyLedger, loyaltyTick]
   );
   const chequesExposure = useMemo(() => pendingIncomingByCustomer(cheques), [cheques]);
-  const customersWithPoints = useMemo(
-    () => customers.map(c => ({ ...c, loyaltyPoints: loyaltyAvailable.get(c.id) ?? 0, chequesPending: chequesExposure.get(c.id) ?? 0 })),
-    [customers, loyaltyAvailable, chequesExposure]
-  );
+  const customersWithPoints = useMemo(() => {
+    const month = todayISO().slice(0, 7);
+    return customers.map(customer => {
+      const customerInvoices = invoices.filter(invoice => invoice.customerId === customer.id && invoice.status !== 'ملغاة');
+      const totalPurchases = customerInvoices.reduce((total, invoice) => total + netSales(invoice), 0);
+      const monthlyPurchases = customerInvoices
+        .filter(invoice => invoice.date.slice(0, 7) === month)
+        .reduce((total, invoice) => total + netSales(invoice), 0);
+      const lastVisit = customerInvoices.map(invoice => invoice.date).sort().at(-1) || '';
+      return {
+        ...customer,
+        totalPurchases: Math.round(totalPurchases * 100) / 100,
+        monthlyPurchases: Math.round(monthlyPurchases * 100) / 100,
+        invoicesCount: customerInvoices.length,
+        lastVisit,
+        loyaltyPoints: loyaltyAvailable.get(customer.id) ?? 0,
+        chequesPending: chequesExposure.get(customer.id) ?? 0,
+      };
+    });
+  }, [customers, invoices, loyaltyAvailable, chequesExposure]);
 
   useEffect(() => {
     const t = setInterval(() => setLoyaltyTick(x => x + 1), 60 * 60 * 1000);
