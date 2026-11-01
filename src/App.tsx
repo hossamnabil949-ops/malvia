@@ -2603,6 +2603,7 @@ export default function App() {
         {viewTab === 'customers' && (
           <CustomersView
             customers={customersWithPoints}
+            invoices={invoices}
             onAddCustomer={handleAddCustomer}
             loyaltyEnabled={resolveLoyalty(settings.loyalty).enabled}
             canAdjustLoyalty={effectiveRole === 'مدير عام'}
