@@ -250,20 +250,12 @@ export function answerCustomerBalanceLookup(
   const customerMatches = rank(customers);
   const supplierMatches = rank(suppliers);
 
-  if (!explicitType) {
-    const customerTop = customerMatches[0];
-    const supplierTop = supplierMatches[0];
-    if (customerTop || supplierTop) {
-      if (customerTop && supplierTop) return answer(clarify);
-      return answer(clarify);
-    }
-    return answer(lang === 'ar'
-      ? 'لم أجد سجلًا واضحًا بهذا الاسم. هل هو عميل/ورشة أم مورد؟ لم يتم إرسال الطلب إلى خدمة خارجية.'
-      : 'No clear record was found. Is this a customer/workshop or a supplier? The request was not sent externally.');
-  }
+  if (!explicitType && customerMatches[0] && supplierMatches[0]) return answer(clarify);
 
-  const matches = hasSupplier ? supplierMatches : customerMatches;
-  const kind = hasSupplier ? 'المورد' : 'العميل أو الورشة';
+  const matches = hasSupplier ? supplierMatches : hasCustomer ? customerMatches
+    : customerMatches.length ? customerMatches : supplierMatches;
+  const kindIsSupplier = hasSupplier || (!hasCustomer && !customerMatches.length && !!supplierMatches.length);
+  const kind = kindIsSupplier ? 'المورد' : 'العميل أو الورشة';
   const top = matches[0];
   const second = matches[1];
   if (!top || (!top.exact && (top.matched < queryTokens.length || top.score < 0.75))) {
