@@ -53,22 +53,22 @@ const active = (d: ReportData, r: DateRange): Invoice[] => d.invoices.filter(i =
 const netQty = (it: { quantity: number; returnedQuantity?: number }): number => Math.max(0, it.quantity - (it.returnedQuantity ?? 0));
 const sum = <T,>(list: T[], f: (x: T) => number): number => list.reduce((s, x) => s + f(x), 0);
 
-/** صافي قيمة الفاتورة قبل الضريبة وبعد خصم الفاتورة والمرتجعات. */
-export function netSales(invoice: Invoice): number {
-  const subtotal = Number(invoice.subtotal) || sum(invoice.items, it => Number(it.total) || (it.quantity * it.unitPrice));
-  const discount = Math.max(0, Number(invoice.discount) || 0);
-  const factor = subtotal > 0 ? Math.max(0, subtotal - discount) / subtotal : 1;
-  return r2(sum(invoice.items, it => Math.max(0, it.quantity - (it.returnedQuantity ?? 0)) * it.unitPrice) - discount * (
-    subtotal > 0 ? sum(invoice.items, it => Math.max(0, it.quantity - (it.returnedQuantity ?? 0)) * it.unitPrice) / subtotal : 0
-  ));
-}
-
+/** صافي قيمة السطر قبل الضريبة وبعد خصم الفاتورة والمرتجعات. */
 const netItemRevenue = (invoice: Invoice, item: Invoice['items'][number]): number => {
   const subtotal = Number(invoice.subtotal) || sum(invoice.items, it => Number(it.total) || (it.quantity * it.unitPrice));
+  const remainingRatio = item.quantity > 0 ? Math.max(0, item.quantity - (item.returnedQuantity ?? 0)) / item.quantity : 0;
   const gross = Math.max(0, item.quantity - (item.returnedQuantity ?? 0)) * item.unitPrice;
   const discountShare = subtotal > 0 ? (Number(invoice.discount) || 0) * ((Number(item.total) || item.quantity * item.unitPrice) / subtotal) : 0;
-  return r2(Math.max(0, gross - discountShare * (item.quantity > 0 ? Math.max(0, item.quantity - (item.returnedQuantity ?? 0)) / item.quantity : 0)));
+  const afterDiscount = Math.max(0, gross - discountShare * remainingRatio);
+  const originalTaxShare = item.taxAmount ?? (subtotal > 0 ? (Number(invoice.tax) || 0) * ((Number(item.total) || item.quantity * item.unitPrice) / subtotal) : 0);
+  const taxShare = invoice.pricesIncludeTax ? originalTaxShare * remainingRatio : 0;
+  return r2(Math.max(0, afterDiscount - taxShare));
 };
+
+/** صافي قيمة الفاتورة قبل الضريبة وبعد الخصم والمرتجعات. */
+export function netSales(invoice: Invoice): number {
+  return r2(sum(invoice.items, item => netItemRevenue(invoice, item)));
+}
 
 function group<T>(list: T[], key: (x: T) => string): Map<string, T[]> {
   const m = new Map<string, T[]>();
