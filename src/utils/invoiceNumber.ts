@@ -19,7 +19,7 @@ const deviceCode = (): string => {
 export const nextSalesInvoiceNumber = (invoices: { invoiceNumber: string }[], date = new Date()): string => {
   const year = date.getFullYear();
   const device = deviceCode();
-  const re = new RegExp(`^INV-${year}-${device}-(\\\\d+)$`);
+  const re = new RegExp(`^INV-${year}-${device}-(\\d+)$`);
   let max = 0;
   invoices.forEach(inv => {
     const match = re.exec((inv.invoiceNumber || '').trim());
@@ -31,7 +31,7 @@ export const nextSalesInvoiceNumber = (invoices: { invoiceNumber: string }[], da
 // ترقيم المشتريات محلي متسلسل؛ لا يغيّر الأرقام القديمة.
 export const nextPurchaseInvoiceNumber = (invoices: { invoiceNumber: string }[], date = new Date()): string => {
   const year = date.getFullYear();
-  const re = new RegExp(`^PUR-${year}-(\\\\d+)$`);
+  const re = new RegExp(`^PUR-${year}-(\\d+)$`);
   let max = 0;
   invoices.forEach(inv => {
     const match = re.exec((inv.invoiceNumber || '').trim());
