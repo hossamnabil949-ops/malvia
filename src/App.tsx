@@ -1646,6 +1646,29 @@ export default function App() {
 
   // Handlers for Purchases
   const handleAddPurchaseInvoice = (invoice: PurchaseInvoice) => {
+    // تحقق قبل أي حفظ جزئي: لا نقبل دفعة أكبر من الفاتورة أو سطوراً غير صالحة.
+    if (!Number.isFinite(invoice.grandTotal) || invoice.grandTotal <= 0 ||
+        !Number.isFinite(invoice.amountPaid) || invoice.amountPaid < 0 ||
+        invoice.amountPaid > invoice.grandTotal + 0.001 ||
+        invoice.items.some(item => !Number.isFinite(item.quantity) || item.quantity <= 0 || !Number.isFinite(item.costPrice) || item.costPrice < 0)) {
+      window.alert('بيانات فاتورة المشتريات غير صالحة أو المبلغ المدفوع أكبر من إجمالي الفاتورة.');
+      return;
+    }
+    try {
+      for (const item of invoice.items) {
+        const matches = item.partId
+          ? parts.filter(part => part.id === item.partId)
+          : parts.filter(part => normKey(part.partNumber) === normKey(item.partNumber) && normKey(part.name) === normKey(item.partName) && (!item.brand || part.brand === item.brand));
+        if (matches.length > 1) throw new Error(`الصنف ${item.partName} له أكثر من تطابق؛ اختر الصنف بمعرّفه قبل حفظ الفاتورة.`);
+        if (matches.length === 0 && (!(item.salePrice > 0) || !Number.isFinite(item.salePrice))) {
+          throw new Error(`أدخل سعر بيع صحيحاً للصنف الجديد: ${item.partName}.`);
+        }
+      }
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'تعذر التحقق من أصناف المشتريات.');
+      return;
+    }
+
     setPurchaseInvoices(prev => {
       const updated = [invoice, ...prev];
       persistChanges({ purchaseInvoices: updated });
@@ -1674,37 +1697,43 @@ export default function App() {
       return updated;
     });
 
-    // Increase stock for purchased parts — والأصناف الجديدة تُضاف للمخزن تلقائياً بالرصيد
+    // زيادة المخزون بمطابقة partId أولاً، مع متوسط تكلفة مرجّح لا آخر سعر شراء.
     {
       const today = todayISO();
-      // تجميع كميات كل صنف في الفاتورة (قد يتكرر الصنف في أكثر من سطر)
-      const byKey = new Map<string, { item: typeof invoice.items[number]; qty: number }>();
-      invoice.items.forEach(item => {
-        const key = normKey(item.partNumber) || normKey(item.partName);
-        const cur = byKey.get(key);
-        if (cur) byKey.set(key, { item, qty: cur.qty + item.quantity });
-        else byKey.set(key, { item, qty: item.quantity });
-      });
+      const grouped = new Map<string, { item: typeof invoice.items[number]; part?: AutoPart; qty: number; costValue: number }>();
+      for (const item of invoice.items) {
+        const candidates = item.partId
+          ? parts.filter(part => part.id === item.partId)
+          : parts.filter(part => normKey(part.partNumber) === normKey(item.partNumber) && normKey(part.name) === normKey(item.partName) && (!item.brand || part.brand === item.brand));
+        const part = candidates[0];
+        const key = part ? `part:${part.id}` : `new:${normKey(item.partNumber)}|${normKey(item.brand || GENERAL_BRAND)}|${normKey(item.partName)}`;
+        const previous = grouped.get(key);
+        if (previous) {
+          previous.qty += item.quantity;
+          previous.costValue += item.quantity * item.costPrice;
+        } else {
+          grouped.set(key, { item, part, qty: item.quantity, costValue: item.quantity * item.costPrice });
+        }
+      }
 
-      const matched = new Set<string>();
       const movements: Parameters<typeof logStockMovements>[0] = [];
       const updatedExisting = parts.map(part => {
-        const k1 = normKey(part.partNumber);
-        const hit = byKey.get(k1) ?? byKey.get(normKey(part.name));
-        if (!hit) return part;
-        matched.add(byKey.get(k1) ? k1 : normKey(part.name));
-        movements.push({ part, qtyDelta: hit.qty, type: 'purchase', refId: invoice.id, refNumber: invoice.invoiceNumber });
-        return {
-          ...part,
-          stockQuantity: part.stockQuantity + hit.qty,
-          costPrice: hit.item.costPrice || part.costPrice,
-          updatedAt: today,
-        };
+        const entry = grouped.get(`part:${part.id}`);
+        if (!entry) return part;
+        const oldQty = Math.max(0, Number(part.stockQuantity) || 0);
+        const incomingQty = entry.qty;
+        const incomingUnitCost = incomingQty > 0 ? entry.costValue / incomingQty : entry.item.costPrice;
+        const nextCost = oldQty + incomingQty > 0
+          ? ((oldQty * (Number(part.costPrice) || 0)) + entry.costValue) / (oldQty + incomingQty)
+          : incomingUnitCost;
+        movements.push({ part, qtyDelta: incomingQty, type: 'purchase', refId: invoice.id, refNumber: invoice.invoiceNumber });
+        return { ...part, stockQuantity: part.stockQuantity + incomingQty, costPrice: Math.round(nextCost * 100) / 100, updatedAt: today };
       });
 
       const newParts: AutoPart[] = [];
-      byKey.forEach(({ item, qty }, key) => {
-        if (matched.has(key)) return;
+      for (const [key, entry] of grouped) {
+        if (entry.part) continue;
+        const item = entry.item;
         const created: AutoPart = {
           id: `p-${Date.now()}-${newParts.length}`,
           partNumber: item.partNumber || `NEW-${Date.now().toString().slice(-6)}-${newParts.length + 1}`,
@@ -1714,9 +1743,9 @@ export default function App() {
           category: item.category,
           origin: 'تجاري درجة 1',
           shelfLocation: 'مستودع رئيسي',
-          costPrice: item.costPrice,
-          salePrice: item.salePrice || item.costPrice,
-          stockQuantity: qty,
+          costPrice: entry.qty > 0 ? entry.costValue / entry.qty : item.costPrice,
+          salePrice: item.salePrice,
+          stockQuantity: entry.qty,
           minAlertStock: 2,
           unit: 'حبة',
           createdAt: today,
@@ -1724,15 +1753,13 @@ export default function App() {
           ...(item.tracking && item.tracking !== 'none' ? { tracking: item.tracking } : {}),
         };
         newParts.push(created);
-        // الصنف الجديد: رصيده بعد الحركة = الكمية الموردة (الرصيد قبلها صفر)
-        movements.push({ part: { ...created, stockQuantity: 0 }, qtyDelta: qty, type: 'purchase', refId: invoice.id, refNumber: invoice.invoiceNumber });
-      });
+        movements.push({ part: { ...created, stockQuantity: 0 }, qtyDelta: entry.qty, type: 'purchase', refId: invoice.id, refNumber: invoice.invoiceNumber });
+      }
 
       const nextParts = [...newParts, ...updatedExisting];
       setParts(nextParts);
       persistChanges({ parts: nextParts });
       logStockMovements(movements);
-      // الاستلام في مخزن/فرع غير رئيسي: نحرّك رصيده بمعرّفات الأصناف (تشمل الأصناف الجديدة)
       shiftWarehouseStock(invoice.warehouseId, movements.map(m => ({ partId: m.part.id, qty: m.qtyDelta })), 1);
       registerPurchaseTracking(invoice, nextParts);
     }
