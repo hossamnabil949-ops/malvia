@@ -1262,10 +1262,6 @@ export default function App() {
         const updated = prev.map(customer => customer.id === finalInvoice.customerId ? {
           ...customer,
           balance: customer.balance + creditAmount,
-          totalPurchases: (customer.totalPurchases || 0) + finalInvoice.grandTotal,
-          monthlyPurchases: (customer.monthlyPurchases || 0) + (finalInvoice.date.slice(0, 7) === todayISO().slice(0, 7) ? finalInvoice.grandTotal : 0),
-          invoicesCount: (customer.invoicesCount || 0) + 1,
-          lastVisit: finalInvoice.date,
         } : customer);
         persistChanges({ customers: updated });
         return updated;
@@ -1388,10 +1384,6 @@ export default function App() {
         const updated = prev.map(c => c.id === inv.customerId ? {
           ...c,
           balance: c.balance - creditAmount,
-          totalPurchases: Math.max(0, (c.totalPurchases || 0) - Math.max(0, inv.grandTotal - (inv.returnedAmount || 0))),
-          monthlyPurchases: Math.max(0, (c.monthlyPurchases || 0) - (inv.date.slice(0, 7) === todayISO().slice(0, 7) ? Math.max(0, inv.grandTotal - (inv.returnedAmount || 0)) : 0)),
-          invoicesCount: Math.max(0, (c.invoicesCount || 0) - 1),
-          lastVisit: invoices.filter(x => x.id !== inv.id && x.customerId === inv.customerId && x.status !== 'ملغاة').map(x => x.date).sort().at(-1) || '',
         } : c);
         persistChanges({ customers: updated });
         return updated;
@@ -1513,7 +1505,7 @@ export default function App() {
       setCustomers(prev => {
         const updated = prev.map(c =>
           (salesReturn.customerId && c.id === salesReturn.customerId)
-            ? { ...c, balance: c.balance - salesReturn.totalRefundAmount, totalPurchases: Math.max(0, (c.totalPurchases || 0) - salesReturn.totalRefundAmount), monthlyPurchases: Math.max(0, (c.monthlyPurchases || 0) - ((invoices.find(inv => inv.id === salesReturn.invoiceId)?.date || '').slice(0, 7) === todayISO().slice(0, 7) ? salesReturn.totalRefundAmount : 0)) }
+            ? { ...c, balance: c.balance - salesReturn.totalRefundAmount, }
             : c
         );
         persistChanges({ customers: updated });
@@ -1614,7 +1606,7 @@ export default function App() {
       setCustomers(prev => {
         const updated = prev.map(c =>
           (ret.customerId && c.id === ret.customerId)
-            ? { ...c, balance: c.balance + ret.totalRefundAmount, totalPurchases: (c.totalPurchases || 0) + ret.totalRefundAmount, monthlyPurchases: (c.monthlyPurchases || 0) + ((invoices.find(inv => inv.id === ret.invoiceId)?.date || '').slice(0, 7) === todayISO().slice(0, 7) ? ret.totalRefundAmount : 0) }
+            ? { ...c, balance: c.balance + ret.totalRefundAmount, }
             : c
         );
         persistChanges({ customers: updated });
