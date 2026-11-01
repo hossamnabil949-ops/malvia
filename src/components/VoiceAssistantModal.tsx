@@ -405,7 +405,10 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   };
 
   const handleSupplierPlanTurn = (raw: string): boolean => {
-    const digitText = raw.replace(/[٠-٩۰-۹]/g, d => String('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'.indexOf(d) % 10));
+    const digitText = raw
+      .replace(/[٠-٩۰-۹]/g, d => String('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'.indexOf(d) % 10))
+      .replace(/[٬،]/g, ',')
+      .replace(/٫/g, '.');
     const q = normalizeArabic(digitText);
     const isCreate = /(جدول|جدوله|قسم المبلغ|قسّم المبلغ|جدول دفعات|دفعات اسبوع|دفعات شهري|كل يوم|كل اسبوع|كل شهر)/.test(q);
     if (!supplierPlanDraft && !isCreate) return false;
@@ -421,8 +424,11 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
     } else if (numericOnly && supplierPlanDraft && !supplierPlanDraft.installmentCount) {
       draft.installmentCount = Number(numericOnly[1]);
     } else {
-      const amountMatch = digitText.match(/(?:بمبلغ|مبلغ|المبلغ|اجمالي|إجمالي|المستحق)\\s*([0-9][0-9,،.]*)/);
-      if (amountMatch && Number(amountMatch[1].replace(/[,.،]/g,'')) > 0) draft.totalAmount = Number(amountMatch[1].replace(/[,.،]/g,''));
+      const amountMatch = digitText.match(/(?:بمبلغ|مبلغ|المبلغ|اجمالي|إجمالي|المستحق)\\s*[:：]?\\s*([0-9][0-9,.]*)/);
+      if (amountMatch) {
+        const parsedAmount = Number(amountMatch[1].replace(/,/g, ''));
+        if (Number.isFinite(parsedAmount) && parsedAmount > 0) draft.totalAmount = parsedAmount;
+      }
       const countMatch = q.match(/(?:على|عدد|لعدد)\\s*(\\d{1,3})\\s*(?:دفعات|دفعة|قسط|اقساط)?|^(\\d{1,3})\\s*(?:دفعات|دفعة|قسط)?$/);
       if (countMatch) draft.installmentCount = Number(countMatch[1] || countMatch[2]);
     }
