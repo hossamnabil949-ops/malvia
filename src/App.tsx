@@ -2935,6 +2935,15 @@ export default function App() {
           invoices={invoices}
           suppliers={suppliers}
           supplierPaymentSchedules={supplierPaymentSchedules}
+          onCreateSupplierPaymentSchedules={(rows) => {
+            if (!(effectiveRole === 'مدير عام' || effectivePermissions?.canManagePurchases) || !Array.isArray(rows) || !rows.length) return false;
+            const existingIds = new Set(supplierPaymentSchedules.map(x => x.id));
+            if (rows.some(x => !x.id || existingIds.has(x.id) || !suppliers.some(s => s.id === x.supplierId) || !Number.isFinite(x.amount) || x.amount <= 0 || x.amountPaid !== 0 || x.status !== 'scheduled')) return false;
+            const updated = [...supplierPaymentSchedules, ...rows];
+            setSupplierPaymentSchedules(updated);
+            persistChanges({ supplierPaymentSchedules: updated });
+            return true;
+          }}
           shopName={activeTenant.companyName}
         />
       )}
