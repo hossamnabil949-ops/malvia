@@ -382,6 +382,7 @@ export function reportSlowMoving(d: ReportData, today: string, days = 90): Repor
   }
   const lastPurchase = new Map<string, string>();
   for (const purchase of d.purchaseInvoices) {
+    if (!Array.isArray(purchase.items)) continue;
     for (const item of purchase.items) {
       const key = item.partId || item.partNumber;
       const date = purchase.date.slice(0, 10);
