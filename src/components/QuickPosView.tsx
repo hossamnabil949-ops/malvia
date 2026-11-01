@@ -31,6 +31,7 @@ import {
 import confetti from 'canvas-confetti';
 import { nextSalesInvoiceNumber } from '../utils/invoiceNumber';
 import { SaleError, computeTotals, validateSale, validateDiscountPolicy, toEgp, isCreditPayment } from '../utils/saleLogic';
+import { cairoDateKey } from '../utils/reportsLogic';
 import { AutoPart, CartItem, Customer, Invoice, CarBrand, CarModel, PartCategory, PaymentMethod, Employee, Warehouse, StockLevel } from '../types/autoParts';
 import { MAIN_WAREHOUSE_ID, MAIN_WAREHOUSE_NAME, availableIn } from '../utils/warehouseLogic';
 import { SerialUnit, StockBatch, inStockUnits, expiryState, daysToExpiry } from '../utils/trackingLogic';
@@ -431,8 +432,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       id: `inv-${Date.now()}`,
       invoiceNumber: nextSalesInvoiceNumber(invoices),
       warehouseId: saleWarehouseId === MAIN_WAREHOUSE_ID ? undefined : saleWarehouseId,
-      date: new Date().toISOString().split('T')[0],
-      time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+      date: cairoDateKey(new Date()),
+      time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Cairo' }),
       customerName: finalCustomerName,
       customerPhone: phone,
       customerId: selectedCustomerId !== 'cash' ? selectedCustomerId : undefined,
