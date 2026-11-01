@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Banknote, CreditCard, Zap, Smartphone, FileSpreadsheet, ArrowDownLeft, ArrowUpRight, Layers, Wallet } from 'lucide-react';
+import { Banknote, CreditCard, Zap, Smartphone, FileSpreadsheet, ArrowDownLeft, ArrowUpRight, Layers, Wallet, Landmark } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { TreasuryTransaction } from '../types/autoParts';
 import { DateRangeFilter } from './DateRangeFilter';
@@ -11,6 +11,7 @@ const ICONS: Record<TreasuryAccountKey, React.ComponentType<{ className?: string
   instapay: Zap,
   visa: CreditCard,
   wallet: Smartphone,
+  bank: Landmark,
 };
 
 const fmt = (n: number) => n.toLocaleString('ar-EG', { maximumFractionDigits: 2 });
@@ -87,7 +88,7 @@ export const TreasuryAccountsReport: React.FC<TreasuryAccountsReportProps> = ({ 
             <span>تقارير الخزنة حسب الحساب</span>
           </h4>
           <p className="text-[11px] text-neutral-400 mt-0.5">
-            كل حساب (كاش، إنستاباي، فيزا، محافظ) له تقريره المستقل، مع تقرير مجمع لكل الحسابات.
+            كل حساب (كاش، إنستاباي، فيزا، محافظ، تحويلات وشيكات بنكية) له تقريره المستقل، مع تقرير مجمع لكل الحسابات.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -103,7 +104,7 @@ export const TreasuryAccountsReport: React.FC<TreasuryAccountsReportProps> = ({ 
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <button
           type="button"
           onClick={() => setSelected('all')}
