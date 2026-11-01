@@ -68,6 +68,7 @@ export interface ReportData {
   invoices: Invoice[];
   salesReturns: SalesReturn[];
   purchaseInvoices: PurchaseInvoice[];
+  purchaseReturns?: import('../types/autoParts').PurchaseReturn[];
   parts: AutoPart[];
   customers: Customer[];
   suppliers: Supplier[];
@@ -331,7 +332,7 @@ export function reportVatSummary(d: ReportData, r: DateRange): ReportTable {
     return ret.totalRefundAmount * ((original.tax || 0) / original.grandTotal);
   });
   const inputVat = sum(d.purchaseInvoices.filter(invoice => inRange(invoice.date, r)), invoice => invoice.tax || 0);
-  const inputVatReturns = sum(d.purchaseReturns.filter(ret => inRange(ret.date, r)), ret => {
+  const inputVatReturns = sum((d.purchaseReturns || []).filter(ret => inRange(ret.date, r)), ret => {
     const original = d.purchaseInvoices.find(invoice => invoice.id === ret.purchaseInvoiceId);
     return original && original.grandTotal > 0
       ? ret.totalReturnAmount * ((original.tax || 0) / original.grandTotal)
