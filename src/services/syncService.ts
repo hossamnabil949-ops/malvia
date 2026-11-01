@@ -128,6 +128,24 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 let poll: ReturnType<typeof setInterval> | null = null;
 let busy = false;
 const dirty = new Set<string>();
+// Durable outbox: pending resources survive app restarts.
+const pendingKey = (tenant: string) => `malvia_sync_pending_v1_${tenant}`;
+function readPending(tenant: string): string[] {
+  try {
+    const raw = localStorage.getItem(pendingKey(tenant));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((r): r is string => typeof r === 'string' && (SYNC_RESOURCES as readonly string[]).includes(r)) : [];
+  } catch { return []; }
+}
+function writePending(tenant: string) {
+  try { localStorage.setItem(pendingKey(tenant), JSON.stringify([...dirty])); }
+  catch { emitStatus('error', 'تعذّر حفظ قائمة المزامنة المعلقة على الجهاز'); }
+}
+function queueResource(tenant: string, resource: string) {
+  if (!(SYNC_RESOURCES as readonly string[]).includes(resource)) return;
+  dirty.add(resource);
+  writePending(tenant);
+}
 
 async function api(path: string, init: RequestInit & { headers?: Record<string, string> }) {
   const headers: Record<string, string> = { ...(init.headers || {}) };
@@ -200,7 +218,7 @@ export async function pullAll(tenantId: string, licenseKey: string, serverToken?
       meta.base[res] = baseFor(res, remote.data);
     } else if (Array.isArray(local) && Array.isArray(remote.data)) {
       writeLocal(tenantId, res, mergeArrays(res, local as Item[], remote.data as Item[], meta.base[res] || {}));
-      dirty.add(res); // لدينا تغييرات محلية لا تزال تحتاج دفع بعد الدمج
+      queueResource(tenantId, res); // durable pending merge
       meta.base[res] = buildBase(res, remote.data as Item[]);
     } else {
       meta.base[res] = baseFor(res, remote.data);
@@ -216,18 +234,41 @@ export async function pullAll(tenantId: string, licenseKey: string, serverToken?
 
 async function flush() {
   if (!active || busy) return;
+  if (timer) { clearTimeout(timer); timer = null; }
   busy = true;
   const { tenantId, licenseKey } = active;
   try {
-    emitStatus('syncing');
-    // أول اتصال بالسحابة: ارفع كل ما هو محلي وغير موجود في السحابة
+    readPending(tenantId).forEach(res => dirty.add(res));
     const meta = readMeta(tenantId);
-    for (const res of SYNC_RESOURCES) if (meta.versions[res] === undefined && readLocal(tenantId, res) !== undefined) dirty.add(res);
-    const list = [...dirty]; dirty.clear();
-    for (const res of list) {
-      try { await pushResource(tenantId, licenseKey, res); } catch (e) { dirty.add(res); throw e; }
+    // Reconcile every local resource at startup and every sync cycle. This recovers
+    // edits that were saved locally just before the app was closed.
+    for (const res of SYNC_RESOURCES) {
+      const local = readLocal(tenantId, res);
+      if (local !== undefined && (meta.versions[res] === undefined || hasLocalChanges(res, local, meta.base[res]))) {
+        queueResource(tenantId, res);
+      }
     }
-    emitStatus('synced');
+    emitStatus('syncing', dirty.size ? `عناصر بانتظار الرفع: ${dirty.size}` : 'فحص التغييرات المحلية');
+    const list = [...dirty];
+    for (const res of list) {
+      if (!active || active.tenantId !== tenantId) return;
+      const ok = await pushResource(tenantId, licenseKey, res);
+      if (!ok) throw new Error(`تعذّر إتمام مزامنة المورد ${res} بعد عدة محاولات تعارض`);
+      const latest = readLocal(tenantId, res);
+      const latestMeta = readMeta(tenantId);
+      if (latest === undefined || !hasLocalChanges(res, latest, latestMeta.base[res])) {
+        dirty.delete(res);
+        writePending(tenantId);
+      } else {
+        queueResource(tenantId, res);
+      }
+    }
+    if (dirty.size) {
+      emitStatus('syncing', `ما زال هناك ${dirty.size} عنصر بانتظار المزامنة`);
+      schedule(1500);
+    } else {
+      emitStatus('synced', 'تم رفع جميع التغييرات المحلية');
+    }
   } catch (e: any) {
     emitStatus(navigator.onLine ? 'error' : 'offline', String(e?.message || e));
     schedule(15000);
@@ -242,29 +283,42 @@ function schedule(ms = 1500) {
 /** تُستدعى من saveTenantStoreData بعد كل حفظ محلي. */
 export function markDirty(tenantId: string, resources: string[]) {
   if (!active || active.tenantId !== tenantId) return;
-  for (const r of resources) if ((SYNC_RESOURCES as readonly string[]).includes(r)) dirty.add(r);
+  for (const r of resources) queueResource(tenantId, r);
   if (dirty.size) schedule();
 }
 
 export async function startSync(tenantId: string, licenseKey: string) {
   stopSync();
   active = { tenantId, licenseKey };
+  dirty.clear();
+  readPending(tenantId).forEach(res => dirty.add(res));
+  let tickRunning = false;
   const tick = async () => {
-    if (!active || document.hidden) return;
-    try { await pullAll(active.tenantId, active.licenseKey); await flush(); }
-    catch (e: any) { emitStatus(navigator.onLine ? 'error' : 'offline', String(e?.message || e)); }
+    if (!active || active.tenantId !== tenantId || document.hidden || tickRunning) return;
+    tickRunning = true;
+    try {
+      await pullAll(tenantId, licenseKey);
+      await flush();
+    } catch (e: any) {
+      emitStatus(navigator.onLine ? 'error' : 'offline', String(e?.message || e));
+      schedule(15000);
+    } finally { tickRunning = false; }
   };
-  await tick();
-  poll = setInterval(tick, 15000);
   window.addEventListener('online', tick);
   document.addEventListener('visibilitychange', tick);
+  window.addEventListener('focus', tick);
+  await tick();
+  poll = setInterval(tick, 15000);
 }
 
 export function stopSync() {
-  active = null; dirty.clear();
+  const previousTenant = active?.tenantId;
+  active = null;
   if (timer) clearTimeout(timer);
   if (poll) clearInterval(poll);
   timer = poll = null;
+  if (previousTenant) writePending(previousTenant);
+  dirty.clear();
 }
 
 /** Bootstrap returns license metadata only. Full tenant data is downloaded only after server employee authentication. */
