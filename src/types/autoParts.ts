@@ -322,7 +322,7 @@ export type SupplierPaymentScheduleStatus = 'scheduled' | 'paid' | 'cancelled';
 export interface SupplierPaymentSchedule {
   id: string; supplierId: string; supplierName: string; purchaseInvoiceId?: string; purchaseInvoiceNumber?: string;
   amount: number; amountPaid: number; dueDate: string; status: SupplierPaymentScheduleStatus;
-  paymentId?: string; treasuryTransactionId?: string; notes?: string; createdAt: string; updatedAt: string;
+  paymentId?: string; paymentIds?: string[]; treasuryTransactionId?: string; treasuryTransactionIds?: string[]; notes?: string; createdAt: string; updatedAt: string;
 }
 
 export interface SupplierPayment {
