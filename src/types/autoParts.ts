@@ -403,6 +403,8 @@ export interface PurchaseInvoice {
 }
 
 export interface SalesReturnItem {
+  partId?: string;
+  lineId?: string; // `${invoiceId}:${index}`
   partNumber: string;
   partName: string;
   quantity: number;
@@ -420,6 +422,7 @@ export interface SalesReturn {
   date: string;
   time: string;
   customerName: string;
+  customerId?: string;
   items: SalesReturnItem[];
   totalRefundAmount: number;
   refundMethod: 'نقدي (خصم من الخزنة)' | 'خصم من رصيد العميل الآجل' | 'إنستاباي / محفظة';
