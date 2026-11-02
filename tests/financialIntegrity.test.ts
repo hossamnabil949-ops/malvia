@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { generateSupplierScheduleDates } from '../src/utils/supplierPaymentSchedule.ts';
-import { accountOf } from '../src/utils/treasuryAccounts.ts';
+import { accountOf, isCreditMethod } from '../src/utils/treasuryAccounts.ts';
+import { normalizePaymentMethod } from '../src/utils/paymentMethods.ts';
 import { registrationEffect, actionEffect } from '../src/utils/chequeLogic.ts';
 import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
@@ -100,6 +101,13 @@ assert.equal(accountOf('فيزا / بطاقة بنكية'), 'visa');
 assert.equal(accountOf('كاش (نقدي)'), 'cash');
 assert.throws(() => accountOf('cash-like unknown'), /غير معروفة/);
 assert.throws(() => accountOf('آجل'), /ليست حركة خزنة/);
+assert.equal(accountOf('نقدي'), 'cash');
+assert.equal(accountOf('انستاباي / InstaPay'), 'instapay');
+assert.equal(accountOf('محفظة إلكترونية'), 'wallet');
+assert.equal(accountOf('فيزا / بطاقة'), 'visa');
+assert.equal(accountOf('bank transfer'), 'bank');
+assert.equal(isCreditMethod('credit'), true);
+assert.equal(normalizePaymentMethod('انستاباي / InstaPay'), 'إنستاباي / InstaPay');
 
 // FIN-9: incoming cheque excess remains as customer credit and is fully reversible on bounce.
 const incoming = registrationEffect('incoming', 150, { balance: 100 });
