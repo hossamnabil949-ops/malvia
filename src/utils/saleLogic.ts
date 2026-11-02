@@ -1,5 +1,9 @@
+import { isCreditPaymentMethod } from './paymentMethods';
+
 // منطق البيع كدوال نقية (بدون React ولا تخزين) => قابلة للاختبار وإعادة الاستخدام من الكاشير والمساعد الصوتي.
 // كل الحسابات بالقروش (أعداد صحيحة) لتفادي أخطاء الفاصلة العشرية.
+
+export const DEFAULT_CUSTOMER_CREDIT_LIMIT = 5000;
 
 export type SaleErrorCode =
   | 'EMPTY_CART' | 'INVALID_QTY' | 'INVALID_PRICE' | 'OUT_OF_STOCK' | 'PRICE_BELOW_COST'
@@ -23,18 +27,20 @@ export interface StockPart { id: string; stockQuantity: number }
 export interface PaymentLine { method: string; amount: number }
 
 /** الآجل = لا يدخل نقدية للخزنة (يُسجَّل على حساب العميل) */
-export const isCreditPayment = (method: string): boolean => (method || '').includes('آجل');
+export const isCreditPayment = (method: string): boolean => isCreditPaymentMethod(method);
 
 export interface Totals { subtotal: number; discount: number; tax: number; grandTotal: number } // بالقروش
 
 /** الخصم قبل الضريبة. vatRatePercent من الإعدادات (لا تُكتب 0.14 داخل الشاشة). */
-export function computeTotals(lines: CartLine[], discountEgp: number, vatRatePercent: number, applyVat: boolean): Totals {
+export function computeTotals(lines: CartLine[], discountEgp: number, vatRatePercent: number, applyVat: boolean, pricesIncludeVat = false): Totals {
   const subtotal = lines.reduce((s, l) => s + Math.round(l.qty * toPiasters(l.unitPrice)), 0);
   const discount = toPiasters(discountEgp);
   if (discount < 0 || discount > subtotal) throw new SaleError('DISCOUNT_EXCEEDS_SUBTOTAL', { subtotal, discount });
   const taxable = subtotal - discount;
-  const tax = applyVat ? Math.round((taxable * vatRatePercent) / 100) : 0;
-  return { subtotal, discount, tax, grandTotal: taxable + tax };
+  const tax = applyVat
+    ? Math.round(pricesIncludeVat ? (taxable * vatRatePercent) / (100 + vatRatePercent) : (taxable * vatRatePercent) / 100)
+    : 0;
+  return { subtotal, discount, tax, grandTotal: applyVat && pricesIncludeVat ? taxable : taxable + tax };
 }
 
 export interface DiscountPolicyLine { qty: number; listPrice: number; unitPrice: number; unitCost: number }
@@ -90,7 +96,7 @@ export function validateSale(lines: CartLine[], stock: StockPart[], totals: Tota
   const credit = payments.filter(p => isCreditPayment(p.method)).reduce((s, p) => s + toPiasters(p.amount), 0);
   if (credit > 0) {
     if (!opt.customerId) throw new SaleError('CREDIT_REQUIRES_CUSTOMER');
-    const limit = opt.customerCreditLimit ?? 0;
+    const limit = (opt.customerCreditLimit ?? 0) > 0 ? (opt.customerCreditLimit as number) : DEFAULT_CUSTOMER_CREDIT_LIMIT;
     if (limit > 0 && toPiasters(opt.customerBalance ?? 0) + credit > toPiasters(limit)) {
       throw new SaleError('CREDIT_LIMIT_EXCEEDED', { limit, balance: opt.customerBalance ?? 0 });
     }
@@ -112,7 +118,11 @@ export function deductStock<T extends StockPart>(parts: T[], lines: CartLine[], 
 /** المبلغ المسترد لصنف مرتجع = نصيب الكمية من إجمالي سطر الفاتورة (بعد الخصم ومع الضريبة). */
 export function refundForLine(lineTotalEgp: number, lineQty: number, returnQty: number, alreadyReturnedQty: number): number {
   if (returnQty <= 0 || returnQty + alreadyReturnedQty > lineQty) throw new SaleError('INVALID_QTY', { returnQty, remaining: lineQty - alreadyReturnedQty });
-  return toEgp(Math.round((toPiasters(lineTotalEgp) * returnQty) / lineQty));
+  const total = toPiasters(lineTotalEgp);
+  const cumulativeBefore = Math.round((total * alreadyReturnedQty) / lineQty);
+  const cumulativeAfter = Math.round((total * (alreadyReturnedQty + returnQty)) / lineQty);
+  // توزيع تراكمي ثابت: مجموع كل الدفعات الجزئية يساوي إجمالي السطر بالقرش تماماً.
+  return toEgp(cumulativeAfter - cumulativeBefore);
 }
 
 // ---------- إلغاء فاتورة (Void) ----------
@@ -121,6 +131,7 @@ export interface VoidInput {
   returnedAmount?: number;
   items: { partId?: string; partNumber: string; quantity: number; returnedQuantity?: number }[];
   payments: PaymentLine[];
+  priorRefunds?: { refundMethod: string; totalRefundAmount: number }[];
 }
 export interface VoidPlan {
   fraction: number;                                                   // نسبة ما لم يُرتجع من الفاتورة (0..1)
@@ -136,10 +147,74 @@ export function computeVoidPlan(inv: VoidInput): VoidPlan {
   const restock = inv.items
     .map(it => ({ partId: it.partId, partNumber: it.partNumber, qty: Math.max(0, it.quantity - (it.returnedQuantity || 0)) }))
     .filter(r => r.qty > 0);
-  const creditAmount = round2(inv.payments.filter(p => isCreditPayment(p.method)).reduce((s, p) => s + p.amount, 0) * fraction);
-  const refunds = inv.payments
-    .filter(p => !isCreditPayment(p.method))
-    .map(p => ({ method: p.method, amount: round2(p.amount * fraction) }))
-    .filter(r => r.amount > 0);
+  const creditPayments = inv.payments.filter(p => isCreditPayment(p.method));
+  const nonCreditPayments = inv.payments.filter(p => !isCreditPayment(p.method));
+  let creditAmount = round2(creditPayments.reduce((s, p) => s + p.amount, 0) * fraction);
+  let refunds = nonCreditPayments.map(p => ({ method: p.method, amount: round2(p.amount * fraction) })).filter(r => r.amount > 0);
+
+  // When return records exist, reverse their actual refund channels instead of prorating every original method.
+  if (inv.priorRefunds && inv.priorRefunds.length > 0) {
+    const refundClass = (method: string): string => {
+      if (method === 'خصم من رصيد العميل الآجل') return 'credit';
+      if (method === 'نقدي (خصم من الخزنة)') return 'cash';
+      if (method === 'إنستاباي / محفظة') return 'digital';
+      return method.trim().toLowerCase();
+    };
+    const paymentClass = (method: string): string => {
+      if (isCreditPayment(method)) return 'credit';
+      if (/نقد|كاش|cash/i.test(method)) return 'cash';
+      if (/إنستاباي|محفظة|فودافون|instapay|wallet/i.test(method)) return 'digital';
+      return method.trim().toLowerCase();
+    };
+    const creditReturned = inv.priorRefunds
+      .filter(r => refundClass(r.refundMethod) === 'credit')
+      .reduce((total, r) => total + r.totalRefundAmount, 0);
+    creditAmount = round2(Math.max(0, creditPayments.reduce((s, p) => s + p.amount, 0) - creditReturned));
+
+    const remainingByIndex = nonCreditPayments.map(p => p.amount);
+    for (const prior of inv.priorRefunds.filter(r => refundClass(r.refundMethod) !== 'credit')) {
+      let remaining = prior.totalRefundAmount;
+      const wantedClass = refundClass(prior.refundMethod);
+      const matching = nonCreditPayments.map((p, index) => ({ p, index }))
+        .filter(x => paymentClass(x.p.method) === wantedClass && remainingByIndex[x.index] > 0);
+      const applyTo = (candidates: { p: PaymentLine; index: number }[]) => {
+        for (const candidate of candidates) {
+          if (remaining <= 0.005) break;
+          const applied = Math.min(remaining, remainingByIndex[candidate.index]);
+          remainingByIndex[candidate.index] = round2(remainingByIndex[candidate.index] - applied);
+          remaining = round2(remaining - applied);
+        }
+      };
+      applyTo(matching);
+      // If the actual refund channel exceeds its original payment bucket, offset the remainder against other outstanding payment buckets.
+      if (remaining > 0.005) {
+        const fallback = nonCreditPayments.map((p, index) => ({ p, index }))
+          .filter(x => remainingByIndex[x.index] > 0)
+          .sort((a, b) => remainingByIndex[b.index] - remainingByIndex[a.index]);
+        applyTo(fallback);
+      }
+    }
+    refunds = nonCreditPayments.map((payment, index) => ({
+      method: payment.method,
+      amount: round2(Math.max(0, remainingByIndex[index])),
+    })).filter(refund => refund.amount > 0);
+  }
   return { fraction, restock, creditAmount, refunds };
+}
+
+
+/** متوسط تكلفة الوحدة المرجح بعد استلام كمية جديدة، مع التقريب لأقرب قرش. */
+export function weightedAverageUnitCost(
+  currentQty: number,
+  currentUnitCost: number,
+  incomingQty: number,
+  incomingUnitCost: number,
+): number {
+  if (![currentQty, currentUnitCost, incomingQty, incomingUnitCost].every(Number.isFinite)
+    || currentQty < 0 || incomingQty < 0 || currentUnitCost < 0 || incomingUnitCost < 0) {
+    throw new RangeError('INVALID_INVENTORY_COST_INPUT');
+  }
+  const totalQty = currentQty + incomingQty;
+  if (totalQty === 0) return Math.round(incomingUnitCost * 100) / 100;
+  return Math.round(((currentQty * currentUnitCost + incomingQty * incomingUnitCost) / totalQty) * 100) / 100;
 }

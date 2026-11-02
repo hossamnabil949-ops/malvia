@@ -1,5 +1,6 @@
 import { AutoPart, Customer, Invoice, Supplier } from '../types/autoParts';
 import { loadDeviceLicenseKey } from './tenantService';
+import { cairoDateKey, netSales } from '../utils/reportsLogic';
 
 export type AIActionType = 
   | 'EXECUTE_SALE' 
@@ -46,10 +47,10 @@ export function buildShopSnapshot(
   shopName?: string,
   supplierPaymentSchedules: Array<{ id: string; supplierId: string; supplierName: string; amount: number; amountPaid: number; dueDate: string; status: string; notes?: string }> = []
 ) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = cairoDateKey(new Date());
   const month = today.slice(0, 7);
   const live = invoices.filter((i) => i.status !== 'ملغاة');
-  const sum = (list: Invoice[]) => list.reduce((t, i) => t + (i.grandTotal - (i.returnedAmount || 0)), 0);
+  const sum = (list: Invoice[]) => list.reduce((t, i) => t + netSales(i), 0);
   const todayInv = live.filter((i) => i.date === today);
   const monthInv = live.filter((i) => (i.date || '').startsWith(month));
   const sold = new Map<string, { name: string; qty: number }>();
@@ -105,7 +106,7 @@ function answerInternalShopQuery(command: string, parts: AutoPart[], customers: 
     const matched = supplierTerms.map(x => ({...x, score: spoken.filter(w => x.tokens.includes(w)).length})).filter(x => x.score > 0).sort((a,b)=>b.score-a.score);
     if (spoken.length && (!matched.length || (matched[1] && matched[1].score === matched[0].score))) return answer('لم أستطع تحديد المورد بشكل فريد. اذكر اسم المورد كما هو مسجل.');
     const selected = matched[0]?.supplier;
-    const today = new Date().toISOString().slice(0,10);
+    const today = cairoDateKey(new Date());
     const pending = rows.filter(x => x.status === 'scheduled' && x.amount > x.amountPaid && (!selected || x.supplierId === selected.id)).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
     if (!pending.length) return answer(selected ? 'لا توجد دفعات مجدولة متبقية للمورد ' + selected.name + '.' : 'لا توجد دفعات مجدولة متبقية.');
     const overdue = pending.filter(x => x.dueDate < today);

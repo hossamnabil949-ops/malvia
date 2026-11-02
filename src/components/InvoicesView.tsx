@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { paymentLines } from '../utils/paymentLines';
+import { netSales } from '../utils/reportsLogic';
 import { Invoice, SalesReturn, SalesReturnItem, PaymentMethod } from '../types/autoParts';
 import { DateRangeFilter } from './DateRangeFilter';
 import { verifyManagerApproval } from '../services/approvalService';
@@ -156,7 +157,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     });
   }, [salesReturns, searchQuery, dateRange]);
 
-  const totalSalesRevenue = useMemo(() => invoices.reduce((acc, inv) => inv.status === 'ملغاة' ? acc : acc + inv.grandTotal - (inv.returnedAmount || 0), 0), [invoices]);
+  const totalSalesRevenue = useMemo(() => invoices.reduce((acc, inv) => inv.status === 'ملغاة' ? acc : acc + netSales(inv), 0), [invoices]);
   const totalRefundsFromTreasury = useMemo(() => {
     return salesReturns
       .filter(r => r.treasuryDeducted || r.refundMethod === 'نقدي (خصم من الخزنة)')
@@ -195,6 +196,8 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       .map((it, idx) => ({ it, idx, qty: returnItems[String(idx)] || 0 }))
       .filter(({ qty }) => qty > 0)
       .map(({ it, idx, qty }) => ({
+        lineId: it.lineId || `${returnInvoice.id}:${idx}`,
+        partId: it.partId,
         partNumber: it.partNumber,
         partName: it.partName,
         quantity: qty,
@@ -214,6 +217,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       date: new Date().toISOString().split('T')[0],
       time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
       customerName: returnInvoice.customerName,
+      customerId: returnInvoice.customerId,
       items: itemsToReturn,
       totalRefundAmount: calculatedReturnTotal,
       refundMethod,

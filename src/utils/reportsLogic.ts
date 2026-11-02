@@ -16,6 +16,42 @@ import { paymentLines } from './paymentLines.ts';
 
 export interface DateRange { from: string; to: string }
 
+export interface SalesForDateSummary {
+  date: string;
+  invoices: Invoice[];
+  count: number;
+  sales: number;
+  average: number;
+}
+
+/** Calendar date in Egypt's business timezone, independent of the device timezone. */
+export function cairoDateKey(date: Date | string = new Date()): string {
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  const value = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(value.getTime())) throw new Error('تاريخ غير صالح لحساب مبيعات اليوم');
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(value);
+  const part = (type: string) => parts.find(x => x.type === type)?.value || '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+/** One source of truth for date-scoped sales: active invoices only, net of recorded returns. */
+export function salesForDate(invoices: Invoice[], date: Date | string = new Date()): SalesForDateSummary {
+  const key = cairoDateKey(date);
+  const selected = invoices.filter(invoice =>
+    invoice.status !== 'ملغاة' && (invoice.date || '').slice(0, 10) === key
+  );
+  const sales = r2(sum(selected, netSales));
+  return {
+    date: key,
+    invoices: selected,
+    count: selected.length,
+    sales,
+    average: selected.length ? r2(sales / selected.length) : 0,
+  };
+}
+
 export type ColumnKind = 'text' | 'money' | 'int' | 'percent' | 'date';
 export interface ReportColumn { key: string; label: string; kind?: ColumnKind }
 export type Cell = string | number;
@@ -32,6 +68,7 @@ export interface ReportData {
   invoices: Invoice[];
   salesReturns: SalesReturn[];
   purchaseInvoices: PurchaseInvoice[];
+  purchaseReturns?: import('../types/autoParts').PurchaseReturn[];
   parts: AutoPart[];
   customers: Customer[];
   suppliers: Supplier[];
@@ -44,6 +81,15 @@ export interface ReportData {
 }
 
 const r2 = (n: number): number => Math.round(n * 100) / 100;
+/** Net sales per invoice: pre-tax revenue after invoice discount and tax-inclusive refunds. */
+export function netSales(invoice: Invoice): number {
+  const preTaxAfterDiscount = Math.max(0, invoice.subtotal - invoice.discount);
+  const refundBeforeTax = invoice.grandTotal > 0
+    ? (invoice.returnedAmount || 0) * (preTaxAfterDiscount / invoice.grandTotal)
+    : 0;
+  return r2(Math.max(0, preTaxAfterDiscount - refundBeforeTax));
+}
+
 const inRange = (date: string | undefined, r: DateRange): boolean => {
   if (!date) return false;
   const d = date.slice(0, 10);
@@ -62,13 +108,13 @@ function group<T>(list: T[], key: (x: T) => string): Map<string, T[]> {
 // ---------------- المبيعات ----------------
 export function reportDailySales(d: ReportData, r: DateRange): ReportTable {
   const inv = active(d, r);
-  const rets = d.salesReturns.filter(x => inRange(x.date, r));
-  const days = new Set<string>([...inv.map(i => i.date.slice(0, 10)), ...rets.map(x => x.date.slice(0, 10))]);
+  const days = new Set<string>(inv.map(i => i.date.slice(0, 10)));
   const rows = [...days].sort().map(day => {
     const di = inv.filter(i => i.date.slice(0, 10) === day);
-    const total = sum(di, i => i.grandTotal);
-    const ret = sum(rets.filter(x => x.date.slice(0, 10) === day), x => x.totalRefundAmount);
-    return { date: day, count: di.length, total: r2(total), discount: r2(sum(di, i => i.discount)), tax: r2(sum(di, i => i.tax)), returns: r2(ret), net: r2(total - ret) };
+    const grossPreTax = sum(di, i => Math.max(0, i.subtotal - i.discount));
+    const net = sum(di, netSales);
+    const ret = Math.max(0, grossPreTax - net);
+    return { date: day, count: di.length, total: r2(grossPreTax), discount: r2(sum(di, i => i.discount)), tax: r2(sum(di, i => i.tax)), returns: r2(ret), net: r2(net) };
   });
   return {
     id: 'daily-sales', title: 'المبيعات اليومية',
@@ -78,7 +124,7 @@ export function reportDailySales(d: ReportData, r: DateRange): ReportTable {
     ],
     rows,
     totals: { date: 'الإجمالي', count: sum(rows, x => x.count), total: r2(sum(rows, x => x.total)), discount: r2(sum(rows, x => x.discount)), tax: r2(sum(rows, x => x.tax)), returns: r2(sum(rows, x => x.returns)), net: r2(sum(rows, x => x.net)) },
-    note: 'الصافي = إجمالي الفواتير غير الملغاة ناقص المرتجعات المسجّلة في نفس اليوم.',
+    note: 'المبيعات منسوبة إلى تاريخ الفاتورة، قبل الضريبة وبعد الخصم، وصافيها بعد المرتجعات المسجلة على الفاتورة.',
   };
 }
 
@@ -86,13 +132,19 @@ export function reportSalesByItem(d: ReportData, r: DateRange): ReportTable {
   const costFallback = new Map(d.parts.map(p => [p.id, p.costPrice]));
   const m = new Map<string, { number: string; name: string; qty: number; revenue: number; cost: number }>();
   for (const inv of active(d, r)) {
+    const preTaxAfterDiscount = Math.max(0, inv.subtotal - inv.discount);
+    const invoiceNetRatio = preTaxAfterDiscount > 0 ? netSales(inv) / preTaxAfterDiscount : 0;
     for (const it of inv.items) {
-      const q = netQty(it);
+      const q = it.returnedQuantity !== undefined ? netQty(it) : it.quantity * invoiceNetRatio;
       if (q <= 0) continue;
       const key = it.partId || it.partNumber;
       const row = m.get(key) ?? { number: it.partNumber, name: it.partName, qty: 0, revenue: 0, cost: 0 };
+      const lineGross = it.total || (it.quantity * it.unitPrice);
+      const invoiceDiscountShare = inv.subtotal > 0 ? inv.discount * (lineGross / inv.subtotal) : 0;
+      const netLineBeforeReturns = Math.max(0, lineGross - invoiceDiscountShare);
+      const netLineRevenue = it.quantity > 0 ? netLineBeforeReturns * (q / it.quantity) : 0;
       row.qty += q;
-      row.revenue += q * it.unitPrice;
+      row.revenue += netLineRevenue;
       row.cost += q * (it.costPrice ?? costFallback.get(it.partId ?? '') ?? 0);
       m.set(key, row);
     }
@@ -108,16 +160,16 @@ export function reportSalesByItem(d: ReportData, r: DateRange): ReportTable {
     ],
     rows,
     totals: { number: '', name: 'الإجمالي', qty: sum(rows, x => x.qty), revenue: r2(rev), cost: r2(sum(rows, x => x.cost)), profit: r2(prof), margin: rev > 0 ? r2((prof / rev) * 100) : 0 },
-    note: 'القيم قبل خصم الفاتورة العام والضريبة، وبعد استبعاد الكميات المرتجعة والفواتير الملغاة.',
+    note: 'قيمة كل سطر بعد توزيع خصم الفاتورة عليه نسبياً، وقبل الضريبة وبعد خصم الكميات المرتجعة والفواتير الملغاة. تكلفة البيع المحفوظة على السطر هي الأساس.',
   };
 }
 
 export function reportSalesByCustomer(d: ReportData, r: DateRange): ReportTable {
   const bal = new Map(d.customers.map(c => [c.id, c]));
-  const g = group(active(d, r), i => i.customerId || `name:${i.customerName}`);
+  const g = group(active(d, r), i => i.customerId || `unregistered-invoice:${i.id}`);
   const rows = [...g.entries()].map(([k, list]) => {
     const c = bal.get(list[0].customerId ?? '');
-    const total = sum(list, i => i.grandTotal - (i.returnedAmount ?? 0));
+    const total = sum(list, netSales);
     return { name: c?.name ?? list[0].customerName, count: list.length, total: r2(total), avg: r2(total / list.length), last: list.map(i => i.date.slice(0, 10)).sort().at(-1) ?? '', balance: r2(c?.balance ?? 0) };
   }).sort((a, b) => b.total - a.total);
   return {
@@ -134,7 +186,7 @@ export function reportSalesByCashier(d: ReportData, r: DateRange): ReportTable {
   const names = new Set([...inv.map(i => i.cashierName), ...voided.map(i => i.cashierName)]);
   const rows = [...names].map(n => {
     const mine = inv.filter(i => i.cashierName === n);
-    const total = sum(mine, i => i.grandTotal);
+    const total = sum(mine, netSales);
     return { name: n, count: mine.length, total: r2(total), avg: mine.length ? r2(total / mine.length) : 0, voided: voided.filter(i => i.cashierName === n).length };
   }).sort((a, b) => b.total - a.total);
   return {
@@ -145,12 +197,37 @@ export function reportSalesByCashier(d: ReportData, r: DateRange): ReportTable {
   };
 }
 
+export function reportSalesReconciliation(d: ReportData, r: DateRange): ReportTable {
+  const invoices = active(d, r);
+  const sourceTotal = r2(sum(invoices, netSales));
+  const daily = reportDailySales(d, r);
+  const byCustomer = reportSalesByCustomer(d, r);
+  const byCashier = reportSalesByCashier(d, r);
+  const byItem = reportSalesByItem(d, r);
+  const byPayment = reportSalesByPayment(d, r);
+  const values = [
+    { item: 'إجمالي الفواتير المؤهلة (المرجع الموحد)', amount: sourceTotal },
+    { item: 'مجموع التقرير اليومي', amount: r2(sum(daily.rows, row => Number(row.net) || 0)) },
+    { item: 'مجموع تقرير العملاء', amount: r2(sum(byCustomer.rows, row => Number(row.total) || 0)) },
+    { item: 'مجموع تقرير الكاشير', amount: r2(sum(byCashier.rows, row => Number(row.total) || 0)) },
+    { item: 'مجموع تقرير الأصناف', amount: r2(sum(byItem.rows, row => Number(row.revenue) || 0)) },
+    { item: 'مجموع طرق الدفع بعد توزيع المرتجعات والضريبة', amount: r2(sum(byPayment.rows, row => Number(row.amount) || 0)) },
+  ];
+  return {
+    id: 'sales-reconciliation', title: 'مطابقة صافي المبيعات بين التقارير',
+    columns: [{ key: 'item', label: 'مصدر الإجمالي' }, { key: 'amount', label: 'صافي المبيعات (ج.م)', kind: 'money' }, { key: 'difference', label: 'الفرق عن المرجع', kind: 'money' }],
+    rows: values.map(row => ({ ...row, difference: r2(row.amount - sourceTotal) })),
+    totals: { item: 'فرق التقارير (يجب أن يكون صفراً)', amount: sourceTotal, difference: 0 },
+    note: 'جميع المقارنات تستخدم الفواتير غير الملغاة وصافي المبيعات بعد الخصم والمرتجعات وقبل الضريبة. أي فرق غير صفري يستحق مراجعة توزيع المرتجع أو الدفعة.',
+  };
+}
+
 export function reportSalesByPayment(d: ReportData, r: DateRange): ReportTable {
   const m = new Map<string, { count: number; amount: number }>();
   for (const inv of active(d, r)) {
     for (const p of paymentLines(inv)) {
       const row = m.get(p.method) ?? { count: 0, amount: 0 };
-      row.count += 1; row.amount += p.amount; m.set(p.method, row);
+      row.count += 1; row.amount += (inv.grandTotal > 0 ? p.amount * (netSales(inv) / inv.grandTotal) : 0); m.set(p.method, row);
     }
   }
   const total = sum([...m.values()], x => x.amount);
@@ -184,8 +261,10 @@ export function reportReturns(d: ReportData, r: DateRange): ReportTable {
 
 // ---------------- المشتريات والمالية ----------------
 export function reportPurchasesBySupplier(d: ReportData, r: DateRange): ReportTable {
-  const g = group(d.purchaseInvoices.filter(i => inRange(i.date, r)), i => i.supplierName);
-  const rows = [...g.entries()].map(([name, list]) => {
+  const supplierNames = new Map(d.suppliers.map(s => [s.id, s.name]));
+  const g = group(d.purchaseInvoices.filter(i => inRange(i.date, r)), i => i.supplierId || `legacy-name:${i.supplierName}`);
+  const rows = [...g.entries()].map(([supplierKey, list]) => {
+    const name = supplierNames.get(supplierKey) || list[0]?.supplierName || supplierKey;
     const total = sum(list, i => i.grandTotal);
     const paid = sum(list, i => i.amountPaid ?? 0);
     return { name, count: list.length, total: r2(total), paid: r2(paid), remaining: r2(Math.max(0, total - paid)) };
@@ -200,26 +279,84 @@ export function reportPurchasesBySupplier(d: ReportData, r: DateRange): ReportTa
 
 export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
   const inv = active(d, r);
+  const invoiceById = new Map(inv.map(i => [i.id, i]));
+  const partCostByNumber = new Map<string, number[]>();
+  for (const part of d.parts) {
+    const list = partCostByNumber.get(part.partNumber) ?? [];
+    list.push(part.costPrice);
+    partCostByNumber.set(part.partNumber, list);
+  }
   const sales = sum(inv, i => i.subtotal - i.discount);
-  const returns = sum(d.salesReturns.filter(x => inRange(x.date, r)), x => x.totalRefundAmount);
-  const cogs = sum(inv, i => sum(i.items, it => netQty(it) * (it.costPrice ?? 0)));
+  const returns = sum(d.salesReturns.filter(ret => {
+    const original = d.invoices.find(i => i.id === ret.invoiceId);
+    return inRange(ret.date, r) && Boolean(original) && original!.status !== 'ملغاة';
+  }), ret => {
+    const original = invoiceById.get(ret.invoiceId) ?? d.invoices.find(i => i.id === ret.invoiceId);
+    if (!original || original.grandTotal <= 0) return 0;
+    const preTaxNet = Math.max(0, original.subtotal - original.discount);
+    return ret.totalRefundAmount * (preTaxNet / original.grandTotal);
+  });
+  const cogs = sum(inv, i => sum(i.items, it => {
+    const frozenCost = it.costPrice;
+    const matches = partCostByNumber.get(it.partNumber) ?? [];
+    const fallbackCost = matches.length === 1 ? matches[0] : 0;
+    return netQty(it) * (frozenCost ?? fallbackCost);
+  }));
   const expenses = sum(d.expenses.filter(e => inRange(e.date, r)), e => e.amount);
+  const drawerShortage = sum(d.treasury.filter(tx => inRange(tx.date, r) && tx.category === 'عجز درج (تسوية وردية)'), tx => tx.amount);
+  const drawerOverage = sum(d.treasury.filter(tx => inRange(tx.date, r) && tx.category === 'زيادة درج (تسوية وردية)'), tx => tx.amount);
   const net = sales - returns;
   const gross = net - cogs;
   const rows = [
     { item: 'المبيعات (قبل الضريبة وبعد الخصم)', amount: r2(sales) },
-    { item: 'يخصم: المرتجعات', amount: r2(-returns) },
+    { item: 'يخصم: المرتجعات (قبل الضريبة وبعد الخصم)', amount: r2(-returns) },
     { item: 'صافي المبيعات', amount: r2(net) },
     { item: 'يخصم: تكلفة البضاعة المباعة', amount: r2(-cogs) },
     { item: 'مجمل الربح', amount: r2(gross) },
     { item: 'يخصم: المصروفات', amount: r2(-expenses) },
-    { item: 'صافي الربح', amount: r2(gross - expenses) },
+    { item: 'يخصم: عجز الدرج', amount: r2(-drawerShortage) },
+    { item: 'يضاف: زيادة الدرج', amount: r2(drawerOverage) },
+    { item: 'صافي الربح', amount: r2(gross - expenses - drawerShortage + drawerOverage) },
   ];
   return {
     id: 'profit-loss', title: 'ملخص الأرباح والخسائر',
     columns: [{ key: 'item', label: 'البند' }, { key: 'amount', label: 'المبلغ (ج.م)', kind: 'money' }],
     rows,
-    note: 'التكلفة تُحسب بتكلفة الصنف المسجّلة على كل فاتورة وقت البيع. لا يشمل توزيعات الشركاء ورأس المال.',
+    note: 'المرتجعات تُحوَّل إلى أساس الفاتورة الأصلية قبل الضريبة وبعد الخصم، وتُستبعد مرتجعات الفواتير الملغاة. تكلفة البضاعة تستخدم تكلفة البيع المحفوظة، ثم تكلفة الصنف الحالية فقط عند وجود تطابق وحيد. يشمل عجز وزيادة الدرج المسجلين كتسويات ورديات، ولا يشمل توزيعات الشركاء ورأس المال.',
+  };
+}
+
+export function reportVatSummary(d: ReportData, r: DateRange): ReportTable {
+  const outputVat = sum(active(d, r), invoice => invoice.tax || 0);
+  const outputVatReturns = sum(d.salesReturns.filter(ret => {
+    const original = d.invoices.find(invoice => invoice.id === ret.invoiceId);
+    return inRange(ret.date, r) && Boolean(original) && original!.status !== 'ملغاة' && original!.grandTotal > 0;
+  }), ret => {
+    const original = d.invoices.find(invoice => invoice.id === ret.invoiceId)!;
+    return ret.totalRefundAmount * ((original.tax || 0) / original.grandTotal);
+  });
+  const inputVat = sum(d.purchaseInvoices.filter(invoice => inRange(invoice.date, r)), invoice => invoice.tax || 0);
+  const inputVatReturns = sum((d.purchaseReturns || []).filter(ret => inRange(ret.date, r)), ret => {
+    const original = d.purchaseInvoices.find(invoice => invoice.id === ret.purchaseInvoiceId);
+    return original && original.grandTotal > 0
+      ? ret.totalReturnAmount * ((original.tax || 0) / original.grandTotal)
+      : 0;
+  });
+  const outputNet = Math.max(0, outputVat - outputVatReturns);
+  const inputNet = Math.max(0, inputVat - inputVatReturns);
+  return {
+    id: 'vat-summary', title: 'ملخص ضريبة القيمة المضافة',
+    columns: [{ key: 'item', label: 'البند' }, { key: 'amount', label: 'المبلغ (ج.م)', kind: 'money' }],
+    rows: [
+      { item: 'ضريبة المخرجات على المبيعات', amount: r2(outputVat) },
+      { item: 'يخصم: ضريبة مرتجعات المبيعات', amount: r2(-outputVatReturns) },
+      { item: 'صافي ضريبة المخرجات', amount: r2(outputNet) },
+      { item: 'ضريبة المدخلات على المشتريات', amount: r2(inputVat) },
+      { item: 'يخصم: ضريبة مرتجعات المشتريات', amount: r2(-inputVatReturns) },
+      { item: 'صافي ضريبة المدخلات', amount: r2(inputNet) },
+      { item: 'صافي الضريبة المستحقة / الرصيد الدائن', amount: r2(outputNet - inputNet) },
+    ],
+    note: 'ملخص تجميعي للضريبة المسجلة على الفواتير والمرتجعات خلال الفترة. لا يمثل إقراراً ضريبياً رسمياً ولا يغني عن مراجعة المحاسب.',
   };
 }
 
@@ -267,7 +404,7 @@ export function reportInventoryValuation(d: ReportData): ReportTable {
 }
 
 export function reportLowStock(d: ReportData): ReportTable {
-  const rows = d.parts.filter(p => p.stockQuantity <= p.minAlertStock)
+  const rows = d.parts.filter(p => p.minAlertStock > 0 && p.stockQuantity <= p.minAlertStock)
     .map(p => ({ number: p.partNumber, name: p.name, stock: p.stockQuantity, min: p.minAlertStock, suggest: Math.max(0, p.minAlertStock * 2 - p.stockQuantity), cost: r2(Math.max(0, p.minAlertStock * 2 - p.stockQuantity) * p.costPrice) }))
     .sort((a, b) => a.stock - b.stock);
   return {
@@ -280,20 +417,32 @@ export function reportLowStock(d: ReportData): ReportTable {
 }
 
 export function reportSlowMoving(d: ReportData, today: string, days = 90): ReportTable {
-  const lastSale = new Map<string, string>();
+  const lastActivity = new Map<string, string>();
+  const recordActivity = (key: string | undefined, date: string | undefined) => {
+    const normalizedDate = date?.slice(0, 10);
+    if (!key || !normalizedDate) return;
+    const previous = lastActivity.get(key);
+    if (!previous || normalizedDate > previous) lastActivity.set(key, normalizedDate);
+  };
   for (const inv of d.invoices) {
     if (inv.status === 'ملغاة') continue;
-    for (const it of inv.items) {
-      const k = it.partId || it.partNumber;
-      const prev = lastSale.get(k);
-      if (!prev || inv.date > prev) lastSale.set(k, inv.date.slice(0, 10));
+    for (const it of inv.items || []) {
+      recordActivity(it.partId, inv.date);
+      if (!it.partId) recordActivity(it.partNumber, inv.date);
+    }
+  }
+  for (const purchase of d.purchaseInvoices) {
+    for (const it of purchase.items || []) {
+      recordActivity(it.partId, purchase.date);
+      if (!it.partId) recordActivity(it.partNumber, purchase.date);
     }
   }
   const rows = d.parts.filter(p => p.stockQuantity > 0).map(p => {
-    const last = lastSale.get(p.id) ?? lastSale.get(p.partNumber) ?? '';
-    const idle = last ? daysBetween(last, today) : 9999;
-    return { number: p.partNumber, name: p.name, stock: p.stockQuantity, frozen: r2(p.stockQuantity * p.costPrice), last: last || 'لم يُبع', idle: idle === 9999 ? 'بدون مبيعات' : idle, _i: idle };
-  }).filter(x => x._i >= days).sort((a, b) => b.frozen - a.frozen)
+    const last = [lastActivity.get(p.id), lastActivity.get(p.partNumber), p.createdAt?.slice(0, 10)]
+      .filter((x): x is string => Boolean(x)).sort().at(-1) ?? '';
+    const idle = last ? Math.max(0, daysBetween(last, today)) : 0;
+    return { number: p.partNumber, name: p.name, stock: p.stockQuantity, frozen: r2(p.stockQuantity * p.costPrice), last: last || 'تاريخ غير متاح', idle: last ? idle : 'تاريخ غير متاح', _i: idle };
+  }).filter(x => x._i >= days && x.last !== 'تاريخ غير متاح').sort((a, b) => b.frozen - a.frozen)
     .map(({ _i, ...rest }) => rest);
   return {
     id: 'slow-moving', title: `الأصناف الراكدة (بلا مبيعات منذ ${days} يوماً)`,
@@ -323,10 +472,17 @@ export function reportExpiry(d: ReportData, today: string): ReportTable {
 // ---------------- الذمم والالتزامات ----------------
 /** أعمار ديون العملاء: يُوزَّع رصيد العميل على فواتيره الآجلة من الأحدث للأقدم، والباقي يُعدّ قديماً (أكثر من 90). */
 export function reportCustomerAging(d: ReportData, today: string): ReportTable {
-  const creditOf = (i: Invoice): number => sum(paymentLines(i).filter(p => p.isCredit), p => p.amount);
-  const byCustomer = group(d.invoices.filter(i => i.status !== 'ملغاة' && creditOf(i) > 0), i => i.customerId || `name:${i.customerName}`);
+  const creditOf = (i: Invoice): number => {
+    const creditPayments = sum(paymentLines(i).filter(p => p.isCredit), p => p.amount);
+    const creditReturns = sum(d.salesReturns.filter(ret =>
+      ret.invoiceId === i.id && ret.refundMethod === 'خصم من رصيد العميل الآجل'
+    ), ret => ret.totalRefundAmount);
+    const settled = sum(i.settlementPayments || [], payment => payment.amount);
+    return Math.max(0, creditPayments - creditReturns - settled);
+  };
+  const byCustomer = group(d.invoices.filter(i => i.status !== 'ملغاة' && i.customerId && creditOf(i) > 0), i => i.customerId as string);
   const rows = d.customers.filter(c => c.balance > 0).map(c => {
-    const list = (byCustomer.get(c.id) ?? byCustomer.get(`name:${c.name}`) ?? []).sort((a, b) => b.date.localeCompare(a.date));
+    const list = (byCustomer.get(c.id) ?? []).sort((a, b) => a.date.localeCompare(b.date));
     const b = { b0: 0, b30: 0, b60: 0, b90: 0 };
     let left = c.balance;
     for (const inv of list) {
@@ -344,7 +500,7 @@ export function reportCustomerAging(d: ReportData, today: string): ReportTable {
     columns: [{ key: 'name', label: 'العميل' }, { key: 'b0', label: '0–30 يوماً', kind: 'money' }, { key: 'b30', label: '31–60', kind: 'money' }, { key: 'b60', label: '61–90', kind: 'money' }, { key: 'b90', label: 'أكثر من 90', kind: 'money' }, { key: 'total', label: 'إجمالي الدين', kind: 'money' }],
     rows,
     totals: { name: 'الإجمالي', b0: r2(sum(rows, x => x.b0)), b30: r2(sum(rows, x => x.b30)), b60: r2(sum(rows, x => x.b60)), b90: r2(sum(rows, x => x.b90)), total: r2(sum(rows, x => x.total)) },
-    note: 'الدين يُوزَّع على أحدث الفواتير الآجلة أولاً (الأقدم هو الأخير سداداً). الرصيد الذي لا تغطيه فواتير مسجّلة يُحسب «أكثر من 90».',
+    note: 'الدين يُوزَّع على أقدم الفواتير الآجلة أولاً (FIFO)، مع خصم المرتجعات التي خُصمت من حساب العميل. الرصيد الذي لا تغطيه فواتير مسجّلة يُحسب «أكثر من 90».',
   };
 }
 
@@ -361,15 +517,15 @@ export function reportSupplierPayables(d: ReportData): ReportTable {
 export function reportCheques(d: ReportData, today: string): ReportTable {
   const rows = d.cheques.filter(isOpen).sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(c => {
     const st = dueState(c, today);
-    return { dir: c.direction === 'incoming' ? 'وارد' : 'صادر', party: c.partyName, number: c.number, bank: c.bankName, due: c.dueDate, days: daysBetween(today, c.dueDate), state: st === 'overdue' ? 'متأخر' : st === 'due_soon' ? 'يستحق قريباً' : 'لاحقاً', amount: r2(c.amount), _in: c.direction === 'incoming' ? c.amount : 0, _out: c.direction === 'outgoing' ? c.amount : 0 };
+    return { dir: c.direction === 'incoming' ? 'وارد' : 'صادر', party: c.partyName, number: c.number, bank: c.bankName, due: c.dueDate, days: daysBetween(today, c.dueDate), state: st === 'overdue' ? 'متأخر' : st === 'due_soon' ? 'يستحق قريباً' : 'لاحقاً', amount: r2(c.amount), incoming: c.direction === 'incoming' ? r2(c.amount) : 0, outgoing: c.direction === 'outgoing' ? r2(c.amount) : 0 };
   });
-  const inn = sum(rows, x => x._in), out = sum(rows, x => x._out);
+  const inn = sum(rows, x => x.incoming), out = sum(rows, x => x.outgoing);
   return {
     id: 'cheques', title: 'الشيكات المفتوحة حسب الاستحقاق',
-    columns: [{ key: 'dir', label: 'النوع' }, { key: 'party', label: 'الطرف' }, { key: 'number', label: 'رقم الشيك' }, { key: 'bank', label: 'البنك' }, { key: 'due', label: 'الاستحقاق', kind: 'date' }, { key: 'days', label: 'الأيام المتبقية' }, { key: 'state', label: 'الحالة' }, { key: 'amount', label: 'المبلغ', kind: 'money' }],
-    rows: rows.map(({ _in, _out, ...rest }) => rest),
-    totals: { dir: 'الإجمالي', party: `واردة ${r2(inn)} · صادرة ${r2(out)}`, number: '', bank: '', due: '', days: '', state: '', amount: r2(inn + out) },
-    note: 'الأيام السالبة = متأخر عن الاستحقاق.',
+    columns: [{ key: 'dir', label: 'النوع' }, { key: 'party', label: 'الطرف' }, { key: 'number', label: 'رقم الشيك' }, { key: 'bank', label: 'البنك' }, { key: 'due', label: 'الاستحقاق', kind: 'date' }, { key: 'days', label: 'الأيام المتبقية' }, { key: 'state', label: 'الحالة' }, { key: 'amount', label: 'المبلغ', kind: 'money' }, { key: 'incoming', label: 'إجمالي الوارد', kind: 'money' }, { key: 'outgoing', label: 'إجمالي الصادر', kind: 'money' }],
+    rows,
+    totals: { dir: 'الإجمالي', party: '', number: '', bank: '', due: '', days: '', state: '', amount: r2(inn + out), incoming: r2(inn), outgoing: r2(out) },
+    note: 'الأيام السالبة = متأخر عن الاستحقاق. إجمالي الشيكات الواردة والصادرة معروض كلٌّ على حدة.'
   };
 }
 
@@ -395,8 +551,10 @@ export const REPORT_DEFS: ReportDef[] = [
   { id: 'sales-by-customer', group: 'المبيعات', title: 'المبيعات حسب العميل', usesRange: true, build: (d, r) => reportSalesByCustomer(d, r) },
   { id: 'sales-by-cashier', group: 'المبيعات', title: 'المبيعات حسب الموظف', usesRange: true, build: (d, r) => reportSalesByCashier(d, r) },
   { id: 'sales-by-payment', group: 'المبيعات', title: 'المبيعات حسب طريقة الدفع', usesRange: true, build: (d, r) => reportSalesByPayment(d, r) },
+  { id: 'sales-reconciliation', group: 'المبيعات', title: 'مطابقة صافي المبيعات بين التقارير', usesRange: true, build: (d, r) => reportSalesReconciliation(d, r) },
   { id: 'returns', group: 'المبيعات', title: 'تحليل المرتجعات', usesRange: true, build: (d, r) => reportReturns(d, r) },
   { id: 'profit-loss', group: 'المالية', title: 'الأرباح والخسائر', usesRange: true, build: (d, r) => reportProfitLoss(d, r) },
+  { id: 'vat-summary', group: 'المالية', title: 'ملخص ضريبة القيمة المضافة', usesRange: true, build: (d, r) => reportVatSummary(d, r) },
   { id: 'expenses', group: 'المالية', title: 'المصروفات حسب البند', usesRange: true, build: (d, r) => reportExpensesByCategory(d, r) },
   { id: 'treasury', group: 'المالية', title: 'حركة الخزنة', usesRange: true, build: (d, r) => reportTreasury(d, r) },
   { id: 'purchases-by-supplier', group: 'المالية', title: 'المشتريات حسب المورد', usesRange: true, build: (d, r) => reportPurchasesBySupplier(d, r) },

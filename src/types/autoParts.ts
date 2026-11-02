@@ -120,6 +120,7 @@ export type PaymentMethod =
   | string;
 
 export interface InvoiceItem {
+  lineId?: string; // معرف ثابت لسطر الفاتورة حتى مع تكرار الصنف أو اختلاف السعر
   partId?: string; // معرّف الصنف (المطابقة به أدق من الاسم/الرقم)
   partNumber: string;
   partName: string;
@@ -128,6 +129,7 @@ export interface InvoiceItem {
   originalPrice?: number;
   costPrice?: number; // تكلفة الوحدة وقت البيع (لحساب تكلفة البضاعة المباعة بدقة)
   total: number;
+  taxAmount?: number; // حصة الضريبة المحسوبة على هذا السطر
   returnedQuantity?: number;
   batchAllocations?: import('../utils/trackingLogic').BatchAllocation[]; // الدفعات المسحوبة (للأصناف ذات الدفعات)
   serials?: string[];          // الأرقام التسلسلية المباعة
@@ -139,11 +141,19 @@ export interface InvoicePayment {
   amount: number;
 }
 
+export interface InvoiceSettlement {
+  amount: number;
+  date: string;
+  time: string;
+  paymentMethod: PaymentMethod | string;
+  receiptNumber: string;
+}
+
 export type AuditAction =
   | 'invoice.create' | 'invoice.price_override' | 'invoice.discount' | 'invoice.void'
   | 'sales_return.create' | 'sales_return.delete'
   | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
-  | 'stock.adjust' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'cheque.create' | 'cheque.action' | 'batch.create' | 'batch.writeoff' | 'serial.register' | 'serial.scrap' | 'stock.transfer' | 'supplier.payment'
+  | 'stock.adjust' | 'part.restock' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'cheque.create' | 'cheque.action' | 'batch.create' | 'batch.writeoff' | 'serial.register' | 'serial.scrap' | 'stock.transfer' | 'supplier.payment'
   | 'shift.open' | 'shift.close' | 'shift.variance' | 'part.delete';
 
 export interface AuditEntry {
@@ -194,6 +204,8 @@ export interface Invoice {
   grandTotal: number;
   paymentMethod: PaymentMethod | string;
   payments?: InvoicePayment[]; // الدفع المقسّم (كاش + فيزا ...). غيابه = دفعة واحدة بـ paymentMethod
+  creditAmount?: number; // الجزء الآجل من إجمالي الفاتورة
+  settlementPayments?: InvoiceSettlement[]; // التحصيلات المخصصة لهذه الفاتورة بالترتيب
   customerId?: string; // ربط الفاتورة بالعميل (بدل المطابقة بالاسم)
   cashierId?: string;
   cashierName: string;
@@ -201,7 +213,8 @@ export interface Invoice {
   loyaltyEarned?: number;         // نقاط ولاء اكتسبها العميل من هذه الفاتورة
   loyaltyRedeemedPoints?: number; // نقاط استبدلها العميل كخصم في هذه الفاتورة
   loyaltyDiscount?: number;       // قيمة الخصم الناتج عن النقاط (ج.م) وهو جزء من discount
-  status?: 'مسددة' | 'مرتجع جزئي' | 'مرتجع كلي' | 'ملغاة';
+  status?: 'آجلة' | 'مسددة جزئياً' | 'مسددة' | 'مرتجع جزئي' | 'مرتجع كلي' | 'ملغاة';
+  paymentStatus?: 'آجلة' | 'مسددة جزئياً' | 'مسددة';
   returnedAmount?: number;
   voidedAt?: string;        // ISO — وقت الإلغاء
   voidedBy?: string;        // من نفّذ الإلغاء
@@ -220,7 +233,7 @@ export interface Customer {
   monthlyPurchases: number; // مشتريات الشهر الحالي
   invoicesCount?: number;
   lastVisit: string;
-  creditLimit?: number; // حد الائتمان (ج.م) — 0 أو بدون قيمة = غير محدود
+  creditLimit?: number; // حد الائتمان (ج.م) — القيمة الافتراضية 5,000 ج.م عند عدم التحديد
   loyaltyPoints?: number; // رصيد نقاط الولاء (يُدمج بالفرق على السحابة)
   chequesPending?: number; // (محسوب وغير محفوظ) شيكات واردة مفتوحة تُحتسب ضمن مخاطر الائتمان
 }
@@ -367,6 +380,7 @@ export interface PurchaseInvoiceItem {
   costPrice: number;
   salePrice: number;
   total: number;
+  taxAmount?: number; // حصة ضريبة المدخلات لهذا السطر
   returnedQuantity?: number;
   tracking?: import('../utils/trackingLogic').TrackingMode; // للصنف الجديد عند أول توريد
   batchNo?: string;
@@ -399,6 +413,8 @@ export interface PurchaseInvoice {
 }
 
 export interface SalesReturnItem {
+  lineId?: string; // يربط المرتجع بسطر الفاتورة الأصلي
+  partId?: string; // يربط حركة المخزون بمعرّف الصنف
   partNumber: string;
   partName: string;
   quantity: number;
@@ -416,6 +432,7 @@ export interface SalesReturn {
   date: string;
   time: string;
   customerName: string;
+  customerId?: string;
   items: SalesReturnItem[];
   totalRefundAmount: number;
   refundMethod: 'نقدي (خصم من الخزنة)' | 'خصم من رصيد العميل الآجل' | 'إنستاباي / محفظة';
@@ -522,7 +539,7 @@ export interface Shift {
   cashIn?: number;                // إجمالي القبض النقدي خلال الوردية
   cashOut?: number;               // إجمالي الصرف النقدي خلال الوردية
   cashSales?: number;
-  nonCash?: { instapay: number; visa: number; wallet: number };
+  nonCash?: { instapay: number; visa: number; wallet: number; bank?: number };
   invoiceCount?: number;
   breakdown?: ShiftCashLine[];    // تفصيل الحركات النقدية حسب البند
 }
@@ -580,6 +597,9 @@ export interface ShopSettings {
   taxId: string;
   currency: string;
   vatRate: number;
+  taxRegistered?: boolean; // المنشأة مسجلة/خاضعة لضريبة القيمة المضافة
+  pricesIncludeVat?: boolean; // سعر البيع المدخل شامل الضريبة
+  defaultMinAlertStock?: number; // حد التنبيه الافتراضي للأصناف الجديدة
   invoiceFooterNotes: string;
   activeEmployeeId: string;
   requireShiftForSales?: boolean; // إلزام فتح وردية قبل أي بيع في الكاشير

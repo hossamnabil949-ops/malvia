@@ -1,8 +1,9 @@
 import { TreasuryTransaction } from '../types/autoParts';
 import { DateRange, inDateRange } from './dateRange';
+import { paymentAccountOf, isCreditPaymentMethod } from './paymentMethods';
 
 // حسابات الخزنة: كل طريقة دفع تُحسب في حساب مستقل (كاش، إنستاباي، فيزا، محفظة).
-export type TreasuryAccountKey = 'cash' | 'instapay' | 'visa' | 'wallet';
+export type TreasuryAccountKey = 'cash' | 'instapay' | 'visa' | 'wallet' | 'bank';
 
 export interface TreasuryAccountMeta {
   key: TreasuryAccountKey;
@@ -16,19 +17,19 @@ export const TREASURY_ACCOUNTS: TreasuryAccountMeta[] = [
   { key: 'instapay', label: 'إنستاباي InstaPay', shortLabel: 'إنستاباي', color: '#a855f7' },
   { key: 'visa', label: 'فيزا / بطاقة بنكية', shortLabel: 'فيزا', color: '#3b82f6' },
   { key: 'wallet', label: 'محافظ إلكترونية (فودافون كاش...)', shortLabel: 'محافظ', color: '#06b6d4' },
+  { key: 'bank', label: 'تحويلات وشيكات بنكية', shortLabel: 'بنك', color: '#64748b' },
 ];
 
-/** يحوّل نص طريقة الدفع (بكل صيغه القديمة والجديدة) إلى حساب خزنة. */
+/** يقبل الصيغ التاريخية ويصنفها عبر طبقة تطبيع موحدة. */
 export const accountOf = (method?: string): TreasuryAccountKey => {
-  const m = (method || '').toLowerCase();
-  if (m.includes('انستا') || m.includes('إنستا') || m.includes('insta')) return 'instapay';
-  if (m.includes('محفظ') || m.includes('فودافون') || m.includes('wallet')) return 'wallet';
-  if (m.includes('فيزا') || m.includes('بطاقة') || m.includes('شبكة') || m.includes('مدى') || m.includes('بنك') || m.includes('visa')) return 'visa';
-  return 'cash';
+  const account = paymentAccountOf(method);
+  if (account === 'credit') throw new Error('طريقة الآجل ليست حركة خزنة.');
+  return account;
 };
 
-/** الآجل ليس حساب خزنة: لا تدخل به نقدية فعلية. */
-export const isCreditMethod = (method?: string): boolean => (method || '').includes('آجل');
+/** الآجل ليس حساب خزنة، ويُتعرف عليه بكل الصيغ القديمة والجديدة. */
+export const isCreditMethod = (method?: string): boolean => isCreditPaymentMethod(method);
+
 
 export interface AccountSummary {
   key: TreasuryAccountKey;

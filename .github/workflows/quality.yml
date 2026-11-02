@@ -5,6 +5,8 @@ on:
     branches:
       - ai/response-speed-phase1
       - malvia-web
+      - fix/financial-integrity-fin2-fin18
+      - commercial-v1-fin18-next
     paths:
       - '**/*.ts'
       - '**/*.tsx'
@@ -14,6 +16,9 @@ on:
       - 'package-lock.json'
       - 'tsconfig.json'
       - '.github/workflows/quality.yml'
+  pull_request:
+    branches:
+      - malvia-web
   workflow_dispatch:
 
 permissions:
@@ -44,5 +49,7 @@ jobs:
       - name: TypeScript check
         run: npm run lint
 
+      - name: Financial and regression tests
+        run: npm test
       - name: Production build
         run: npm run build

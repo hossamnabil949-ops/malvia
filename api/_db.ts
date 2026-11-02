@@ -211,11 +211,97 @@ export async function init() {
         insert into malvia_agent_ops(tenant,idempotency_key,result) values(p_tenant,p_key,v_result);
         return v_result;
       end $$`;
+      await q`create table if not exists malvia_sync_ops (
+        tenant text not null,
+        idempotency_key text not null,
+        request_hash text not null,
+        result jsonb not null,
+        created_at timestamptz not null default now(),
+        primary key (tenant, idempotency_key)
+      )`;
+      await q`create or replace function malvia_sync_batch(p_tenant text, p_key text, p_hash text, p_ops jsonb)
+      returns jsonb language plpgsql as $$
+      declare v_op jsonb; v_resource text; v_data jsonb; v_base bigint; v_current jsonb;
+        v_version bigint; v_versions jsonb := '{}'::jsonb; v_result jsonb; v_existing jsonb; v_hash text;
+      begin
+        if jsonb_typeof(p_ops) <> 'array' or jsonb_array_length(p_ops) = 0 or jsonb_array_length(p_ops) > 40 then
+          raise exception 'SYNC_BATCH_INVALID';
+        end if;
+        perform pg_advisory_xact_lock(hashtext(p_tenant));
+        select jsonb_build_object('hash',request_hash,'result',result) into v_existing
+          from malvia_sync_ops where tenant=p_tenant and idempotency_key=p_key;
+        if v_existing is not null then
+          if v_existing->>'hash' <> p_hash then raise exception 'SYNC_IDEMPOTENCY_KEY_REUSED'; end if;
+          return (v_existing->'result') || jsonb_build_object('idempotentReplay',true);
+        end if;
+        -- Validate every expected version before writing any resource.
+        for v_op in select value from jsonb_array_elements(p_ops) loop
+          v_resource := v_op->>'resource';
+          v_data := v_op->'data';
+          v_base := coalesce((v_op->>'baseVersion')::bigint,0);
+          if v_resource is null or v_data is null or v_resource in ('_registry','employees_sessions') then
+            raise exception 'SYNC_BATCH_INVALID';
+          end if;
+          if exists (select 1 from jsonb_array_elements(p_ops) x where x->>'resource'=v_resource group by x->>'resource' having count(*) > 1) then
+            raise exception 'SYNC_BATCH_DUPLICATE_RESOURCE';
+          end if;
+          select jsonb_build_object('data',data,'version',version) into v_current
+            from malvia_docs where tenant=p_tenant and resource=v_resource;
+          if (v_current is null and v_base <> 0) or (v_current is not null and (v_current->>'version')::bigint <> v_base) then
+            return jsonb_build_object('success',false,'conflict',true,'resource',v_resource,'current',v_current);
+          end if;
+          if v_resource='invoices' then
+            if exists (
+              select 1 from jsonb_array_elements(coalesce(v_data,'[]'::jsonb)) incoming
+              where nullif(trim(incoming->>'invoiceNumber'),'') is not null
+              group by lower(trim(incoming->>'invoiceNumber')) having count(*) > 1
+            ) or exists (
+              select 1 from jsonb_array_elements(coalesce(v_data,'[]'::jsonb)) incoming
+              join malvia_docs existing_doc on existing_doc.tenant=p_tenant and existing_doc.resource='invoices'
+              cross join lateral jsonb_array_elements(coalesce(existing_doc.data,'[]'::jsonb)) existing
+              where nullif(trim(incoming->>'invoiceNumber'),'') is not null
+                and lower(trim(incoming->>'invoiceNumber'))=lower(trim(existing->>'invoiceNumber'))
+                and coalesce(incoming->>'id','')<>coalesce(existing->>'id','')
+            ) then
+              return jsonb_build_object('success',false,'conflict',true,'code','DUPLICATE_INVOICE_NUMBER','resource',v_resource,'current',v_current);
+            end if;
+          end if;
+        end loop;
+        -- All checks passed: all document writes happen in this one database transaction.
+        for v_op in select value from jsonb_array_elements(p_ops) loop
+          v_resource := v_op->>'resource'; v_data := v_op->'data'; v_base := coalesce((v_op->>'baseVersion')::bigint,0);
+          if v_base=0 then
+            insert into malvia_docs(tenant,resource,data,version) values(p_tenant,v_resource,v_data,1);
+            v_version := 1;
+          else
+            update malvia_docs set data=v_data,version=version+1,updated_at=now()
+              where tenant=p_tenant and resource=v_resource and version=v_base returning version into v_version;
+          end if;
+          v_versions := v_versions || jsonb_build_object(v_resource,v_version);
+        end loop;
+        v_result := jsonb_build_object('success',true,'versions',v_versions);
+        insert into malvia_sync_ops(tenant,idempotency_key,request_hash,result) values(p_tenant,p_key,p_hash,v_result);
+        return v_result;
+      end $$`;
       await q`create or replace function malvia_put_if_version(p_tenant text, p_resource text, p_data jsonb, p_base_version bigint)
       returns bigint language plpgsql as $$
       declare v_version bigint;
       begin
         perform pg_advisory_xact_lock(hashtext(p_tenant));
+        -- FIN-12: invoice numbers are unique per tenant across devices. The tenant lock
+        -- serializes concurrent sync writes, so the check and document update are atomic.
+        if p_resource = 'invoices' and exists (
+          select 1
+          from jsonb_array_elements(coalesce(p_data, '[]'::jsonb)) incoming
+          join malvia_docs existing_doc
+            on existing_doc.tenant = p_tenant and existing_doc.resource = 'invoices'
+          cross join lateral jsonb_array_elements(coalesce(existing_doc.data, '[]'::jsonb)) existing
+          where nullif(trim(incoming->>'invoiceNumber'), '') is not null
+            and lower(trim(incoming->>'invoiceNumber')) = lower(trim(existing->>'invoiceNumber'))
+            and coalesce(incoming->>'id', '') <> coalesce(existing->>'id', '')
+        ) then
+          return -1;
+        end if;
         if p_base_version = 0 then
           insert into malvia_docs(tenant,resource,data,version) values(p_tenant,p_resource,p_data,1)
           on conflict(tenant,resource) do nothing returning version into v_version;
@@ -254,6 +340,13 @@ export async function putIfVersion(tenant: string, resource: string, data: unkno
   return version == null ? null : Number(version);
 }
 
+
+export async function commitSyncBatch(tenant: string, idempotencyKey: string, requestHash: string, operations: Array<{ resource: string; data: unknown; baseVersion: number }>): Promise<any> {
+  await init();
+  const q = await sql();
+  const rows = await q`select malvia_sync_batch(${tenant},${idempotencyKey},${requestHash},${JSON.stringify(operations)}::jsonb) as result`;
+  return (rows as any[])[0]?.result;
+}
 
 export async function createEmployeeSession(tenant: string, employeeId: string, tokenHash: string, expiresAt: Date): Promise<void> {
   await init();

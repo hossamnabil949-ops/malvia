@@ -51,6 +51,13 @@ export default async function handler(req: any, res: any) {
       const keys = policy[resource] || ['canManageSettings'];
       if (!allowed(keys)) return res.status(403).json({ code: 'EMPLOYEE_PERMISSION_DENIED', error: 'لا تملك صلاحية مزامنة هذا النوع من البيانات.' });
       const v = await putIfVersion(tenant, resource, data, baseVersion);
+      if (v === -1) {
+        return res.status(409).json({
+          conflict: true,
+          code: 'DUPLICATE_INVOICE_NUMBER',
+          error: 'رقم الفاتورة مستخدم بالفعل على جهاز آخر. احتفظ بالفاتورة محلياً وغيّر رقمها إلى رقم فريد قبل إعادة المزامنة.',
+        });
+      }
       if (v === null) {
         return res.status(409).json({ conflict: true, code: 'VERSION_CONFLICT', current: await getOne(tenant, resource) });
       }

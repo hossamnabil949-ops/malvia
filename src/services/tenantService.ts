@@ -149,8 +149,39 @@ export function setAppTheme(theme: AppTheme): void {
   applyAppTheme(theme);
 }
 
+type TenantTransactionPayload = Record<string, unknown>;
+
+function recoverTenantTransaction(tenantId: string): void {
+  const journalKey = getTenantKey(tenantId, '__transaction_journal');
+  const raw = localStorage.getItem(journalKey);
+  if (!raw) return;
+  const journal = JSON.parse(raw) as { version: 1; updates: TenantTransactionPayload };
+  if (journal.version !== 1 || !journal.updates || typeof journal.updates !== 'object') {
+    throw new Error('تعذّر استعادة معاملة محلية غير صالحة؛ أوقفنا التحميل لحماية البيانات.');
+  }
+  for (const [resource, value] of Object.entries(journal.updates)) {
+    localStorage.setItem(getTenantKey(tenantId, resource), JSON.stringify(value));
+  }
+  localStorage.removeItem(journalKey);
+  markDirty(tenantId, Object.keys(journal.updates));
+}
+
+/** Commit all changed tenant resources behind one recoverable local transaction journal. */
+export function commitTenantTransaction(tenantId: string, updates: TenantTransactionPayload): void {
+  if (!tenantId || !updates || Object.keys(updates).length === 0) return;
+  recoverTenantTransaction(tenantId);
+  const journalKey = getTenantKey(tenantId, '__transaction_journal');
+  localStorage.setItem(journalKey, JSON.stringify({ version: 1, updates }));
+  for (const [resource, value] of Object.entries(updates)) {
+    localStorage.setItem(getTenantKey(tenantId, resource), JSON.stringify(value));
+  }
+  localStorage.removeItem(journalKey);
+  markDirty(tenantId, Object.keys(updates));
+}
+
 export function loadTenantStoreData(tenant: TenantLicense) {
   const tenantId = tenant.tenantId;
+  recoverTenantTransaction(tenantId);
   const isDemoCleared = localStorage.getItem(getTenantKey(tenantId, 'demo_cleared')) === 'true';
 
   const loadResource = <T>(resource: string, fallback: T): T => {
@@ -241,12 +272,8 @@ export function saveTenantStoreData(
   }
 ) {
   try {
-    Object.entries(data).forEach(([resource, val]) => {
-      if (val !== undefined) {
-        localStorage.setItem(getTenantKey(tenantId, resource), JSON.stringify(val));
-      }
-    });
-    markDirty(tenantId, Object.entries(data).filter(([, v]) => v !== undefined).map(([k]) => k));
+    const updates = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
+    commitTenantTransaction(tenantId, updates);
   } catch (err) {
     console.error('Error saving tenant store data:', err);
     // امتلاء مساحة المتصفح كان يمر بصمت => نبلّغ الواجهة بدل إخفاء ضياع التغييرات

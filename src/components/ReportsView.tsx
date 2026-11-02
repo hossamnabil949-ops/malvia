@@ -22,6 +22,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { netSales } from '../utils/reportsLogic';
 import { 
   Invoice, 
   PurchaseInvoice, 
@@ -94,7 +95,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const filteredTreasury = useMemo(() => treasuryTransactions.filter(t => isDateInFilter(t.date)), [treasuryTransactions, dateFilter]);
   const filteredExpenses = useMemo(() => expenses.filter(e => isDateInFilter(e.date)), [expenses, dateFilter]);
 
-  const totalSalesVal = useMemo(() => filteredSales.reduce((acc, i) => i.status === 'ملغاة' ? acc : acc + i.grandTotal - (i.returnedAmount || 0), 0), [filteredSales]);
+  const totalSalesVal = useMemo(() => filteredSales.reduce((acc, i) => i.status === 'ملغاة' ? acc : acc + netSales(i), 0), [filteredSales]);
   const totalPurchasesVal = useMemo(() => filteredPurchases.reduce((acc, i) => acc + i.grandTotal, 0), [filteredPurchases]);
   const totalInventoryCost = useMemo(() => parts.reduce((acc, p) => acc + (p.stockQuantity * p.costPrice), 0), [parts]);
   const totalSuppliersDebts = useMemo(() => suppliers.reduce((acc, s) => acc + s.balance, 0), [suppliers]);

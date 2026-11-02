@@ -315,3 +315,97 @@ select:focus-visible, textarea:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* ===== MALVIA mobile app experience ===== */
+.malvia-mobile-nav { display: none; }
+
+@media (max-width: 767px) {
+  html, body, #root { width: 100%; min-width: 320px; }
+  body { font-size: 14px; }
+  #root main {
+    width: 100%;
+    max-width: 100%;
+    padding: 14px 12px calc(82px + env(safe-area-inset-bottom));
+    margin-inline: 0;
+  }
+
+  /* Fixed, thumb-friendly navigation inspired by the approved mobile reference */
+  .malvia-mobile-nav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: center;
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 60;
+    min-height: 64px;
+    padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
+    background: rgba(10, 16, 29, .97);
+    border-top: 1px solid rgba(132, 157, 198, .16);
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, .22);
+    backdrop-filter: blur(18px);
+  }
+  .malvia-mobile-nav-item {
+    min-width: 0;
+    min-height: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border: 0;
+    border-radius: 14px;
+    color: #8b9ab5;
+    background: transparent;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.1;
+    transition: color .18s ease, background .18s ease, transform .18s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .malvia-mobile-nav-item.is-active {
+    color: #60a5fa;
+    background: rgba(59, 130, 246, .13);
+  }
+  .malvia-mobile-nav-item:active { transform: scale(.96); }
+
+  /* Compact top bar and comfortable touch targets */
+  #root header.sticky {
+    min-height: 54px;
+    height: 54px;
+    padding-top: env(safe-area-inset-top);
+  }
+  #root header.sticky > div { min-height: 54px; }
+  #root button, #root [role="button"] { touch-action: manipulation; }
+  #root input, #root select, #root textarea {
+    min-height: 42px;
+    max-width: 100%;
+    font-size: 16px;
+  }
+  #root main h1 { font-size: clamp(1.15rem, 5vw, 1.45rem); }
+  #root main h2 { font-size: clamp(1rem, 4.2vw, 1.2rem); }
+
+  /* Cards and data panels become clean, full-width mobile surfaces */
+  #root main .rounded-2xl,
+  #root main .rounded-xl { min-width: 0; }
+  #root main .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  #root main table { min-width: 620px; }
+  #root main .grid { min-width: 0; }
+  #root main .grid > * { min-width: 0; }
+  #root main img, #root main svg { max-width: 100%; }
+
+  /* POS: prioritize the product search and keep checkout controls reachable */
+  #root main input[placeholder*="بحث"],
+  #root main input[placeholder*="ابحث"] { min-height: 46px; }
+  #root main button { min-height: 38px; }
+  #root main .sticky { scroll-margin-top: 62px; }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  #root main { padding: 18px 16px calc(84px + env(safe-area-inset-bottom)); }
+  .malvia-mobile-nav { display: grid; }
+}
