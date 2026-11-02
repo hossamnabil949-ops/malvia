@@ -60,7 +60,8 @@ import {
   CapitalTransactionType,
   TreasuryTransaction,
   AutoPart,
-  SalesReturn
+  SalesReturn,
+  Shift
 } from '../types/autoParts';
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS_LIST } from '../data/autoPartsData';
 import { TreasuryAccountsReport } from './TreasuryAccountsReport';
@@ -75,6 +76,7 @@ interface FinanceViewProps {
   distributions: ProfitDistributionRecord[];
   capitalTransactions?: CapitalTransaction[];
   treasuryTransactions?: TreasuryTransaction[];
+  shifts?: Shift[];
   auditLog?: import('../types/autoParts').AuditEntry[];
   stockMovements?: import('../types/autoParts').StockMovement[];
   treasuryBalance?: number;
@@ -105,6 +107,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   distributions,
   capitalTransactions = [],
   treasuryTransactions = [],
+  shifts = [],
   auditLog = [],
   stockMovements = [],
   treasuryBalance,
@@ -269,25 +272,37 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       'محفظة إلكترونية': { total: 0, count: 0 },
       'آجل / حساب ورشة': { total: 0, count: 0 },
     };
+    const classify = (method: string): string | null => {
+      const m = String(method || '').trim().toLowerCase();
+      if (m.includes('آجل') || m.includes('credit') || m.includes('حساب ورشة')) return 'آجل / حساب ورشة';
+      if (m.includes('فيزا') || m.includes('بطاقة') || m.includes('شبكة') || m.includes('مدى') || m.includes('visa') || m.includes('card')) return 'فيزا / بطاقة';
+      if (m.includes('انستا') || m.includes('إنستا') || m.includes('insta')) return 'انستاباي / InstaPay';
+      if (m.includes('محفظ') || m.includes('فودافون') || m.includes('wallet')) return 'محفظة إلكترونية';
+      if (m.includes('نقد') || m.includes('كاش') || m === 'cash') return 'نقدي';
+      return null;
+    };
 
-    invoices.forEach((inv) => {
-      const method = inv.paymentMethod;
-      if (counts[method] !== undefined) {
-        counts[method].total += inv.grandTotal;
-        counts[method].count += 1;
-      } else if (method.includes('شبكة') || method.includes('مدى') || method.includes('فيزا')) {
-        counts['فيزا / بطاقة'].total += inv.grandTotal;
-        counts['فيزا / بطاقة'].count += 1;
-      } else if (method.includes('نقدي') || method.includes('كاش')) {
-        counts['نقدي'].total += inv.grandTotal;
-        counts['نقدي'].count += 1;
-      } else if (method.includes('آجل')) {
-        counts['آجل / حساب ورشة'].total += inv.grandTotal;
-        counts['آجل / حساب ورشة'].count += 1;
-      } else {
-        counts['نقدي'].total += inv.grandTotal;
-        counts['نقدي'].count += 1;
+    invoices.filter(inv => inv.status !== 'ملغاة').forEach(inv => {
+      const splitPayments = Array.isArray(inv.payments) && inv.payments.length
+        ? inv.payments
+        : [{ method: inv.paymentMethod, amount: Math.max(0, inv.grandTotal - (inv.creditAmount || 0)) }];
+      const paid = splitPayments.reduce((sum, p) => sum + Math.max(0, Number(p.amount) || 0), 0);
+      const returned = Math.min(paid, Math.max(0, Number(inv.returnedAmount || 0)));
+      const factor = paid > 0 ? (paid - returned) / paid : 1;
+      const invoiceKeys = new Set<string>();
+      splitPayments.forEach(payment => {
+        const key = classify(String(payment.method));
+        if (!key) return;
+        const amount = Math.max(0, Number(payment.amount) || 0) * factor;
+        counts[key].total += amount;
+        if (amount > 0) invoiceKeys.add(key);
+      });
+      const credit = Math.max(0, Number(inv.creditAmount || 0));
+      if (credit > 0) {
+        counts['آجل / حساب ورشة'].total += credit;
+        invoiceKeys.add('آجل / حساب ورشة');
       }
+      invoiceKeys.forEach(key => { counts[key].count += 1; });
     });
 
     return [
@@ -944,7 +959,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
       {activeFinanceTab === 'treasury' && (
         <div className="space-y-6">
-          <TreasuryAccountsReport transactions={treasuryTransactions} />
+          <TreasuryAccountsReport transactions={treasuryTransactions} shifts={shifts} />
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
             {paymentBreakdown.map((pb) => {
