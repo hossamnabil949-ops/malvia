@@ -225,7 +225,7 @@ export async function init() {
             on existing_doc.tenant = p_tenant and existing_doc.resource = 'invoices'
           cross join lateral jsonb_array_elements(coalesce(existing_doc.data, '[]'::jsonb)) existing
           where nullif(trim(incoming->>'invoiceNumber'), '') is not null
-            and incoming->>'invoiceNumber' = existing->>'invoiceNumber'
+            and lower(trim(incoming->>'invoiceNumber')) = lower(trim(existing->>'invoiceNumber'))
             and coalesce(incoming->>'id', '') <> coalesce(existing->>'id', '')
         ) then
           return -1;
