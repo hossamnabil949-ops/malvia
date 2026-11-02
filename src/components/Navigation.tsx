@@ -543,36 +543,68 @@ export const Navigation: React.FC<NavigationProps> = ({
         <main className="flex-1 w-full max-w-[1600px] mx-auto p-3 sm:p-6">{children}</main>
       </div>
 
-      {/* ===== Mobile bottom navigation ===== */}
-      <nav className="malvia-mobile-nav lg:hidden" aria-label="التنقل الرئيسي">
-        {[
-          { id: 'dashboard' as ActiveTab, label: 'الرئيسية', icon: Home },
-          { id: 'pos' as ActiveTab, label: 'الكاشير', icon: ShoppingCart },
-          { id: 'inventory' as ActiveTab, label: 'المخزون', icon: Boxes },
-          { id: 'customers' as ActiveTab, label: 'العملاء', icon: Users },
-        ].filter(item => canAccessTab(item.id)).map(item => {
-          const Icon = item.icon;
-          const active = currentTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => onTabChange(item.id)}
-              aria-current={active ? 'page' : undefined}
-              className={`malvia-mobile-nav-item ${active ? 'is-active' : ''}`}
-            >
-              <Icon className="w-5 h-5" strokeWidth={active ? 2.5 : 1.8} />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className="malvia-mobile-nav-item"
-          aria-label="المزيد من الأقسام"
-        >
-          <Menu className="w-5 h-5" />
-          <span>المزيد</span>
-        </button>
+      {/* ===== Mobile bottom bar ===== */}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-1 text-white shadow-2xl">
+        <div className="flex items-center justify-around">
+          {canAccessTab('dashboard') && (
+          <button
+            onClick={() => onTabChange('dashboard')}
+            className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${
+              currentTab === 'dashboard' ? 'text-amber-400 font-bold' : 'text-slate-400'
+            }`}
+          >
+            <Home className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">الرئيسية</span>
+          </button>
+          )}
+
+          {canAccessTab('pos') && (
+          <button
+            onClick={() => onTabChange('pos')}
+            className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${
+              currentTab === 'pos' ? 'text-amber-400 font-bold' : 'text-slate-400'
+            }`}
+          >
+            <ShoppingCart className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">الكاشير</span>
+          </button>
+          )}
+
+          {canAccessTab('suppliers') && (
+          <button
+            onClick={() => onTabChange('suppliers')}
+            className="flex flex-col items-center -mt-4 bg-gradient-to-tr from-amber-500 to-amber-600 text-slate-950 p-3 rounded-2xl shadow-lg shadow-amber-500/30 border-2 border-slate-900 active:scale-95 transition"
+            title="حسابات الموردين والدفعات"
+          >
+            <Truck className="w-5 h-5 stroke-[2.5]" />
+            <span className="text-[9px] font-black mt-0.5">الموردين</span>
+          </button>
+          )}
+
+          {canAccessTab('inventory') && (
+          <button
+            onClick={() => onTabChange('inventory')}
+            className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${
+              currentTab === 'inventory' ? 'text-amber-400 font-bold' : 'text-slate-400'
+            }`}
+          >
+            <Boxes className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">المخزون</span>
+          </button>
+          )}
+
+          {canAccessTab('invoices') && (
+          <button
+            onClick={() => onTabChange('invoices')}
+            className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${
+              currentTab === 'invoices' ? 'text-amber-400 font-bold' : 'text-slate-400'
+            }`}
+          >
+            <Receipt className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">الفواتير</span>
+          </button>
+          )}
+        </div>
       </nav>
     </div>
   );
