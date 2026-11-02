@@ -199,3 +199,20 @@ export function computeVoidPlan(inv: VoidInput): VoidPlan {
   }
   return { fraction, restock, creditAmount, refunds };
 }
+
+
+/** متوسط تكلفة الوحدة المرجح بعد استلام كمية جديدة، مع التقريب لأقرب قرش. */
+export function weightedAverageUnitCost(
+  currentQty: number,
+  currentUnitCost: number,
+  incomingQty: number,
+  incomingUnitCost: number,
+): number {
+  if (![currentQty, currentUnitCost, incomingQty, incomingUnitCost].every(Number.isFinite)
+    || currentQty < 0 || incomingQty < 0 || currentUnitCost < 0 || incomingUnitCost < 0) {
+    throw new RangeError('INVALID_INVENTORY_COST_INPUT');
+  }
+  const totalQty = currentQty + incomingQty;
+  if (totalQty === 0) return Math.round(incomingUnitCost * 100) / 100;
+  return Math.round(((currentQty * currentUnitCost + incomingQty * incomingUnitCost) / totalQty) * 100) / 100;
+}
