@@ -1,5 +1,6 @@
 import { TreasuryTransaction } from '../types/autoParts';
 import { DateRange, inDateRange } from './dateRange';
+import { paymentAccountOf, isCreditPaymentMethod } from './paymentMethods';
 
 // حسابات الخزنة: كل طريقة دفع تُحسب في حساب مستقل (كاش، إنستاباي، فيزا، محفظة).
 export type TreasuryAccountKey = 'cash' | 'instapay' | 'visa' | 'wallet' | 'bank';
@@ -19,21 +20,16 @@ export const TREASURY_ACCOUNTS: TreasuryAccountMeta[] = [
   { key: 'bank', label: 'تحويلات وشيكات بنكية', shortLabel: 'بنك', color: '#64748b' },
 ];
 
-/** يحوّل نص طريقة الدفع (بكل صيغه القديمة والجديدة) إلى حساب خزنة. */
+/** يقبل الصيغ التاريخية ويصنفها عبر طبقة تطبيع موحدة. */
 export const accountOf = (method?: string): TreasuryAccountKey => {
-  const m = String(method || '').trim().toLowerCase();
-  if (!m) throw new Error('طريقة الدفع غير محددة؛ لا يمكن تصنيف حركة الخزنة.');
-  if (m.includes('آجل') || m.includes('حساب ورشة') || m === 'credit') throw new Error('طريقة الآجل ليست حركة خزنة.');
-  if (m.includes('شيك') || m.includes('تحويل بنكي') || m.includes('حوالة بنكية') || m.includes('bank transfer') || m.includes('wire transfer') || m === 'bank') return 'bank';
-  if (m.includes('انستا') || m.includes('إنستا') || m.includes('insta')) return 'instapay';
-  if (m.includes('محفظ') || m.includes('فودافون') || m.includes('wallet')) return 'wallet';
-  if (m.includes('فيزا') || m.includes('بطاقة') || m.includes('شبكة') || m.includes('مدى') || m.includes('visa') || m.includes('card')) return 'visa';
-  if (m.includes('كاش') || m.includes('نقد') || m === 'cash') return 'cash';
-  throw new Error(`طريقة دفع غير معروفة ولا يمكن افتراض أنها نقدية: ${method}`);
+  const account = paymentAccountOf(method);
+  if (account === 'credit') throw new Error('طريقة الآجل ليست حركة خزنة.');
+  return account;
 };
 
-/** الآجل ليس حساب خزنة: لا تدخل به نقدية فعلية. */
-export const isCreditMethod = (method?: string): boolean => (method || '').includes('آجل');
+/** الآجل ليس حساب خزنة، ويُتعرف عليه بكل الصيغ القديمة والجديدة. */
+export const isCreditMethod = (method?: string): boolean => isCreditPaymentMethod(method);
+
 
 export interface AccountSummary {
   key: TreasuryAccountKey;
