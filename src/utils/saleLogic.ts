@@ -1,3 +1,5 @@
+import { isCreditPaymentMethod } from './paymentMethods';
+
 // منطق البيع كدوال نقية (بدون React ولا تخزين) => قابلة للاختبار وإعادة الاستخدام من الكاشير والمساعد الصوتي.
 // كل الحسابات بالقروش (أعداد صحيحة) لتفادي أخطاء الفاصلة العشرية.
 
@@ -25,7 +27,7 @@ export interface StockPart { id: string; stockQuantity: number }
 export interface PaymentLine { method: string; amount: number }
 
 /** الآجل = لا يدخل نقدية للخزنة (يُسجَّل على حساب العميل) */
-export const isCreditPayment = (method: string): boolean => (method || '').includes('آجل');
+export const isCreditPayment = (method: string): boolean => isCreditPaymentMethod(method);
 
 export interface Totals { subtotal: number; discount: number; tax: number; grandTotal: number } // بالقروش
 
