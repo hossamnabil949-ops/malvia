@@ -77,12 +77,21 @@ export function validateSyncBody(body: any): SyncBody {
   if (isArr) {
     if (!Array.isArray(data)) throw new ApiError('INVALID_BODY');            // كان يقبل أي شيء ويكسر باقي الأجهزة
     const ids = new Set<string>();
+    const invoiceNumbers = new Set<string>();
     for (const it of data) {
       if (!it || typeof it !== 'object' || Array.isArray(it)) throw new ApiError('INVALID_BODY');
-      if (it.id == null) continue;                                           // بعض البيانات القديمة بلا id: لا نرفضها
-      const id = String(it.id);
-      if (ids.has(id)) throw new ApiError('INVALID_BODY');                    // id مكرر
-      ids.add(id);
+      if (it.id != null) {
+        const id = String(it.id);
+        if (ids.has(id)) throw new ApiError('INVALID_BODY');                  // id مكرر
+        ids.add(id);
+      }
+      if (resource === 'invoices' && typeof it.invoiceNumber === 'string') {
+        const number = it.invoiceNumber.trim();
+        if (number) {
+          if (invoiceNumbers.has(number)) throw new ApiError('INVALID_BODY'); // رقم فاتورة مكرر داخل نفس دفعة المزامنة
+          invoiceNumbers.add(number);
+        }
+      }
     }
   } else if (!data || typeof data !== 'object' || Array.isArray(data)) {
     throw new ApiError('INVALID_BODY');
