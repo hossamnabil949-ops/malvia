@@ -220,7 +220,7 @@ export async function init() {
         primary key (tenant, idempotency_key)
       )`;
       await q`create or replace function malvia_sync_batch(p_tenant text, p_key text, p_hash text, p_ops jsonb)
-      returns jsonb language plpgsql as $
+      returns jsonb language plpgsql as $$
       declare v_op jsonb; v_resource text; v_data jsonb; v_base bigint; v_current jsonb;
         v_version bigint; v_versions jsonb := '{}'::jsonb; v_result jsonb; v_existing jsonb; v_hash text;
       begin
@@ -282,7 +282,7 @@ export async function init() {
         v_result := jsonb_build_object('success',true,'versions',v_versions);
         insert into malvia_sync_ops(tenant,idempotency_key,request_hash,result) values(p_tenant,p_key,p_hash,v_result);
         return v_result;
-      end $`;
+      end $$`;
       await q`create or replace function malvia_put_if_version(p_tenant text, p_resource text, p_data jsonb, p_base_version bigint)
       returns bigint language plpgsql as $$
       declare v_version bigint;
