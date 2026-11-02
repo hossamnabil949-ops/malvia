@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Banknote, CreditCard, Zap, Smartphone, FileSpreadsheet, ArrowDownLeft, ArrowUpRight, Layers, Wallet, Landmark } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { TreasuryTransaction } from '../types/autoParts';
+import { Shift, TreasuryTransaction } from '../types/autoParts';
 import { DateRangeFilter } from './DateRangeFilter';
 import { DateRange, EMPTY_DATE_RANGE, inDateRange, todayISO } from '../utils/dateRange';
 import { TREASURY_ACCOUNTS, TreasuryAccountKey, accountOf, summarizeTreasury } from '../utils/treasuryAccounts';
@@ -18,10 +18,11 @@ const fmt = (n: number) => n.toLocaleString('ar-EG', { maximumFractionDigits: 2 
 
 interface TreasuryAccountsReportProps {
   transactions: TreasuryTransaction[];
+  shifts?: Shift[];
 }
 
 /** تقارير الخزنة: تقرير مستقل لكل حساب (كاش / إنستاباي / فيزا / محافظ) + تقرير مجمع. */
-export const TreasuryAccountsReport: React.FC<TreasuryAccountsReportProps> = ({ transactions }) => {
+export const TreasuryAccountsReport: React.FC<TreasuryAccountsReportProps> = ({ transactions, shifts = [] }) => {
   const [selected, setSelected] = useState<'all' | TreasuryAccountKey>('all');
   const [range, setRange] = useState<DateRange>(EMPTY_DATE_RANGE);
 
@@ -33,6 +34,37 @@ export const TreasuryAccountsReport: React.FC<TreasuryAccountsReportProps> = ({ 
       .filter((tx) => selected === 'all' || accountOf(tx.paymentMethod) === selected)
       .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
   }, [transactions, range, selected]);
+
+  // درج النقدية فقط: لا تدخل الفيزا أو إنستاباي أو المحافظ أو البنك في رصيد الدرج.
+  // إذا توفرت وردية نستخدم كاش افتتاحها الفعلي؛ الأيام القديمة بلا وردية موثقة
+  // يظهر افتتاحها كتقدير تراكمي من سجل الحركات ولا ندّعي أنه جرد فعلي.
+  const dailyCashRows = useMemo(() => {
+    const cashTxs = transactions
+      .filter(tx => {
+        try { return accountOf(tx.paymentMethod) === 'cash'; }
+        catch { return false; }
+      })
+      .slice()
+      .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+    const dateSet = new Set<string>(cashTxs.map(tx => tx.date));
+    shifts.forEach(shift => { if (shift.openedAt) dateSet.add(shift.openedAt.slice(0, 10)); });
+    const dates = Array.from(dateSet).sort();
+    let runningCash = 0;
+    return dates.map(date => {
+      const dayTxs = cashTxs.filter(tx => tx.date === date);
+      const dayShifts = shifts.filter(shift => shift.openedAt?.slice(0, 10) === date)
+        .sort((a, b) => a.openedAt.localeCompare(b.openedAt));
+      const hasRecordedOpening = dayShifts.length > 0;
+      const opening = hasRecordedOpening ? Number(dayShifts[0].openingCash || 0) : runningCash;
+      const income = dayTxs.filter(tx => tx.type === 'قبض').reduce((sum, tx) => sum + tx.amount, 0);
+      const expense = dayTxs.filter(tx => tx.type === 'صرف').reduce((sum, tx) => sum + tx.amount, 0);
+      const expectedClosing = opening + income - expense;
+      const closedShift = [...dayShifts].reverse().find(shift => shift.status === 'مغلقة' && Number.isFinite(shift.countedCash));
+      const closing = closedShift ? Number(closedShift.countedCash) : expectedClosing;
+      runningCash = expectedClosing;
+      return { date, opening, income, expense, expectedClosing, closing, hasRecordedOpening, closedShift };
+    }).filter(row => inDateRange(row.date, range)).reverse();
+  }, [transactions, shifts, range]);
 
   const shown = useMemo(() => {
     if (selected === 'all') return summary.total;
@@ -147,6 +179,41 @@ export const TreasuryAccountsReport: React.FC<TreasuryAccountsReportProps> = ({ 
           );
         })}
       </div>
+
+      <section className="rounded-2xl border border-emerald-500/20 bg-surface-1 overflow-hidden">
+        <div className="p-4 border-b border-neutral-800 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h5 className="text-sm font-black text-white">رصيد درج الكاش يومًا بيوم</h5>
+            <p className="text-[11px] text-neutral-400 mt-1">يعرض الافتتاح والقبض والصرف ورصيد نهاية كل يوم. لا يشمل وسائل الدفع الإلكترونية.</p>
+          </div>
+          <span className="text-[10px] text-neutral-500">الرصيد المتوقع = الافتتاح + القبض − الصرف</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-right text-xs text-neutral-300">
+            <thead className="bg-surface-2 text-neutral-400">
+              <tr>
+                <th className="p-3">اليوم</th><th className="p-3">رصيد أول اليوم</th>
+                <th className="p-3">مقبوضات كاش</th><th className="p-3">مصروفات كاش</th>
+                <th className="p-3">الرصيد المتوقع آخر اليوم</th><th className="p-3">الجرد الفعلي</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-800">
+              {dailyCashRows.length === 0 ? (
+                <tr><td colSpan={6} className="p-6 text-center text-neutral-500">لا توجد حركات كاش أو ورديات في الفترة المحددة</td></tr>
+              ) : dailyCashRows.map(row => (
+                <tr key={row.date}>
+                  <td className="p-3 font-mono whitespace-nowrap">{row.date}</td>
+                  <td className="p-3 font-mono">{fmt(row.opening)}{!row.hasRecordedOpening && <span className="block text-[10px] text-amber-400">افتتاح تقديري من الحركات</span>}</td>
+                  <td className="p-3 font-mono text-emerald-400">{fmt(row.income)}</td>
+                  <td className="p-3 font-mono text-rose-400">{fmt(row.expense)}</td>
+                  <td className="p-3 font-mono font-bold text-white">{fmt(row.expectedClosing)}</td>
+                  <td className="p-3 font-mono">{row.closedShift ? <><span className="font-bold">{fmt(row.closing)}</span><span className={Math.abs(Number(row.closedShift.variance || 0)) > 0.009 ? 'block text-rose-400 text-[10px]' : 'block text-emerald-400 text-[10px]'}>{Number(row.closedShift.variance || 0) > 0 ? 'زيادة' : Number(row.closedShift.variance || 0) < 0 ? 'عجز' : 'مطابق'} {fmt(Math.abs(Number(row.closedShift.variance || 0)))}</span></> : <span className="text-amber-400">لم يُجرَ الجرد بعد</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <div className="grid grid-cols-3 gap-3 text-xs">
         <div className="p-3 rounded-2xl bg-surface-1 border border-emerald-500/20">
