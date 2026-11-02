@@ -518,10 +518,12 @@ export async function authenticateShopUser(
   }
   const usingDefaultPassword = DEFAULT_PASSWORDS.includes(cleanPass);
 
-  // Online logins must also be verified by the server. Never create a local "successful"
-  // session that would immediately start protected cloud sync without a server token.
+  // A locally verified employee may enter in LOCAL-ONLY mode when the cloud copy
+  // is stale (for example, credentials were changed while this device was offline).
+  // No server token is created in this case, so protected cloud sync remains blocked.
   let serverSessionToken: string | undefined;
   let serverSessionExpiresAt: string | undefined;
+  let localOnlyLogin = typeof navigator !== 'undefined' && !navigator.onLine;
   if (typeof navigator !== 'undefined' && navigator.onLine) {
     try {
       const authResponse = await fetch('/api/auth/login', {
@@ -532,19 +534,26 @@ export async function authenticateShopUser(
       let authBody: any = {};
       try { authBody = await authResponse.json(); } catch { /* invalid server response */ }
       if (!authResponse.ok || typeof authBody.token !== 'string' || authBody.token.length < 32) {
-        return {
-          success: false,
-          message: authBody.error || 'تعذّر توثيق الموظف على الخادم. تحقق من اتصال الإنترنت ومزامنة حساب الموظف، ثم حاول تسجيل الدخول مرة أخرى.',
-          employees: migratedEmployees,
-        };
+        // Only a credential/employee mismatch can fall back to the locally verified account.
+        // License, authorization, rate-limit and server errors must still fail closed.
+        if (authResponse.status === 401 && authBody.code === 'EMPLOYEE_INVALID_CREDENTIALS') {
+          localOnlyLogin = true;
+        } else {
+          return {
+            success: false,
+            message: authBody.error || 'تعذّر توثيق الموظف على الخادم. حاول مرة أخرى.',
+            employees: migratedEmployees,
+          };
+        }
+      } else {
+        serverSessionToken = authBody.token;
+        serverSessionExpiresAt = typeof authBody.expiresAt === 'string' ? authBody.expiresAt : undefined;
       }
-      serverSessionToken = authBody.token;
-      serverSessionExpiresAt = typeof authBody.expiresAt === 'string' ? authBody.expiresAt : undefined;
     } catch (e) {
       console.warn('Cloud employee authentication failed.', e);
       return {
         success: false,
-        message: 'تعذّر الاتصال بخادم تسجيل الدخول. لم يتم تسجيل الدخول السحابي؛ تحقق من الإنترنت وحاول مجددًا.',
+        message: 'تعذّر الاتصال بخادم تسجيل الدخول. تحقق من الإنترنت وحاول مجددًا.',
         employees: migratedEmployees,
       };
     }
@@ -570,6 +579,7 @@ export async function authenticateShopUser(
   return {
     success: true,
     message: `مرحباً بك يا ${matchedEmp.name} (${matchedEmp.role}) في نظام ${tenant.companyName}!` +
+      (localOnlyLogin ? ' ⚠ دخول محلي مؤقت: بيانات الموظف غير متطابقة مع الخادم؛ المزامنة السحابية متوقفة حتى اعتماد الحساب.' : '') +
       (usingDefaultPassword ? ' ⚠ كلمة المرور افتراضية: غيّرها من الإعدادات.' : ''),
     session,
     tenant,
