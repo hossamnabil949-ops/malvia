@@ -48,7 +48,7 @@ import { isCreditMethod } from './utils/treasuryAccounts';
 import { findOpenShift, findOpenShifts, summarizeShift, stampNewTreasury, nextShiftNumber, countTotal, round2, varianceOf } from './utils/shiftLogic';
 import { nextSalesInvoiceNumber } from './utils/invoiceNumber';
 import { uniqueTransactionNumber } from './utils/uniqueTransactionNumber';
-import { SaleError, computeVoidPlan, computeTotals, deductStock, isCreditPayment } from './utils/saleLogic';
+import { SaleError, computeVoidPlan, computeTotals, deductStock, isCreditPayment, weightedAverageUnitCost } from './utils/saleLogic';
 import { cairoDateKey } from './utils/reportsLogic';
 import type { AuditEntry, StockMovement, InvoicePayment, Warehouse, StockLevel, StockTransfer } from './types/autoParts';
 import { MAIN_WAREHOUSE_ID, normalizeWarehouseId, availableIn, adjustLevels, validateTransfer, applyTransfer, TransferError } from './utils/warehouseLogic';
@@ -554,11 +554,41 @@ export default function App() {
   };
 
   const handleAddPart = (newPart: AutoPart) => {
-    setParts(prev => {
-      const updated = [{ ...newPart, createdAt: newPart.createdAt || todayISO(), updatedAt: todayISO() }, ...prev];
+    // إدخال صنف موجود من شاشة المخزون يعني توريد كمية جديدة للصنف نفسه،
+    // وليس إنشاء سجل مكرر. التكلفة تُحدّث بمتوسط التكلفة المرجح وسعر البيع بآخر سعر أدخله المستخدم.
+    const matches = parts.filter(part => normKey(part.partNumber) === normKey(newPart.partNumber));
+    if (matches.length > 1) {
+      window.alert('رقم الصنف موجود لأكثر من سجل بالمخزون. لم يتم الحفظ حتى لا يتم تحديث صنف غير مقصود.');
+      return;
+    }
+    const existing = matches[0];
+    if (existing) {
+      if (normKey(existing.name) !== normKey(newPart.name)) {
+        window.alert('رقم الصنف مسجل باسم مختلف. راجع رقم الصنف قبل إضافة الكمية حتى لا يتم دمج صنفين مختلفين.');
+        return;
+      }
+      const oldQty = Math.max(0, Number(existing.stockQuantity) || 0);
+      const incomingQty = Math.max(0, Number(newPart.stockQuantity) || 0);
+      const nextPart: AutoPart = {
+        ...existing,
+        stockQuantity: oldQty + incomingQty,
+        costPrice: weightedAverageUnitCost(oldQty, Number(existing.costPrice) || 0, incomingQty, Number(newPart.costPrice) || 0),
+        salePrice: Number(newPart.salePrice),
+        barcode: newPart.barcode || existing.barcode,
+        updatedAt: todayISO(),
+      };
+      const updated = parts.map(part => part.id === existing.id ? nextPart : part);
+      setParts(updated);
       persistChanges({ parts: updated });
-      return updated;
-    });
+      if (incomingQty > 0) logStockMovements([{ part: existing, qtyDelta: incomingQty, type: 'purchase' }]);
+      logAudit('part.restock', `إضافة كمية لصنف موجود ${existing.name} - الكمية ${incomingQty} - متوسط التكلفة ${nextPart.costPrice} - سعر البيع الجديد ${nextPart.salePrice}`, existing.id, incomingQty);
+      return;
+    }
+    const created = { ...newPart, createdAt: newPart.createdAt || todayISO(), updatedAt: todayISO() };
+    const updated = [created, ...parts];
+    setParts(updated);
+    persistChanges({ parts: updated });
+    if (created.stockQuantity > 0) logStockMovements([{ part: { ...created, stockQuantity: 0 }, qtyDelta: created.stockQuantity, type: 'purchase' }]);
   };
 
   // حذف صنف (أُضيف بالخطأ): التحقق من باسورد المدير يتم في الواجهة قبل الاستدعاء.
@@ -1753,6 +1783,8 @@ export default function App() {
           ...part,
           stockQuantity: part.stockQuantity + incomingQty,
           costPrice: Math.round(newCost * 100) / 100,
+          // سعر البيع المدخل في فاتورة التوريد هو أحدث سعر معتمد للصنف.
+          salePrice: Number.isFinite(entry.item.salePrice) && entry.item.salePrice > 0 ? entry.item.salePrice : part.salePrice,
           updatedAt: today,
         };
       });
