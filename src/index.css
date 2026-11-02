@@ -466,3 +466,32 @@ select:focus-visible, textarea:focus-visible {
   .malvia-pos-cart-sheet > div { min-height:100%; max-height:none !important; border-radius:20px !important; padding:14px !important; }
   .malvia-pos-cart-sheet button { min-height:42px; }
 }
+
+
+/* ===== Mobile navigation and POS corrective pass ===== */
+@media (max-width: 767px) {
+  /* Keep the drawer above the fixed bottom bar and allow its full menu to scroll. */
+  .malvia-mobile-nav { z-index: 60; }
+  .malvia-mobile-nav + * { min-width: 0; }
+  body:has(.lg\\:hidden.fixed.inset-0.z-\\[70\\]) { overflow: hidden; }
+  /* Product catalog must use the available viewport, not a clipped desktop panel. */
+  [data-mobile-pos="true"] { min-height: calc(100dvh - 118px); }
+  .malvia-pos-catalog { width: 100%; min-width: 0; }
+  .malvia-pos-products {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    align-content: start;
+    width: 100%;
+    min-height: 0;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  .malvia-pos-products > div { min-width: 0; overflow: hidden; }
+  .malvia-pos-products > div > div:first-child { min-width: 0; }
+  .malvia-pos-products > div > div:last-child { align-items: flex-start !important; gap: 6px; flex-wrap: wrap; }
+  .malvia-pos-products > div > div:last-child > div { min-width: 0; }
+  .malvia-pos-searchbar { width: 100%; min-width: 0; }
+  .malvia-pos-searchbar > div:first-child { min-width: 0; }
+  /* Keep the invoice action visible above the bottom navigation without leaving a blank panel. */
+  .malvia-pos-cart-sheet { z-index: 80 !important; }
+}
