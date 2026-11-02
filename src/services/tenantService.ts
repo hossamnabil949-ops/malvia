@@ -518,25 +518,36 @@ export async function authenticateShopUser(
   }
   const usingDefaultPassword = DEFAULT_PASSWORDS.includes(cleanPass);
 
-  // Issue a separate server-verified session for AI financial operations. Local/offline login remains
-  // available, but the AI execution API fails closed when this server token is absent.
+  // Online logins must also be verified by the server. Never create a local "successful"
+  // session that would immediately start protected cloud sync without a server token.
   let serverSessionToken: string | undefined;
   let serverSessionExpiresAt: string | undefined;
-  try {
-    const authResponse = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-license-key': tenant.licenseKey },
-      body: JSON.stringify({ username: cleanUser, password: cleanPass }),
-    });
-    if (authResponse.ok) {
-      const authBody = await authResponse.json();
-      if (typeof authBody.token === 'string' && authBody.token.length >= 32) {
-        serverSessionToken = authBody.token;
-        serverSessionExpiresAt = typeof authBody.expiresAt === 'string' ? authBody.expiresAt : undefined;
+  if (typeof navigator !== 'undefined' && navigator.onLine) {
+    try {
+      const authResponse = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-license-key': tenant.licenseKey },
+        body: JSON.stringify({ username: cleanUser, password: cleanPass }),
+      });
+      let authBody: any = {};
+      try { authBody = await authResponse.json(); } catch { /* invalid server response */ }
+      if (!authResponse.ok || typeof authBody.token !== 'string' || authBody.token.length < 32) {
+        return {
+          success: false,
+          message: authBody.error || 'تعذّر توثيق الموظف على الخادم. تحقق من اتصال الإنترنت ومزامنة حساب الموظف، ثم حاول تسجيل الدخول مرة أخرى.',
+          employees: migratedEmployees,
+        };
       }
+      serverSessionToken = authBody.token;
+      serverSessionExpiresAt = typeof authBody.expiresAt === 'string' ? authBody.expiresAt : undefined;
+    } catch (e) {
+      console.warn('Cloud employee authentication failed.', e);
+      return {
+        success: false,
+        message: 'تعذّر الاتصال بخادم تسجيل الدخول. لم يتم تسجيل الدخول السحابي؛ تحقق من الإنترنت وحاول مجددًا.',
+        employees: migratedEmployees,
+      };
     }
-  } catch (e) {
-    console.warn('Server employee session unavailable; AI financial actions will remain disabled until online re-login.', e);
   }
 
   const session: UserSession = {
