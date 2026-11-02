@@ -353,6 +353,19 @@ export function markDirty(tenantId: string, resources: string[]) {
 
 export async function startSync(tenantId: string, licenseKey: string) {
   stopSync();
+  let session: any = null;
+  try {
+    const raw = localStorage.getItem('malvia_user_session_v1');
+    session = raw ? JSON.parse(raw) : null;
+  } catch { session = null; }
+  if (!session?.serverSessionToken) {
+    emitStatus('error', 'المزامنة السحابية متوقفة: سجّل الدخول مجددًا مع اتصال الإنترنت لتوثيق الموظف.');
+    return;
+  }
+  if (session.serverSessionExpiresAt && Date.parse(session.serverSessionExpiresAt) <= Date.now()) {
+    emitStatus('error', 'انتهت جلسة الموظف السحابية: سجّل الخروج ثم الدخول مجددًا مع اتصال الإنترنت.');
+    return;
+  }
   active = { tenantId, licenseKey };
   dirty.clear();
   readPending(tenantId).forEach(res => dirty.add(res));
@@ -399,14 +412,8 @@ export async function activateFromCloud(licenseKey: string, username?: string, p
     const bootstrap = await api('/api/auth/bootstrap', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-license-key': key }, body: JSON.stringify({ licenseKey: key }) });
     if (!bootstrap.ok) return { ok: false, error: bootstrap.body?.error || `HTTP ${bootstrap.status}` };
     const tenant = bootstrap.body.tenant;
-    if (username && password) {
-      const auth = await api('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-license-key': key }, body: JSON.stringify({ username, password }) });
-      if (auth.ok && auth.body?.token) {
-        try { localStorage.setItem('malvia_pending_server_session_v1', JSON.stringify({ token: auth.body.token, tenantId: auth.body.tenantId })); } catch { /* fail closed for cloud data access */ }
-        try { await pullAll(String(tenant.tenantId), key, String(auth.body.token)); }
-        finally { try { localStorage.removeItem('malvia_pending_server_session_v1'); } catch { /* ignore */ } }
-      }
-    }
+    // Employee authentication is performed once by authenticateShopUser after local account
+    // validation. Bootstrap must not silently attempt a second login or download tenant data.
     return { ok: true, tenant };
   } catch {
     return { ok: false, offline: true };
