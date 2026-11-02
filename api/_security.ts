@@ -86,7 +86,7 @@ export function validateSyncBody(body: any): SyncBody {
         ids.add(id);
       }
       if (resource === 'invoices' && typeof it.invoiceNumber === 'string') {
-        const number = it.invoiceNumber.trim();
+        const number = it.invoiceNumber.trim().toLocaleLowerCase();
         if (number) {
           if (invoiceNumbers.has(number)) throw new ApiError('INVALID_BODY'); // رقم فاتورة مكرر داخل نفس دفعة المزامنة
           invoiceNumbers.add(number);
