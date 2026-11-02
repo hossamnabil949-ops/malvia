@@ -216,6 +216,20 @@ export async function init() {
       declare v_version bigint;
       begin
         perform pg_advisory_xact_lock(hashtext(p_tenant));
+        -- FIN-12: invoice numbers are unique per tenant across devices. The tenant lock
+        -- serializes concurrent sync writes, so the check and document update are atomic.
+        if p_resource = 'invoices' and exists (
+          select 1
+          from jsonb_array_elements(coalesce(p_data, '[]'::jsonb)) incoming
+          join malvia_docs existing_doc
+            on existing_doc.tenant = p_tenant and existing_doc.resource = 'invoices'
+          cross join lateral jsonb_array_elements(coalesce(existing_doc.data, '[]'::jsonb)) existing
+          where nullif(trim(incoming->>'invoiceNumber'), '') is not null
+            and incoming->>'invoiceNumber' = existing->>'invoiceNumber'
+            and coalesce(incoming->>'id', '') <> coalesce(existing->>'id', '')
+        ) then
+          return -1;
+        end if;
         if p_base_version = 0 then
           insert into malvia_docs(tenant,resource,data,version) values(p_tenant,p_resource,p_data,1)
           on conflict(tenant,resource) do nothing returning version into v_version;
@@ -224,7 +238,7 @@ export async function init() {
         update malvia_docs set data=p_data, version=version+1, updated_at=now()
           where tenant=p_tenant and resource=p_resource and version=p_base_version returning version into v_version;
         return v_version;
-      end $$`;
+      end $`;
     })();
   }
   return ready;
