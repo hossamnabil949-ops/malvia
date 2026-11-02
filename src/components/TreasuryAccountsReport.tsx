@@ -25,6 +25,7 @@ interface TreasuryAccountsReportProps {
 export const TreasuryAccountsReport: React.FC<TreasuryAccountsReportProps> = ({ transactions, shifts = [] }) => {
   const [selected, setSelected] = useState<'all' | TreasuryAccountKey>('all');
   const [range, setRange] = useState<DateRange>(EMPTY_DATE_RANGE);
+  const [cashDay, setCashDay] = useState<string>(todayISO());
 
   const summary = useMemo(() => summarizeTreasury(transactions, range), [transactions, range]);
 
@@ -61,10 +62,23 @@ export const TreasuryAccountsReport: React.FC<TreasuryAccountsReportProps> = ({ 
       const expectedClosing = opening + income - expense;
       const closedShift = [...dayShifts].reverse().find(shift => shift.status === 'مغلقة' && Number.isFinite(shift.countedCash));
       const closing = closedShift ? Number(closedShift.countedCash) : expectedClosing;
-      runningCash = expectedClosing;
+      runningCash = closing;
       return { date, opening, income, expense, expectedClosing, closing, hasRecordedOpening, closedShift };
-    }).filter(row => inDateRange(row.date, range)).reverse();
-  }, [transactions, shifts, range]);
+    });
+  }, [transactions, shifts]);
+
+  const selectedCashDay = useMemo(() => {
+    const exact = dailyCashRows.find(row => row.date === cashDay);
+    if (exact) return exact;
+    const previous = [...dailyCashRows].filter(row => row.date < cashDay).pop();
+    const opening = previous?.closing ?? 0;
+    return { date: cashDay, opening, income: 0, expense: 0, expectedClosing: opening, closing: opening, hasRecordedOpening: false, closedShift: undefined };
+  }, [dailyCashRows, cashDay]);
+
+  const cashDayTransactions = useMemo(() => transactions
+    .filter(tx => tx.date === cashDay && accountOf(tx.paymentMethod) === 'cash')
+    .sort((a, b) => (a.time || '').localeCompare(b.time || '')),
+  [transactions, cashDay]);
 
   const shown = useMemo(() => {
     if (selected === 'all') return summary.total;
@@ -181,38 +195,31 @@ export const TreasuryAccountsReport: React.FC<TreasuryAccountsReportProps> = ({ 
       </div>
 
       <section className="rounded-2xl border border-emerald-500/20 bg-surface-1 overflow-hidden">
-        <div className="p-4 border-b border-neutral-800 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h5 className="text-sm font-black text-white">رصيد درج الكاش يومًا بيوم</h5>
-            <p className="text-[11px] text-neutral-400 mt-1">يعرض الافتتاح والقبض والصرف ورصيد نهاية كل يوم. لا يشمل وسائل الدفع الإلكترونية.</p>
+        <div className="p-4 border-b border-neutral-800 flex flex-wrap items-center justify-between gap-3">
+          <div><h5 className="text-sm font-black text-white">رصيد درج الكاش</h5><p className="text-[11px] text-neutral-400 mt-1">رصيد إقفال اليوم السابق + حركة اليوم = الرصيد المتوقع الآن</p></div>
+          <div className="flex items-center gap-2">
+            <label htmlFor="cash-balance-day" className="text-xs text-neutral-400">التاريخ</label>
+            <input id="cash-balance-day" type="date" value={cashDay} max={todayISO()} onChange={e => setCashDay(e.target.value)} className="h-10 rounded-xl bg-surface-2 border border-neutral-700 px-3 text-sm text-white" />
+            {cashDay !== todayISO() && <button type="button" onClick={() => setCashDay(todayISO())} className="text-xs font-bold text-sky-400 hover:underline">اليوم</button>}
           </div>
-          <span className="text-[10px] text-neutral-500">الرصيد المتوقع = الافتتاح + القبض − الصرف</span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-right text-xs text-neutral-300">
-            <thead className="bg-surface-2 text-neutral-400">
-              <tr>
-                <th className="p-3">اليوم</th><th className="p-3">رصيد أول اليوم</th>
-                <th className="p-3">مقبوضات كاش</th><th className="p-3">مصروفات كاش</th>
-                <th className="p-3">الرصيد المتوقع آخر اليوم</th><th className="p-3">الجرد الفعلي</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-800">
-              {dailyCashRows.length === 0 ? (
-                <tr><td colSpan={6} className="p-6 text-center text-neutral-500">لا توجد حركات كاش أو ورديات في الفترة المحددة</td></tr>
-              ) : dailyCashRows.map(row => (
-                <tr key={row.date}>
-                  <td className="p-3 font-mono whitespace-nowrap">{row.date}</td>
-                  <td className="p-3 font-mono">{fmt(row.opening)}{!row.hasRecordedOpening && <span className="block text-[10px] text-amber-400">افتتاح تقديري من الحركات</span>}</td>
-                  <td className="p-3 font-mono text-emerald-400">{fmt(row.income)}</td>
-                  <td className="p-3 font-mono text-rose-400">{fmt(row.expense)}</td>
-                  <td className="p-3 font-mono font-bold text-white">{fmt(row.expectedClosing)}</td>
-                  <td className="p-3 font-mono">{row.closedShift ? <><span className="font-bold">{fmt(row.closing)}</span><span className={Math.abs(Number(row.closedShift.variance || 0)) > 0.009 ? 'block text-rose-400 text-[10px]' : 'block text-emerald-400 text-[10px]'}>{Number(row.closedShift.variance || 0) > 0 ? 'زيادة' : Number(row.closedShift.variance || 0) < 0 ? 'عجز' : 'مطابق'} {fmt(Math.abs(Number(row.closedShift.variance || 0)))}</span></> : <span className="text-amber-400">لم يُجرَ الجرد بعد</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="p-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-xl bg-surface-2 p-3"><span className="text-[11px] text-neutral-400 block">رصيد إقفال اليوم السابق</span><strong className="text-lg font-black font-mono text-white block mt-1">{fmt(selectedCashDay.opening)} ج.م</strong></div>
+          <div className="rounded-xl bg-surface-2 p-3"><span className="text-[11px] text-neutral-400 block">مقبوضات اليوم كاش</span><strong className="text-lg font-black font-mono text-emerald-400 block mt-1">+ {fmt(selectedCashDay.income)} ج.م</strong></div>
+          <div className="rounded-xl bg-surface-2 p-3"><span className="text-[11px] text-neutral-400 block">مصروفات اليوم كاش</span><strong className="text-lg font-black font-mono text-rose-400 block mt-1">− {fmt(selectedCashDay.expense)} ج.م</strong></div>
+          <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/25 p-3"><span className="text-[11px] text-neutral-300 block">رصيد الدرج المتوقع {cashDay === todayISO() ? 'حاليًا' : 'نهاية اليوم'}</span><strong className="text-xl font-black font-mono text-emerald-400 block mt-1">{fmt(selectedCashDay.expectedClosing)} ج.م</strong></div>
         </div>
+        <div className="px-4 pb-3 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <span className="text-neutral-400">يبدأ اليوم برصيد إقفال اليوم السابق، ويُستخدم افتتاح الوردية المسجل إذا وُجد.</span>
+          {selectedCashDay.closedShift ? <span className={Math.abs(Number(selectedCashDay.closedShift.variance || 0)) > 0.009 ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>الجرد الفعلي: {fmt(Number(selectedCashDay.closedShift.countedCash || 0))} ج.م · الفرق {fmt(Number(selectedCashDay.closedShift.variance || 0))} ج.م</span> : <span className="text-amber-400">لم يتم إقفال الوردية / الجرد لهذا اليوم</span>}
+        </div>
+        <details className="border-t border-neutral-800">
+          <summary className="cursor-pointer select-none px-4 py-3 text-xs font-bold text-sky-400 hover:bg-surface-2">تفاصيل حركات الكاش لهذا اليوم ({cashDayTransactions.length})</summary>
+          <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-right text-xs text-neutral-300">
+            <thead className="bg-surface-2 text-neutral-400"><tr><th className="p-3">الوقت</th><th className="p-3">البند</th><th className="p-3">البيان</th><th className="p-3">قبض</th><th className="p-3">صرف</th></tr></thead>
+            <tbody className="divide-y divide-neutral-800">{cashDayTransactions.length === 0 ? <tr><td colSpan={5} className="p-5 text-center text-neutral-500">لا توجد حركات كاش في هذا التاريخ</td></tr> : cashDayTransactions.map(tx => <tr key={tx.id}><td className="p-3 font-mono">{tx.time || '—'}</td><td className="p-3">{tx.category}</td><td className="p-3">{tx.description}</td><td className="p-3 font-mono text-emerald-400">{tx.type === 'قبض' ? fmt(tx.amount) : '—'}</td><td className="p-3 font-mono text-rose-400">{tx.type === 'صرف' ? fmt(tx.amount) : '—'}</td></tr>)}</tbody>
+          </table></div>
+        </details>
       </section>
 
       <div className="grid grid-cols-3 gap-3 text-xs">
