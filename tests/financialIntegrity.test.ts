@@ -5,7 +5,7 @@ import { registrationEffect, actionEffect } from '../src/utils/chequeLogic.ts';
 import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
-import { validateSale, SaleError, computeTotals } from '../src/utils/saleLogic.ts';
+import { validateSale, SaleError, computeTotals, weightedAverageUnitCost } from '../src/utils/saleLogic.ts';
 import { cairoDateKey, salesForDate, netSales, reportDailySales, reportSalesByItem, reportVatSummary, reportSalesReconciliation } from '../src/utils/reportsLogic.ts';
 
 // FIN-1 / AI-4: dashboard sales use Cairo's calendar day and one consistent eligible-invoice set.
@@ -161,3 +161,11 @@ assert.match(tx1, /^TX-20261101-/);
 assert.notEqual(tx1, tx2);
 
 console.log('financial integrity regression tests passed');
+
+
+// Inventory: adding an existing SKU must use weighted-average cost and the newly entered sale price.
+assert.equal(weightedAverageUnitCost(10, 100, 5, 160), 120);
+assert.equal(weightedAverageUnitCost(0, 100, 5, 160), 160);
+assert.equal(weightedAverageUnitCost(10, 100.01, 1, 100.02), 100.01);
+assert.equal(weightedAverageUnitCost(0, 0, 0, 125.55), 125.55);
+assert.throws(() => weightedAverageUnitCost(-1, 100, 1, 120), /INVALID_INVENTORY_COST_INPUT/);
