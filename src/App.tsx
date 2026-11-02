@@ -2414,7 +2414,7 @@ export default function App() {
         onOpenNotifications={() => setShowNotifications(true)}
         onOpenVoiceAssistant={() => setShowVoiceAssistant(true)}
         onOpenDeploymentGuide={() => setShowDeploymentGuide(true)}
-        onOpenInventoryAudit={() => setShowInventoryAudit(true)}
+        onOpenInventoryAudit={() => setShowBarcodeStocktake(true)}
         onOpenInventoryErrors={() => setShowInventoryErrors(true)}
         onOpenCarModels={() => setShowCarModels(true)}
         onOpenPhotoSharing={() => setShowPhotoSharing(true)}
