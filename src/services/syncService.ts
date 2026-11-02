@@ -201,8 +201,13 @@ async function pushResource(tenantId: string, licenseKey: string, res: string): 
 
 async function sha256Hex(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+  if (globalThis.crypto?.subtle) {
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+  }
+  // Older HTTP LAN contexts may not expose WebCrypto. Keep a deterministic
+  // 128-bit fallback so a retry after a dropped response retains its key.
+  return [0, 1, 2, 3].map(i => hashOf(`${i}:${value}`).split(':')[0]).join('');
 }
 
 // Push all dirty documents as one server transaction. A retry of identical
