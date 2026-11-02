@@ -238,7 +238,7 @@ export async function init() {
         update malvia_docs set data=p_data, version=version+1, updated_at=now()
           where tenant=p_tenant and resource=p_resource and version=p_base_version returning version into v_version;
         return v_version;
-      end $`;
+      end $$`;
     })();
   }
   return ready;
