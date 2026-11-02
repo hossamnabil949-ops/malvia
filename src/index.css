@@ -409,3 +409,60 @@ select:focus-visible, textarea:focus-visible {
   #root main { padding: 18px 16px calc(84px + env(safe-area-inset-bottom)); }
   .malvia-mobile-nav { display: grid; }
 }
+
+
+/* ===== Dedicated mobile layouts (not a scaled desktop canvas) ===== */
+@media (max-width: 767px) {
+  [data-mobile-dashboard="true"] { display:flex; flex-direction:column; gap:14px; padding-bottom:18px; }
+  .malvia-dashboard-hero {
+    padding:18px 16px !important; border-radius:22px !important;
+    background:radial-gradient(circle at 100% 0%,rgba(59,130,246,.22),transparent 48%),linear-gradient(145deg,#17243b,#101827 72%) !important;
+    border:1px solid rgba(96,165,250,.22) !important; box-shadow:0 12px 30px rgba(0,0,0,.18) !important;
+  }
+  .malvia-dashboard-hero > div { gap:14px !important; }
+  .malvia-dashboard-hero h2 { font-size:19px !important; line-height:1.5 !important; letter-spacing:-.3px; }
+  .malvia-dashboard-hero p { font-size:11px !important; line-height:1.7 !important; max-width:34rem; }
+  .malvia-dashboard-hero > div > div:last-child { display:grid !important; grid-template-columns:1fr 1fr; gap:8px !important; }
+  .malvia-dashboard-hero button { min-height:46px !important; justify-content:center; padding:10px 9px !important; border-radius:14px !important; font-size:11px !important; }
+  .malvia-dashboard-kpis { gap:9px !important; }
+  .malvia-dashboard-kpis > * {
+    min-height:112px; padding:13px !important; border-radius:18px !important;
+    background:linear-gradient(145deg,#18243a,#111a2a) !important;
+    border-color:rgba(148,163,184,.13) !important; box-shadow:0 6px 18px rgba(0,0,0,.12);
+  }
+  .malvia-dashboard-kpis > * > div:first-child { font-size:10px !important; gap:6px; }
+  .malvia-dashboard-kpis > * > div:first-child > div { width:30px !important; height:30px !important; border-radius:10px !important; }
+  .malvia-dashboard-kpis > * > div:nth-child(2) { margin-top:10px !important; }
+  .malvia-dashboard-kpis > * > div:nth-child(2) > div { font-size:clamp(17px,5vw,22px) !important; }
+
+  [data-mobile-pos="true"] {
+    display:flex !important; flex-direction:column; gap:12px !important;
+    padding-bottom:calc(92px + env(safe-area-inset-bottom)) !important;
+  }
+  .malvia-pos-catalog { display:flex; flex-direction:column; gap:11px !important; }
+  .malvia-pos-searchbar {
+    padding:10px !important; gap:7px !important; border-radius:18px !important;
+    position:sticky; top:58px; z-index:20; box-shadow:0 8px 22px rgba(0,0,0,.2) !important;
+  }
+  .malvia-pos-searchbar input { min-height:46px !important; font-size:14px !important; }
+  .malvia-pos-searchbar button { min-width:44px; min-height:44px !important; justify-content:center; padding-inline:10px !important; }
+  .malvia-pos-products {
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:9px !important;
+    max-height:none !important; overflow:visible !important; padding-bottom:8px !important;
+  }
+  .malvia-pos-products > div {
+    min-height:142px; padding:11px !important; border-radius:17px !important;
+    background:linear-gradient(155deg,#19263d,#111a2a) !important;
+    border-color:rgba(148,163,184,.14) !important; box-shadow:0 5px 14px rgba(0,0,0,.12);
+  }
+  .malvia-pos-products h4 { font-size:12px !important; line-height:1.45 !important; }
+  .malvia-pos-products > div > div:last-child { margin-top:10px !important; padding-top:9px !important; }
+  .malvia-pos-cart-sheet {
+    inset:0 !important; bottom:0 !important; width:100vw; max-height:100dvh !important; height:100dvh;
+    border-radius:0 !important;
+    padding:calc(12px + env(safe-area-inset-top)) 12px calc(14px + env(safe-area-inset-bottom)) !important;
+    background:#0e1727 !important; overflow-y:auto !important; overscroll-behavior:contain;
+  }
+  .malvia-pos-cart-sheet > div { min-height:100%; max-height:none !important; border-radius:20px !important; padding:14px !important; }
+  .malvia-pos-cart-sheet button { min-height:42px; }
+}
