@@ -341,6 +341,13 @@ export async function putIfVersion(tenant: string, resource: string, data: unkno
 }
 
 
+export async function commitSyncBatch(tenant: string, idempotencyKey: string, requestHash: string, operations: Array<{ resource: string; data: unknown; baseVersion: number }>): Promise<any> {
+  await init();
+  const q = await sql();
+  const rows = await q`select malvia_sync_batch(${tenant},${idempotencyKey},${requestHash},${JSON.stringify(operations)}::jsonb) as result`;
+  return (rows as any[])[0]?.result;
+}
+
 export async function createEmployeeSession(tenant: string, employeeId: string, tokenHash: string, expiresAt: Date): Promise<void> {
   await init();
   const q = await sql();
