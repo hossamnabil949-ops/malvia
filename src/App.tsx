@@ -2743,6 +2743,7 @@ export default function App() {
             partners={partners}
             distributions={[]}
             treasuryTransactions={treasury}
+            shifts={shifts}
             treasuryBalance={treasuryBalance}
             onAddExpense={handleAddExpense}
             onAddDistribution={(record: ProfitDistributionRecord) => {
