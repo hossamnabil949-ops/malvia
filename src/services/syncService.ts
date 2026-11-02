@@ -199,6 +199,65 @@ async function pushResource(tenantId: string, licenseKey: string, res: string): 
   return false;
 }
 
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Push all dirty documents as one server transaction. A retry of identical
+// content gets the same idempotency key, including after a lost HTTP response.
+async function pushBatch(tenantId: string, licenseKey: string, resources: string[]): Promise<void> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const meta = readMeta(tenantId);
+    const operations = resources.flatMap(resource => {
+      const data = readLocal(tenantId, resource);
+      if (data === undefined) return [];
+      if (!hasLocalChanges(resource, data, meta.base[resource]) && meta.versions[resource] !== undefined) return [];
+      return [{ resource, data, baseVersion: meta.versions[resource] || 0 }];
+    });
+    if (!operations.length) return;
+    const serialized = JSON.stringify(operations);
+    const idempotencyKey = `sync-${await sha256Hex(serialized)}`;
+    const r = await api('/api/sync-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-license-key': licenseKey },
+      body: JSON.stringify({ operations, idempotencyKey }),
+    });
+    if (r.ok) {
+      for (const op of operations) {
+        meta.versions[op.resource] = Number(r.body?.versions?.[op.resource]);
+        meta.base[op.resource] = baseFor(op.resource, op.data);
+      }
+      writeMeta(tenantId, meta);
+      return;
+    }
+    if (r.status === 409 && r.body?.conflict && r.body?.resource) {
+      if (r.body.code === 'DUPLICATE_INVOICE_NUMBER') {
+        throw new Error('تعارض رقم فاتورة بين جهازين. احتفظنا بالفاتورة محلياً؛ غيّر رقمها بعد مراجعة الفواتير قبل إعادة المزامنة.');
+      }
+      const resource = String(r.body.resource);
+      const current = r.body.current;
+      const local = readLocal(tenantId, resource);
+      if (!current || local === undefined) {
+        throw new Error(`تعارض إصدار المورد ${resource} ولا توجد نسخة خادمية كافية للدمج الآمن.`);
+      }
+      const remote = current.data;
+      const merged = Array.isArray(local) && Array.isArray(remote)
+        ? mergeArrays(resource, local as Item[], remote as Item[], meta.base[resource] || {})
+        : local;
+      writeLocal(tenantId, resource, merged);
+      meta.versions[resource] = Number(current.version);
+      meta.base[resource] = baseFor(resource, remote);
+      writeMeta(tenantId, meta);
+      window.dispatchEvent(new CustomEvent(SYNC_EVENT));
+      continue;
+    }
+    throw new Error(r.body?.error || `فشل إرسال دفعة المزامنة: HTTP ${r.status}`);
+  }
+  throw new Error('تعذّر إتمام دفعة المزامنة بعد أربع محاولات تعارض؛ البيانات ما زالت محفوظة محلياً.');
+}
+
 export async function pullAll(tenantId: string, licenseKey: string, serverToken?: string): Promise<{ changed: boolean; tenant?: any }> {
   const headers: Record<string, string> = { 'x-license-key': licenseKey };
   if (serverToken) headers.Authorization = `Bearer ${serverToken}`;
@@ -251,10 +310,9 @@ async function flush() {
     }
     emitStatus('syncing', dirty.size ? `عناصر بانتظار الرفع: ${dirty.size}` : 'فحص التغييرات المحلية');
     const list = [...dirty];
+    if (!active || active.tenantId !== tenantId) return;
+    await pushBatch(tenantId, licenseKey, list);
     for (const res of list) {
-      if (!active || active.tenantId !== tenantId) return;
-      const ok = await pushResource(tenantId, licenseKey, res);
-      if (!ok) throw new Error(`تعذّر إتمام مزامنة المورد ${res} بعد عدة محاولات تعارض`);
       const latest = readLocal(tenantId, res);
       const latestMeta = readMeta(tenantId);
       if (latest === undefined || !hasLocalChanges(res, latest, latestMeta.base[res])) {
