@@ -28,7 +28,7 @@ export default async function handler(req: any, res: any) {
     const lic = await findLicense(key);
     if (!lic) { rateLimit(`bad-key:${ip}`, 10, 10 * 60_000); throw new ApiError('LICENSE_INVALID'); }
     if (lic.status === 'معلق مؤقتاً') throw new ApiError('LICENSE_SUSPENDED');
-    const bearer = String(req.headers.authorization || '').match(/^Bearer\\s+(.+)$/i)?.[1] || '';
+    const bearer = String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1] || '';
     if (!bearer) return res.status(401).json({ code: 'EMPLOYEE_SESSION_REQUIRED', error: 'يلزم تسجيل دخول موظف موثق قبل المزامنة.' });
     const tokenHash = createHash('sha256').update(bearer).digest('hex');
     const tenant = String(lic.tenantId);
