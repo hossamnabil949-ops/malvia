@@ -173,7 +173,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
     </button>
 
     {/* Navigation groups */}
-    <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2.5 space-y-4">
+    <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y overflow-x-hidden py-3 px-2.5 space-y-4">
       {NAV_GROUPS.map(g => ({ ...g, items: g.items.filter(i => canAccessTab(i.id)) }))
         .filter(g => g.items.length > 0)
         .map((group, gi) => (
@@ -378,12 +378,12 @@ export const Navigation: React.FC<NavigationProps> = ({
 
       {/* ===== Mobile drawer ===== */}
       {drawerOpen && (
-        <div className="lg:hidden fixed inset-0 z-50">
+        <div className="lg:hidden fixed inset-0 z-[80]">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setDrawerOpen(false)}
           />
-          <aside className="absolute inset-y-0 start-0 w-72 max-w-[85vw] flex flex-col bg-nav-bg border-e border-nav-line shadow-2xl">
+          <aside className="absolute inset-y-0 start-0 w-72 max-w-[85vw] flex flex-col min-h-0 overflow-hidden bg-nav-bg border-e border-nav-line shadow-2xl">
             <button
               onClick={() => setDrawerOpen(false)}
               className="absolute top-3 end-3 z-10 p-1.5 rounded-lg bg-nav-hover text-nav-text hover:text-nav-strong"
