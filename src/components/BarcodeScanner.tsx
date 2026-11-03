@@ -66,6 +66,7 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState('');
+  const [pendingCode, setPendingCode] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const cb = useRef(onScan);
   cb.current = onScan;
@@ -74,6 +75,7 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
 
   const openCamera = () => {
     setMsg('');
+    setPendingCode('');
     if (!supported) {
       setMsg('متصفح الجهاز ده مش بيقرا الباركود بالكاميرا (شغّال على Chrome أندرويد). استخدم قارئ باركود أو اكتب الكود.');
       return;
@@ -119,8 +121,7 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
                 // نفس الكود مايتحسبش مرتين خلال ثانيتين (الكاميرا بتشوفه عدة إطارات)
                 if (code && now - (lastSeen[code] || 0) > 2000) {
                   lastSeen[code] = now;
-                  cb.current(code);
-                  if (!continuous) { setOpen(false); return; }
+                  setPendingCode(code);
                 }
               }
             } catch { /* تجاهل أخطاء الإطار الواحد */ }
@@ -179,16 +180,30 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
               <X className="w-5 h-5" />
             </button>
             <div className="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/90 to-transparent text-center">
-              <p className="text-xs text-neutral-200 min-h-[18px]">{status || 'وجّه الكاميرا نحو الباركود'}</p>
+              <p className="text-xs text-neutral-200 min-h-[18px]">{pendingCode ? `تمت قراءة: ${pendingCode}` : (status || 'وجّه الكاميرا نحو الباركود')}</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="mt-4 px-6 h-11 rounded-xl bg-neutral-800 border border-neutral-600 text-white text-sm font-bold"
-          >
-            تم / إغلاق
-          </button>
+          <div className="mt-4 flex w-full max-w-md gap-3">
+            <button
+              type="button"
+              disabled={!pendingCode}
+              onClick={() => {
+                if (!pendingCode) return;
+                cb.current(pendingCode);
+                setPendingCode('');
+              }}
+              className="flex-1 h-12 rounded-xl bg-amber-500 text-neutral-950 text-sm font-black disabled:opacity-40"
+            >
+              تأكيد وإضافة
+            </button>
+            <button
+              type="button"
+              onClick={() => { setPendingCode(''); setOpen(false); }}
+              className="flex-1 h-12 rounded-xl bg-neutral-800 border border-neutral-600 text-white text-sm font-bold"
+            >
+              إلغاء
+            </button>
+          </div>
         </div>
       )}
     </>
