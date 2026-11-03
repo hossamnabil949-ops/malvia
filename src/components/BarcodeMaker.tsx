@@ -41,21 +41,27 @@ export const BarcodeMaker: React.FC<Props> = ({ parts, onUpdatePartPrices, onClo
   const [error, setError] = useState('');
   const rows = useMemo(() => parts.filter(p => !query || [p.name, p.partNumber, ...barcodeValues(p)].some(v => String(v || '').toLowerCase().includes(query.toLowerCase()))), [parts, query]);
   const selectedParts = parts.filter(p => selected.includes(p.id));
-  const ensureCodes = () => {
+  const buildCodes = () => {
     setError('');
+    const generated: Record<string, string> = {};
+    const occupied = parts.flatMap(p => barcodeValues(p));
     for (const part of selectedParts) {
-      if (part.internalBarcode || part.barcode) continue;
-      const code = makeInternalBarcode(parts.flatMap(p => barcodeValues(p)));
-      if (findBarcodeConflict(parts, code, part.id)) { setError('تعذر إنشاء كود فريد. حاول مرة أخرى.'); return; }
-      if (!onUpdatePartPrices) { setError('تحديث بيانات الأصناف غير متاح في هذه الشاشة.'); return; }
+      const current = part.internalBarcode || part.barcode;
+      if (current) { generated[part.id] = current; continue; }
+      const code = makeInternalBarcode([...occupied, ...Object.values(generated)]);
+      if (findBarcodeConflict(parts, code, part.id)) { setError('تعذر إنشاء كود فريد. حاول مرة أخرى.'); return null; }
+      if (!onUpdatePartPrices) { setError('تحديث بيانات الأصناف غير متاح في هذه الشاشة.'); return null; }
+      generated[part.id] = code;
       onUpdatePartPrices(part.id, part.costPrice, part.salePrice, code);
     }
+    return generated;
   };
   const print = () => {
-    ensureCodes();
+    const generated = buildCodes();
+    if (!generated) return;
     const labels = selectedParts.flatMap(part => Array.from({ length: Math.max(1, Math.min(100, copies)) }, () => {
-      const code = part.internalBarcode || part.barcode || '';
-      return `<article class="label"><b>${part.name}</b><small>${part.partNumber}</small>${code ? code128Svg(code) : '<small>سيظهر الباركود بعد حفظه</small>'}<strong>${Number(part.salePrice || 0).toLocaleString('ar-EG')} ج.م</strong></article>`;
+      const code = generated[part.id] || part.internalBarcode || part.barcode || '';
+      return `<article class="label"><b>${part.name}</b><small>${part.partNumber}</small>${code ? code128Svg(code) : '<small>لا يوجد باركود</small>'}<strong>${Number(part.salePrice || 0).toLocaleString('ar-EG')} ج.م</strong></article>`;
     })).join('');
     const win = window.open('', '_blank', 'width=900,height=700');
     if (!win) { setError('اسمح بالنوافذ المنبثقة لإتمام الطباعة.'); return; }
