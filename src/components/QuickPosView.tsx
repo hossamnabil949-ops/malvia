@@ -551,7 +551,6 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           </div>
 
           <BarcodeScanButton onScan={handleBarcodeScan} label="مسح" status={scanStatus} />
-}
 
           {onOpenVoiceAssistant && (
             <button
