@@ -769,6 +769,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   onChange={(v) => setNewPartForm({ ...newPartForm, barcode: v })}
                 />
               </div>
+              <div>
+                <label className="text-neutral-300 font-bold block mb-1">باركود المورد (اختياري)</label>
+                <BarcodeField
+                  value={newPartForm.supplierBarcode || ''}
+                  onChange={(v) => setNewPartForm({ ...newPartForm, supplierBarcode: v })}
+                />
+              </div>
 
               <div>
                 <label className="text-neutral-300 font-bold block mb-1">
