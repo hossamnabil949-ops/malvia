@@ -44,7 +44,7 @@ export const BarcodeMaker: React.FC<Props> = ({ parts, onUpdatePartPrices, onClo
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [copies, setCopies] = useState(1);
-  const [printFormat, setPrintFormat] = useState('roll-50x30');
+  const [printFormat, setPrintFormat] = useState('a4');
   const [error, setError] = useState('');
   const rows = useMemo(() => parts.filter(p => !query || [p.name, p.partNumber, ...barcodeValues(p)].some(v => String(v || '').toLowerCase().includes(query.toLowerCase()))), [parts, query]);
   const selectedParts = parts.filter(p => selected.includes(p.id));
@@ -78,7 +78,11 @@ export const BarcodeMaker: React.FC<Props> = ({ parts, onUpdatePartPrices, onClo
     if (!win) { setError('اسمح بالنوافذ المنبثقة لإتمام الطباعة.'); return; }
     const pageCss = printFormat === 'a4' ? '@page{size:A4 portrait;margin:5mm}body{margin:0;font-family:Arial}.sheet{width:200mm;height:287mm;box-sizing:border-box;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(8,minmax(0,1fr));gap:2mm;page-break-after:always;break-after:page}.sheet:last-child{page-break-after:auto;break-after:auto}.label{min-width:0;min-height:0;height:auto;padding:2mm;border:1px dashed #aaa;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;break-inside:avoid}.label b,.label small,.label strong{max-width:100%;overflow-wrap:anywhere}.label svg{width:100%;height:13mm;flex:0 0 auto}' : printFormat === 'roll-40x40' ? '@page{size:40mm 40mm;margin:0}body{margin:0;width:40mm}.label{width:40mm;height:40mm;padding:2mm;display:flex;flex-direction:column;justify-content:center;text-align:center;break-after:page}.label svg{width:100%;height:15mm}' : printFormat === 'roll-40x25' ? '@page{size:40mm 25mm;margin:0}body{margin:0;width:40mm}.label{width:40mm;height:25mm;padding:1mm;display:flex;flex-direction:column;justify-content:center;text-align:center;break-after:page}.label svg{width:100%;height:8mm}' : '@page{size:50mm 30mm;margin:0}body{margin:0;width:50mm}.label{width:50mm;height:30mm;padding:2mm;display:flex;flex-direction:column;justify-content:center;text-align:center;break-after:page}.label svg{width:100%;height:10mm}';
     win.document.write(`<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>ملصقات MALVIA</title><style>body{font-family:Arial}.label{box-sizing:border-box;overflow:hidden}.label b,.label small,.label strong{display:block;margin:1mm 0;font-size:8pt}${pageCss}</style></head><body>${labels}</body></html>`);
-    win.document.close(); win.focus(); win.print();
+    win.document.close();
+    win.focus();
+    const startPrint = () => win.requestAnimationFrame(() => win.requestAnimationFrame(() => win.print()));
+    if (win.document.readyState === 'complete') startPrint();
+    else win.addEventListener('load', startPrint, { once: true });
   };
   return <div className="fixed inset-0 z-[120] bg-black/80 flex items-center justify-center p-2 sm:p-5" dir="rtl">
     <section className="w-full max-w-4xl max-h-[94dvh] overflow-hidden rounded-2xl border border-neutral-700 bg-surface-2 flex flex-col shadow-2xl">
