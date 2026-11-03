@@ -61,9 +61,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     : [];
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="malvia-dashboard space-y-6 pb-12" data-mobile-dashboard="true">
       {/* 1. Quick Navigation Action Hero */}
-      <div className="p-6 rounded-3xl bg-gradient-to-r from-surface-2 via-surface-3 to-surface-2 border border-neutral-800 shadow-xl">
+      <div className="malvia-dashboard-hero p-6 rounded-3xl bg-gradient-to-r from-surface-2 via-surface-3 to-surface-2 border border-neutral-800 shadow-xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider mb-1">
@@ -152,7 +152,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       )}
 
       {/* 2. Key Performance Indicators (KPIs) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="malvia-dashboard-kpis grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-neutral-400 text-xs">
             <span>مبيعات اليوم</span>

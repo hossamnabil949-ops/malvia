@@ -522,7 +522,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         <Lock className="w-3 h-3" />
         <span>قفل الأسعار مفعّل · حد الخصم {maxDiscountPercent}% · إصدار {buildLabel}</span>
       </div>
-      <div className="lg:col-span-7 space-y-3 sm:space-y-4 min-w-0">
+      <div className="malvia-pos-catalog lg:col-span-7 space-y-3 sm:space-y-4 min-w-0">
         {!shiftOpen && onOpenShifts && (
           <button
             onClick={onOpenShifts}
@@ -540,7 +540,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
             <span className="shrink-0 underline">فتح وردية ›</span>
           </button>
         )}
-        <div className="p-3.5 rounded-2xl bg-surface-2 border border-neutral-800 shadow-md flex items-center gap-3">
+        <div className="malvia-pos-searchbar p-3.5 rounded-2xl bg-surface-2 border border-neutral-800 shadow-md flex items-center gap-3">
           <div className="relative flex-grow">
             <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
             <input
@@ -615,7 +615,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           ))}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-2 gap-2 sm:gap-3 max-h-[34dvh] sm:max-h-[440px] lg:max-h-[580px] overflow-y-auto overscroll-contain no-scrollbar p-0.5">
+        <div className="malvia-pos-products grid grid-cols-2 sm:grid-cols-2 gap-2 sm:gap-3 max-h-[34dvh] sm:max-h-[440px] lg:max-h-[580px] overflow-y-auto overscroll-contain no-scrollbar p-0.5">
           {filteredParts.length === 0 ? (
             <div className="col-span-full py-12 text-center text-xs text-neutral-500 bg-surface-2 rounded-2xl border border-neutral-800">
               لا توجد قطع غيار مطابقة للبحث أو الماركة المحددة
@@ -698,7 +698,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         </div>
       </div>
 
-      <div className={`${mobileCartOpen ? "fixed inset-x-0 bottom-0 z-[60] max-h-[85dvh] rounded-t-3xl shadow-2xl" : "hidden"} lg:col-span-5 lg:flex lg:static lg:z-auto lg:max-h-none lg:rounded-3xl lg:shadow-xl`}><div className="w-full min-h-0 bg-surface-2 rounded-t-3xl lg:rounded-3xl border border-amber-500/25 p-3 sm:p-5 flex flex-col justify-start shadow-xl space-y-3 sm:space-y-4 max-h-[85dvh] lg:max-h-none overflow-y-auto overscroll-contain">
+      <div className={`malvia-pos-cart-sheet ${mobileCartOpen ? "fixed inset-x-0 bottom-0 z-[60] max-h-[85dvh] rounded-t-3xl shadow-2xl" : "hidden"} lg:col-span-5 lg:flex lg:static lg:z-auto lg:max-h-none lg:rounded-3xl lg:shadow-xl`}><div className="w-full min-h-0 bg-surface-2 rounded-t-3xl lg:rounded-3xl border border-amber-500/25 p-3 sm:p-5 flex flex-col justify-start shadow-xl space-y-3 sm:space-y-4 max-h-[85dvh] lg:max-h-none overflow-y-auto overscroll-contain">
         <div>
           <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
             <div className="flex items-center gap-2">
