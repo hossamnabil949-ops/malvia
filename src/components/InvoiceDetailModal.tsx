@@ -84,11 +84,11 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain touch-pan-y"
       onClick={onClose}
     >
       <div 
-        className="paper w-full max-w-md bg-white text-neutral-900 rounded-3xl p-6 shadow-2xl relative my-6"
+        className="paper w-full max-w-md bg-white text-neutral-900 rounded-3xl p-4 sm:p-6 shadow-2xl relative my-2 sm:my-6 max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain touch-pan-y"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-neutral-200 mb-4 print:hidden">
