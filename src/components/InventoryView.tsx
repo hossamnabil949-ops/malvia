@@ -176,6 +176,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     e.preventDefault();
     if (!newPartForm.partNumber || !newPartForm.name) return;
 
+    const generatedInternalBarcode = makeInternalBarcode(parts.flatMap(p => [p.barcode, p.internalBarcode, p.supplierBarcode].filter(Boolean) as string[]));
     const part: AutoPart = {
       id: `p-${Date.now()}`,
       partNumber: newPartForm.partNumber.trim(),
@@ -190,8 +191,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       stockQuantity: Number.isFinite(Number(newPartForm.stockQuantity)) ? Number(newPartForm.stockQuantity) : 0,
       minAlertStock: Number.isFinite(Number(newPartForm.minAlertStock)) ? Number(newPartForm.minAlertStock) : 2,
       unit: newPartForm.unit || 'طقم',
-      barcode: newPartForm.barcode?.trim() || undefined,
-      internalBarcode: makeInternalBarcode(parts.flatMap(p => [p.barcode, p.internalBarcode, p.supplierBarcode].filter(Boolean) as string[])),
+      barcode: newPartForm.barcode?.trim() || generatedInternalBarcode,
+      internalBarcode: generatedInternalBarcode,
       supplierBarcode: newPartForm.supplierBarcode?.trim() || undefined,
       ...(newPartForm.tracking && newPartForm.tracking !== 'none' ? { tracking: newPartForm.tracking } : {}),
     };
