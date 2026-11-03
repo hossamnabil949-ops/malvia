@@ -70,6 +70,7 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
   const [msg, setMsg] = useState('');
   const [pendingCode, setPendingCode] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
+  const lastSeenRef = useRef<Record<string, number>>({});
   const cb = useRef(onScan);
   const lastSeenRef = useRef<Record<string, number>>({});
   cb.current = onScan;
