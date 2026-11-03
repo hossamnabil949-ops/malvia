@@ -528,7 +528,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 border-b border-neutral-800 pb-2 overflow-x-auto no-scrollbar">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2 border-b border-neutral-800 pb-3">
         {[
           { id: 'equity', label: 'رأس المال والشركاء وحصص الملكية', icon: Users, badge: `${partners.length} شركاء` },
           { id: 'income', label: 'قائمة الدخل والأرباح (P&L)', icon: TrendingUp },
@@ -542,14 +542,14 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveFinanceTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all border ${
+              className={`w-full min-w-0 min-h-[58px] flex items-center justify-start gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-right whitespace-normal leading-snug transition-all border ${
                 isActive
                   ? 'bg-amber-500 text-neutral-950 border-amber-400 shadow-md'
                   : 'bg-surface-2 text-neutral-300 border-neutral-800 hover:border-neutral-700'
               }`}
             >
-              <Icon className="w-4 h-4" />
-              <span>{tab.label}</span>
+              <Icon className="w-4 h-4 shrink-0" />
+              <span className="min-w-0 flex-1">{tab.label}</span>
               {tab.badge && (
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
                   isActive ? 'bg-neutral-950/20 text-neutral-900 font-black' : 'bg-neutral-800 text-neutral-400'
