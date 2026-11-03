@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Search, 
   Plus, 
@@ -276,16 +276,25 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const [splitMethod, setSplitMethod] = useState<string>('فيزا / بطاقة بنكية');
   const [splitAmount, setSplitAmount] = useState<string>('');
   const [saleError, setSaleError] = useState<string>('');
-  // مسح الباركود (كاميرا أو قارئ USB): كل مسحة تضيف القطعة للسلة
+  // المسح يضيف إلى قائمة انتظار مؤقتة؛ لا يدخل الصنف الفاتورة إلا بعد التأكيد.
   const [scanStatus, setScanStatus] = useState('');
+  const [pendingScans, setPendingScans] = useState<Record<string, { part: AutoPart; count: number }>>({});
+  const lastScanAt = useRef<Record<string, number>>({});
   const handleBarcodeScan = (code: string) => {
     const part = findPartByBarcode(parts, code);
     if (!part) { beep(false); setScanStatus(`❌ الكود ${code} غير مسجّل`); setSaleError(`الباركود ${code} غير مسجّل لأي قطعة`); return; }
-    if (stockHere(part) <= 0) { beep(false); setScanStatus(`⚠️ ${part.name} — نفد من المخزن`); setSaleError(`«${part.name}» رصيده صفر في المخزن المختار`); return; }
-    beep(true);
-    setSaleError('');
-    setScanStatus(`✅ ${part.name}`);
-    onAddToCart(part);
+    const now = Date.now();
+    if (now - (lastScanAt.current[part.id] || 0) < 1500) return;
+    lastScanAt.current[part.id] = now;
+    const pendingCount = pendingScans[part.id]?.count || 0;
+    if (stockHere(part) <= 0 || pendingCount >= stockHere(part)) { beep(false); setScanStatus(`⚠️ ${part.name} — الكمية غير متاحة`); setSaleError(`الكمية المطلوبة من «${part.name}» تتجاوز الرصيد المتاح`); return; }
+    beep(true); setSaleError(''); setScanStatus(`تم التعرف على: ${part.name} — في انتظار التأكيد`);
+    setPendingScans(prev => ({ ...prev, [part.id]: { part, count: (prev[part.id]?.count || 0) + 1 } }));
+  };
+  const confirmScannedItems = () => {
+    const entries = Object.values(pendingScans);
+    entries.forEach(({part,count}) => { for (let i=0; i<count; i++) onAddToCart(part); });
+    setPendingScans({}); setScanStatus(entries.length ? 'تمت إضافة الأصناف المؤكدة إلى الفاتورة' : '');
   };
   useBarcodeWedge(handleBarcodeScan, true);
 
@@ -553,6 +562,13 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           </div>
 
           <BarcodeScanButton onScan={handleBarcodeScan} label="مسح" status={scanStatus} />
+          {Object.keys(pendingScans).length > 0 && (
+            <div className="w-full rounded-xl border border-amber-500/40 bg-amber-950/20 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2"><b className="text-xs text-amber-300">أصناف مقروءة — في انتظار التأكيد</b><span className="text-[11px] text-white">{Object.values(pendingScans).reduce((n,x)=>n+x.count,0)} قطعة</span></div>
+              <div className="max-h-24 overflow-y-auto space-y-1">{Object.values(pendingScans).map(({part,count}) => <div key={part.id} className="flex justify-between text-xs text-neutral-200"><span className="truncate">{part.name}</span><b className="text-amber-300">× {count}</b></div>)}</div>
+              <div className="flex gap-2"><button type="button" onClick={confirmScannedItems} className="flex-1 h-9 rounded-lg bg-amber-500 text-neutral-950 font-black text-xs">تأكيد وإضافة للفاتورة</button><button type="button" onClick={()=>{setPendingScans({});setScanStatus("تم إلغاء الأصناف الممسوحة");}} className="px-3 h-9 rounded-lg bg-neutral-800 text-neutral-200 text-xs">إلغاء</button></div>
+            </div>
+          )}
 
           {onOpenVoiceAssistant && (
             <button
@@ -698,7 +714,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         </div>
       </div>
 
-      <div className={`malvia-pos-cart-sheet ${mobileCartOpen ? "fixed inset-x-0 bottom-0 z-[60] h-[85dvh] max-h-[85dvh] rounded-t-3xl shadow-2xl overflow-y-auto overscroll-y-contain touch-pan-y [webkit-overflow-scrolling:touch]" : "hidden"} lg:col-span-5 lg:flex lg:static lg:z-auto lg:max-h-none lg:rounded-3xl lg:shadow-xl`}><div className="w-full min-h-0 bg-surface-2 rounded-t-3xl lg:rounded-3xl border border-amber-500/25 p-3 sm:p-5 flex flex-col justify-start shadow-xl space-y-3 sm:space-y-4 max-h-none overflow-visible lg:max-h-none lg:overflow-y-auto">
+      <div className={`malvia-pos-cart-sheet ${mobileCartOpen ? "fixed inset-x-0 bottom-0 z-[60] h-[88dvh] max-h-[88dvh] rounded-t-3xl shadow-2xl overflow-hidden flex flex-col overscroll-y-contain touch-pan-y" : "hidden"} lg:col-span-5 lg:flex lg:static lg:z-auto lg:max-h-none lg:rounded-3xl lg:shadow-xl`}><div className="w-full min-h-0 h-full bg-surface-2 rounded-t-3xl lg:rounded-3xl border border-amber-500/25 p-3 sm:p-5 flex flex-col justify-start shadow-xl space-y-3 sm:space-y-4 max-h-full overflow-y-auto overscroll-contain lg:max-h-none lg:overflow-y-auto">
         <div>
           <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
             <div className="flex items-center gap-2">
@@ -887,7 +903,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
             />
           </div>
 
-          <div className="divide-y divide-neutral-800/80 max-h-24 sm:max-h-60 overflow-y-auto overscroll-contain no-scrollbar py-2">
+          <div className="divide-y divide-neutral-800/80 min-h-[160px] max-h-[38dvh] sm:max-h-[50vh] overflow-y-auto overscroll-contain no-scrollbar py-2">
             {cart.length === 0 ? (
               <div className="py-10 text-center text-xs text-neutral-500">
                 لم تقم بإضافة أي قطعة إلى الفاتورة بعد. اضغط على أي صنف من القائمة لإضافته.
