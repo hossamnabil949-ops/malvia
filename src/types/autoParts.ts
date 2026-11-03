@@ -90,7 +90,9 @@ export interface AutoPart {
   reservedQuantity?: number; // محجوز
   minAlertStock: number;
   unit: string; // حبة، طقم، لتر
-  barcode?: string; // باركود المنتج (اختياري) — يُسجَّل يدوياً أو بالكاميرا
+  barcode?: string; // الباركود الداخلي/الأساسي للصنف
+  internalBarcode?: string; // باركود MALVIA الداخلي
+  supplierBarcode?: string; // باركود المورد (اختياري)
   imageUrl?: string; // صورة القطعة للمعاينة والمشاركة
   isScreenOrDisplay?: boolean; // هل القطعة شاشة أو تابلوه
   alternatives?: PartAlternative[]; // البدائل المتطابقة
