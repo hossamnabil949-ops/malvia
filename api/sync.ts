@@ -6,6 +6,8 @@ import { createHash } from 'node:crypto';
 import { ApiError, clientIp, findLicense, rateLimit, sendError, validateSyncBody } from './_security.js';
 
 export default async function handler(req: any, res: any) {
+  let phase = 'start';
+  let resource = '';
   try {
     const key = String(req.headers['x-license-key'] || '').trim();
     if (!key) throw new ApiError('LICENSE_REQUIRED');
@@ -17,6 +19,7 @@ export default async function handler(req: any, res: any) {
     const tenant = String(lic.tenantId);
 
     if (req.method === 'GET') {\n      phase = 'download';
+      phase = 'authenticate_employee';
       const bearer = String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1] || '';
       if (!bearer) return res.status(401).json({ code: 'EMPLOYEE_SESSION_REQUIRED', error: 'سجّل دخول الموظف قبل تنزيل بيانات المحل.' });
       const tokenHash = createHash('sha256').update(bearer).digest('hex');
@@ -25,7 +28,10 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ tenant: lic, docs: await getAll(tenant) });
     }
     if (req.method === 'POST') {
-      const { resource, data, baseVersion } = validateSyncBody(req.body);
+      phase = 'validate_body';
+      const body = validateSyncBody(req.body);
+      resource = body.resource;
+      const { data, baseVersion } = body;
       const bearer = String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1] || '';
       if (!bearer) return res.status(401).json({ code: 'EMPLOYEE_SESSION_REQUIRED', error: 'يلزم تسجيل دخول موظف موثق قبل مزامنة التعديلات.' });
       const tokenHash = createHash('sha256').update(bearer).digest('hex');
@@ -50,7 +56,8 @@ export default async function handler(req: any, res: any) {
       };
       const keys = policy[resource] || ['canManageSettings'];
       if (!allowed(keys)) return res.status(403).json({ code: 'EMPLOYEE_PERMISSION_DENIED', error: 'لا تملك صلاحية مزامنة هذا النوع من البيانات.' });
-      phase = 'database_write';\n      const v = await putIfVersion(tenant, resource, data, baseVersion);
+      phase = 'database_write';\n      phase = 'database_write';
+      const v = await putIfVersion(tenant, resource, data, baseVersion);
       if (v === -1) {
         return res.status(409).json({
           conflict: true,
@@ -65,6 +72,7 @@ export default async function handler(req: any, res: any) {
     }
     throw new ApiError('METHOD_NOT_ALLOWED');
   } catch (e) {
+    console.error('[MALVIA_SYNC_FAILURE]', { phase, resource: resource || undefined, method: req.method, error: e });
     return sendError(res, e);
   }
 }
