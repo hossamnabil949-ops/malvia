@@ -11,12 +11,12 @@ export default async function handler(req: any, res: any) {
     if (!key) throw new ApiError('LICENSE_REQUIRED');
     const ip = clientIp(req);
     rateLimit(`sync:${ip}`, 300, 60_000);
-    const lic = await findLicense(key);
+    phase = 'license_lookup';\n    const lic = await findLicense(key);
     if (!lic) { rateLimit(`bad-key:${ip}`, 10, 10 * 60_000); throw new ApiError('LICENSE_INVALID'); }
     if (lic.status === 'معلق مؤقتاً') throw new ApiError('LICENSE_SUSPENDED');
     const tenant = String(lic.tenantId);
 
-    if (req.method === 'GET') {
+    if (req.method === 'GET') {\n      phase = 'download';
       const bearer = String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1] || '';
       if (!bearer) return res.status(401).json({ code: 'EMPLOYEE_SESSION_REQUIRED', error: 'سجّل دخول الموظف قبل تنزيل بيانات المحل.' });
       const tokenHash = createHash('sha256').update(bearer).digest('hex');
@@ -50,7 +50,7 @@ export default async function handler(req: any, res: any) {
       };
       const keys = policy[resource] || ['canManageSettings'];
       if (!allowed(keys)) return res.status(403).json({ code: 'EMPLOYEE_PERMISSION_DENIED', error: 'لا تملك صلاحية مزامنة هذا النوع من البيانات.' });
-      const v = await putIfVersion(tenant, resource, data, baseVersion);
+      phase = 'database_write';\n      const v = await putIfVersion(tenant, resource, data, baseVersion);
       if (v === -1) {
         return res.status(409).json({
           conflict: true,
