@@ -158,6 +158,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         return (
           part.partNumber.toLowerCase().includes(q) ||
           (part.barcode || '').toLowerCase().includes(q) ||
+          (part.internalBarcode || '').toLowerCase().includes(q) ||
+          (part.supplierBarcode || '').toLowerCase().includes(q) ||
           part.name.includes(q) ||
           part.compatibleModels.includes(q) ||
           part.shelfLocation.toLowerCase().includes(q)
