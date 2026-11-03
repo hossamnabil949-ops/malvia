@@ -72,7 +72,6 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastSeenRef = useRef<Record<string, number>>({});
   const cb = useRef(onScan);
-  const lastSeenRef = useRef<Record<string, number>>({});
   cb.current = onScan;
 
   const openCamera = () => {
@@ -91,11 +90,17 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
     const startReader = async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('افتح النظام من رابط HTTPS أو localhost لتشغيل الكاميرا.'), { name: 'SecurityError' });
-        const devices = await reader.listVideoInputDevices();
-        if (stopped) return;
-        const preferred = devices.find(d => /back|rear|environment|خلف/i.test(d.label)) || devices[devices.length - 1];
-        if (!preferred) throw Object.assign(new Error('لم يتم العثور على كاميرا في الجهاز.'), { name: 'NotFoundError' });
-        controls = await reader.decodeFromVideoDevice(preferred.deviceId, videoRef.current!, result => {
+        const video = videoRef.current;
+        if (!video) throw new Error('لم يتم تجهيز نافذة الكاميرا بعد.');
+        // اطلب الكاميرا الخلفية مباشرة؛ أسماء الكاميرات تكون فارغة غالبًا قبل منح الإذن على Android.
+        controls = await reader.decodeFromConstraints({
+          audio: false,
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+        }, video, result => {
           if (stopped || !result) return;
           const code = cleanBarcode(result.getText());
           const now = Date.now();
