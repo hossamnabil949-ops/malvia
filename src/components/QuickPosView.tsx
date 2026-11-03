@@ -276,26 +276,14 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const [splitMethod, setSplitMethod] = useState<string>('فيزا / بطاقة بنكية');
   const [splitAmount, setSplitAmount] = useState<string>('');
   const [saleError, setSaleError] = useState<string>('');
-  // المسح يضيف إلى قائمة انتظار مؤقتة؛ لا يدخل الصنف الفاتورة إلا بعد التأكيد.
+  // لا يُضاف الصنف إلا بعد تأكيده من نافذة الكاميرا؛ كل تأكيد يمثل قطعة واحدة.
   const [scanStatus, setScanStatus] = useState('');
-  const [pendingScans, setPendingScans] = useState<Record<string, { part: AutoPart; count: number }>>({});
-  const lastScanAt = useRef<Record<string, number>>({});
   const handleBarcodeScan = (code: string) => {
     const part = findPartByBarcode(parts, code);
     if (!part) { beep(false); setScanStatus(`❌ الكود ${code} غير مسجّل`); setSaleError(`الباركود ${code} غير مسجّل لأي قطعة`); return; }
-    const now = Date.now();
-    if (now - (lastScanAt.current[part.id] || 0) < 1500) return;
-    lastScanAt.current[part.id] = now;
-    const pendingCount = pendingScans[part.id]?.count || 0;
     const cartCount = cart.find(item => item.part.id === part.id)?.quantity || 0;
-    if (stockHere(part) <= 0 || pendingCount + cartCount >= stockHere(part)) { beep(false); setScanStatus(`⚠️ ${part.name} — الكمية غير متاحة`); setSaleError(`الكمية المطلوبة من «${part.name}» تتجاوز الرصيد المتاح`); return; }
-    beep(true); setSaleError(''); setScanStatus(`تم التعرف على: ${part.name} — في انتظار التأكيد`);
-    setPendingScans(prev => ({ ...prev, [part.id]: { part, count: (prev[part.id]?.count || 0) + 1 } }));
-  };
-  const confirmScannedItems = () => {
-    const entries = Object.values(pendingScans);
-    entries.forEach(({part,count}) => { for (let i=0; i<count; i++) onAddToCart(part); });
-    setPendingScans({}); setScanStatus(entries.length ? 'تمت إضافة الأصناف المؤكدة إلى الفاتورة' : '');
+    if (stockHere(part) <= cartCount) { beep(false); setScanStatus(`⚠️ ${part.name} — الكمية غير متاحة`); setSaleError(`الكمية المطلوبة من «${part.name}» تتجاوز الرصيد المتاح`); return; }
+    beep(true); setSaleError(''); onAddToCart(part); setScanStatus(`تمت إضافة ${part.name} إلى الفاتورة`);
   };
   useBarcodeWedge(handleBarcodeScan, true);
 
@@ -563,13 +551,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           </div>
 
           <BarcodeScanButton onScan={handleBarcodeScan} label="مسح" status={scanStatus} />
-          {Object.keys(pendingScans).length > 0 && (
-            <div className="w-full rounded-xl border border-amber-500/40 bg-amber-950/20 p-3 space-y-2">
-              <div className="flex items-center justify-between gap-2"><b className="text-xs text-amber-300">أصناف مقروءة — في انتظار التأكيد</b><span className="text-[11px] text-white">{Object.values(pendingScans).reduce((n,x)=>n+x.count,0)} قطعة</span></div>
-              <div className="max-h-24 overflow-y-auto space-y-1">{Object.values(pendingScans).map(({part,count}) => <div key={part.id} className="flex justify-between text-xs text-neutral-200"><span className="truncate">{part.name}</span><b className="text-amber-300">× {count}</b></div>)}</div>
-              <div className="flex gap-2"><button type="button" onClick={confirmScannedItems} className="flex-1 h-9 rounded-lg bg-amber-500 text-neutral-950 font-black text-xs">تأكيد وإضافة للفاتورة</button><button type="button" onClick={()=>{setPendingScans({});setScanStatus("تم إلغاء الأصناف الممسوحة");}} className="px-3 h-9 rounded-lg bg-neutral-800 text-neutral-200 text-xs">إلغاء</button></div>
-            </div>
-          )}
+}
 
           {onOpenVoiceAssistant && (
             <button
