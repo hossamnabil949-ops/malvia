@@ -93,6 +93,7 @@ export interface AutoPart {
   barcode?: string; // الباركود الداخلي/الأساسي للصنف
   internalBarcode?: string; // باركود MALVIA الداخلي
   supplierBarcode?: string; // باركود المورد (اختياري)
+  extraBarcodes?: { value: string; kind: 'internal' | 'supplier'; label?: string }[]; // أكواد إضافية للصنف
   imageUrl?: string; // صورة القطعة للمعاينة والمشاركة
   isScreenOrDisplay?: boolean; // هل القطعة شاشة أو تابلوه
   alternatives?: PartAlternative[]; // البدائل المتطابقة
