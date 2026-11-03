@@ -447,39 +447,43 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       </td>
 
                       <td className="p-3.5 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex flex-wrap items-center justify-center gap-1.5 min-w-[190px]">
                           <button
                             onClick={() => setStockCardPart(part)}
-                            className="p-1.5 rounded-lg bg-neutral-800 hover:bg-sky-500 hover:text-neutral-950 text-sky-300 transition-colors"
+                            className="inline-flex min-h-9 items-center gap-1.5 px-2 py-2 rounded-lg bg-neutral-800 hover:bg-sky-500 hover:text-neutral-950 text-sky-300 transition-colors text-[10px] font-bold whitespace-nowrap"
                             title="كارت الصنف (حركة الصنف)"
+                            aria-label="كارت الصنف وحركة الصنف"
                           >
-                            <ClipboardList className="w-3.5 h-3.5" />
+                            <ClipboardList className="w-3.5 h-3.5 shrink-0" /><span>كارت الصنف</span>
                           </button>
 
                           <button
                             onClick={() => onQuickSalePart(part)}
                             disabled={isOut}
-                            className="p-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="inline-flex min-h-9 items-center gap-1.5 px-2 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold disabled:opacity-30 disabled:cursor-not-allowed text-[10px] whitespace-nowrap"
+                            aria-label="إضافة الصنف للفاتورة"
                             title="إضافة للفاتورة"
                           >
-                            <ShoppingCart className="w-3.5 h-3.5" />
+                            <ShoppingCart className="w-3.5 h-3.5 shrink-0" /><span>بيع</span>
                           </button>
 
                           <button
                             onClick={() => setRestockPart(part)}
-                            className="p-1.5 rounded-lg bg-surface-3 hover:bg-surface-4 text-neutral-200"
+                            className="inline-flex min-h-9 items-center gap-1.5 px-2 py-2 rounded-lg bg-surface-3 hover:bg-surface-4 text-neutral-200 text-[10px] font-bold whitespace-nowrap"
+                            aria-label="توريد أو تزويد كمية"
                             title="توريد / تزويد كمية"
                           >
-                            <Plus className="w-3.5 h-3.5" />
+                            <Plus className="w-3.5 h-3.5 shrink-0" /><span>توريد</span>
                           </button>
 
                           {onDeletePart && (
                             <button
                               onClick={() => { setDeletePart(part); setDeletePass(''); setDeleteError(''); }}
-                              className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 transition-colors"
+                              className="inline-flex min-h-9 items-center gap-1.5 px-2 py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 transition-colors text-[10px] font-bold whitespace-nowrap"
+                              aria-label="حذف الصنف"
                               title="حذف الصنف (يتطلب باسورد المدير)"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-3.5 h-3.5 shrink-0" /><span>حذف</span>
                             </button>
                           )}
                         </div>

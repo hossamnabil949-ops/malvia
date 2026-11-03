@@ -698,7 +698,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         </div>
       </div>
 
-      <div className={`malvia-pos-cart-sheet ${mobileCartOpen ? "fixed inset-x-0 bottom-0 z-[60] max-h-[85dvh] rounded-t-3xl shadow-2xl" : "hidden"} lg:col-span-5 lg:flex lg:static lg:z-auto lg:max-h-none lg:rounded-3xl lg:shadow-xl`}><div className="w-full min-h-0 bg-surface-2 rounded-t-3xl lg:rounded-3xl border border-amber-500/25 p-3 sm:p-5 flex flex-col justify-start shadow-xl space-y-3 sm:space-y-4 max-h-[85dvh] lg:max-h-none overflow-y-auto overscroll-contain">
+      <div className={`malvia-pos-cart-sheet ${mobileCartOpen ? "fixed inset-x-0 bottom-0 z-[60] h-[85dvh] max-h-[85dvh] rounded-t-3xl shadow-2xl overflow-y-auto overscroll-y-contain touch-pan-y [webkit-overflow-scrolling:touch]" : "hidden"} lg:col-span-5 lg:flex lg:static lg:z-auto lg:max-h-none lg:rounded-3xl lg:shadow-xl`}><div className="w-full min-h-0 bg-surface-2 rounded-t-3xl lg:rounded-3xl border border-amber-500/25 p-3 sm:p-5 flex flex-col justify-start shadow-xl space-y-3 sm:space-y-4 max-h-none overflow-visible lg:max-h-none lg:overflow-y-auto">
         <div>
           <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
             <div className="flex items-center gap-2">
