@@ -10,6 +10,9 @@ export const findPartByBarcode = (parts: AutoPart[], raw: string): AutoPart | un
   if (!code) return undefined;
   return (
     parts.find((p) => cleanBarcode(p.barcode || '').toLowerCase() === code) ||
+    parts.find((p) => cleanBarcode(p.internalBarcode || '').toLowerCase() === code) ||
+    parts.find((p) => cleanBarcode(p.supplierBarcode || '').toLowerCase() === code) ||
+    parts.find((p) => (p.extraBarcodes || []).some(item => cleanBarcode(item.value || '').toLowerCase() === code)) ||
     parts.find((p) => cleanBarcode(p.partNumber || '').toLowerCase() === code)
   );
 };
