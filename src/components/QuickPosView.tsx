@@ -287,7 +287,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
     if (now - (lastScanAt.current[part.id] || 0) < 1500) return;
     lastScanAt.current[part.id] = now;
     const pendingCount = pendingScans[part.id]?.count || 0;
-    if (stockHere(part) <= 0 || pendingCount >= stockHere(part)) { beep(false); setScanStatus(`⚠️ ${part.name} — الكمية غير متاحة`); setSaleError(`الكمية المطلوبة من «${part.name}» تتجاوز الرصيد المتاح`); return; }
+    const cartCount = cart.find(item => item.part.id === part.id)?.quantity || 0;
+    if (stockHere(part) <= 0 || pendingCount + cartCount >= stockHere(part)) { beep(false); setScanStatus(`⚠️ ${part.name} — الكمية غير متاحة`); setSaleError(`الكمية المطلوبة من «${part.name}» تتجاوز الرصيد المتاح`); return; }
     beep(true); setSaleError(''); setScanStatus(`تم التعرف على: ${part.name} — في انتظار التأكيد`);
     setPendingScans(prev => ({ ...prev, [part.id]: { part, count: (prev[part.id]?.count || 0) + 1 } }));
   };
