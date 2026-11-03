@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ScanBarcode, X } from 'lucide-react';
 import { cleanBarcode } from '../utils/barcodeLookup';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 
 // ───────────────────────────────────────────────────────────────
 // 1) قارئ الباركود USB/بلوتوث: يكتب الكود بسرعة كبيرة ثم Enter.
@@ -70,90 +71,51 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
   const [pendingCode, setPendingCode] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const cb = useRef(onScan);
+  const lastSeenRef = useRef<Record<string, number>>({});
   cb.current = onScan;
-
-  const supported = typeof window !== 'undefined' && 'BarcodeDetector' in window;
 
   const openCamera = () => {
     setMsg('');
     setPendingCode('');
-    if (!supported) {
-      setMsg('متصفح الجهاز ده مش بيقرا الباركود بالكاميرا (شغّال على Chrome أندرويد). استخدم قارئ باركود أو اكتب الكود.');
-      return;
-    }
     setOpen(true);
   };
 
   useEffect(() => {
     if (!open) return;
     let stopped = false;
-    let stream: MediaStream | null = null;
-    let raf = 0;
-    const lastSeen: Record<string, number> = {};
-    lastSeenRef.current = lastSeen;
-
-    const run = async () => {
+    let controls: { stop: () => void } | undefined;
+    const reader = new BrowserMultiFormatReader();
+    const seen: Record<string, number> = {};
+    lastSeenRef.current = seen;
+    const startReader = async () => {
       try {
-        if (!navigator.mediaDevices?.getUserMedia) {
-          setMsg('الكاميرا غير متاحة (الصفحة تحتاج https).');
-          setOpen(false);
-          return;
-        }
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
-          audio: false,
+        if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('افتح النظام من رابط HTTPS أو localhost لتشغيل الكاميرا.'), { name: 'SecurityError' });
+        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+        if (stopped) return;
+        const preferred = devices.find(d => /back|rear|environment|خلف/i.test(d.label)) || devices[devices.length - 1];
+        if (!preferred) throw Object.assign(new Error('لم يتم العثور على كاميرا في الجهاز.'), { name: 'NotFoundError' });
+        controls = await reader.decodeFromVideoDevice(preferred.deviceId, videoRef.current!, result => {
+          if (stopped || !result) return;
+          const code = cleanBarcode(result.getText());
+          const now = Date.now();
+          if (code && now - (seen[code] || 0) > 1800) { seen[code] = now; setPendingCode(code); }
         });
-        if (stopped) { stream.getTracks().forEach((t) => t.stop()); return; }
-        const video = videoRef.current!;
-        video.srcObject = stream;
-        await video.play();
-        const detector = new (window as any).BarcodeDetector({
-          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'code_93', 'itf', 'codabar', 'qr_code', 'data_matrix'],
-        });
-        let busy = false;
-        const tick = async () => {
-          if (stopped) return;
-          if (!busy && video.readyState >= 2) {
-            busy = true;
-            try {
-              const found = await detector.detect(video);
-              if (found.length > 0 && found[0].rawValue) {
-                const code = cleanBarcode(String(found[0].rawValue));
-                const now = Date.now();
-                // نفس الكود مايتحسبش مرتين خلال ثانيتين (الكاميرا بتشوفه عدة إطارات)
-                if (code && now - (lastSeen[code] || 0) > 2000) {
-                  lastSeen[code] = now;
-                  setPendingCode(code);
-                }
-              }
-            } catch { /* تجاهل أخطاء الإطار الواحد */ }
-            busy = false;
-          }
-          raf = requestAnimationFrame(tick);
-        };
-        tick();
+        if (stopped) controls.stop();
       } catch (e: any) {
+        if (stopped) return;
         const n = e?.name || '';
-        setMsg(
-          n === 'NotAllowedError' || n === 'SecurityError'
-            ? 'تم رفض إذن الكاميرا. اسمح للموقع باستخدام الكاميرا من إعدادات المتصفح ثم أعد المحاولة.'
-            : n === 'NotFoundError'
-            ? 'لم يتم العثور على كاميرا.'
-            : 'تعذر تشغيل الكاميرا.'
-        );
+        setMsg(n === 'NotAllowedError' || n === 'SecurityError' ? (e?.message || 'اسمح للموقع باستخدام الكاميرا من إعدادات المتصفح.') : n === 'NotFoundError' ? (e?.message || 'لم يتم العثور على كاميرا.') : n === 'NotReadableError' ? 'الكاميرا مستخدمة بواسطة تطبيق آخر. أغلقه ثم حاول مرة أخرى.' : 'تعذر تشغيل الكاميرا. تحقق من إذن الكاميرا ثم أعد المحاولة.');
         setOpen(false);
       }
     };
-    run();
-
+    startReader();
     return () => {
       stopped = true;
-      cancelAnimationFrame(raf);
-      stream?.getTracks().forEach((t) => t.stop());
+      controls?.stop();
+      reader.reset();
       const v = videoRef.current;
-      if (v) { (v.srcObject as MediaStream | null)?.getTracks().forEach((t) => t.stop()); v.srcObject = null; }
+      if (v) { (v.srcObject as MediaStream | null)?.getTracks().forEach(t => t.stop()); v.srcObject = null; }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   return (
@@ -171,8 +133,8 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
 
       {open && (
         <div className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center p-4" dir="rtl">
-          <div className="relative w-full max-w-md aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-amber-500/40">
-            <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
+          <div className="relative w-full max-w-md aspect-[3/4] rounded-2xl overflow-hidden bg-neutral-950 border border-amber-500/40">
+            <video ref={videoRef} className="w-full h-full object-cover" muted playsInline autoPlay />
             <div className="absolute inset-x-8 top-1/2 h-0.5 bg-amber-400/80 pointer-events-none" />
             <button
               type="button"
