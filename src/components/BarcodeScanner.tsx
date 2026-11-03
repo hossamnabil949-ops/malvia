@@ -91,7 +91,7 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
     const startReader = async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('افتح النظام من رابط HTTPS أو localhost لتشغيل الكاميرا.'), { name: 'SecurityError' });
-        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+        const devices = await reader.listVideoInputDevices();
         if (stopped) return;
         const preferred = devices.find(d => /back|rear|environment|خلف/i.test(d.label)) || devices[devices.length - 1];
         if (!preferred) throw Object.assign(new Error('لم يتم العثور على كاميرا في الجهاز.'), { name: 'NotFoundError' });
