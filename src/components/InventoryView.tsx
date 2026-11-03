@@ -1,4 +1,6 @@
 import { BarcodeField } from './BarcodeField';
+import { BarcodeMaker } from './BarcodeMaker';
+import { makeInternalBarcode } from '../utils/barcodeManager';
 import React, { useState, useMemo } from 'react';
 import { 
   Search, 
@@ -77,6 +79,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   isAddModalOpenInitially = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [showBarcodeMaker, setShowBarcodeMaker] = useState(false);
   // حذف صنف: لا يتم إلا بعد إدخال باسورد المدير
   const [deletePart, setDeletePart] = useState<AutoPart | null>(null);
   const [deletePass, setDeletePass] = useState('');
@@ -188,6 +191,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       minAlertStock: Number.isFinite(Number(newPartForm.minAlertStock)) ? Number(newPartForm.minAlertStock) : 2,
       unit: newPartForm.unit || 'طقم',
       barcode: newPartForm.barcode?.trim() || undefined,
+      internalBarcode: makeInternalBarcode(parts.flatMap(p => [p.barcode, p.internalBarcode, p.supplierBarcode].filter(Boolean) as string[])),
+      supplierBarcode: newPartForm.supplierBarcode?.trim() || undefined,
       ...(newPartForm.tracking && newPartForm.tracking !== 'none' ? { tracking: newPartForm.tracking } : {}),
     };
 
@@ -207,6 +212,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       minAlertStock: 3,
       unit: 'طقم',
       barcode: '',
+      supplierBarcode: '',
       tracking: 'none',
     });
   };
@@ -264,6 +270,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           )}
 
 
+
+          <button
+            type="button"
+            onClick={() => setShowBarcodeMaker(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-bold transition-all shadow-sm"
+            title="إنشاء وطباعة ملصقات الباركود"
+          >
+            <ScanBarcodeIcon className="w-4 h-4" />
+            <span>صانع الباركود</span>
+          </button>
 
           {onOpenBarcodeStocktake && (
             <button
@@ -906,6 +922,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           onClose={() => setStockCardPart(null)}
         />
       )}
+      {showBarcodeMaker && <BarcodeMaker parts={parts} onUpdatePartPrices={onUpdatePartPrices} onClose={() => setShowBarcodeMaker(false)} />}
     </div>
   );
 };
