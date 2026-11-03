@@ -8,6 +8,7 @@ import { cleanBarcode } from '../utils/barcodeLookup';
 // ───────────────────────────────────────────────────────────────
 export function useBarcodeWedge(onScan: (code: string) => void, enabled = true) {
   const cb = useRef(onScan);
+  const lastSeenRef = useRef<Record<string, number>>({});
   cb.current = onScan;
 
   useEffect(() => {
@@ -89,6 +90,7 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
     let stream: MediaStream | null = null;
     let raf = 0;
     const lastSeen: Record<string, number> = {};
+    lastSeenRef.current = lastSeen;
 
     const run = async () => {
       try {
@@ -190,6 +192,7 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
               onClick={() => {
                 if (!pendingCode) return;
                 cb.current(pendingCode);
+                delete lastSeenRef.current[pendingCode];
                 setPendingCode('');
               }}
               className="flex-1 h-12 rounded-xl bg-amber-500 text-neutral-950 text-sm font-black disabled:opacity-40"
