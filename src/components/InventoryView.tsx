@@ -1,4 +1,6 @@
 import { BarcodeField } from './BarcodeField';
+import { BarcodeMaker } from './BarcodeMaker';
+import { makeInternalBarcode } from '../utils/barcodeManager';
 import React, { useState, useMemo } from 'react';
 import { 
   Search, 
@@ -77,6 +79,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   isAddModalOpenInitially = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [showBarcodeMaker, setShowBarcodeMaker] = useState(false);
   // حذف صنف: لا يتم إلا بعد إدخال باسورد المدير
   const [deletePart, setDeletePart] = useState<AutoPart | null>(null);
   const [deletePass, setDeletePass] = useState('');
@@ -155,6 +158,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         return (
           part.partNumber.toLowerCase().includes(q) ||
           (part.barcode || '').toLowerCase().includes(q) ||
+          (part.internalBarcode || '').toLowerCase().includes(q) ||
+          (part.supplierBarcode || '').toLowerCase().includes(q) ||
           part.name.includes(q) ||
           part.compatibleModels.includes(q) ||
           part.shelfLocation.toLowerCase().includes(q)
@@ -173,6 +178,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     e.preventDefault();
     if (!newPartForm.partNumber || !newPartForm.name) return;
 
+    const generatedInternalBarcode = makeInternalBarcode(parts.flatMap(p => [p.barcode, p.internalBarcode, p.supplierBarcode].filter(Boolean) as string[]));
     const part: AutoPart = {
       id: `p-${Date.now()}`,
       partNumber: newPartForm.partNumber.trim(),
@@ -187,7 +193,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       stockQuantity: Number.isFinite(Number(newPartForm.stockQuantity)) ? Number(newPartForm.stockQuantity) : 0,
       minAlertStock: Number.isFinite(Number(newPartForm.minAlertStock)) ? Number(newPartForm.minAlertStock) : 2,
       unit: newPartForm.unit || 'طقم',
-      barcode: newPartForm.barcode?.trim() || undefined,
+      barcode: newPartForm.barcode?.trim() || generatedInternalBarcode,
+      internalBarcode: generatedInternalBarcode,
+      supplierBarcode: newPartForm.supplierBarcode?.trim() || undefined,
       ...(newPartForm.tracking && newPartForm.tracking !== 'none' ? { tracking: newPartForm.tracking } : {}),
     };
 
@@ -207,6 +215,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       minAlertStock: 3,
       unit: 'طقم',
       barcode: '',
+      supplierBarcode: '',
       tracking: 'none',
     });
   };
@@ -264,6 +273,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           )}
 
 
+
+          <button
+            type="button"
+            onClick={() => setShowBarcodeMaker(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-bold transition-all shadow-sm"
+            title="إنشاء وطباعة ملصقات الباركود"
+          >
+            <ScanBarcodeIcon className="w-4 h-4" />
+            <span>صانع الباركود</span>
+          </button>
 
           {onOpenBarcodeStocktake && (
             <button
@@ -753,6 +772,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   onChange={(v) => setNewPartForm({ ...newPartForm, barcode: v })}
                 />
               </div>
+              <div>
+                <label className="text-neutral-300 font-bold block mb-1">باركود المورد (اختياري)</label>
+                <BarcodeField
+                  value={newPartForm.supplierBarcode || ''}
+                  onChange={(v) => setNewPartForm({ ...newPartForm, supplierBarcode: v })}
+                />
+              </div>
 
               <div>
                 <label className="text-neutral-300 font-bold block mb-1">
@@ -906,6 +932,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           onClose={() => setStockCardPart(null)}
         />
       )}
+      {showBarcodeMaker && <BarcodeMaker parts={parts} onUpdatePartPrices={onUpdatePartPrices} onClose={() => setShowBarcodeMaker(false)} />}
     </div>
   );
 };

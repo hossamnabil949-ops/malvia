@@ -311,7 +311,11 @@ export async function init() {
           where tenant=p_tenant and resource=p_resource and version=p_base_version returning version into v_version;
         return v_version;
       end $$`;
-    })();
+    })().catch((error) => {
+      // لا نحتفظ بوعد فاشل: فشل اتصال Neon المؤقت يجب ألا يعطّل كل الطلبات التالية على نفس الـ instance.
+      ready = null;
+      throw error;
+    });
   }
   return ready;
 }

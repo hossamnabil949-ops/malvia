@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ScanBarcode, X } from 'lucide-react';
 import { cleanBarcode } from '../utils/barcodeLookup';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 
 // ───────────────────────────────────────────────────────────────
 // 1) قارئ الباركود USB/بلوتوث: يكتب الكود بسرعة كبيرة ثم Enter.
@@ -8,6 +9,7 @@ import { cleanBarcode } from '../utils/barcodeLookup';
 // ───────────────────────────────────────────────────────────────
 export function useBarcodeWedge(onScan: (code: string) => void, enabled = true) {
   const cb = useRef(onScan);
+  const lastSeenRef = useRef<Record<string, number>>({});
   cb.current = onScan;
 
   useEffect(() => {
@@ -66,91 +68,60 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState('');
+  const [pendingCode, setPendingCode] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
+  const lastSeenRef = useRef<Record<string, number>>({});
   const cb = useRef(onScan);
   cb.current = onScan;
 
-  const supported = typeof window !== 'undefined' && 'BarcodeDetector' in window;
-
   const openCamera = () => {
     setMsg('');
-    if (!supported) {
-      setMsg('متصفح الجهاز ده مش بيقرا الباركود بالكاميرا (شغّال على Chrome أندرويد). استخدم قارئ باركود أو اكتب الكود.');
-      return;
-    }
+    setPendingCode('');
     setOpen(true);
   };
 
   useEffect(() => {
     if (!open) return;
     let stopped = false;
-    let stream: MediaStream | null = null;
-    let raf = 0;
-    const lastSeen: Record<string, number> = {};
-
-    const run = async () => {
+    let controls: { stop: () => void } | undefined;
+    const reader = new BrowserMultiFormatReader();
+    const seen: Record<string, number> = {};
+    lastSeenRef.current = seen;
+    const startReader = async () => {
       try {
-        if (!navigator.mediaDevices?.getUserMedia) {
-          setMsg('الكاميرا غير متاحة (الصفحة تحتاج https).');
-          setOpen(false);
-          return;
-        }
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
+        if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('افتح النظام من رابط HTTPS أو localhost لتشغيل الكاميرا.'), { name: 'SecurityError' });
+        const video = videoRef.current;
+        if (!video) throw new Error('لم يتم تجهيز نافذة الكاميرا بعد.');
+        // اطلب الكاميرا الخلفية مباشرة؛ أسماء الكاميرات تكون فارغة غالبًا قبل منح الإذن على Android.
+        controls = await reader.decodeFromConstraints({
           audio: false,
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+        }, video, result => {
+          if (stopped || !result) return;
+          const code = cleanBarcode(result.getText());
+          const now = Date.now();
+          if (code && now - (seen[code] || 0) > 1800) { seen[code] = now; setPendingCode(code); }
         });
-        if (stopped) { stream.getTracks().forEach((t) => t.stop()); return; }
-        const video = videoRef.current!;
-        video.srcObject = stream;
-        await video.play();
-        const detector = new (window as any).BarcodeDetector({
-          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'code_93', 'itf', 'codabar', 'qr_code', 'data_matrix'],
-        });
-        let busy = false;
-        const tick = async () => {
-          if (stopped) return;
-          if (!busy && video.readyState >= 2) {
-            busy = true;
-            try {
-              const found = await detector.detect(video);
-              if (found.length > 0 && found[0].rawValue) {
-                const code = cleanBarcode(String(found[0].rawValue));
-                const now = Date.now();
-                // نفس الكود مايتحسبش مرتين خلال ثانيتين (الكاميرا بتشوفه عدة إطارات)
-                if (code && now - (lastSeen[code] || 0) > 2000) {
-                  lastSeen[code] = now;
-                  cb.current(code);
-                  if (!continuous) { setOpen(false); return; }
-                }
-              }
-            } catch { /* تجاهل أخطاء الإطار الواحد */ }
-            busy = false;
-          }
-          raf = requestAnimationFrame(tick);
-        };
-        tick();
+        if (stopped) controls.stop();
       } catch (e: any) {
+        if (stopped) return;
         const n = e?.name || '';
-        setMsg(
-          n === 'NotAllowedError' || n === 'SecurityError'
-            ? 'تم رفض إذن الكاميرا. اسمح للموقع باستخدام الكاميرا من إعدادات المتصفح ثم أعد المحاولة.'
-            : n === 'NotFoundError'
-            ? 'لم يتم العثور على كاميرا.'
-            : 'تعذر تشغيل الكاميرا.'
-        );
+        setMsg(n === 'NotAllowedError' || n === 'SecurityError' ? (e?.message || 'اسمح للموقع باستخدام الكاميرا من إعدادات المتصفح.') : n === 'NotFoundError' ? (e?.message || 'لم يتم العثور على كاميرا.') : n === 'NotReadableError' ? 'الكاميرا مستخدمة بواسطة تطبيق آخر. أغلقه ثم حاول مرة أخرى.' : 'تعذر تشغيل الكاميرا. تحقق من إذن الكاميرا ثم أعد المحاولة.');
         setOpen(false);
       }
     };
-    run();
-
+    startReader();
     return () => {
       stopped = true;
-      cancelAnimationFrame(raf);
-      stream?.getTracks().forEach((t) => t.stop());
+      controls?.stop();
+      reader.reset();
       const v = videoRef.current;
-      if (v) { (v.srcObject as MediaStream | null)?.getTracks().forEach((t) => t.stop()); v.srcObject = null; }
+      if (v) { (v.srcObject as MediaStream | null)?.getTracks().forEach(t => t.stop()); v.srcObject = null; }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   return (
@@ -168,8 +139,8 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
 
       {open && (
         <div className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center p-4" dir="rtl">
-          <div className="relative w-full max-w-md aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-amber-500/40">
-            <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
+          <div className="relative w-full max-w-md aspect-[3/4] rounded-2xl overflow-hidden bg-neutral-950 border border-amber-500/40">
+            <video ref={videoRef} className="w-full h-full object-cover" muted playsInline autoPlay />
             <div className="absolute inset-x-8 top-1/2 h-0.5 bg-amber-400/80 pointer-events-none" />
             <button
               type="button"
@@ -179,16 +150,31 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
               <X className="w-5 h-5" />
             </button>
             <div className="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/90 to-transparent text-center">
-              <p className="text-xs text-neutral-200 min-h-[18px]">{status || 'وجّه الكاميرا نحو الباركود'}</p>
+              <p className="text-xs text-neutral-200 min-h-[18px]">{pendingCode ? `تمت قراءة: ${pendingCode}` : (status || 'وجّه الكاميرا نحو الباركود')}</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="mt-4 px-6 h-11 rounded-xl bg-neutral-800 border border-neutral-600 text-white text-sm font-bold"
-          >
-            تم / إغلاق
-          </button>
+          <div className="mt-4 flex w-full max-w-md gap-3">
+            <button
+              type="button"
+              disabled={!pendingCode}
+              onClick={() => {
+                if (!pendingCode) return;
+                cb.current(pendingCode);
+                delete lastSeenRef.current[pendingCode];
+                setPendingCode('');
+              }}
+              className="flex-1 h-12 rounded-xl bg-amber-500 text-neutral-950 text-sm font-black disabled:opacity-40"
+            >
+              تأكيد وإضافة
+            </button>
+            <button
+              type="button"
+              onClick={() => { setPendingCode(''); setOpen(false); }}
+              className="flex-1 h-12 rounded-xl bg-neutral-800 border border-neutral-600 text-white text-sm font-bold"
+            >
+              إلغاء
+            </button>
+          </div>
         </div>
       )}
     </>

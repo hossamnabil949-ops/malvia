@@ -628,7 +628,7 @@ export default function App() {
         if (p.id === partId) {
           return barcode === undefined
             ? { ...p, costPrice, salePrice }
-            : { ...p, costPrice, salePrice, barcode: barcode || undefined };
+            : { ...p, costPrice, salePrice, barcode: barcode || undefined, internalBarcode: barcode || undefined };
         }
         return p;
       });
