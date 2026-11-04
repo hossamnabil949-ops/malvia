@@ -180,9 +180,11 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 {settings.taxId ? `بطاقة ضريبية: ${settings.taxId}` : ''}
               </div>
             )}
-            <p className="text-[11px] text-neutral-700 pt-1">
-              فاتورة بيع ضريبية مبسطة وإذن صرف بضاعة
-            </p>
+            {settings.taxRegistered && (
+              <p className="text-[11px] text-neutral-700 pt-1">
+                فاتورة بيع ضريبية مبسطة وإذن صرف بضاعة
+              </p>
+            )}
             {invoice.status && invoice.status !== 'مسددة' && (
               <div className="inline-block px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold border border-rose-300">
                 {invoice.status === 'مرتجع كلي' ? 'مرتجع بالكامل' : `مرتجع جزئي (مخصوم: ${invoice.returnedAmount?.toFixed(2)} ج.م)`}
@@ -242,7 +244,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 <tr className="text-neutral-500 border-b border-neutral-200">
                   <th className="pb-1.5">الصنف</th>
                   <th className="pb-1.5 text-center">الكمية</th>
-                  <th className="pb-1.5 text-center">سعر الوحدة</th>
+                  <th className="pb-1.5 text-center">{settings.taxRegistered && settings.pricesIncludeVat ? 'سعر الوحدة شامل الضريبة' : 'سعر الوحدة'}</th>
                   <th className="pb-1.5 text-left">الإجمالي</th>
                 </tr>
               </thead>
@@ -281,7 +283,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
           <div className="py-3 text-xs space-y-1 border-b border-neutral-200">
             <div className="flex justify-between text-neutral-600">
-              <span>المجموع قبل الضريبة:</span>
+              <span>{settings.taxRegistered && settings.pricesIncludeVat ? 'إجمالي الأصناف شامل الضريبة:' : 'إجمالي الأصناف:'}</span>
               <span className="font-mono">{invoice.subtotal.toFixed(2)} ج.م</span>
             </div>
             {invoice.discount > 0 && (
@@ -290,12 +292,14 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 <span className="font-mono">-{invoice.discount.toFixed(2)} ج.م</span>
               </div>
             )}
-            <div className="flex justify-between text-neutral-600">
-              <span>ضريبة القيمة المضافة:</span>
-              <span className="font-mono">
-                {invoice.tax > 0 ? `${invoice.tax.toFixed(2)} ج.م (${settings.vatRate ?? 14}%)` : 'معفى / بدون ضريبة (0.00 ج.م)'}
-              </span>
-            </div>
+            {settings.taxRegistered && (
+              <div className="flex justify-between text-neutral-600">
+                <span>ضريبة القيمة المضافة:</span>
+                <span className="font-mono">
+                  {invoice.tax > 0 ? `${invoice.tax.toFixed(2)} ج.م (${settings.vatRate ?? 14}%)` : 'معفى / بدون ضريبة (0.00 ج.م)'}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between text-base font-black text-neutral-950 pt-1.5 border-t border-neutral-200">
               <span>الإجمالي النهائي المستحق:</span>
               <span className="font-mono text-lg text-amber-700">{invoice.grandTotal.toFixed(2)} ج.م</span>
