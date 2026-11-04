@@ -41,6 +41,7 @@ import {
   ProfitDistributionRecord,
   Shift
 } from './types/autoParts';
+import type { OpeningBalanceRecord } from './utils/openingBalanceLogic';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
 import { createBankMovementEntry, createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount } from './utils/bankLedger';
 import { requiresDirectBankAccount, requiresSpecificBankAccount } from './utils/paymentMethods';
@@ -156,6 +157,7 @@ export default function App() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [cardSettlements, setCardSettlements] = useState<CardSettlementBatch[]>([]);
   const [bankLedgerEntries, setBankLedgerEntries] = useState<BankLedgerEntry[]>([]);
+  const [openingBalances, setOpeningBalances] = useState<OpeningBalanceRecord[]>([]);
   const [stockBatches, setStockBatches] = useState<StockBatch[]>([]);
   const [serialUnits, setSerialUnits] = useState<SerialUnit[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -266,6 +268,7 @@ export default function App() {
     setBankAccounts(data.bankAccounts || []);
     setCardSettlements(data.cardSettlements || []);
     setBankLedgerEntries(data.bankLedgerEntries || []);
+    setOpeningBalances(data.openingBalances || []);
     setStockBatches(data.stockBatches || []);
     setSerialUnits(data.serialUnits || []);
   }, []);
