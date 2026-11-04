@@ -4,7 +4,7 @@
  */
 export type OpeningBalanceCategory =
   | 'inventory' | 'cash' | 'bank' | 'fixed_asset' | 'prepaid'
-  | 'customer_receivable' | 'other_asset' | 'supplier_payable' | 'loan' | 'other_liability';
+  | 'customer_receivable' | 'other_asset' | 'supplier_payable' | 'loan' | 'other_liability' | 'historical_expense';
 
 export interface OpeningBalanceLine {
   id: string;
@@ -42,6 +42,7 @@ export interface OpeningBalanceRecord {
 export interface OpeningBalanceSummary {
   assets: number;
   liabilities: number;
+  historicalExpenses: number;
   netAssets: number;
   partnerCapital: number;
   reconciliationDifference: number;
@@ -58,11 +59,14 @@ export function summarizeOpeningBalances(record: Pick<OpeningBalanceRecord, 'par
   const assetBreakdown: OpeningBalanceSummary['assetBreakdown'] = {
     inventory: 0, cash: 0, bank: 0, fixed_asset: 0, prepaid: 0, customer_receivable: 0, other_asset: 0,
   };
+  let historicalExpenses = 0;
   const liabilityBreakdown: OpeningBalanceSummary['liabilityBreakdown'] = {
     supplier_payable: 0, loan: 0, other_liability: 0,
   };
   for (const line of record.lines) {
-    if (ASSET_CATEGORIES.has(line.category)) {
+    if (line.category === 'historical_expense') {
+      historicalExpenses += line.amount;
+    } else if (ASSET_CATEGORIES.has(line.category)) {
       assetBreakdown[line.category as keyof typeof assetBreakdown] += line.amount;
     } else {
       liabilityBreakdown[line.category as keyof typeof liabilityBreakdown] += line.amount;
@@ -73,7 +77,7 @@ export function summarizeOpeningBalances(record: Pick<OpeningBalanceRecord, 'par
   const partnerCapital = roundMoney(record.partners.reduce((sum, p) => sum + p.originalContribution, 0));
   const netAssets = roundMoney(assets - liabilities);
   return {
-    assets, liabilities, netAssets, partnerCapital,
+    assets, liabilities, historicalExpenses: roundMoney(historicalExpenses), netAssets, partnerCapital,
     reconciliationDifference: roundMoney(netAssets - partnerCapital),
     assetBreakdown, liabilityBreakdown,
   };
