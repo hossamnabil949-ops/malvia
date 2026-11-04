@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { BankAccount, CardSettlementBatch, BankLedgerEntry, validateBankAccount, createCardSettlementEntries, summarizeBankAccount } from '../utils/bankLedger';
+import { BankAccount, CardSettlementBatch, BankLedgerEntry, validateBankAccount, summarizeBankAccount } from '../utils/bankLedger';
 
 interface BankLedgerViewProps {
   accounts: BankAccount[];
