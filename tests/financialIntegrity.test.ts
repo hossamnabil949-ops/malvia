@@ -5,6 +5,7 @@ import { normalizePaymentMethod } from '../src/utils/paymentMethods.ts';
 import { hasTabAccess, ROLE_PRESETS } from '../src/utils/permissions.ts';
 import { registrationEffect, actionEffect } from '../src/utils/chequeLogic.ts';
 import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
+import { createCardSettlementEntries, summarizeBankAccount, validateBankAccount } from '../src/utils/bankLedger.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
 import { validateSale, SaleError, computeTotals, weightedAverageUnitCost } from '../src/utils/saleLogic.ts';
@@ -191,3 +192,34 @@ assert.equal(weightedAverageUnitCost(0, 100, 5, 160), 160);
 assert.equal(weightedAverageUnitCost(10, 100.01, 1, 100.02), 100.01);
 assert.equal(weightedAverageUnitCost(0, 0, 0, 125.55), 125.55);
 assert.throws(() => weightedAverageUnitCost(-1, 100, 1, 120), /INVALID_INVENTORY_COST_INPUT/);
+
+
+// BANK-LEDGER-1: Visa settlements must clear gross receivables, credit only net cash to
+// the selected bank, and record the processor fee exactly once.
+const bankA = {
+  id: 'bank-cib-001', name: 'الحساب الجاري', bankName: 'CIB',
+  accountLast4: '1234', openingBalance: 1000, openingDate: '2026-01-01', active: true,
+};
+assert.equal(validateBankAccount(bankA, []), null);
+assert.equal(validateBankAccount(bankA, [bankA]), 'BANK_ACCOUNT_DUPLICATE');
+const settlement = {
+  id: 'visa-settle-001', processor: 'البنك التجاري',
+  grossAmount: 1000, feeAmount: 20, netAmount: 980,
+  settlementDate: '2026-11-04', bankAccountId: bankA.id, reference: 'BATCH-7788',
+};
+const settlementResult = createCardSettlementEntries(settlement, [bankA], []);
+assert.equal(settlementResult.error, null);
+assert.equal(settlementResult.entries.length, 3);
+assert.deepEqual(
+  settlementResult.entries.map(entry => [entry.accountKind, entry.direction, entry.amount]),
+  [
+    ['visa-clearing', 'out', 1000],
+    ['bank', 'in', 980],
+    ['bank-fees', 'out', 20],
+  ],
+);
+assert.equal(summarizeBankAccount(bankA, settlementResult.entries), 1980);
+assert.equal(createCardSettlementEntries(settlement, [bankA], [settlement]).error, 'SETTLEMENT_DUPLICATE');
+assert.equal(createCardSettlementEntries({ ...settlement, feeAmount: 1000, netAmount: 0 }, [bankA]).error, 'SETTLEMENT_FEE_INVALID');
+assert.equal(createCardSettlementEntries({ ...settlement, netAmount: 1000 }, [bankA]).error, 'SETTLEMENT_AMOUNT_INVALID');
+assert.equal(createCardSettlementEntries(settlement, [{ ...bankA, active: false }]).error, 'BANK_ACCOUNT_INACTIVE');
