@@ -142,6 +142,7 @@ export interface InvoiceItem {
 export interface InvoicePayment {
   method: PaymentMethod | string;
   amount: number;
+  bankAccountId?: string;
 }
 
 export interface InvoiceSettlement {
