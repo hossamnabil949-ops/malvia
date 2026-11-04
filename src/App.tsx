@@ -2291,33 +2291,32 @@ export default function App() {
 
   // Add Expense
   const handleAddExpense = (newExp: Expense) => {
-    setExpenses(prev => {
-      const updated = [newExp, ...prev];
-      persistChanges({ expenses: updated });
-      return updated;
-    });
-    // Expense-only users may record expenses but cannot write the full treasury ledger.
-    if (currentUser?.role === 'مدير عام' || effectivePermissions?.canManageTreasury) {
-      // Add to treasury
-      const tx: TreasuryTransaction = {
-        id: `TX-EXP-${Date.now()}`,
-        txNumber: uniqueTransactionNumber('TX-EX'),
-        date: newExp.date,
-        time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
-        type: 'صرف',
-        category: 'مصروفات تشغيلية',
-        amount: newExp.amount,
-        paymentMethod: newExp.paymentMethod,
-        balanceAfter: treasuryBalance - newExp.amount,
-        description: `مصروف: ${newExp.title} (${newExp.category})`,
-        recordedBy: newExp.recordedBy || currentUser?.employeeName || 'المحاسب'
-      };
-      setTreasury(prev => {
-        const updated = [tx, ...prev];
-        persistChanges({ treasuryTransactions: updated });
-        return updated;
-      });
-    }
+    const canRecord = currentUser?.role === 'مدير عام' ||
+      Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury);
+    if (!canRecord || !Number.isFinite(newExp.amount) || newExp.amount <= 0) return;
+    const expense: Expense = {
+      ...newExp,
+      recordedBy: currentUser?.employeeName || newExp.recordedBy || 'المحاسب',
+    };
+    const tx: TreasuryTransaction = {
+      id: `TX-EXP-${Date.now()}`,
+      txNumber: uniqueTransactionNumber('TX-EX'),
+      date: expense.date,
+      time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+      type: 'صرف',
+      category: 'مصروفات تشغيلية',
+      amount: expense.amount,
+      paymentMethod: expense.paymentMethod,
+      balanceAfter: treasuryBalance - expense.amount,
+      referenceId: expense.id,
+      description: `مصروف: ${expense.title} (${expense.category})`,
+      recordedBy: expense.recordedBy,
+    };
+    const nextExpenses = [expense, ...expenses];
+    const nextTreasury = [tx, ...treasury];
+    setExpenses(nextExpenses);
+    setTreasury(nextTreasury);
+    persistChanges({ expenses: nextExpenses, treasuryTransactions: nextTreasury });
   };
 
   const handleAddBankAccount = (account: BankAccount) => {
