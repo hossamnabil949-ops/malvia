@@ -2784,7 +2784,7 @@ export default function App() {
             onAddPartner={(newPartner: Partner, paymentMethod: string, notes: string) => {
               if (partners.some(partner => partner.id === newPartner.id || partner.phone === newPartner.phone)) {
                 window.alert('هذا الشريك مسجل بالفعل أو رقم هاتفه مستخدم لشريك آخر.');
-                return;
+                return false;
               }
               const updatedPartners = [newPartner, ...partners];
               setPartners(updatedPartners);
@@ -2809,6 +2809,7 @@ export default function App() {
                 return updated;
               });
               logAudit('partner.add', `إضافة الشريك ${newPartner.name} بحصة ${newPartner.sharePercentage}% ورأس مال ${newPartner.initialCapital} ج.م`, newPartner.id, newPartner.initialCapital);
+              return true;
             }}
             onUpdatePartnerShare={(partnerId: string, newSharePercentage: number) => {
               if (!Number.isFinite(newSharePercentage) || newSharePercentage < 0 || newSharePercentage > 100) {
