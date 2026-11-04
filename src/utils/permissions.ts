@@ -14,10 +14,10 @@ export const TAB_ACCESS: Record<string, PermKey[]> = {
   warehouses: ['canManageInventory'],
   tracking: ['canManageInventory'],
   invoices: ['canSellPos', 'canViewReports'],
-  purchases: ['canManagePurchases'],
+  purchases: ['canManagePurchases', 'canReceivePurchases'],
   suppliers: ['canManagePurchases', 'canManageTreasury'],
   customers: ['canSellPos', 'canManageTreasury'],
-  finance: ['canManageTreasury', 'canManagePartners'],
+  finance: ['canManageTreasury', 'canManagePartners', 'canManageExpenses'],
   cheques: ['canManageTreasury', 'canRegisterCheques', 'canManageChequeLifecycle'],
   reports: ['canViewReports'],
   settings: ['canManageSettings'],
@@ -50,6 +50,7 @@ const P = (over: Partial<EmployeePermissions>): EmployeePermissions => ({
   canSellPos: false, canManageInventory: false, canManagePurchases: false,
   canManageTreasury: false, canViewReports: false, canManageSettings: false, canManagePartners: false,
   canViewCashBalances: false, canRegisterCheques: false, canManageChequeLifecycle: false,
+  canManageExpenses: false, canReceivePurchases: false,
   ...over,
 });
 
@@ -59,6 +60,6 @@ export const ROLE_PRESETS: Record<Employee['role'], EmployeePermissions> = {
   'كاشير مبيعات': P({ canSellPos: true, canViewCashBalances: true, canRegisterCheques: true, simpleCashierMode: true }),
   'أمين مستودع': P({ canManageInventory: true }),
   'محاسب مالي': P({ canManageTreasury: true, canViewReports: true }),
-  'مسؤول مشتريات': P({ canManagePurchases: true }),
+  'مسؤول مشتريات': P({ canManagePurchases: true, canReceivePurchases: true }),
   'مشرف ورشة': P({ canSellPos: true }),
 };
