@@ -3,7 +3,7 @@ import { generateSupplierScheduleDates } from '../src/utils/supplierPaymentSched
 import { accountOf, isCreditMethod, summarizeTreasury } from '../src/utils/treasuryAccounts.ts';
 import { normalizePaymentMethod } from '../src/utils/paymentMethods.ts';
 import { hasTabAccess, ROLE_PRESETS } from '../src/utils/permissions.ts';
-import { validateChequeCollectionSync, validateChequeAuxiliarySync, validateExpenseOnlySync } from '../src/utils/chequeSyncPolicy.ts';
+import { validateChequeCollectionSync, validateChequeAuxiliarySync, validateExpenseOnlySync, validatePurchaseAuditSync } from '../src/utils/chequeSyncPolicy.ts';
 import { registrationEffect, actionEffect, availableActions } from '../src/utils/chequeLogic.ts';
 import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
 import { createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, summarizeBankAccount, validateBankAccount } from '../src/utils/bankLedger.ts';
@@ -143,6 +143,23 @@ assert.equal(hasTabAccess('موظف', expenseOnly, 'settings'), false);
 const receivingOnly = { canReceivePurchases: true };
 assert.equal(hasTabAccess('موظف', receivingOnly, 'purchases'), true);
 assert.equal(hasTabAccess('موظف', receivingOnly, 'suppliers'), false);
+
+const receivedPurchase = { id: 'PUR-REC-1', grandTotal: 500, invoiceNumber: 'PUR-001' };
+const receivedPurchaseAudit = {
+  id: 'AUD-PUR-1', action: 'purchase.create', entityId: receivedPurchase.id,
+  amount: 500, userName: 'موظف استلام',
+};
+assert.equal(validatePurchaseAuditSync({
+  previousAudit: [], incomingAudit: [receivedPurchaseAudit],
+  previousInvoices: [], incomingInvoices: [receivedPurchase],
+  employee: { name: 'موظف استلام' },
+}), null);
+assert.equal(validatePurchaseAuditSync({
+  previousAudit: [], incomingAudit: [receivedPurchaseAudit],
+  previousInvoices: [], incomingInvoices: [],
+  employee: { name: 'موظف استلام' },
+}), 'PURCHASE_AUDIT_REFERENCE_INVALID');
+
 
 const expenseOnlyRecord = {
   id: 'exp-only-1', title: 'مصروف تشغيل', category: 'صيانة ونثريات وضيافة',
