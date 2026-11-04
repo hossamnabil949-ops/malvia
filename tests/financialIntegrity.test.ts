@@ -202,6 +202,7 @@ const bankA = {
 };
 assert.equal(validateBankAccount(bankA, []), null);
 assert.equal(validateBankAccount(bankA, [bankA]), 'BANK_ACCOUNT_DUPLICATE');
+assert.equal(validateBankAccount({ ...bankA, openingDate: '2026-02-31' }), 'BANK_ACCOUNT_INVALID');
 const settlement = {
   id: 'visa-settle-001', processor: 'البنك التجاري',
   grossAmount: 1000, feeAmount: 20, netAmount: 980,
@@ -222,4 +223,5 @@ assert.equal(summarizeBankAccount(bankA, settlementResult.entries), 1980);
 assert.equal(createCardSettlementEntries(settlement, [bankA], [settlement]).error, 'SETTLEMENT_DUPLICATE');
 assert.equal(createCardSettlementEntries({ ...settlement, feeAmount: 1000, netAmount: 0 }, [bankA]).error, 'SETTLEMENT_FEE_INVALID');
 assert.equal(createCardSettlementEntries({ ...settlement, netAmount: 1000 }, [bankA]).error, 'SETTLEMENT_AMOUNT_INVALID');
+assert.equal(createCardSettlementEntries({ ...settlement, settlementDate: '2026-02-31' }, [bankA]).error, 'SETTLEMENT_DATE_INVALID');
 assert.equal(createCardSettlementEntries(settlement, [{ ...bankA, active: false }]).error, 'BANK_ACCOUNT_INACTIVE');
