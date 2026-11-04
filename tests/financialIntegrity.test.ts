@@ -254,14 +254,18 @@ assert.equal(createChequeBankReversalEntry({
 assert.equal(summarizeBankAccount(bankA, [incomingChequePosting.entry!, chequeBounceReversal.entry!]), 1000);
 assert.deepEqual(availableActions({ direction: 'incoming', status: 'محصّل' }), ['bounce']);
 assert.deepEqual(availableActions({ direction: 'outgoing', status: 'مصروف' }), ['bounce']);
-const clearedIncomingEffect = actionEffect({
-  ...remoteCheque, status: 'محصّل',
-}, 'bounce');
+const chequeEffectFixture = {
+  id: 'CHQ-EFFECT', number: '9003', direction: 'incoming' as const, status: 'محصّل' as const,
+  amount: 250, bankName: 'CIB', dueDate: '2026-11-10', receivedDate: '2026-11-04',
+  partyType: 'customer' as const, partyId: 'C-1', partyName: 'عميل', createdBy: 'مسؤول شيكات',
+  createdAt: '2026-11-04T10:00:00.000Z', appliedAmount: 250, history: [],
+};
+const clearedIncomingEffect = actionEffect(chequeEffectFixture, 'bounce');
 assert.equal(clearedIncomingEffect.customerBalanceDelta, 250);
 assert.equal(clearedIncomingEffect.treasury?.type, 'صرف');
 assert.equal(clearedIncomingEffect.treasury?.category, 'ارتداد شيك وارد');
 const clearedOutgoingEffect = actionEffect({
-  ...remoteCheque, direction: 'outgoing', status: 'مصروف', appliedDebt: 200, appliedCredit: 50,
+  ...chequeEffectFixture, direction: 'outgoing' as const, status: 'مصروف' as const, appliedDebt: 200, appliedCredit: 50,
 }, 'bounce');
 assert.equal(clearedOutgoingEffect.treasury?.type, 'قبض');
 assert.equal(clearedOutgoingEffect.treasury?.category, 'ارتداد شيك صادر');
