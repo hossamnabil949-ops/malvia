@@ -29,6 +29,7 @@ export interface Cheque {
   appliedAmount?: number;      // واردة: ما خُصم فعلاً من مديونية العميل عند التسجيل
   appliedDebt?: number;        // صادرة: ما خُصم فعلاً من مستحقات المورد
   appliedCredit?: number;      // صادرة: الزيادة عن المستحقات (رصيد دائن للمحل)
+  clearedBankAccountId?: string; // الحساب البنكي الفعلي عند التحصيل/الصرف
   history: ChequeEvent[];
 }
 
