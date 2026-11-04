@@ -324,7 +324,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       });
     if (validItems.length === 0) return;
 
-    const finalAmountPaid = paymentStatus === 'مدفوعة نقداً' ? grandTotal : (paymentStatus === 'آجل' ? 0 : amountPaid);
+    const finalAmountPaid = canReceiveOnly ? 0 : paymentStatus === 'مدفوعة نقداً' ? grandTotal : (paymentStatus === 'آجل' ? 0 : amountPaid);
 
     const newInvoice: PurchaseInvoice = {
       id: `pur-${Date.now()}`,
@@ -341,10 +341,10 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       discount,
       grandTotal,
       originalGrandTotal: grandTotal,
-      paymentStatus,
+      paymentStatus: canReceiveOnly ? 'آجل' : paymentStatus,
       amountPaid: finalAmountPaid,
       remainingBalance: Math.max(0, grandTotal - finalAmountPaid),
-      paymentMethod,
+      paymentMethod: canReceiveOnly ? 'آجل / حساب ورشة' : paymentMethod,
       notes: notes.trim() || undefined,
       receivedBy,
     };
@@ -1247,48 +1247,56 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-surface-1 p-4 rounded-2xl border border-neutral-800">
-                <div>
-                  <label className="text-xs font-bold text-neutral-400 block mb-1">حالة سداد الفاتورة للتاجر:</label>
-                  <select
-                    value={paymentStatus}
-                    onChange={(e) => handlePaymentStatusChange(e.target.value as any)}
-                    className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none focus:border-amber-400 font-bold"
-                  >
-                    <option value="مدفوعة نقداً">مدفوعة نقداً (صرف كامل القيمة من الخزنة)</option>
-                    <option value="مسددة جزئياً">مسددة جزئياً (عربون/دفعة والباقي آجل مجدول)</option>
-                    <option value="آجل">آجل بالكامل (إضافة كامل المبلغ لحساب المورد)</option>
-                  </select>
+                {canReceiveOnly ? (
+                <div className="sm:col-span-3 rounded-xl border border-sky-500/30 bg-sky-950/20 p-3 text-xs text-sky-200">
+                  صلاحية الاستلام فقط: سيتم تسجيل الفاتورة كآجل على المورد دون تسجيل أي مدفوعات أو حركة خزينة. يتولى المحاسب أو المسؤول المالي اعتماد السداد لاحقاً.
                 </div>
-
-                {paymentStatus !== 'آجل' && (
+              ) : (
+                <>
                   <div>
-                    <label className="text-xs font-bold text-neutral-400 block mb-1">
-                      المبلغ المسدد نقداً (يخصم من الخزينة):
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max={grandTotal}
-                      value={amountPaid}
-                      onChange={(e) => setAmountPaid(Number(e.target.value))}
-                      className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-emerald-500/50 text-xs text-emerald-300 font-mono font-bold focus:outline-none"
-                    />
+                    <label className="text-xs font-bold text-neutral-400 block mb-1">حالة سداد الفاتورة للتاجر:</label>
+                    <select
+                      value={paymentStatus}
+                      onChange={(e) => handlePaymentStatusChange(e.target.value as any)}
+                      className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none focus:border-amber-400 font-bold"
+                    >
+                      <option value="مدفوعة نقداً">مدفوعة نقداً (صرف كامل القيمة من الخزنة)</option>
+                      <option value="مسددة جزئياً">مسددة جزئياً (عربون/دفعة والباقي آجل مجدول)</option>
+                      <option value="آجل">آجل بالكامل (إضافة كامل المبلغ لحساب المورد)</option>
+                    </select>
                   </div>
-                )}
 
-                <div>
-                  <label className="text-xs font-bold text-neutral-400 block mb-1">طريقة الدفع:</label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none"
-                  >
-                    <option value="كاش (نقدي)">كاش (نقدي من الخزنة)</option>
-                    <option value="إنستاباي / InstaPay">إنستاباي InstaPay</option>
-                    <option value="فودافون كاش ومحافظ إلكترونية">فودافون كاش</option>
-                    <option value="فيزا / بطاقة بنكية">تحويل بنكي / فيزا</option>
-                  </select>
-                </div>
+                  {paymentStatus !== 'آجل' && (
+                    <div>
+                      <label className="text-xs font-bold text-neutral-400 block mb-1">
+                        المبلغ المسدد نقداً (يخصم من الخزينة):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={grandTotal}
+                        value={amountPaid}
+                        onChange={(e) => setAmountPaid(Number(e.target.value))}
+                        className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-emerald-500/50 text-xs text-emerald-300 font-mono font-bold focus:outline-none"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-xs font-bold text-neutral-400 block mb-1">طريقة الدفع:</label>
+                    <select
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none"
+                    >
+                      <option value="كاش (نقدي)">كاش (نقدي من الخزنة)</option>
+                      <option value="إنستاباي / InstaPay">إنستاباي InstaPay</option>
+                      <option value="فودافون كاش ومحافظ إلكترونية">فودافون كاش</option>
+                      <option value="فيزا / بطاقة بنكية">تحويل بنكي / فيزا</option>
+                    </select>
+                  </div>
+                </>
+              )}
               </div>
 
               <div className="p-4 rounded-2xl bg-surface-1 border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
