@@ -92,6 +92,7 @@ interface FinanceViewProps {
   outstandingVisaBalance?: number;
   onAddBankAccount?: (account: BankAccount) => void;
   onSettleVisa?: (batch: CardSettlementBatch) => { ok: boolean; message?: string };
+  onTransferBank?: (input: { id: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; date: string; reference: string }) => { ok: boolean; message?: string };
   canManageExpenses?: boolean;
   canManageTreasury?: boolean;
   canManagePartners?: boolean;
@@ -189,10 +190,12 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [newPartnerInitialCapital, setNewPartnerInitialCapital] = useState<number>(100000);
   const [newPartnerSharePercent, setNewPartnerSharePercent] = useState<number>(20);
   const [newPartnerPaymentMethod, setNewPartnerPaymentMethod] = useState<string>('فيزا / بطاقة');
+  const [newPartnerBankAccountId, setNewPartnerBankAccountId] = useState('');
   const [newPartnerNotes, setNewPartnerNotes] = useState('حصة تأسيسية جديدة بموجب عقد الشراكة');
 
   const [injectAmount, setInjectAmount] = useState<number>(25000);
   const [injectPaymentMethod, setInjectPaymentMethod] = useState<string>('فيزا / بطاقة');
+  const [injectBankAccountId, setInjectBankAccountId] = useState('');
   const [injectNotes, setInjectNotes] = useState('ضخ سيولة لتمويل شراء دفعة قطع غيار أصلية');
   const [injectAutoRecalculate, setInjectAutoRecalculate] = useState(false);
 
@@ -457,7 +460,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       joinDate: new Date().toISOString().split('T')[0],
     };
 
-    if (onAddPartner && onAddPartner(newPartner, newPartnerPaymentMethod, newPartnerNotes) === false) return;
+    if (onAddPartner && onAddPartner(newPartner, newPartnerPaymentMethod, newPartnerNotes, requiresSpecificBankAccount(newPartnerPaymentMethod) ? newPartnerBankAccountId : undefined) === false) return;
 
     setShowAddPartnerModal(false);
     setNewPartnerName('');
@@ -467,6 +470,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const handleSubmitInjectCapital = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTargetPartner || injectAmount <= 0) return;
+    if (requiresSpecificBankAccount(injectPaymentMethod) && !bankAccounts.some(account => account.id === injectBankAccountId && account.active)) return;
 
     const currentCap = selectedTargetPartner.totalCurrentCapital || (selectedTargetPartner.initialCapital + (selectedTargetPartner.addedCapital || 0) + (selectedTargetPartner.reinvestedProfits || 0));
     const newCap = currentCap + injectAmount;
@@ -477,7 +481,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         injectAmount,
         injectPaymentMethod,
         injectNotes,
-        injectAutoRecalculate
+        injectAutoRecalculate,
+        requiresSpecificBankAccount(injectPaymentMethod) ? injectBankAccountId : undefined
       );
     }
 
@@ -1249,6 +1254,16 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     <option value="محفظة إلكترونية">محفظة إلكترونية</option>
                   </select>
                 </div>
+                {requiresSpecificBankAccount(newPartnerPaymentMethod) && (
+                  <div className="sm:col-span-2">
+                    <label className="text-amber-300 font-bold block mb-1">الحساب البنكي المستلم لرأس المال *</label>
+                    <select required value={newPartnerBankAccountId} onChange={e => setNewPartnerBankAccountId(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-amber-500/50 text-white">
+                      <option value="">اختر الحساب البنكي</option>
+                      {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}</option>)}
+                    </select>
+                    {!bankAccounts.some(account => account.active) && <p className="text-[10px] text-rose-300 mt-1">أضف حساباً بنكياً نشطاً أولاً.</p>}
+                  </div>
+                )}
                 <div>
                   <label className="text-neutral-300 font-bold block mb-1">بيان / ملاحظات الإيداع</label>
                   <input
@@ -1337,6 +1352,16 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   </select>
                 </div>
               </div>
+              {requiresSpecificBankAccount(injectPaymentMethod) && (
+                <div>
+                  <label className="text-amber-300 font-bold block mb-1">الحساب البنكي المستلم لضخ رأس المال *</label>
+                  <select required value={injectBankAccountId} onChange={e => setInjectBankAccountId(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-amber-500/50 text-white">
+                    <option value="">اختر الحساب البنكي</option>
+                    {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}</option>)}
+                  </select>
+                  {!bankAccounts.some(account => account.active) && <p className="text-[10px] text-rose-300 mt-1">أضف حساباً بنكياً نشطاً أولاً.</p>}
+                </div>
+              )}
 
               <button
                 type="submit"
