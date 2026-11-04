@@ -74,6 +74,9 @@ export default async function handler(req: any, res: any) {
       for (const resource of ['treasury', 'bankLedgerEntries']) {
         const operation: any = operationMap.get(resource);
         if (!operation || permissions.canManageChequeLifecycle !== true) continue;
+        // POS/purchase operators already have the legacy workflow permission for treasury writes;
+        // apply the narrow cheque-only rule only to lifecycle-only staff.
+        if (resource === 'treasury' && (permissions.canSellPos === true || permissions.canManagePurchases === true)) continue;
         if (!chequeOperation) return res.status(403).json({ code: 'CHEQUE_STATE_REQUIRED', resource, error: 'يجب مزامنة حالة الشيك المرتبطة بالحركة البنكية.' });
         const previous = await loadArray(resource);
         const bankAccounts = resource === 'bankLedgerEntries' ? await loadArray('bankAccounts') : [];
