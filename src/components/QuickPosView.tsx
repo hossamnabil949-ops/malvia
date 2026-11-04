@@ -37,6 +37,8 @@ import { MAIN_WAREHOUSE_ID, MAIN_WAREHOUSE_NAME, availableIn } from '../utils/wa
 import { SerialUnit, StockBatch, inStockUnits, expiryState, daysToExpiry } from '../utils/trackingLogic';
 import { LoyaltySettings, resolveLoyalty, earnedPoints, pointsValue, maxRedeemablePoints } from '../utils/loyaltyLogic';
 import { verifyOwnerPassword } from '../services/approvalService';
+import type { BankAccount } from '../utils/bankLedger';
+import { requiresDirectBankAccount } from '../utils/paymentMethods';
 import { CAR_BRANDS, PART_CATEGORIES } from '../data/autoPartsData';
 import { BrandBar } from './BrandBar';
 import { BarcodeScanButton, useBarcodeWedge } from './BarcodeScanner';
@@ -52,6 +54,7 @@ interface QuickPosViewProps {
   onRemoveFromCart: (partId: string) => void;
   onClearCart: () => void;
   onCheckoutComplete: (invoice: Invoice) => boolean | void;
+  bankAccounts?: BankAccount[];
   vatRate?: number;            // نسبة الضريبة من إعدادات المحل (%)
   taxRegistered?: boolean;
   pricesIncludeVat?: boolean;
@@ -88,6 +91,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   onRemoveFromCart,
   onClearCart,
   onCheckoutComplete,
+  bankAccounts = [],
   vatRate = 14,
   taxRegistered = false,
   pricesIncludeVat = false,
@@ -275,6 +279,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const [splitEnabled, setSplitEnabled] = useState<boolean>(false);
   const [splitMethod, setSplitMethod] = useState<string>('فيزا / بطاقة بنكية');
   const [splitAmount, setSplitAmount] = useState<string>('');
+  const [paymentBankAccountId, setPaymentBankAccountId] = useState('');
+  const [splitBankAccountId, setSplitBankAccountId] = useState('');
   const [saleError, setSaleError] = useState<string>('');
   // لا يُضاف الصنف إلا بعد تأكيده من نافذة الكاميرا؛ كل تأكيد يمثل قطعة واحدة.
   const [scanStatus, setScanStatus] = useState('');
@@ -368,9 +374,14 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       }
     }
 
-    const payments = splitEnabled && splitValue > 0
-      ? [{ method: paymentMethod as string, amount: primaryValue }, { method: splitMethod, amount: splitValue }]
-      : [{ method: paymentMethod as string, amount: grandTotal }];
+    const rawPayments = splitEnabled && splitValue > 0
+      ? [{ method: paymentMethod as string, amount: primaryValue, bankAccountId: paymentBankAccountId }, { method: splitMethod, amount: splitValue, bankAccountId: splitBankAccountId }]
+      : [{ method: paymentMethod as string, amount: grandTotal, bankAccountId: paymentBankAccountId }];
+    if (rawPayments.some(payment => requiresDirectBankAccount(payment.method) && !bankAccounts.some(account => account.id === payment.bankAccountId && account.active))) {
+      setSaleError('اختر حساباً بنكياً نشطاً لكل دفعة InstaPay أو تحويل بنكي قبل اعتماد الفاتورة.');
+      return;
+    }
+    const payments = rawPayments.map(({ method, amount, bankAccountId }) => ({ method, amount, ...(requiresDirectBankAccount(method) ? { bankAccountId } : {}) }));
 
     // تحقق قبل أي تأثير: رصيد، أسعار، خصم، دفع، آجل
     try {
@@ -468,7 +479,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
       tax: Number(tax.toFixed(2)),
       grandTotal: Number(grandTotal.toFixed(2)),
       paymentMethod: payments.length > 1 ? 'مختلط (دفع مقسّم)' : paymentMethod,
-      payments: payments.map((p) => ({ method: p.method, amount: p.amount })),
+      payments: payments.map((p) => ({ method: p.method, amount: p.amount, ...(p.bankAccountId ? { bankAccountId: p.bankAccountId } : {}) })),
       creditAmount: payments.filter(payment => isCreditPayment(payment.method)).reduce((total, payment) => total + payment.amount, 0),
       settlementPayments: [],
       cashierId,
@@ -1198,7 +1209,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => setPaymentMethod(m.id as any)}
+                    onClick={() => { setPaymentMethod(m.id as any); setPaymentBankAccountId(''); }}
                     className={`p-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all ${
                       isSelected
                         ? 'bg-amber-500 text-neutral-950 border-amber-400 shadow-sm'
@@ -1213,6 +1224,16 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
             </div>
           </div>
 
+          {requiresDirectBankAccount(paymentMethod) && (
+            <div className="p-2.5 rounded-xl bg-surface-1 border border-amber-500/40 space-y-1.5 text-xs">
+              <label className="text-amber-300 font-bold block">الحساب البنكي المستلم لدفعة InstaPay *</label>
+              <select value={paymentBankAccountId} onChange={e => setPaymentBankAccountId(e.target.value)} className="w-full h-9 px-3 rounded-lg bg-surface-2 border border-amber-500/40 text-white" required>
+                <option value="">اختر الحساب البنكي</option>
+                {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}</option>)}
+              </select>
+            </div>
+          )}
+
           <div className="p-2.5 rounded-xl bg-surface-1 border border-neutral-700 space-y-2 text-xs">
             <label className="flex items-center justify-between cursor-pointer">
               <span className="text-neutral-300 font-bold">دفع مقسّم (جزء بطريقة وجزء بأخرى)</span>
@@ -1222,15 +1243,22 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <select
                   value={splitMethod}
-                  onChange={(e) => setSplitMethod(e.target.value)}
+                  onChange={(e) => { setSplitMethod(e.target.value); setSplitBankAccountId(''); }}
                   className="h-8 px-2 rounded-lg bg-surface-2 border border-neutral-600 text-white text-xs"
                 >
                   <option value="كاش (نقدي)">كاش (نقدي)</option>
-                  <option value="إنستاباي / InstaPay">إنستاباي</option>
+                  <option value="InstaPay - حساب بنكي">InstaPay إلى حساب بنكي</option>
+                  <option value="InstaPay - محفظة">InstaPay إلى محفظة</option>
                   <option value="فودافون كاش ومحافظ إلكترونية">محفظة إلكترونية</option>
                   <option value="فيزا / بطاقة بنكية">فيزا / بنك</option>
                   <option value="آجل (شكك / حساب ورشة)">آجل (حساب ورشة)</option>
                 </select>
+                {requiresDirectBankAccount(splitMethod) && (
+                  <select value={splitBankAccountId} onChange={e => setSplitBankAccountId(e.target.value)} className="col-span-2 h-8 px-2 rounded-lg bg-surface-2 border border-amber-500/40 text-white text-xs" required>
+                    <option value="">اختر الحساب البنكي للدفعة الثانية</option>
+                    {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}</option>)}
+                  </select>
+                )}
                 <input
                   type="number"
                   min="0"
