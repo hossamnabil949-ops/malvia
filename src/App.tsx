@@ -42,7 +42,8 @@ import {
   Shift
 } from './types/autoParts';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
-import { createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount } from './utils/bankLedger';
+import { createBankMovementEntry, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount } from './utils/bankLedger';
+import { requiresSpecificBankAccount } from './utils/paymentMethods';
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
 import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands';
@@ -1751,6 +1752,17 @@ export default function App() {
       window.alert('فاتورة المشتريات مسجلة بالفعل؛ تم إيقاف العملية لمنع التكرار.');
       return false;
     }
+    if (invoice.amountPaid > 0 && requiresSpecificBankAccount(invoice.paymentMethod)) {
+      const posting = createBankMovementEntry({
+        id: `purchase:${invoice.id}`, batchId: invoice.id, bankAccountId: invoice.bankAccountId || '',
+        direction: 'out', amount: invoice.amountPaid, date: invoice.date, reference: invoice.invoiceNumber,
+        description: `سداد فاتورة مشتريات ${invoice.invoiceNumber}`,
+      }, bankAccounts, bankLedgerEntries);
+      if (posting.error || !posting.entry) {
+        window.alert('لا يمكن اعتماد السداد البنكي: اختر حساباً بنكياً نشطاً وتأكد من عدم تكرار الحركة.');
+        return false;
+      }
+    }
     if (invoice.items.some(item => item.partId && !parts.some(part => part.id === item.partId))) {
       window.alert('أحد الأصناف المرتبطة بالفاتورة لم يعد موجوداً بالمخزون. حدّث الفاتورة قبل الحفظ.');
       return false;
@@ -1887,6 +1899,7 @@ export default function App() {
         paymentMethod: invoice.paymentMethod,
         balanceAfter: treasuryBalance - invoice.amountPaid,
         referenceId: invoice.id,
+        bankAccountId: invoice.bankAccountId,
         description: `مشتريات بضاعة فاتورة #${invoice.invoiceNumber} - مورد: ${invoice.supplierName}`,
         recordedBy: currentUser?.employeeName || 'إدارة المشتريات'
       };
@@ -1895,6 +1908,18 @@ export default function App() {
         persistChanges({ treasuryTransactions: updated });
         return updated;
       });
+      if (requiresSpecificBankAccount(invoice.paymentMethod)) {
+        const posting = createBankMovementEntry({
+          id: `purchase:${invoice.id}`, batchId: invoice.id, bankAccountId: invoice.bankAccountId || '',
+          direction: 'out', amount: invoice.amountPaid, date: invoice.date, reference: invoice.invoiceNumber,
+          description: `سداد فاتورة مشتريات ${invoice.invoiceNumber}`,
+        }, bankAccounts, bankLedgerEntries);
+        if (posting.entry) {
+          const nextBankEntries = [posting.entry, ...bankLedgerEntries];
+          setBankLedgerEntries(nextBankEntries);
+          persistChanges({ bankLedgerEntries: nextBankEntries });
+        }
+      }
     }
     return true;
   };
@@ -2294,6 +2319,14 @@ export default function App() {
     const canRecord = currentUser?.role === 'مدير عام' ||
       Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury);
     if (!canRecord || !Number.isFinite(newExp.amount) || newExp.amount <= 0) return;
+    if (requiresSpecificBankAccount(newExp.paymentMethod)) {
+      const posting = createBankMovementEntry({
+        id: `expense:${newExp.id}`, batchId: newExp.id, bankAccountId: newExp.bankAccountId || '',
+        direction: 'out', amount: newExp.amount, date: newExp.date, reference: newExp.id,
+        description: `مصروف بنكي: ${newExp.title}`,
+      }, bankAccounts, bankLedgerEntries);
+      if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً لتسجيل هذا المصروف.'); return; }
+    }
     const expense: Expense = {
       ...newExp,
       recordedBy: currentUser?.employeeName || newExp.recordedBy || 'المحاسب',
@@ -2307,6 +2340,7 @@ export default function App() {
       category: 'مصروفات تشغيلية',
       amount: expense.amount,
       paymentMethod: expense.paymentMethod,
+      bankAccountId: expense.bankAccountId,
       balanceAfter: treasuryBalance - expense.amount,
       referenceId: expense.id,
       description: `مصروف: ${expense.title} (${expense.category})`,
@@ -2317,6 +2351,18 @@ export default function App() {
     setExpenses(nextExpenses);
     setTreasury(nextTreasury);
     persistChanges({ expenses: nextExpenses, treasuryTransactions: nextTreasury });
+    if (requiresSpecificBankAccount(expense.paymentMethod)) {
+      const posting = createBankMovementEntry({
+        id: `expense:${expense.id}`, batchId: expense.id, bankAccountId: expense.bankAccountId || '',
+        direction: 'out', amount: expense.amount, date: expense.date, reference: expense.id,
+        description: `مصروف بنكي: ${expense.title}`,
+      }, bankAccounts, bankLedgerEntries);
+      if (posting.entry) {
+        const nextBankEntries = [posting.entry, ...bankLedgerEntries];
+        setBankLedgerEntries(nextBankEntries);
+        persistChanges({ bankLedgerEntries: nextBankEntries });
+      }
+    }
   };
 
   const handleAddBankAccount = (account: BankAccount) => {
@@ -2713,6 +2759,7 @@ export default function App() {
             parts={parts}
             treasuryBalance={treasuryBalance}
             onAddPurchaseInvoice={handleAddPurchaseInvoice}
+            bankAccounts={bankAccounts}
             onPurchaseReturn={handleAddPurchaseReturn}
             onDeletePurchaseReturn={handleDeletePurchaseReturn}
             canReceiveOnly={currentUser?.role !== 'مدير عام' && Boolean(effectivePermissions?.canReceivePurchases && !effectivePermissions?.canManagePurchases)}
@@ -2822,6 +2869,7 @@ export default function App() {
         {viewTab === 'suppliers' && (
           <SuppliersView
             suppliers={suppliers}
+            bankAccounts={bankAccounts}
             supplierPayments={supplierPayments}
             supplierPaymentSchedules={supplierPaymentSchedules}
             onChangeSupplierPaymentSchedules={(next) => { setSupplierPaymentSchedules(next); persistChanges({ supplierPaymentSchedules: next }); }}
@@ -2840,11 +2888,20 @@ export default function App() {
                 return updated;
               });
             }}
-            onSettleSupplierPayment={(supplierId, amount, paymentDate, paymentMethod, _treasurySource, notes, scheduleId) => {
+            bankAccounts={bankAccounts}
+            onSettleSupplierPayment={(supplierId, amount, paymentDate, paymentMethod, _treasurySource, notes, scheduleId, bankAccountId) => {
               const supplier = suppliers.find(s => s.id === supplierId);
               const schedule = scheduleId ? supplierPaymentSchedules.find(x => x.id === scheduleId) : undefined;
               if (scheduleId && (!schedule || schedule.status !== 'scheduled' || supplierPayments.some(p => p.scheduleId === scheduleId && p.amount >= schedule.amount - schedule.amountPaid))) return;
               if (!supplier || !Number.isFinite(amount) || amount <= 0 || (schedule && amount > schedule.amount - schedule.amountPaid)) return;
+              if (requiresSpecificBankAccount(paymentMethod)) {
+                const posting = createBankMovementEntry({
+                  id: `supplier-payment:${paymentId}`, batchId: paymentId, bankAccountId: bankAccountId || '',
+                  direction: 'out', amount, date: paymentDate, reference: paymentId,
+                  description: `سداد مورد ${supplier.name}`,
+                }, bankAccounts, bankLedgerEntries);
+                if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً قبل اعتماد السداد.'); return; }
+              }
               const stamp = Date.now();
               const paymentId = `SP-${stamp}-${Math.random().toString(36).slice(2,7)}`;
               const txId = `TX-SUPP-${stamp}-${Math.random().toString(36).slice(2,7)}`;
@@ -2852,13 +2909,24 @@ export default function App() {
               const newDebt = Math.max(0, debt - amount);
               const overpaid = Math.max(0, amount - debt);
               const updatedSuppliers = suppliers.map(s => s.id === supplierId ? { ...s, balance: newDebt, deferredDebt: newDebt, storeCredit: (s.storeCredit || 0) + overpaid, totalPaid: (s.totalPaid || 0) + amount, lastPaymentDate: paymentDate } : s);
-              const paymentRecord: import('./types/autoParts').SupplierPayment = { id: paymentId, paymentNumber: paymentId.slice(-6), supplierId, supplierName: supplier.name, amount, paymentDate, paymentMethod, treasurySource: _treasurySource, notes, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات', scheduleId };
-              const tx: TreasuryTransaction = { id: txId, txNumber: uniqueTransactionNumber('TX-S'), date: paymentDate, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'سداد دفعة لمورد', amount, paymentMethod: paymentMethod as PaymentMethod, balanceAfter: treasuryBalance - amount, referenceId: paymentId, description: `سداد مورد #${supplierId}: ${notes}`, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات' };
+              const paymentRecord: import('./types/autoParts').SupplierPayment = { id: paymentId, paymentNumber: paymentId.slice(-6), supplierId, supplierName: supplier.name, amount, paymentDate, paymentMethod, treasurySource: _treasurySource, bankAccountId, notes, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات', scheduleId };
+              const tx: TreasuryTransaction = { id: txId, txNumber: uniqueTransactionNumber('TX-S'), date: paymentDate, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'سداد دفعة لمورد', amount, paymentMethod: paymentMethod as PaymentMethod, balanceAfter: treasuryBalance - amount, referenceId: paymentId, bankAccountId, description: `سداد مورد #${supplierId}: ${notes}`, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات' };
               const updatedPayments = [paymentRecord, ...supplierPayments];
               const updatedTreasury = [tx, ...treasury];
               setSuppliers(updatedSuppliers); persistChanges({ suppliers: updatedSuppliers });
               setSupplierPayments(updatedPayments); persistChanges({ supplierPayments: updatedPayments });
               setTreasury(updatedTreasury); persistChanges({ treasuryTransactions: updatedTreasury });
+              if (requiresSpecificBankAccount(paymentMethod)) {
+                const posting = createBankMovementEntry({
+                  id: `supplier-payment:${paymentId}`, batchId: paymentId, bankAccountId: bankAccountId || '',
+                  direction: 'out', amount, date: paymentDate, reference: paymentId,
+                  description: `سداد مورد ${supplier.name}`,
+                }, bankAccounts, bankLedgerEntries);
+                if (posting.entry) {
+                  const nextBankEntries = [posting.entry, ...bankLedgerEntries];
+                  setBankLedgerEntries(nextBankEntries); persistChanges({ bankLedgerEntries: nextBankEntries });
+                }
+              }
               if (schedule) {
                 const paid = Math.min(schedule.amount, schedule.amountPaid + amount);
                 const nextStatus: import('./types/autoParts').SupplierPaymentSchedule['status'] = paid >= schedule.amount ? 'paid' : 'scheduled';
