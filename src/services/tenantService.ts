@@ -238,6 +238,7 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     bankAccounts: loadResource<BankAccount[]>('bankAccounts', []),
     cardSettlements: loadResource<CardSettlementBatch[]>('cardSettlements', []),
     bankLedgerEntries: loadResource<BankLedgerEntry[]>('bankLedgerEntries', []),
+    openingBalances: loadResource<import('../utils/openingBalanceLogic').OpeningBalanceRecord[]>('openingBalances', []),
     stockBatches: loadResource<StockBatch[]>('stockBatches', []),
     serialUnits: loadResource<SerialUnit[]>('serialUnits', []),
   };
@@ -274,6 +275,7 @@ export function saveTenantStoreData(
     bankAccounts?: BankAccount[];
     cardSettlements?: CardSettlementBatch[];
     bankLedgerEntries?: BankLedgerEntry[];
+    openingBalances?: import('../utils/openingBalanceLogic').OpeningBalanceRecord[];
     stockBatches?: StockBatch[];
     serialUnits?: SerialUnit[];
   }
@@ -318,6 +320,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     localStorage.setItem(getTenantKey(tenantId, 'bankAccounts'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'cardSettlements'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'bankLedgerEntries'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'openingBalances'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'stockBatches'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'serialUnits'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'demo_cleared'), 'true');
