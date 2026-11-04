@@ -9,6 +9,7 @@ interface ShiftsViewProps {
   shifts: Shift[];
   treasury: TreasuryTransaction[];
   isManager: boolean;
+  canViewCashBalances?: boolean;
   currentUserName: string;
   requireShiftForSales: boolean;
   openShiftsCount: number;
@@ -102,7 +103,7 @@ ${s.nonCash ? `<hr><table>${row('إنستاباي', fmtMoney(s.nonCash.instapay)
 };
 
 export const ShiftsView: React.FC<ShiftsViewProps> = ({
-  shifts, treasury, isManager, currentUserName, requireShiftForSales, openShiftsCount, onOpenShift, onCloseShift, onToggleRequireShift,
+  shifts, treasury, isManager, canViewCashBalances = false, currentUserName, requireShiftForSales, openShiftsCount, onOpenShift, onCloseShift, onToggleRequireShift,
 }) => {
   const openShift = useMemo(() => findOpenShift(shifts), [shifts]);
   const lastClosed = useMemo(() => lastClosedShift(shifts), [shifts]);
@@ -143,7 +144,7 @@ export const ShiftsView: React.FC<ShiftsViewProps> = ({
   const summary = useMemo(() => (openShift ? summarizeShift(openShift, treasury) : null), [openShift, treasury]);
   const counted = closeMode === 'denoms' ? countTotal(toDenoms(closeDenoms)) : round2(Number(closeDirect) || 0);
   const hasCount = closeMode === 'denoms' ? Object.keys(toDenoms(closeDenoms)).length > 0 : closeDirect !== '';
-  const showExpected = isManager || revealed; // العدّ الأعمى: الكاشير لا يرى المتوقع قبل أن يعدّ
+  const showExpected = isManager || canViewCashBalances || revealed; // الاطلاع على رصيد الدرج مستقل عن إدارة الخزنة
   const variance = summary ? varianceOf(counted, summary.expectedCash) : 0;
   const canConfirm = hasCount && (isManager || revealed);
 
