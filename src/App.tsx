@@ -2821,6 +2821,15 @@ export default function App() {
             shifts={shifts}
             treasuryBalance={treasuryBalance}
             onAddExpense={handleAddExpense}
+            bankAccounts={bankAccounts}
+            cardSettlements={cardSettlements}
+            bankLedgerEntries={bankLedgerEntries}
+            outstandingVisaBalance={Math.max(0, (summarizeTreasury(treasury).accounts.find(a => a.key === 'visa')?.balance || 0) - cardSettlements.reduce((sum, batch) => sum + batch.grossAmount, 0))}
+            onAddBankAccount={handleAddBankAccount}
+            onSettleVisa={handleSettleVisa}
+            canManageExpenses={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury)}
+            canManageTreasury={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageTreasury)}
+            canManagePartners={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManagePartners)}
             onAddPartner={(newPartner: Partner, paymentMethod: string, notes: string) => {
               if (partners.some(partner => partner.id === newPartner.id || partner.phone === newPartner.phone)) {
                 window.alert('هذا الشريك مسجل بالفعل أو رقم هاتفه مستخدم لشريك آخر.');
