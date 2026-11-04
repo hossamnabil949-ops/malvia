@@ -199,6 +199,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [injectNotes, setInjectNotes] = useState('ضخ سيولة لتمويل شراء دفعة قطع غيار أصلية');
   const [injectAutoRecalculate, setInjectAutoRecalculate] = useState(false);
 
+  const [distributionPaymentMethod, setDistributionPaymentMethod] = useState<string>('نقدي');
+  const [distributionBankAccountId, setDistributionBankAccountId] = useState('');
   const [reinvestAmount, setReinvestAmount] = useState<number>(5000);
   const [reinvestNotes, setReinvestNotes] = useState('رسملة الأرباح الدورية وإضافتها لحصة رأس المال المستثمر');
 
@@ -415,6 +417,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
   const handleExecuteDistribution = () => {
     if (netDistributableProfit <= 0) return;
+    if (requiresSpecificBankAccount(distributionPaymentMethod) && !bankAccounts.some(account => account.id === distributionBankAccountId && account.active)) return;
 
     const record: ProfitDistributionRecord = {
       id: `dist-${Date.now()}`,
@@ -425,6 +428,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       grossProfit: grossProfit,
       totalExpenses: totalOperatingExpenses,
       netProfit: netDistributableProfit,
+      paymentMethod: distributionPaymentMethod,
+      bankAccountId: requiresSpecificBankAccount(distributionPaymentMethod) ? distributionBankAccountId : undefined,
       partnerShares: partners.map((p) => ({
         partnerId: p.id,
         partnerName: p.name,
@@ -1582,7 +1587,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
               <h3 className="text-sm font-bold flex items-center gap-2">
                 <Receipt className="w-4 h-4 text-amber-400" />
-                <span>اعتماد وتوزيع أرباح الدورة الحالية نقدياً</span>
+                <span>اعتماد وتوزيع أرباح الدورة الحالية</span>
               </h3>
               <button onClick={() => setShowDistributeModal(false)} className="text-neutral-400 hover:text-white">
                 <X className="w-4 h-4" />
@@ -1596,6 +1601,27 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   {netDistributableProfit.toLocaleString()} ج.م
                 </span>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-neutral-300 font-bold block mb-1 text-xs">طريقة صرف التوزيعات</label>
+                <select value={distributionPaymentMethod} onChange={e => { setDistributionPaymentMethod(e.target.value); setDistributionBankAccountId(''); }} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-xs">
+                  <option value="نقدي">نقدي — الخزينة</option>
+                  <option value="تحويل بنكي">تحويل بنكي</option>
+                  <option value="InstaPay - حساب بنكي">InstaPay إلى حساب بنكي</option>
+                  <option value="InstaPay - محفظة">InstaPay إلى محفظة</option>
+                </select>
+              </div>
+              {requiresSpecificBankAccount(distributionPaymentMethod) && (
+                <div>
+                  <label className="text-amber-300 font-bold block mb-1 text-xs">الحساب البنكي الذي ستُصرف منه التوزيعات *</label>
+                  <select required value={distributionBankAccountId} onChange={e => setDistributionBankAccountId(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-amber-500/50 text-white text-xs">
+                    <option value="">اختر الحساب البنكي</option>
+                    {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
