@@ -2771,6 +2771,9 @@ export default function App() {
             invoices={invoices}
             parts={parts}
             salesReturns={salesReturns}
+            purchaseInvoices={purchaseInvoices}
+            purchaseReturns={purchaseReturns}
+            taxRegistered={Boolean(settings.taxRegistered)}
             expenses={expenses}
             partners={partners}
             distributions={[]}
@@ -2778,6 +2781,35 @@ export default function App() {
             shifts={shifts}
             treasuryBalance={treasuryBalance}
             onAddExpense={handleAddExpense}
+            onAddPartner={(newPartner: Partner, paymentMethod: string, notes: string) => {
+              if (partners.some(partner => partner.id === newPartner.id || partner.phone === newPartner.phone)) {
+                window.alert('هذا الشريك مسجل بالفعل أو رقم هاتفه مستخدم لشريك آخر.');
+                return;
+              }
+              const updatedPartners = [newPartner, ...partners];
+              setPartners(updatedPartners);
+              persistChanges({ partners: updatedPartners });
+              const capitalReceipt: TreasuryTransaction = {
+                id: `TX-PARTNER-${newPartner.id}`,
+                txNumber: uniqueTransactionNumber('TX-CAP'),
+                date: newPartner.joinDate,
+                time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+                type: 'قبض',
+                category: 'إيداع رأس مال شريك جديد',
+                amount: newPartner.initialCapital,
+                paymentMethod: paymentMethod as PaymentMethod,
+                balanceAfter: treasuryBalance + newPartner.initialCapital,
+                referenceId: newPartner.id,
+                description: `رأس مال تأسيسي للشريك ${newPartner.name} — ${notes || ''}`,
+                recordedBy: currentUser?.employeeName || 'المدير العام',
+              };
+              setTreasury(prev => {
+                const updated = [capitalReceipt, ...prev];
+                persistChanges({ treasuryTransactions: updated });
+                return updated;
+              });
+              logAudit('partner.add', `إضافة الشريك ${newPartner.name} بحصة ${newPartner.sharePercentage}% ورأس مال ${newPartner.initialCapital} ج.م`, newPartner.id, newPartner.initialCapital);
+            }}
             onAddDistribution={(record: ProfitDistributionRecord) => {
               const tx: TreasuryTransaction = {
                 id: `TX-DIST-${Date.now()}`,
