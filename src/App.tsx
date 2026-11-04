@@ -2810,6 +2810,63 @@ export default function App() {
               });
               logAudit('partner.add', `إضافة الشريك ${newPartner.name} بحصة ${newPartner.sharePercentage}% ورأس مال ${newPartner.initialCapital} ج.م`, newPartner.id, newPartner.initialCapital);
             }}
+            onUpdatePartnerShare={(partnerId: string, newSharePercentage: number) => {
+              if (!Number.isFinite(newSharePercentage) || newSharePercentage < 0 || newSharePercentage > 100) {
+                window.alert('نسبة الشريك يجب أن تكون بين 0 و100%.');
+                return;
+              }
+              setPartners(prev => {
+                const updated = prev.map(partner => partner.id === partnerId ? { ...partner, sharePercentage: newSharePercentage } : partner);
+                persistChanges({ partners: updated });
+                return updated;
+              });
+              logAudit('partner.share.update', `تعديل نسبة الشريك ${partnerId} إلى ${newSharePercentage}%`, partnerId, newSharePercentage);
+            }}
+            onInjectCapital={(partnerId: string, amount: number, paymentMethod: string, notes: string, recalculatePercentages: boolean) => {
+              const target = partners.find(partner => partner.id === partnerId);
+              if (!target || !Number.isFinite(amount) || amount <= 0) return;
+              const updatedPartners = partners.map(partner => {
+                if (partner.id !== partnerId) return partner;
+                const addedCapital = (partner.addedCapital || 0) + amount;
+                return { ...partner, addedCapital, totalCurrentCapital: (partner.totalCurrentCapital || partner.initialCapital + (partner.addedCapital || 0) + (partner.reinvestedProfits || 0)) + amount };
+              });
+              const capitalTotal = updatedPartners.reduce((sum, partner) => sum + (partner.totalCurrentCapital || 0), 0);
+              const finalPartners = recalculatePercentages && capitalTotal > 0
+                ? updatedPartners.map(partner => ({ ...partner, sharePercentage: Number((((partner.totalCurrentCapital || 0) / capitalTotal) * 100).toFixed(4)) }))
+                : updatedPartners;
+              setPartners(finalPartners);
+              persistChanges({ partners: finalPartners });
+              const tx: TreasuryTransaction = {
+                id: `TX-CAPITAL-${partnerId}-${Date.now()}`,
+                txNumber: uniqueTransactionNumber('TX-CAP'),
+                date: todayISO(),
+                time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+                type: 'قبض',
+                category: 'ضخ رأس مال إضافي لشريك',
+                amount,
+                paymentMethod: paymentMethod as PaymentMethod,
+                balanceAfter: treasuryBalance + amount,
+                referenceId: partnerId,
+                description: `ضخ رأس مال إضافي للشريك ${target.name} — ${notes || ''}`,
+                recordedBy: currentUser?.employeeName || 'المدير العام',
+              };
+              setTreasury(prev => { const updated = [tx, ...prev]; persistChanges({ treasuryTransactions: updated }); return updated; });
+              logAudit('partner.capital.add', `ضخ ${amount} ج.م كرأس مال إضافي للشريك ${target.name}`, partnerId, amount);
+            }}
+            onReinvestProfit={(partnerId: string, amount: number, notes: string) => {
+              const target = partners.find(partner => partner.id === partnerId);
+              if (!target || !Number.isFinite(amount) || amount <= 0 || amount > netDistributableProfit) return;
+              setPartners(prev => {
+                const updated = prev.map(partner => partner.id === partnerId ? {
+                  ...partner,
+                  reinvestedProfits: (partner.reinvestedProfits || 0) + amount,
+                  totalCurrentCapital: (partner.totalCurrentCapital || partner.initialCapital + (partner.addedCapital || 0) + (partner.reinvestedProfits || 0)) + amount,
+                } : partner);
+                persistChanges({ partners: updated });
+                return updated;
+              });
+              logAudit('partner.profit.reinvest', `رسملة ${amount} ج.م من أرباح الشريك ${target.name} — ${notes || ''}`, partnerId, amount);
+            }}
             onAddDistribution={(record: ProfitDistributionRecord) => {
               const tx: TreasuryTransaction = {
                 id: `TX-DIST-${Date.now()}`,
@@ -2848,6 +2905,7 @@ export default function App() {
               batches: stockBatches,
               loyaltyLedger,
               loyaltyPointValue: resolveLoyalty(settings.loyalty).pointValueEgp,
+              taxRegistered: Boolean(settings.taxRegistered),
             }}
             exportTab={
               <ReportsView
