@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Landmark, Plus, Search, AlertTriangle, CheckCircle2, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { Customer, Supplier } from '../types/autoParts';
+import type { BankAccount } from '../utils/bankLedger';
 import {
   Cheque, ChequeAction, ChequeDirection, ChequeError, ACTION_LABEL, availableActions, clearLabel, dueState, daysBetween, summarize,
   registrationEffect, isOpen,
