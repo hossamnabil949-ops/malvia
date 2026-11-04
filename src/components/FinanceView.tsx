@@ -307,7 +307,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     return expenses.reduce((sum, exp) => sum + exp.amount, 0);
   }, [expenses]);
 
-  // VAT is excluded from sales revenue above; do not deduct the VAT liability from profit again.\n  const netDistributableProfit = Math.max(0, grossProfit - totalOperatingExpenses);
+  // VAT is excluded from sales revenue above; do not deduct the VAT liability from profit again.
+  const netDistributableProfit = Math.max(0, grossProfit - totalOperatingExpenses);
   const netProfitMargin = estimatedCOGS > 0 ? ((netDistributableProfit / estimatedCOGS) * 100).toFixed(1) : '0';
 
   const totalInitialCapital = useMemo(() => {
