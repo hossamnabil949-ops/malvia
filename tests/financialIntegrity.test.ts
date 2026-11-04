@@ -5,7 +5,7 @@ import { normalizePaymentMethod } from '../src/utils/paymentMethods.ts';
 import { hasTabAccess, ROLE_PRESETS } from '../src/utils/permissions.ts';
 import { registrationEffect, actionEffect } from '../src/utils/chequeLogic.ts';
 import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
-import { createCardSettlementEntries, summarizeBankAccount, validateBankAccount } from '../src/utils/bankLedger.ts';
+import { createCardSettlementEntries, createChequeBankEntry, summarizeBankAccount, validateBankAccount } from '../src/utils/bankLedger.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
 import { validateSale, SaleError, computeTotals, weightedAverageUnitCost } from '../src/utils/saleLogic.ts';
@@ -222,6 +222,25 @@ assert.deepEqual(
 assert.equal(summarizeBankAccount(bankA, settlementResult.entries), 1980);
 assert.equal(createCardSettlementEntries(settlement, [bankA], [settlement]).error, 'SETTLEMENT_DUPLICATE');
 assert.equal(createCardSettlementEntries({ ...settlement, feeAmount: 1000, netAmount: 0 }, [bankA]).error, 'SETTLEMENT_FEE_INVALID');
+
+const incomingChequePosting = createChequeBankEntry({
+  chequeId: 'CHQ-IN-001', bankAccountId: bankA.id, direction: 'incoming',
+  amount: 250, date: '2026-11-04', reference: 'CHK-001', description: 'تحصيل شيك وارد',
+}, [bankA], settlementResult.entries);
+assert.equal(incomingChequePosting.error, null);
+assert.equal(incomingChequePosting.entry?.direction, 'in');
+assert.equal(incomingChequePosting.entry?.bankAccountId, bankA.id);
+assert.equal(createChequeBankEntry({
+  chequeId: 'CHQ-IN-001', bankAccountId: bankA.id, direction: 'incoming',
+  amount: 250, date: '2026-11-04', reference: 'CHK-001', description: 'تحصيل شيك وارد',
+}, [bankA], [incomingChequePosting.entry!, ...settlementResult.entries]).error, 'CHEQUE_BANK_DUPLICATE');
+const outgoingChequePosting = createChequeBankEntry({
+  chequeId: 'CHQ-OUT-001', bankAccountId: bankA.id, direction: 'outgoing',
+  amount: 125, date: '2026-11-04', reference: 'CHK-002', description: 'صرف شيك صادر',
+}, [bankA]);
+assert.equal(outgoingChequePosting.entry?.direction, 'out');
+assert.equal(summarizeBankAccount(bankA, [incomingChequePosting.entry!, outgoingChequePosting.entry!]), 1125);
+
 assert.equal(createCardSettlementEntries({ ...settlement, netAmount: 1000 }, [bankA]).error, 'SETTLEMENT_AMOUNT_INVALID');
 assert.equal(createCardSettlementEntries({ ...settlement, settlementDate: '2026-02-31' }, [bankA]).error, 'SETTLEMENT_DATE_INVALID');
 assert.equal(createCardSettlementEntries(settlement, [{ ...bankA, active: false }]).error, 'BANK_ACCOUNT_INACTIVE');
