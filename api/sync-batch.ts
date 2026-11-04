@@ -95,7 +95,7 @@ export default async function handler(req: any, res: any) {
       if (!Array.isArray(incoming) || incoming.length > 1 || (previous.length > 0 && JSON.stringify(previous) !== JSON.stringify(incoming))) return res.status(409).json({ code: 'OPENING_BALANCE_IMMUTABLE', resource: 'openingBalances', error: 'سجل الأرصدة الافتتاحية موجود بالفعل ولا يسمح باستبداله أو حذفه.' });
       if (incoming.length === 1) {
         const record = incoming[0];
-        if (!record || record.status !== 'approved' || !record.id || !/^\\d{4}-\\d{2}-\\d{2}$/.test(String(record.cutoverDate || '')) || !Number.isFinite(record.originalCapital) || record.originalCapital < 0 || !Array.isArray(record.lines) || !Array.isArray(record.partners)) return res.status(400).json({ code: 'OPENING_BALANCE_INVALID', resource: 'openingBalances', error: 'بيانات الأرصدة الافتتاحية غير صالحة.' });
+        if (!record || record.status !== 'approved' || !record.id || String(record.cutoverDate || '').length !== 10 || String(record.cutoverDate)[4] !== '-' || String(record.cutoverDate)[7] !== '-' || !Number.isFinite(record.originalCapital) || record.originalCapital < 0 || !Array.isArray(record.lines) || !Array.isArray(record.partners)) return res.status(400).json({ code: 'OPENING_BALANCE_INVALID', resource: 'openingBalances', error: 'بيانات الأرصدة الافتتاحية غير صالحة.' });
         const lineIds = new Set<string>();
         for (const line of record.lines) {
           if (!line || !line.id || lineIds.has(String(line.id)) || !String(line.label || '').trim() || !Number.isFinite(line.amount) || line.amount < 0) return res.status(400).json({ code: 'OPENING_BALANCE_LINE_INVALID', resource: 'openingBalances', error: 'أحد بنود الأرصدة الافتتاحية غير صالح أو مكرر.' });
