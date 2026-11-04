@@ -556,6 +556,12 @@ export interface EmployeePermissions {
   canViewReports: boolean;
   canManageSettings: boolean;
   canManagePartners: boolean;
+  /** Read-only visibility of operational cash drawer balances; does not grant treasury administration. */
+  canViewCashBalances?: boolean;
+  /** Allows registering incoming/outgoing cheques without access to full treasury administration. */
+  canRegisterCheques?: boolean;
+  /** Allows changing cheque lifecycle (deposit, clear, bounce, cancel). */
+  canManageChequeLifecycle?: boolean;
   simpleCashierMode?: boolean; // وضع الكاشير المبسط: شاشة بيع فقط بدون قوائم وأدوات متقدمة
 }
 
