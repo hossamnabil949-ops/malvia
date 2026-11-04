@@ -1200,7 +1200,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {[
                 { id: 'كاش (نقدي)', label: 'كاش (نقدي)', icon: Banknote },
-                { id: 'إنستاباي / InstaPay', label: 'إنستاباي (Instapay)', icon: Zap },
+                { id: 'InstaPay - حساب بنكي', label: 'InstaPay - حساب بنكي', icon: Zap },
+                { id: 'InstaPay - محفظة', label: 'InstaPay - محفظة', icon: Smartphone },
                 { id: 'فودافون كاش ومحافظ إلكترونية', label: 'فودافون كاش ومحافظ', icon: Smartphone },
                 { id: 'فيزا / بطاقة بنكية', label: 'فيزا / بنك', icon: CreditCard },
                 { id: 'آجل (شكك / حساب ورشة)', label: 'شكك / آجل ورشة', icon: Clock },
