@@ -30,13 +30,16 @@ import {
 } from 'recharts';
 import { LoyaltyEntry, LOYALTY_TYPE_LABEL, analyzeLoyalty, withRunningBalance } from '../utils/loyaltyLogic';
 import { Customer, Invoice } from '../types/autoParts';
+import type { BankAccount } from '../utils/bankLedger';
+import { requiresSpecificBankAccount } from '../utils/paymentMethods';
 import { cairoDateKey, netSales } from '../utils/reportsLogic';
 
 interface CustomersViewProps {
   customers: Customer[];
   invoices?: Invoice[];
   onAddCustomer: (customer: Customer) => void;
-  onSettleBalance: (customerId: string, amount: number) => void;
+  onSettleBalance: (customerId: string, amount: number, paymentMethod?: string, bankAccountId?: string) => void;
+  bankAccounts?: BankAccount[];
   onUpdateCreditLimit?: (customerId: string, limit: number) => void;
   loyaltyEnabled?: boolean;
   canAdjustLoyalty?: boolean;            // التعديل اليدوي للنقاط: المدير العام فقط
@@ -51,6 +54,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   invoices = [],
   onAddCustomer,
   onSettleBalance,
+  bankAccounts = [],
   onUpdateCreditLimit,
   loyaltyEnabled = false,
   canAdjustLoyalty = false,
@@ -60,6 +64,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [settleModalCustomer, setSettleModalCustomer] = useState<Customer | null>(null);
   const [settleAmount, setSettleAmount] = useState<number>(500);
+  const [settleMethod, setSettleMethod] = useState('نقدي');
+  const [settleBankAccountId, setSettleBankAccountId] = useState('');
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -112,7 +118,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
   const handleConfirmSettle = () => {
     if (settleModalCustomer && settleAmount > 0) {
-      onSettleBalance(settleModalCustomer.id, settleAmount);
+      if (requiresSpecificBankAccount(settleMethod) && !bankAccounts.some(account => account.id === settleBankAccountId && account.active)) return;
+      onSettleBalance(settleModalCustomer.id, settleAmount, settleMethod, requiresSpecificBankAccount(settleMethod) ? settleBankAccountId : undefined);
       setSettleModalCustomer(null);
     }
   };
@@ -510,6 +517,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   onClick={() => {
                     setSettleModalCustomer(c);
                     setSettleAmount(c.balance);
+                    setSettleMethod('نقدي'); setSettleBankAccountId('');
                   }}
                   className="w-full py-2.5 rounded-xl bg-neutral-800 hover:bg-amber-500 hover:text-neutral-950 text-xs font-bold text-neutral-200 transition-colors"
                 >
@@ -548,6 +556,25 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 <p className="font-bold font-mono text-rose-400">{settleModalCustomer.balance.toLocaleString()} ج.م</p>
               </div>
 
+              <div>
+                <label className="text-neutral-300 font-bold block mb-1">طريقة التحصيل</label>
+                <select value={settleMethod} onChange={e => { setSettleMethod(e.target.value); setSettleBankAccountId(''); }} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white">
+                  <option value="نقدي">نقدي — الخزينة</option>
+                  <option value="تحويل بنكي">تحويل إلى حساب بنكي</option>
+                  <option value="InstaPay - حساب بنكي">InstaPay إلى حساب بنكي</option>
+                  <option value="InstaPay - محفظة">InstaPay إلى محفظة</option>
+                </select>
+              </div>
+              {requiresSpecificBankAccount(settleMethod) && (
+                <div>
+                  <label className="text-amber-300 font-bold block mb-1">الحساب البنكي المستلم *</label>
+                  <select value={settleBankAccountId} onChange={e => setSettleBankAccountId(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-amber-500/50 text-white" required>
+                    <option value="">اختر الحساب البنكي</option>
+                    {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}</option>)}
+                  </select>
+                  {!bankAccounts.some(account => account.active) && <p className="text-[10px] text-rose-300 mt-1">لا يوجد حساب بنكي نشط؛ أضف حساباً أولاً.</p>}
+                </div>
+              )}
               <div>
                 <label className="text-neutral-300 font-bold block mb-1">
                   المبلغ المسدد الآن (ج.م):
