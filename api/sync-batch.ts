@@ -1,5 +1,6 @@
 // FIN-18: atomic multi-resource sync. Every resource is validated and committed in one PostgreSQL transaction.
-import { commitSyncBatch, getAuthenticatedEmployee } from './_db.js';
+import { commitSyncBatch, getAuthenticatedEmployee, getOne } from './_db.js';
+import { validateChequeAuxiliarySync, validateChequeCollectionSync } from '../src/utils/chequeSyncPolicy';
 import { createHash } from 'node:crypto';
 import { ApiError, clientIp, findLicense, rateLimit, sendError } from './_security.js';
 
@@ -12,11 +13,11 @@ const policy: Record<string, string[]> = {
   suppliers: ['canManagePurchases','canReceivePurchases','canManageTreasury'], supplierPayments: ['canManagePurchases','canManageTreasury'],
   supplierPaymentSchedules: ['canManagePurchases','canManageTreasury'], purchaseInvoices: ['canManagePurchases','canReceivePurchases'],
   purchaseReturns: ['canManagePurchases'], expenses: ['canManageExpenses','canManageTreasury'],
-  treasury: ['canManageTreasury','canSellPos','canManagePurchases'], bankAccounts: ['canManageTreasury'], cardSettlements: ['canManageTreasury'], bankLedgerEntries: ['canManageTreasury'],
+  treasury: ['canManageTreasury','canSellPos','canManagePurchases','canManageChequeLifecycle'], bankAccounts: ['canManageTreasury'], cardSettlements: ['canManageTreasury'], bankLedgerEntries: ['canManageTreasury','canManageChequeLifecycle'],
   shifts: ['canSellPos','canManageTreasury'],
   stockMovements: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
   auditLog: ['canSellPos','canManageInventory','canManagePurchases','canManageTreasury','canManageSettings'],
-  carModels: ['canManageInventory'], reservations: ['canSellPos'], cheques: ['canManageTreasury'],
+  carModels: ['canManageInventory'], reservations: ['canSellPos'], cheques: ['canManageTreasury','canRegisterCheques','canManageChequeLifecycle'],
 };
 
 export default async function handler(req: any, res: any) {
@@ -54,6 +55,39 @@ export default async function handler(req: any, res: any) {
     for (const op of operations) {
       const allowed = owner || policy[op.resource].some((permission) => permissions[permission] === true);
       if (!allowed) return res.status(403).json({ code: 'EMPLOYEE_PERMISSION_DENIED', resource: op.resource, error: 'لا تملك صلاحية مزامنة أحد عناصر الدفعة.' });
+    }
+
+    if (!owner && operations.some((op: any) => ['cheques', 'treasury', 'bankLedgerEntries'].includes(op.resource)) &&
+        permissions.canManageTreasury !== true) {
+      const operationMap = new Map(operations.map((op: any) => [op.resource, op]));
+      const loadArray = async (resource: string): Promise<any[]> => {
+        const row = await getOne(tenant, resource);
+        return Array.isArray(row?.data) ? row.data as any[] : [];
+      };
+      const chequeOperation: any = operationMap.get('cheques');
+      const previousCheques = await loadArray('cheques');
+      const incomingCheques = chequeOperation ? chequeOperation.data : previousCheques;
+      if (chequeOperation) {
+        const chequeError = validateChequeCollectionSync(previousCheques, incomingCheques, employee, permissions);
+        if (chequeError) return res.status(403).json({ code: chequeError, resource: 'cheques', error: 'تعديل الشيكات غير مسموح بهذه الصلاحية.' });
+      }
+      for (const resource of ['treasury', 'bankLedgerEntries']) {
+        const operation: any = operationMap.get(resource);
+        if (!operation || permissions.canManageChequeLifecycle !== true) continue;
+        if (!chequeOperation) return res.status(403).json({ code: 'CHEQUE_STATE_REQUIRED', resource, error: 'يجب مزامنة حالة الشيك المرتبطة بالحركة البنكية.' });
+        const previous = await loadArray(resource);
+        const bankAccounts = resource === 'bankLedgerEntries' ? await loadArray('bankAccounts') : [];
+        const error = validateChequeAuxiliarySync({
+          resource,
+          previous,
+          incoming: operation.data,
+          previousCheques,
+          incomingCheques,
+          bankAccounts,
+          employee,
+        });
+        if (error) return res.status(403).json({ code: error, resource, error: 'حركة الشيك البنكية غير مطابقة أو غير مسموح بها.' });
+      }
     }
     const serialized = JSON.stringify(operations);
     if (serialized.length > 5_000_000) return res.status(413).json({ code: 'SYNC_BATCH_TOO_LARGE', error: 'حجم دفعة المزامنة أكبر من الحد المسموح.' });
