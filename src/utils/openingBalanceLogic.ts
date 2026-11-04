@@ -88,7 +88,7 @@ export function validateOpeningBalanceRecord(
   record: OpeningBalanceRecord,
   options: { activeBankAccountIds?: string[]; existingRecord?: OpeningBalanceRecord | null } = {},
 ): OpeningBalanceValidationError | null {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(record.cutoverDate)) return 'INVALID_DATE';
+  if (record.cutoverDate.length !== 10 || record.cutoverDate[4] !== '-' || record.cutoverDate[7] !== '-') return 'INVALID_DATE';
   const date = new Date(record.cutoverDate + 'T00:00:00Z');
   if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== record.cutoverDate) return 'INVALID_DATE';
   if (!Number.isFinite(record.originalCapital) || record.originalCapital < 0) return 'INVALID_AMOUNT';
