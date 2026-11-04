@@ -506,7 +506,9 @@ export interface TreasuryTransaction {
     | 'إيداع نقدي إضافي'
     | 'سحب نقدي'
     | 'عجز درج (تسوية وردية)'
-    | 'زيادة درج (تسوية وردية)';
+    | 'زيادة درج (تسوية وردية)'
+    | 'ارتداد شيك وارد'
+    | 'ارتداد شيك صادر';
   amount: number;
   paymentMethod: PaymentMethod | string;
   balanceAfter: number;
