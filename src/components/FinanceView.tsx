@@ -238,15 +238,18 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
     invoices.forEach((inv) => {
       if (inv.status === 'ملغاة') return;
-      revenue += inv.grandTotal;
+      // Revenue is recorded before VAT: tax collected from customers is not business income.
+      revenue += Math.max(0, inv.subtotal - inv.discount);
       inv.items.forEach((it) => {
         let unitCost = it.costPrice;
         if (unitCost === undefined) unitCost = costByPart.get(norm(it.partNumber));
         if (unitCost === undefined) {
-          unitCost = it.unitPrice * 0.7;
+          // Never invent a 70% cost estimate: missing cost must be visible as incomplete data.
+          unitCost = 0;
           estimatedCount += 1;
         }
-        cogs += unitCost * it.quantity;
+        const soldQty = Math.max(0, it.quantity - (it.returnedQuantity || 0));
+        cogs += unitCost * soldQty;
       });
     });
 
@@ -254,9 +257,13 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     const voidedIds = new Set(invoices.filter(i => i.status === 'ملغاة').map(i => i.id));
     salesReturns.forEach((ret) => {
       if (voidedIds.has(ret.invoiceId)) return; // فاتورة ملغاة: خرجت كلها من الإيراد والتكلفة ولا تُخصم مرتجعاتها مرتين
-      revenue -= ret.totalRefundAmount || 0;
+      const original = invoices.find(inv => inv.id === ret.invoiceId);
+      const refundBeforeTax = original && original.grandTotal > 0
+        ? (ret.totalRefundAmount || 0) * (Math.max(0, original.subtotal - original.discount) / original.grandTotal)
+        : 0;
+      revenue -= refundBeforeTax;
       ret.items.forEach((it) => {
-        const unitCost = costByPart.get(norm(it.partNumber)) ?? it.unitPrice * 0.7;
+        const unitCost = costByPart.get(norm(it.partNumber)) ?? 0;
         cogs -= unitCost * it.quantity;
       });
     });
@@ -294,7 +301,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     return expenses.reduce((sum, exp) => sum + exp.amount, 0);
   }, [expenses]);
 
-  const netDistributableProfit = Math.max(0, grossProfit - totalOperatingExpenses - netVatDue);
+  // VAT is excluded from sales revenue above; do not deduct the VAT liability from profit again.\n  const netDistributableProfit = Math.max(0, grossProfit - totalOperatingExpenses);
   const netProfitMargin = estimatedCOGS > 0 ? ((netDistributableProfit / estimatedCOGS) * 100).toFixed(1) : '0';
 
   const totalInitialCapital = useMemo(() => {
