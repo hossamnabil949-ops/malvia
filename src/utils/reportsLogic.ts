@@ -286,16 +286,13 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
     list.push(part.costPrice);
     partCostByNumber.set(part.partNumber, list);
   }
-  const sales = sum(inv, i => i.subtotal - i.discount);
+  // P&L starts from customer cash value (VAT-inclusive) so the net VAT payable
+  // is deducted exactly once below, rather than being omitted or double-counted.
+  const sales = sum(inv, i => i.grandTotal);
   const returns = sum(d.salesReturns.filter(ret => {
     const original = d.invoices.find(i => i.id === ret.invoiceId);
     return inRange(ret.date, r) && Boolean(original) && original!.status !== 'ملغاة';
-  }), ret => {
-    const original = invoiceById.get(ret.invoiceId) ?? d.invoices.find(i => i.id === ret.invoiceId);
-    if (!original || original.grandTotal <= 0) return 0;
-    const preTaxNet = Math.max(0, original.subtotal - original.discount);
-    return ret.totalRefundAmount * (preTaxNet / original.grandTotal);
-  });
+  }), ret => ret.totalRefundAmount);
   const cogs = sum(inv, i => sum(i.items, it => {
     const frozenCost = it.costPrice;
     const matches = partCostByNumber.get(it.partNumber) ?? [];
@@ -310,8 +307,8 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
   const vatSummary = reportVatSummary(d, r);
   const netVatDue = Number(vatSummary.rows.find(row => row.item === 'صافي الضريبة المستحقة / الرصيد الدائن')?.amount) || 0;
   const rows = [
-    { item: 'المبيعات (قبل الضريبة وبعد الخصم)', amount: r2(sales) },
-    { item: 'يخصم: المرتجعات (قبل الضريبة وبعد الخصم)', amount: r2(-returns) },
+    { item: 'إجمالي المبيعات بعد الخصم (شامل الضريبة)', amount: r2(sales) },
+    { item: 'يخصم: مرتجعات المبيعات (شاملة الضريبة)', amount: r2(-returns) },
     { item: 'صافي المبيعات', amount: r2(net) },
     { item: 'يخصم: تكلفة البضاعة المباعة', amount: r2(-cogs) },
     { item: 'مجمل الربح', amount: r2(gross) },
@@ -325,7 +322,7 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
     id: 'profit-loss', title: 'ملخص الأرباح والخسائر',
     columns: [{ key: 'item', label: 'البند' }, { key: 'amount', label: 'المبلغ (ج.م)', kind: 'money' }],
     rows,
-    note: 'المرتجعات تُحوَّل إلى أساس الفاتورة الأصلية قبل الضريبة وبعد الخصم، وتُستبعد مرتجعات الفواتير الملغاة. ضريبة القيمة المضافة المعروضة هي صافي ضريبة المخرجات بعد مرتجعات المبيعات مطروحاً منها ضريبة المدخلات بعد مرتجعات المشتريات؛ تظهر بالسالب قبل صافي الربح. تكلفة البضاعة تستخدم تكلفة البيع المحفوظة. يشمل عجز وزيادة الدرج المسجلين كتسويات ورديات، ولا يشمل توزيعات الشركاء ورأس المال.',
+    note: 'المبيعات والمرتجعات بالقيمة الشاملة للضريبة، ثم يُخصم صافي ضريبة القيمة المضافة المستحقة مرة واحدة قبل صافي الربح. صافي الضريبة = ضريبة المخرجات بعد مرتجعات المبيعات ناقص ضريبة المدخلات بعد مرتجعات المشتريات. تُستبعد الفواتير الملغاة. تكلفة البضاعة تستخدم تكلفة البيع المحفوظة. يشمل عجز وزيادة الدرج المسجلين كتسويات ورديات، ولا يشمل توزيعات الشركاء ورأس المال.',
   };
 }
 
