@@ -2894,6 +2894,9 @@ export default function App() {
               const schedule = scheduleId ? supplierPaymentSchedules.find(x => x.id === scheduleId) : undefined;
               if (scheduleId && (!schedule || schedule.status !== 'scheduled' || supplierPayments.some(p => p.scheduleId === scheduleId && p.amount >= schedule.amount - schedule.amountPaid))) return;
               if (!supplier || !Number.isFinite(amount) || amount <= 0 || (schedule && amount > schedule.amount - schedule.amountPaid)) return;
+              const stamp = Date.now();
+              const paymentId = `SP-${stamp}-${Math.random().toString(36).slice(2,7)}`;
+              const txId = `TX-SUPP-${stamp}-${Math.random().toString(36).slice(2,7)}`;
               if (requiresSpecificBankAccount(paymentMethod)) {
                 const posting = createBankMovementEntry({
                   id: `supplier-payment:${paymentId}`, batchId: paymentId, bankAccountId: bankAccountId || '',
@@ -2902,9 +2905,6 @@ export default function App() {
                 }, bankAccounts, bankLedgerEntries);
                 if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً قبل اعتماد السداد.'); return; }
               }
-              const stamp = Date.now();
-              const paymentId = `SP-${stamp}-${Math.random().toString(36).slice(2,7)}`;
-              const txId = `TX-SUPP-${stamp}-${Math.random().toString(36).slice(2,7)}`;
               const debt = supplier.deferredDebt ?? supplier.balance ?? 0;
               const newDebt = Math.max(0, debt - amount);
               const overpaid = Math.max(0, amount - debt);
