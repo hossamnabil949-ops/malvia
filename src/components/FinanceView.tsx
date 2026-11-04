@@ -137,7 +137,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   onInjectCapital,
   onReinvestProfit,
   bankAccounts = [], cardSettlements = [], bankLedgerEntries = [], outstandingVisaBalance = 0,
-  onAddBankAccount, onSettleVisa,
+  onAddBankAccount, onSettleVisa, onTransferBank,
   canManageExpenses = true, canManageTreasury = true, canManagePartners = true,
 }) => {
   type FinanceTab = 'income' | 'equity' | 'treasury' | 'expenses' | 'audit' | 'bankLedger';
@@ -624,7 +624,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       </div>}
 
       {activeFinanceTab === 'bankLedger' && canManageTreasury && onAddBankAccount && onSettleVisa && (
-        <BankLedgerView accounts={bankAccounts} settlements={cardSettlements} entries={bankLedgerEntries} outstandingVisaBalance={outstandingVisaBalance} onAddBankAccount={onAddBankAccount} onSettleVisa={onSettleVisa} />
+        <BankLedgerView accounts={bankAccounts} settlements={cardSettlements} entries={bankLedgerEntries} outstandingVisaBalance={outstandingVisaBalance} onAddBankAccount={onAddBankAccount} onSettleVisa={onSettleVisa} onTransferBank={onTransferBank} />
       )}
 
       {activeFinanceTab === 'equity' && canManagePartners && (
