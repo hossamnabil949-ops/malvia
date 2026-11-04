@@ -98,9 +98,9 @@ interface FinanceViewProps {
   canManagePartners?: boolean;
   onAddExpense: (expense: Expense) => void;
   onAddDistribution: (record: ProfitDistributionRecord) => void;
-  onAddPartner?: (partner: Partner, paymentMethod: string, notes: string) => boolean | void;
+  onAddPartner?: (partner: Partner, paymentMethod: string, notes: string, bankAccountId?: string) => boolean | void;
   onUpdatePartnerShare?: (partnerId: string, newSharePercentage: number) => void;
-  onInjectCapital?: (partnerId: string, amount: number, paymentMethod: string, notes: string, recalculatePercentages: boolean) => void;
+  onInjectCapital?: (partnerId: string, amount: number, paymentMethod: string, notes: string, recalculatePercentages: boolean, bankAccountId?: string) => void;
   onReinvestProfit?: (partnerId: string, amount: number, notes: string) => void;
 }
 
@@ -137,7 +137,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   onInjectCapital,
   onReinvestProfit,
   bankAccounts = [], cardSettlements = [], bankLedgerEntries = [], outstandingVisaBalance = 0,
-  onAddBankAccount, onSettleVisa, onTransferBank,
+  onAddBankAccount, onSettleVisa, onTransferBank, onTransferBank,
   canManageExpenses = true, canManageTreasury = true, canManagePartners = true,
 }) => {
   type FinanceTab = 'income' | 'equity' | 'treasury' | 'expenses' | 'audit' | 'bankLedger';
@@ -1250,7 +1250,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   >
                     <option value="نقدي">نقدي — الخزينة</option>
                     <option value="فيزا / بطاقة">فيزا / بطاقة بنكية</option>
-                    <option value="انستاباي / InstaPay">InstaPay</option>
+                    <option value="InstaPay - حساب بنكي">InstaPay إلى حساب بنكي</option>
+                    <option value="InstaPay - محفظة">InstaPay إلى محفظة</option>
+                    <option value="انستاباي / InstaPay">InstaPay قديم / غير محدد</option>
+                    <option value="تحويل بنكي">تحويل بنكي</option>
                     <option value="محفظة إلكترونية">محفظة إلكترونية</option>
                   </select>
                 </div>
@@ -1348,7 +1351,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     <option value="InstaPay - محفظة">InstaPay إلى محفظة</option>
                     <option value="انستاباي / InstaPay">InstaPay قديم / غير محدد</option>
                     <option value="تحويل بنكي">تحويل بنكي</option>
-                    <option value="فيزا / بطاقة">فيزا / بطاقة بنكية</option>
                   </select>
                 </div>
               </div>
