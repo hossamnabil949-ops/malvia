@@ -46,7 +46,7 @@ export function validateBankLedgerSync(input: {
   const partners = input.partners || [];
   const cardSettlements = input.cardSettlements || [];
   const cheques = input.cheques || [];
-  const directBank = (method: unknown) => paymentAccountOf(String(method || '')) === 'bank';
+  const directBank = (method: unknown) => ['bank', 'visa'].includes(paymentAccountOf(String(method || '')));
 
   for (const entry of added) {
     if (!entry.id || !entry.batchId || !['in', 'out'].includes(entry.direction)
