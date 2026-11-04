@@ -3152,8 +3152,20 @@ export default function App() {
               logAudit('partner.profit.reinvest', `رسملة ${amount} ج.م من أرباح الشريك ${target.name} — ${notes || ''}`, partnerId, amount);
             }}
             onAddDistribution={(record: ProfitDistributionRecord) => {
+              const paymentMethod = record.paymentMethod || 'نقدي';
+              const txId = `TX-DIST-${record.id}`;
+              let distributionBankEntry: BankLedgerEntry | null = null;
+              if (requiresSpecificBankAccount(paymentMethod)) {
+                const posting = createBankMovementEntry({
+                  id: `distribution:${txId}`, batchId: txId, bankAccountId: record.bankAccountId || '',
+                  direction: 'out', amount: record.netProfit, date: record.date, reference: record.id,
+                  description: `توزيع أرباح للشركاء — ${record.period}`,
+                }, bankAccounts, bankLedgerEntries);
+                if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً لصرف توزيعات الأرباح.'); return; }
+                distributionBankEntry = posting.entry;
+              }
               const tx: TreasuryTransaction = {
-                id: `TX-DIST-${Date.now()}`,
+                id: txId,
                 txNumber: uniqueTransactionNumber('TX-D'),
                 date: record.date,
                 time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
@@ -3161,7 +3173,8 @@ export default function App() {
                 amount: record.netProfit,
                 description: `توزيع أرباح: ${record.period}`,
                 category: 'توزيع أرباح',
-                paymentMethod: 'نقدي',
+                paymentMethod: paymentMethod as PaymentMethod,
+                bankAccountId: requiresSpecificBankAccount(paymentMethod) ? record.bankAccountId : undefined,
                 balanceAfter: treasuryBalance - record.netProfit,
                 recordedBy: currentUser?.employeeName || 'المدير المالي'
               };
@@ -3170,6 +3183,10 @@ export default function App() {
                 persistChanges({ treasuryTransactions: updated });
                 return updated;
               });
+              if (distributionBankEntry) {
+                const nextEntries = [distributionBankEntry, ...bankLedgerEntries];
+                setBankLedgerEntries(nextEntries); persistChanges({ bankLedgerEntries: nextEntries });
+              }
             }}
           />
         )}
