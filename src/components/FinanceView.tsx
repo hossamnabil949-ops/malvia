@@ -85,7 +85,7 @@ interface FinanceViewProps {
   treasuryBalance?: number;
   onAddExpense: (expense: Expense) => void;
   onAddDistribution: (record: ProfitDistributionRecord) => void;
-  onAddPartner?: (partner: Partner, paymentMethod: string, notes: string) => void;
+  onAddPartner?: (partner: Partner, paymentMethod: string, notes: string) => boolean | void;
   onUpdatePartnerShare?: (partnerId: string, newSharePercentage: number) => void;
   onInjectCapital?: (partnerId: string, amount: number, paymentMethod: string, notes: string, recalculatePercentages: boolean) => void;
   onReinvestProfit?: (partnerId: string, amount: number, notes: string) => void;
@@ -410,7 +410,12 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
   const handleSubmitAddPartner = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPartnerName.trim() || newPartnerInitialCapital <= 0) return;
+    if (!newPartnerName.trim() || newPartnerInitialCapital <= 0 || newPartnerSharePercent <= 0 || newPartnerSharePercent > 100) return;
+    const committedShare = partners.reduce((sum, partner) => sum + (Number(partner.sharePercentage) || 0), 0);
+    if (committedShare + newPartnerSharePercent > 100.0001) {
+      window.alert(`إجمالي نسب الشركاء سيصبح ${(committedShare + newPartnerSharePercent).toFixed(2)}%، ولا يجوز أن يتجاوز 100%.`);
+      return;
+    }
 
     const newPartner: Partner = {
       id: `part-${Date.now()}`,
@@ -426,9 +431,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       joinDate: new Date().toISOString().split('T')[0],
     };
 
-    if (onAddPartner) {
-      onAddPartner(newPartner, newPartnerPaymentMethod, newPartnerNotes);
-    }
+    if (onAddPartner && onAddPartner(newPartner, newPartnerPaymentMethod, newPartnerNotes) === false) return;
 
     setShowAddPartnerModal(false);
     setNewPartnerName('');
@@ -1195,6 +1198,32 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     value={newPartnerSharePercent || ''}
                     onChange={(e) => setNewPartnerSharePercent(Number(e.target.value))}
                     className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono text-amber-400 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">طريقة إيداع رأس المال *</label>
+                  <select
+                    value={newPartnerPaymentMethod}
+                    onChange={(e) => setNewPartnerPaymentMethod(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
+                  >
+                    <option value="نقدي">نقدي — الخزينة</option>
+                    <option value="فيزا / بطاقة">فيزا / بطاقة بنكية</option>
+                    <option value="انستاباي / InstaPay">InstaPay</option>
+                    <option value="محفظة إلكترونية">محفظة إلكترونية</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">بيان / ملاحظات الإيداع</label>
+                  <input
+                    type="text"
+                    value={newPartnerNotes}
+                    onChange={(e) => setNewPartnerNotes(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white"
+                    placeholder="رقم الإيصال أو مرجع التحويل"
                   />
                 </div>
               </div>
