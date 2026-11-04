@@ -60,7 +60,8 @@ interface SuppliersViewProps {
     paymentMethod: PaymentMethod | string, 
     treasurySource: string, 
     notes: string,
-    scheduleId?: string
+    scheduleId?: string,
+    bankAccountId?: string
   ) => void;
   onAddPurchaseReturn?: (returnData: PurchaseReturn) => void;
   onSettlePurchaseReturn?: (returnId: string) => void;
