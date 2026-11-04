@@ -3010,10 +3010,20 @@ export default function App() {
             canManageExpenses={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury)}
             canManageTreasury={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageTreasury)}
             canManagePartners={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManagePartners)}
-            onAddPartner={(newPartner: Partner, paymentMethod: string, notes: string) => {
+            onAddPartner={(newPartner: Partner, paymentMethod: string, notes: string, bankAccountId?: string) => {
               if (partners.some(partner => partner.id === newPartner.id || partner.phone === newPartner.phone)) {
                 window.alert('هذا الشريك مسجل بالفعل أو رقم هاتفه مستخدم لشريك آخر.');
                 return false;
+              }
+              let capitalBankEntry: BankLedgerEntry | null = null;
+              if (requiresSpecificBankAccount(paymentMethod)) {
+                const posting = createBankMovementEntry({
+                  id: `partner-capital:${newPartner.id}`, batchId: newPartner.id, bankAccountId: bankAccountId || '',
+                  direction: 'in', amount: newPartner.initialCapital, date: newPartner.joinDate,
+                  reference: newPartner.id, description: `رأس مال تأسيسي للشريك ${newPartner.name}`,
+                }, bankAccounts, bankLedgerEntries);
+                if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً لاستلام رأس المال.'); return false; }
+                capitalBankEntry = posting.entry;
               }
               const updatedPartners = [newPartner, ...partners];
               setPartners(updatedPartners);
@@ -3027,6 +3037,7 @@ export default function App() {
                 category: 'ضخ رأس مال من شريك',
                 amount: newPartner.initialCapital,
                 paymentMethod: paymentMethod as PaymentMethod,
+                bankAccountId: requiresSpecificBankAccount(paymentMethod) ? bankAccountId : undefined,
                 balanceAfter: treasuryBalance + newPartner.initialCapital,
                 referenceId: newPartner.id,
                 description: `رأس مال تأسيسي للشريك ${newPartner.name} — ${notes || ''}`,
@@ -3037,6 +3048,10 @@ export default function App() {
                 persistChanges({ treasuryTransactions: updated });
                 return updated;
               });
+              if (capitalBankEntry) {
+                const nextBankEntries = [capitalBankEntry, ...bankLedgerEntries];
+                setBankLedgerEntries(nextBankEntries); persistChanges({ bankLedgerEntries: nextBankEntries });
+              }
               logAudit('partner.add', `إضافة الشريك ${newPartner.name} بحصة ${newPartner.sharePercentage}% ورأس مال ${newPartner.initialCapital} ج.م`, newPartner.id, newPartner.initialCapital);
               return true;
             }}
@@ -3052,9 +3067,20 @@ export default function App() {
               });
               logAudit('partner.share.update', `تعديل نسبة الشريك ${partnerId} إلى ${newSharePercentage}%`, partnerId, newSharePercentage);
             }}
-            onInjectCapital={(partnerId: string, amount: number, paymentMethod: string, notes: string, recalculatePercentages: boolean) => {
+            onInjectCapital={(partnerId: string, amount: number, paymentMethod: string, notes: string, recalculatePercentages: boolean, bankAccountId?: string) => {
               const target = partners.find(partner => partner.id === partnerId);
               if (!target || !Number.isFinite(amount) || amount <= 0) return;
+              const capitalTxId = `TX-CAPITAL-${partnerId}-${Date.now()}`;
+              let capitalBankEntry: BankLedgerEntry | null = null;
+              if (requiresSpecificBankAccount(paymentMethod)) {
+                const posting = createBankMovementEntry({
+                  id: `partner-capital:${capitalTxId}`, batchId: capitalTxId, bankAccountId: bankAccountId || '',
+                  direction: 'in', amount, date: todayISO(), reference: capitalTxId,
+                  description: `ضخ رأس مال إضافي للشريك ${target.name}`,
+                }, bankAccounts, bankLedgerEntries);
+                if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً لاستلام ضخ رأس المال.'); return; }
+                capitalBankEntry = posting.entry;
+              }
               const updatedPartners = partners.map(partner => {
                 if (partner.id !== partnerId) return partner;
                 const addedCapital = (partner.addedCapital || 0) + amount;
@@ -3067,7 +3093,7 @@ export default function App() {
               setPartners(finalPartners);
               persistChanges({ partners: finalPartners });
               const tx: TreasuryTransaction = {
-                id: `TX-CAPITAL-${partnerId}-${Date.now()}`,
+                id: capitalTxId,
                 txNumber: uniqueTransactionNumber('TX-CAP'),
                 date: todayISO(),
                 time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
@@ -3075,12 +3101,17 @@ export default function App() {
                 category: 'ضخ رأس مال من شريك',
                 amount,
                 paymentMethod: paymentMethod as PaymentMethod,
+                bankAccountId: requiresSpecificBankAccount(paymentMethod) ? bankAccountId : undefined,
                 balanceAfter: treasuryBalance + amount,
                 referenceId: partnerId,
                 description: `ضخ رأس مال إضافي للشريك ${target.name} — ${notes || ''}`,
                 recordedBy: currentUser?.employeeName || 'المدير العام',
               };
               setTreasury(prev => { const updated = [tx, ...prev]; persistChanges({ treasuryTransactions: updated }); return updated; });
+              if (capitalBankEntry) {
+                const nextBankEntries = [capitalBankEntry, ...bankLedgerEntries];
+                setBankLedgerEntries(nextBankEntries); persistChanges({ bankLedgerEntries: nextBankEntries });
+              }
               logAudit('partner.capital.add', `ضخ ${amount} ج.م كرأس مال إضافي للشريك ${target.name}`, partnerId, amount);
             }}
             onReinvestProfit={(partnerId: string, amount: number, notes: string) => {
