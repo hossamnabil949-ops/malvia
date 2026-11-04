@@ -260,6 +260,7 @@ export interface Expense {
   date: string;
   notes?: string;
   paymentMethod: PaymentMethod | string;
+  bankAccountId?: string;
   recordedBy: string;
 }
 
@@ -356,6 +357,7 @@ export interface SupplierPayment {
   amount: number;
   paymentDate: string;
   paymentMethod: PaymentMethod | string;
+  bankAccountId?: string;
   treasurySource: string;
   notes?: string;
   recordedBy: string;
@@ -412,6 +414,7 @@ export interface PurchaseInvoice {
   amountPaid: number;
   remainingBalance?: number;
   paymentMethod: PaymentMethod | string;
+  bankAccountId?: string;
   notes?: string;
   receivedBy: string;
   returnedAmount?: number;
