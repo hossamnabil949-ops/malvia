@@ -137,7 +137,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   onInjectCapital,
   onReinvestProfit,
   bankAccounts = [], cardSettlements = [], bankLedgerEntries = [], outstandingVisaBalance = 0,
-  onAddBankAccount, onSettleVisa, onTransferBank, onTransferBank,
+  onAddBankAccount, onSettleVisa, onTransferBank,
   canManageExpenses = true, canManageTreasury = true, canManagePartners = true,
 }) => {
   type FinanceTab = 'income' | 'equity' | 'treasury' | 'expenses' | 'audit' | 'bankLedger';
