@@ -2855,7 +2855,7 @@ export default function App() {
             }}
             onReinvestProfit={(partnerId: string, amount: number, notes: string) => {
               const target = partners.find(partner => partner.id === partnerId);
-              if (!target || !Number.isFinite(amount) || amount <= 0 || amount > netDistributableProfit) return;
+              if (!target || !Number.isFinite(amount) || amount <= 0) return;
               setPartners(prev => {
                 const updated = prev.map(partner => partner.id === partnerId ? {
                   ...partner,
