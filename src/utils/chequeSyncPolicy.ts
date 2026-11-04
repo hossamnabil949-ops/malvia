@@ -17,7 +17,9 @@ const same = (a: any, b: any): boolean => JSON.stringify(stable(a)) === JSON.str
 const NEXT: Record<string, string[]> = {
   'incoming:في الحافظة': ['مودع بالبنك', 'محصّل', 'مرتد', 'ملغي'],
   'incoming:مودع بالبنك': ['محصّل', 'مرتد'],
+  'incoming:محصّل': ['مرتد'],
   'outgoing:صادر': ['مصروف', 'مرتد', 'ملغي'],
+  'outgoing:مصروف': ['مرتد'],
 };
 
 export function validateChequeCollectionSync(
@@ -70,7 +72,12 @@ export function validateChequeCollectionSync(
     if (newHistory.length !== oldHistory.length + 1 || newHistory[newHistory.length - 1]?.status !== nextStatus) {
       return 'CHEQUE_HISTORY_INVALID';
     }
+    if (oldItem.clearedBankAccountId && item.clearedBankAccountId !== oldItem.clearedBankAccountId) {
+      return 'CHEQUE_BANK_ACCOUNT_IMMUTABLE';
+    }
     if (nextStatus === 'محصّل' || nextStatus === 'مصروف') {
+      if (!String(item.clearedBankAccountId || '').trim()) return 'CHEQUE_BANK_ACCOUNT_REQUIRED';
+    } else if (nextStatus === 'مرتد' && (oldStatus === 'محصّل' || oldStatus === 'مصروف')) {
       if (!String(item.clearedBankAccountId || '').trim()) return 'CHEQUE_BANK_ACCOUNT_REQUIRED';
     } else if (item.clearedBankAccountId) {
       return 'CHEQUE_BANK_ACCOUNT_INVALID';
@@ -104,20 +111,37 @@ export function validateChequeAuxiliarySync(input: {
     const previousCheque = oldCheques.get(chequeId);
     if (!cheque || !previousCheque) return 'CHEQUE_REFERENCE_INVALID';
     const expectedStatus = cheque.direction === 'incoming' ? 'محصّل' : 'مصروف';
+    const previousClearedStatus = cheque.direction === 'incoming' ? 'محصّل' : 'مصروف';
+    const bouncedAfterClear = cheque.status === 'مرتد' && previousCheque.status === previousClearedStatus;
     const oldOpen = cheque.direction === 'incoming'
       ? ['في الحافظة', 'مودع بالبنك'].includes(String(previousCheque.status))
       : previousCheque.status === 'صادر';
-    if (!oldOpen || cheque.status !== expectedStatus || !(Number(cheque.amount) > 0)) return 'CHEQUE_STATE_INVALID';
+    if ((!bouncedAfterClear && (!oldOpen || cheque.status !== expectedStatus)) || !(Number(cheque.amount) > 0)) {
+      return 'CHEQUE_STATE_INVALID';
+    }
     if (input.resource === 'treasury' && input.employee.name && item.recordedBy !== input.employee.name) return 'CHEQUE_ACTOR_MISMATCH';
     if (input.resource === 'treasury') {
-      const expectedType = cheque.direction === 'incoming' ? 'قبض' : 'صرف';
-      const expectedCategory = cheque.direction === 'incoming' ? 'تحصيل من عميل / ورشة' : 'سداد دفعة لمورد';
+      const expectedType = bouncedAfterClear
+        ? (cheque.direction === 'incoming' ? 'صرف' : 'قبض')
+        : (cheque.direction === 'incoming' ? 'قبض' : 'صرف');
+      const expectedCategory = bouncedAfterClear
+        ? (cheque.direction === 'incoming' ? 'ارتداد شيك وارد' : 'ارتداد شيك صادر')
+        : (cheque.direction === 'incoming' ? 'تحصيل من عميل / ورشة' : 'سداد دفعة لمورد');
       if (!String(item.id || '').startsWith('TX-CHQ-') || item.type !== expectedType ||
           item.category !== expectedCategory || item.paymentMethod !== 'شيك (حساب بنكي)' ||
           Number(item.amount) !== Number(cheque.amount)) return 'CHEQUE_TREASURY_ENTRY_INVALID';
     } else {
       const account = accounts.get(String(item.bankAccountId || ''));
-      if (item.id !== 'cheque:' + chequeId || item.batchId !== chequeId ||
+      if (bouncedAfterClear) {
+        const original = input.previous.find(entry => entry.id === 'cheque:' + chequeId);
+        if (item.id !== 'cheque-bounce:' + chequeId || item.batchId !== chequeId ||
+            item.accountKind !== 'bank' || item.direction !== (cheque.direction === 'incoming' ? 'out' : 'in') ||
+            Number(item.amount) !== Number(cheque.amount) ||
+            item.bankAccountId !== cheque.clearedBankAccountId || !original ||
+            original.bankAccountId !== item.bankAccountId || !account || account.active !== true) {
+          return 'CHEQUE_BANK_REVERSAL_INVALID';
+        }
+      } else if (item.id !== 'cheque:' + chequeId || item.batchId !== chequeId ||
           item.accountKind !== 'bank' || item.direction !== (cheque.direction === 'incoming' ? 'in' : 'out') ||
           Number(item.amount) !== Number(cheque.amount) ||
           item.bankAccountId !== cheque.clearedBankAccountId || !account || account.active !== true) {
