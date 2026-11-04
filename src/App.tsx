@@ -42,7 +42,7 @@ import {
   Shift
 } from './types/autoParts';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
-import { createBankMovementEntry, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount } from './utils/bankLedger';
+import { createBankMovementEntry, createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount } from './utils/bankLedger';
 import { requiresSpecificBankAccount } from './utils/paymentMethods';
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
@@ -2373,6 +2373,27 @@ export default function App() {
     persistChanges({ bankAccounts: updated });
   };
 
+  const handleBankTransfer = (input: { id: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; date: string; reference: string }): { ok: boolean; message?: string } => {
+    const result = createBankTransferEntries(input, bankAccounts, bankLedgerEntries);
+    if (result.error) {
+      const messages: Record<string, string> = {
+        BANK_TRANSFER_SOURCE_REQUIRED: 'اختر الحساب المصدر.',
+        BANK_TRANSFER_DESTINATION_REQUIRED: 'اختر الحساب المستلم.',
+        BANK_TRANSFER_SAME_ACCOUNT: 'يجب اختيار حسابين مختلفين.',
+        BANK_TRANSFER_ACCOUNT_INACTIVE: 'الحساب المصدر أو المستلم غير موجود أو موقوف.',
+        BANK_TRANSFER_DUPLICATE: 'تم تسجيل هذا التحويل من قبل.',
+        BANK_TRANSFER_AMOUNT_INVALID: 'قيمة التحويل يجب أن تكون أكبر من صفر.',
+        BANK_TRANSFER_DATE_INVALID: 'تاريخ التحويل غير صحيح.',
+      };
+      return { ok: false, message: messages[result.error] || 'بيانات التحويل غير صالحة.' };
+    }
+    const nextEntries = [...result.entries, ...bankLedgerEntries];
+    setBankLedgerEntries(nextEntries);
+    persistChanges({ bankLedgerEntries: nextEntries });
+    logAudit('bank.transfer', `تحويل بنكي بقيمة ${input.amount} ج.م من ${bankAccounts.find(a => a.id === input.sourceBankAccountId)?.name || ''} إلى ${bankAccounts.find(a => a.id === input.destinationBankAccountId)?.name || ''}`, input.id, input.amount);
+    return { ok: true };
+  };
+
   const handleSettleVisa = (batch: CardSettlementBatch): { ok: boolean; message?: string } => {
     const currentVisa = summarizeTreasury(treasury).accounts.find(a => a.key === 'visa')?.balance || 0;
     const outstanding = Math.max(0, currentVisa);
@@ -2777,6 +2798,7 @@ export default function App() {
           <CustomersView
             customers={customersWithPoints}
             invoices={invoices}
+            bankAccounts={bankAccounts}
             onAddCustomer={handleAddCustomer}
             loyaltyEnabled={resolveLoyalty(settings.loyalty).enabled}
             canAdjustLoyalty={effectiveRole === 'مدير عام'}
@@ -2791,11 +2813,14 @@ export default function App() {
                 return updated;
               });
             }}
-            onSettleBalance={(customerId: string, amount: number) => {
+            onSettleBalance={(customerId: string, amount: number, paymentMethod = 'نقدي', bankAccountId?: string) => {
               const cust = customers.find(c => c.id === customerId);
               if (!cust || !Number.isFinite(amount) || amount <= 0 || amount > cust.balance + 0.005) {
                 window.alert('قيمة التحصيل غير صحيحة أو أكبر من رصيد العميل المستحق.');
                 return;
+              }
+              if (requiresSpecificBankAccount(paymentMethod) && !bankAccounts.some(account => account.id === bankAccountId && account.active)) {
+                window.alert('اختر حساباً بنكياً نشطاً قبل اعتماد التحصيل.'); return;
               }
               const receiptNumber = uniqueTransactionNumber('RCPT');
               const collectedAt = new Date();
@@ -2818,7 +2843,7 @@ export default function App() {
                   if (outstanding <= 0.005) continue;
                   const applied = Math.min(remaining, outstanding);
                   const settlementPayments = [...(invoice.settlementPayments || []), {
-                    amount: applied, date: collectedDate, time: collectedTime, paymentMethod: 'نقدي', receiptNumber,
+                    amount: applied, date: collectedDate, time: collectedTime, paymentMethod, receiptNumber,
                   }];
                   const newOutstanding = Math.max(0, outstanding - applied);
                   const paymentStatus = newOutstanding <= 0.005 ? 'مسددة' as const
@@ -2851,7 +2876,8 @@ export default function App() {
                 type: 'قبض',
                 category: 'تحصيل من عميل / ورشة',
                 amount,
-                paymentMethod: 'نقدي',
+                paymentMethod: paymentMethod as PaymentMethod,
+                bankAccountId: requiresSpecificBankAccount(paymentMethod) ? bankAccountId : undefined,
                 balanceAfter: treasuryBalance + amount,
                 referenceId: customerId,
                 description: `تحصيل من عميل: ${cust?.name || customerId}`,
@@ -2862,6 +2888,17 @@ export default function App() {
                 persistChanges({ treasuryTransactions: updated });
                 return updated;
               });
+              if (requiresSpecificBankAccount(paymentMethod)) {
+                const posting = createBankMovementEntry({
+                  id: `customer-collection:${receiptNumber}`, batchId: receiptNumber,
+                  bankAccountId: bankAccountId || '', direction: 'in', amount, date: collectedDate,
+                  reference: receiptNumber, description: `تحصيل من العميل ${cust.name}`,
+                }, bankAccounts, bankLedgerEntries);
+                if (posting.entry) {
+                  const nextEntries = [posting.entry, ...bankLedgerEntries];
+                  setBankLedgerEntries(nextEntries); persistChanges({ bankLedgerEntries: nextEntries });
+                }
+              }
             }}
           />
         )}
@@ -2969,6 +3006,7 @@ export default function App() {
             outstandingVisaBalance={Math.max(0, summarizeTreasury(treasury).accounts.find(a => a.key === 'visa')?.balance || 0)}
             onAddBankAccount={handleAddBankAccount}
             onSettleVisa={handleSettleVisa}
+            onTransferBank={handleBankTransfer}
             canManageExpenses={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury)}
             canManageTreasury={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageTreasury)}
             canManagePartners={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManagePartners)}
