@@ -9,6 +9,7 @@ interface BankLedgerViewProps {
   outstandingVisaBalance: number;
   onAddBankAccount: (account: BankAccount) => void;
   onSettleVisa: (batch: CardSettlementBatch) => { ok: boolean; message?: string };
+  onTransferBank?: (input: { id: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; date: string; reference: string }) => { ok: boolean; message?: string };
 }
 
 const today = () => todayISO();
@@ -16,7 +17,7 @@ const money = (n: number) => `${n.toLocaleString('ar-EG', { maximumFractionDigit
 const inputClass = 'w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-xs';
 
 export const BankLedgerView: React.FC<BankLedgerViewProps> = ({
-  accounts, settlements, entries, outstandingVisaBalance, onAddBankAccount, onSettleVisa,
+  accounts, settlements, entries, outstandingVisaBalance, onAddBankAccount, onSettleVisa, onTransferBank,
 }) => {
   const [accountName, setAccountName] = useState('');
   const [bankName, setBankName] = useState('');
@@ -29,6 +30,11 @@ export const BankLedgerView: React.FC<BankLedgerViewProps> = ({
   const [settlementDate, setSettlementDate] = useState(today());
   const [reference, setReference] = useState('');
   const [bankAccountId, setBankAccountId] = useState(accounts.find(a => a.active)?.id || '');
+  const [transferSourceId, setTransferSourceId] = useState('');
+  const [transferDestinationId, setTransferDestinationId] = useState('');
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferDate, setTransferDate] = useState(today());
+  const [transferReference, setTransferReference] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -92,6 +98,20 @@ export const BankLedgerView: React.FC<BankLedgerViewProps> = ({
     setNotice('تم تسجيل التسوية وربط صافي المبلغ بالحساب البنكي المحدد.');
   };
 
+  const submitTransfer = (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(''); setNotice('');
+    if (!onTransferBank) { setError('وظيفة التحويل البنكي غير متاحة حالياً.'); return; }
+    const amount = Number(transferAmount);
+    if (!transferSourceId || !transferDestinationId || transferSourceId === transferDestinationId || !Number.isFinite(amount) || amount <= 0 || !transferDate) {
+      setError('اختر حسابين مختلفين نشطين وأدخل مبلغاً وتاريخاً صحيحين.'); return;
+    }
+    const result = onTransferBank({ id: `BANK-TRF-${Date.now()}`, sourceBankAccountId: transferSourceId, destinationBankAccountId: transferDestinationId, amount, date: transferDate, reference: transferReference.trim() });
+    if (!result.ok) { setError(result.message || 'تعذّر تسجيل التحويل البنكي.'); return; }
+    setTransferAmount(''); setTransferReference('');
+    setNotice('تم تسجيل التحويل بقيدين متقابلين: صرف من الحساب المصدر وإيداع في الحساب المستلم.');
+  };
+
   return (
     <div className="space-y-5" dir="rtl">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -144,6 +164,27 @@ export const BankLedgerView: React.FC<BankLedgerViewProps> = ({
           <p className="text-[10px] text-neutral-500">لا تسجل التسوية إلا بعد ظهور الإيداع في كشف البنك. لا تُضاف مستحقات الفيزا إلى رصيد البنك قبل هذه الخطوة.</p>
         </form>
       </div>
+
+      <form onSubmit={submitTransfer} className="p-4 rounded-2xl bg-surface-2 border border-sky-500/30 space-y-3">
+        <div>
+          <h3 className="font-black text-white text-sm">تحويل بين حسابين بنكيين</h3>
+          <p className="text-[10px] text-neutral-500 mt-1">يسجل النظام حركة صرف من المصدر وحركة قبض مساوية في الحساب المستلم، دون التأثير على إجمالي النقدية أو الخزينة.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+          <select className={inputClass} value={transferSourceId} onChange={e => setTransferSourceId(e.target.value)} required>
+            <option value="">الحساب المحوّل منه</option>
+            {activeAccounts.map(a => <option key={a.id} value={a.id}>{a.bankName} — {a.name}</option>)}
+          </select>
+          <select className={inputClass} value={transferDestinationId} onChange={e => setTransferDestinationId(e.target.value)} required>
+            <option value="">الحساب المستلم</option>
+            {activeAccounts.filter(a => a.id !== transferSourceId).map(a => <option key={a.id} value={a.id}>{a.bankName} — {a.name}</option>)}
+          </select>
+          <input className={inputClass} type="number" min="0.01" step="0.01" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} placeholder="المبلغ" required />
+          <input className={inputClass} type="date" value={transferDate} onChange={e => setTransferDate(e.target.value)} required />
+          <input className={inputClass} value={transferReference} onChange={e => setTransferReference(e.target.value)} placeholder="رقم مرجع التحويل" />
+        </div>
+        <button className="h-10 px-4 rounded-xl bg-sky-500 text-black text-xs font-black disabled:opacity-40" type="submit" disabled={activeAccounts.length < 2}>تسجيل التحويل البنكي</button>
+      </form>
 
       <section className="space-y-2">
         <h3 className="font-black text-white text-sm">أرصدة الحسابات البنكية</h3>
