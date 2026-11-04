@@ -5,15 +5,16 @@ import { ApiError, clientIp, findLicense, rateLimit, sendError } from './_securi
 
 const policy: Record<string, string[]> = {
   employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'],
-  parts: ['canManageInventory','canManagePurchases','canSellPos'], stockLevels: ['canManageInventory','canManagePurchases','canSellPos'],
-  stockBatches: ['canManageInventory','canManagePurchases','canSellPos'], serialUnits: ['canManageInventory','canManagePurchases','canSellPos'],
+  parts: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], stockLevels: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
+  stockBatches: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], serialUnits: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
   inventoryErrors: ['canManageInventory'], stockTransfers: ['canManageInventory'], warehouses: ['canManageInventory'],
   invoices: ['canSellPos'], salesReturns: ['canSellPos'], loyaltyLedger: ['canSellPos'], customers: ['canSellPos','canManageTreasury'],
-  suppliers: ['canManagePurchases','canManageTreasury'], supplierPayments: ['canManagePurchases','canManageTreasury'],
-  supplierPaymentSchedules: ['canManagePurchases','canManageTreasury'], purchaseInvoices: ['canManagePurchases'],
-  purchaseReturns: ['canManagePurchases'], expenses: ['canManageTreasury'],
-  treasury: ['canManageTreasury','canSellPos','canManagePurchases'], shifts: ['canSellPos','canManageTreasury'],
-  stockMovements: ['canManageInventory','canManagePurchases','canSellPos'],
+  suppliers: ['canManagePurchases','canReceivePurchases','canManageTreasury'], supplierPayments: ['canManagePurchases','canManageTreasury'],
+  supplierPaymentSchedules: ['canManagePurchases','canManageTreasury'], purchaseInvoices: ['canManagePurchases','canReceivePurchases'],
+  purchaseReturns: ['canManagePurchases'], expenses: ['canManageExpenses','canManageTreasury'],
+  treasury: ['canManageTreasury','canSellPos','canManagePurchases'], bankAccounts: ['canManageTreasury'], cardSettlements: ['canManageTreasury'], bankLedgerEntries: ['canManageTreasury'],
+  shifts: ['canSellPos','canManageTreasury'],
+  stockMovements: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
   auditLog: ['canSellPos','canManageInventory','canManagePurchases','canManageTreasury','canManageSettings'],
   carModels: ['canManageInventory'], reservations: ['canSellPos'], cheques: ['canManageTreasury'],
 };
