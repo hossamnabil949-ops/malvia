@@ -3053,6 +3053,11 @@ export default function App() {
               const bankTotals = new Map<string, number>();
               record.lines.filter(line => line.category === 'bank' && line.bankAccountId).forEach(line => bankTotals.set(line.bankAccountId!, (bankTotals.get(line.bankAccountId!) || 0) + line.amount));
               const nextBanks = bankAccounts.map(account => bankTotals.has(account.id) ? { ...account, openingBalance: bankTotals.get(account.id)!, openingDate: record.cutoverDate } : account);
+              const receivables = new Map<string, number>();
+              const payables = new Map<string, number>();
+              record.lines.forEach(line => { if (line.entityId && line.category === 'customer_receivable') receivables.set(line.entityId, (receivables.get(line.entityId) || 0) + line.amount); if (line.entityId && line.category === 'supplier_payable') payables.set(line.entityId, (payables.get(line.entityId) || 0) + line.amount); });
+              const nextCustomers = customers.map(customer => receivables.has(customer.id) ? { ...customer, balance: (customer.balance || 0) + receivables.get(customer.id)! } : customer);
+              const nextSuppliers = suppliers.map(supplier => payables.has(supplier.id) ? { ...supplier, balance: (supplier.balance || 0) + payables.get(supplier.id)!, deferredDebt: (supplier.deferredDebt || 0) + payables.get(supplier.id)! } : supplier);
               const nextPartners = partners.map(partner => {
                 const opening = record.partners.find(item => item.partnerId === partner.id);
                 if (!opening) return partner;
@@ -3063,8 +3068,8 @@ export default function App() {
               const nextMovements = [...movements, ...stockMovements];
               const audit: AuditEntry = { id: record.id + ':AUDIT', at: record.approvedAt || new Date().toISOString(), userId: currentUser.employeeId, userName: currentUser.employeeName, userRole: currentUser.role, action: 'capital.opening.create', entityId: record.id, summary: 'اعتماد الأرصدة الافتتاحية بتاريخ ' + record.cutoverDate, amount: record.originalCapital };
               const nextAudit = [audit, ...auditLog];
-              setParts(nextParts); setStockMovements(nextMovements); setTreasury(nextTreasury); setBankAccounts(nextBanks); setPartners(nextPartners); setOpeningBalances([record]); setAuditLog(nextAudit);
-              persistChanges({ parts: nextParts, stockMovements: nextMovements, treasuryTransactions: nextTreasury, bankAccounts: nextBanks, partners: nextPartners, openingBalances: [record], auditLog: nextAudit });
+              setParts(nextParts); setStockMovements(nextMovements); setTreasury(nextTreasury); setBankAccounts(nextBanks); setPartners(nextPartners); setCustomers(nextCustomers); setSuppliers(nextSuppliers); setOpeningBalances([record]); setAuditLog(nextAudit);
+              persistChanges({ parts: nextParts, stockMovements: nextMovements, treasuryTransactions: nextTreasury, bankAccounts: nextBanks, partners: nextPartners, customers: nextCustomers, suppliers: nextSuppliers, openingBalances: [record], auditLog: nextAudit });
               return true;
             }}
             outstandingVisaBalance={Math.max(0, summarizeTreasury(treasury).accounts.find(a => a.key === 'visa')?.balance || 0)}
