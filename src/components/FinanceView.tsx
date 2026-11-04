@@ -68,6 +68,7 @@ import { TreasuryAccountsReport } from './TreasuryAccountsReport';
 import { AuditLogPanel } from './AuditLogPanel';
 import { BankLedgerView } from './BankLedgerView';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from '../utils/bankLedger';
+import { requiresSpecificBankAccount } from '../utils/paymentMethods';
 
 interface FinanceViewProps {
   invoices: Invoice[];
@@ -179,6 +180,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [expenseAmount, setExpenseAmount] = useState<number>(0);
   const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory>('إيجار المحل والمستودع');
   const [expensePaymentMethod, setExpensePaymentMethod] = useState<PaymentMethod>('نقدي');
+  const [expenseBankAccountId, setExpenseBankAccountId] = useState('');
   const [expenseNotes, setExpenseNotes] = useState('');
 
   const [newPartnerName, setNewPartnerName] = useState('');
@@ -396,6 +398,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       amount: expenseAmount,
       date: new Date().toISOString().split('T')[0],
       paymentMethod: expensePaymentMethod,
+      bankAccountId: requiresSpecificBankAccount(expensePaymentMethod) ? expenseBankAccountId : undefined,
       notes: expenseNotes,
       recordedBy: 'المحاسب المالي',
     };
@@ -1326,7 +1329,11 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   >
                     <option value="نقدي">نقدي (إيداع الخزينة)</option>
                     <option value="فيزا / بطاقة">فيزا / مدى (الحساب البنكي)</option>
-                    <option value="انستاباي / InstaPay">انستاباي InstaPay</option>
+                    <option value="InstaPay - حساب بنكي">InstaPay إلى حساب بنكي</option>
+                    <option value="InstaPay - محفظة">InstaPay إلى محفظة</option>
+                    <option value="انستاباي / InstaPay">InstaPay قديم / غير محدد</option>
+                    <option value="تحويل بنكي">تحويل بنكي</option>
+                    <option value="فيزا / بطاقة">فيزا / بطاقة بنكية</option>
                   </select>
                 </div>
               </div>
@@ -1514,6 +1521,16 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   </select>
                 </div>
               </div>
+              {requiresSpecificBankAccount(expensePaymentMethod) && (
+                <div>
+                  <label className="text-amber-300 font-bold block mb-1">الحساب البنكي الذي خرج منه المصروف *</label>
+                  <select required value={expenseBankAccountId} onChange={e => setExpenseBankAccountId(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-amber-500/50 text-white">
+                    <option value="">اختر الحساب البنكي</option>
+                    {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}{account.accountLast4 ? ` ••${account.accountLast4}` : ''}</option>)}
+                  </select>
+                  {!bankAccounts.some(account => account.active) && <p className="text-[10px] text-rose-300 mt-1">لا يوجد حساب بنكي نشط. أضف حساباً من دفتر الحسابات البنكية.</p>}
+                </div>
+              )}
 
               <button
                 type="submit"
