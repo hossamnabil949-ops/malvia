@@ -3030,6 +3030,8 @@ export default function App() {
             cardSettlements={cardSettlements}
             bankLedgerEntries={bankLedgerEntries}
             openingBalances={openingBalances}
+            canManageOpeningBalances={currentUser?.role === 'مدير عام'}
+            currentUserName={currentUser?.employeeName || 'المدير العام'}
             onApproveOpeningBalances={(record: OpeningBalanceRecord) => {
               if (currentUser?.role !== 'مدير عام' || openingBalances.length) return false;
               const nextParts = parts.map(part => {
