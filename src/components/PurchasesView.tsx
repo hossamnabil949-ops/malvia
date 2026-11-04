@@ -43,6 +43,8 @@ import { DateRangeFilter } from './DateRangeFilter';
 import { BarcodeScanButton, useBarcodeWedge } from './BarcodeScanner';
 import { beep, findPartByBarcode } from '../utils/barcodeLookup';
 import { nextPurchaseInvoiceNumber } from '../utils/invoiceNumber';
+import type { BankAccount } from '../utils/bankLedger';
+import { requiresSpecificBankAccount } from '../utils/paymentMethods';
 import { DateRange, EMPTY_DATE_RANGE, inDateRange } from '../utils/dateRange';
 
 interface PurchasesViewProps {
@@ -63,6 +65,7 @@ interface PurchasesViewProps {
   defaultTaxEnabled?: boolean;
   defaultTaxRate?: number;
   canReceiveOnly?: boolean;
+  bankAccounts?: BankAccount[];
 }
 
 export const PurchasesView: React.FC<PurchasesViewProps> = ({
@@ -83,6 +86,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   defaultTaxEnabled = false,
   defaultTaxRate = 14,
   canReceiveOnly = false,
+  bankAccounts = [],
 }) => {
   const [currentTab, setCurrentTab] = useState<'invoices' | 'returns'>('invoices');
   useEffect(() => { if (canReceiveOnly) setCurrentTab('invoices'); }, [canReceiveOnly]);
@@ -116,6 +120,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentStatus, setPaymentStatus] = useState<'مدفوعة نقداً' | 'آجل' | 'مسددة جزئياً'>('مدفوعة نقداً');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | string>('كاش (نقدي)');
+  const [bankAccountId, setBankAccountId] = useState('');
   const [amountPaid, setAmountPaid] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
   const [applyTax, setApplyTax] = useState<boolean>(defaultTaxEnabled);
@@ -345,6 +350,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       amountPaid: finalAmountPaid,
       remainingBalance: Math.max(0, grandTotal - finalAmountPaid),
       paymentMethod: canReceiveOnly ? 'آجل / حساب ورشة' : paymentMethod,
+      bankAccountId: !canReceiveOnly && finalAmountPaid > 0 && requiresSpecificBankAccount(paymentMethod) ? bankAccountId : undefined,
       notes: notes.trim() || undefined,
       receivedBy,
     };
@@ -1290,11 +1296,24 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                       className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none"
                     >
                       <option value="كاش (نقدي)">كاش (نقدي من الخزنة)</option>
-                      <option value="إنستاباي / InstaPay">إنستاباي InstaPay</option>
+                      <option value="InstaPay - حساب بنكي">InstaPay إلى حساب بنكي</option>
+                      <option value="InstaPay - محفظة">InstaPay إلى محفظة</option>
+                      <option value="إنستاباي / InstaPay">InstaPay قديم / غير محدد</option>
                       <option value="فودافون كاش ومحافظ إلكترونية">فودافون كاش</option>
-                      <option value="فيزا / بطاقة بنكية">تحويل بنكي / فيزا</option>
+                      <option value="تحويل بنكي">تحويل بنكي</option>
+                      <option value="فيزا / بطاقة بنكية">فيزا / بطاقة بنكية</option>
                     </select>
                   </div>
+                  {amountPaid > 0 && requiresSpecificBankAccount(paymentMethod) && (
+                    <div className="sm:col-span-3">
+                      <label className="text-xs font-bold text-amber-300 block mb-1">الحساب البنكي الذي خرجت منه الدفعة *</label>
+                      <select required value={bankAccountId} onChange={e => setBankAccountId(e.target.value)} className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-amber-500/50 text-xs text-white">
+                        <option value="">اختر الحساب البنكي</option>
+                        {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}{account.accountLast4 ? ` ••${account.accountLast4}` : ''}</option>)}
+                      </select>
+                      {!bankAccounts.some(account => account.active) && <p className="text-[10px] text-rose-300 mt-1">أضف حساباً بنكياً نشطاً أولاً من المالية ← دفتر الحسابات البنكية.</p>}
+                    </div>
+                  )}
                 </>
               )}
               </div>
