@@ -215,13 +215,13 @@ import { availableActions, nextStatus, registrationEffect, actionEffect, applyAc
   // مسارات الحالة
   assert.deepEqual(availableActions(mk()), ['deposit', 'clear', 'bounce', 'cancel']);
   assert.deepEqual(availableActions(mk({ status: 'مودع بالبنك' })), ['clear', 'bounce']);
-  assert.deepEqual(availableActions(mk({ status: 'محصّل' })), []);
+  assert.deepEqual(availableActions(mk({ status: 'محصّل' })), ['bounce']);
   assert.deepEqual(availableActions(mk({ status: 'مرتد' })), []);
   assert.deepEqual(availableActions(mk({ direction: 'outgoing', status: 'صادر' })), ['clear', 'bounce', 'cancel']);
   assert.equal(nextStatus(mk({ status: 'مودع بالبنك' }), 'deposit'), null);              // لا إيداع مرتين
   assert.equal(nextStatus(mk({ status: 'مودع بالبنك' }), 'cancel'), null);               // بعد الإيداع لا إلغاء
   assert.equal(nextStatus(mk({ direction: 'outgoing', status: 'صادر' }), 'clear'), 'مصروف');
-  assert.equal(applyAction(mk({ status: 'محصّل' }), 'bounce', 'u', '2026-11-11T00:00:00.000Z'), null); // المحصّل لا يرتد
+  assert.equal(applyAction(mk({ status: 'محصّل' }), 'bounce', 'u', '2026-11-11T00:00:00.000Z')?.status, 'مرتد'); // يمكن عكس التحصيل إذا ارتد الشيك لاحقاً
   assert.equal(initialStatus('incoming'), 'في الحافظة'); assert.equal(initialStatus('outgoing'), 'صادر');
   const dep = applyAction(mk(), 'deposit', 'أحمد', '2026-11-01T09:00:00.000Z', ' إيداع صباحي ')!;
   assert.equal(dep.status, 'مودع بالبنك'); assert.equal(dep.history.length, 1); assert.equal(dep.history[0].note, 'إيداع صباحي');
