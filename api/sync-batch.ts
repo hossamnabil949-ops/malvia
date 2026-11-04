@@ -1,6 +1,6 @@
 // FIN-18: atomic multi-resource sync. Every resource is validated and committed in one PostgreSQL transaction.
 import { commitSyncBatch, getAuthenticatedEmployee, getOne } from './_db.js';
-import { validateChequeAuditSync, validateChequeAuxiliarySync, validateChequeCollectionSync } from '../src/utils/chequeSyncPolicy';
+import { validateChequeAuditSync, validateChequeAuxiliarySync, validateChequeCollectionSync, validateExpenseOnlySync } from '../src/utils/chequeSyncPolicy';
 import { createHash } from 'node:crypto';
 import { ApiError, clientIp, findLicense, rateLimit, sendError } from './_security.js';
 
@@ -13,7 +13,7 @@ const policy: Record<string, string[]> = {
   suppliers: ['canManagePurchases','canReceivePurchases','canManageTreasury'], supplierPayments: ['canManagePurchases','canManageTreasury'],
   supplierPaymentSchedules: ['canManagePurchases','canManageTreasury'], purchaseInvoices: ['canManagePurchases','canReceivePurchases'],
   purchaseReturns: ['canManagePurchases'], expenses: ['canManageExpenses','canManageTreasury'],
-  treasury: ['canManageTreasury','canSellPos','canManagePurchases','canManageChequeLifecycle'], bankAccounts: ['canManageTreasury'], cardSettlements: ['canManageTreasury'], bankLedgerEntries: ['canManageTreasury','canManageChequeLifecycle'],
+  treasury: ['canManageTreasury','canSellPos','canManagePurchases','canManageChequeLifecycle','canManageExpenses'], bankAccounts: ['canManageTreasury'], cardSettlements: ['canManageTreasury'], bankLedgerEntries: ['canManageTreasury','canManageChequeLifecycle'],
   shifts: ['canSellPos','canManageTreasury'],
   stockMovements: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
   auditLog: ['canSellPos','canManageInventory','canManagePurchases','canManageTreasury','canManageSettings','canRegisterCheques','canManageChequeLifecycle'],
@@ -57,7 +57,7 @@ export default async function handler(req: any, res: any) {
       if (!allowed) return res.status(403).json({ code: 'EMPLOYEE_PERMISSION_DENIED', resource: op.resource, error: 'لا تملك صلاحية مزامنة أحد عناصر الدفعة.' });
     }
 
-    if (!owner && operations.some((op: any) => ['cheques', 'treasury', 'bankLedgerEntries'].includes(op.resource)) &&
+    if (!owner && operations.some((op: any) => ['cheques', 'treasury', 'bankLedgerEntries', 'expenses', 'auditLog'].includes(op.resource)) &&
         permissions.canManageTreasury !== true) {
       const operationMap = new Map(operations.map((op: any) => [op.resource, op]));
       const loadArray = async (resource: string): Promise<any[]> => {
@@ -85,6 +85,27 @@ export default async function handler(req: any, res: any) {
           employee,
         });
         if (auditError) return res.status(403).json({ code: auditError, resource: 'auditLog', error: 'تعديل سجل الشيكات غير مسموح.' });
+      }
+
+      if (permissions.canManageExpenses === true && permissions.canManageTreasury !== true &&
+          permissions.canSellPos !== true && permissions.canManagePurchases !== true) {
+        const expenseOperation: any = operationMap.get('expenses');
+        const treasuryOperation: any = operationMap.get('treasury');
+        if (expenseOperation || treasuryOperation) {
+          if (!expenseOperation || !treasuryOperation) {
+            return res.status(403).json({ code: 'EXPENSE_TREASURY_MISMATCH', resource: 'expenses', error: 'يجب حفظ المصروف وحركته المالية معاً.' });
+          }
+          const previousExpenses = await loadArray('expenses');
+          const previousTreasury = await loadArray('treasury');
+          const expenseError = validateExpenseOnlySync({
+            previousExpenses,
+            incomingExpenses: expenseOperation.data,
+            previousTreasury,
+            incomingTreasury: treasuryOperation.data,
+            employee,
+          });
+          if (expenseError) return res.status(403).json({ code: expenseError, resource: 'expenses', error: 'يمكنك إضافة مصروف تشغيلي فقط دون تعديل الحركات المالية السابقة.' });
+        }
       }
       for (const resource of ['treasury', 'bankLedgerEntries']) {
         const operation: any = operationMap.get(resource);
