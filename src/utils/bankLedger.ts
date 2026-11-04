@@ -182,3 +182,28 @@ export function createChequeBankEntry(
     error: null,
   };
 }
+
+/** Reverses a previously cleared cheque when the bank returns it as bounced. */
+export function createChequeBankReversalEntry(
+  input: { chequeId: string; date: string; reference: string; description: string },
+  existing: BankLedgerEntry[],
+): { entry: BankLedgerEntry | null; error: ChequeBankEntryError | null } {
+  const original = existing.find(entry => entry.id === `cheque:${input.chequeId}`);
+  if (!original) return { entry: null, error: 'CHEQUE_BANK_REQUIRED' };
+  if (existing.some(entry => entry.id === `cheque-bounce:${input.chequeId}`)) return { entry: null, error: 'CHEQUE_BANK_DUPLICATE' };
+  if (!validDate(input.date)) return { entry: null, error: 'CHEQUE_DATE_INVALID' };
+  return {
+    entry: {
+      id: `cheque-bounce:${input.chequeId}`,
+      batchId: input.chequeId,
+      accountKind: 'bank',
+      bankAccountId: original.bankAccountId,
+      direction: original.direction === 'in' ? 'out' : 'in',
+      amount: original.amount,
+      date: input.date,
+      reference: input.reference.trim(),
+      description: input.description,
+    },
+    error: null,
+  };
+}
