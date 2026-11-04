@@ -2689,7 +2689,7 @@ export default function App() {
             onPurchaseReturn={handleAddPurchaseReturn}
             onDeletePurchaseReturn={handleDeletePurchaseReturn}
             canReceiveOnly={currentUser?.role !== 'مدير عام' && Boolean(effectivePermissions?.canReceivePurchases && !effectivePermissions?.canManagePurchases)}
-            onAddSupplier={currentUser?.role !== 'مدير عام' && effectivePermissions?.canReceivePurchases && !effectivePermissions?.canManagePurchases ? undefined : (newSup: Supplier) => {
+            onAddSupplier={(newSup: Supplier) => {
               setSuppliers(prev => {
                 const updated = [newSup, ...prev];
                 persistChanges({ suppliers: updated });
