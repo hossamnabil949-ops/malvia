@@ -153,6 +153,11 @@ export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, su
       return c.direction === 'incoming'
         ? `سيُسجَّل قبض ${money(c.amount)} في الخزنة (حساب بنكي). لا يمكن التراجع.`
         : `سيُسجَّل صرف ${money(c.amount)} من الخزنة (حساب بنكي) للمورد. لا يمكن التراجع.`;
+    if (a === 'bounce' && (c.status === 'محصّل' || c.status === 'مصروف')) {
+      return c.direction === 'incoming'
+        ? `سيُعكس مبلغ ${money(c.amount)} من الحساب البنكي الذي تم التحصيل عليه، وتعود مديونية العميل ${c.partyName}.`
+        : `سيُعاد مبلغ ${money(c.amount)} إلى الحساب البنكي، وتعود مستحقات المورد ${c.partyName}.`;
+    }
     return c.direction === 'incoming'
       ? `سيعود ${money(c.appliedAmount ?? 0)} على مديونية العميل ${c.partyName} وتُغلق حالة الشيك. لا يمكن التراجع.`
       : `ستعود مستحقات المورد ${c.partyName} كما كانت قبل الشيك (${money(c.amount)}) وتُغلق حالة الشيك. لا يمكن التراجع.`;
