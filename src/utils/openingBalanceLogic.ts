@@ -15,6 +15,7 @@ export interface OpeningBalanceLine {
   quantity?: number;
   unitCost?: number;
   bankAccountId?: string;
+  entityId?: string;
 }
 
 export interface OpeningPartnerCapital {
