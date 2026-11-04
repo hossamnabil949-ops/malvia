@@ -49,6 +49,7 @@ import {
 import { markDirty, SYNC_STATUS_EVENT } from './syncService';
 import type { LoyaltyEntry } from '../utils/loyaltyLogic';
 import type { Cheque } from '../utils/chequeLogic';
+import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from '../utils/bankLedger';
 import type { StockBatch, SerialUnit } from '../utils/trackingLogic';
 import { DEFAULT_PASSWORDS, hashPassword, isHashed, verifyPassword } from './passwordService';
 
@@ -234,6 +235,9 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     stockTransfers: loadResource<StockTransfer[]>('stockTransfers', []),
     loyaltyLedger: loadResource<LoyaltyEntry[]>('loyaltyLedger', []),
     cheques: loadResource<Cheque[]>('cheques', []),
+    bankAccounts: loadResource<BankAccount[]>('bankAccounts', []),
+    cardSettlements: loadResource<CardSettlementBatch[]>('cardSettlements', []),
+    bankLedgerEntries: loadResource<BankLedgerEntry[]>('bankLedgerEntries', []),
     stockBatches: loadResource<StockBatch[]>('stockBatches', []),
     serialUnits: loadResource<SerialUnit[]>('serialUnits', []),
   };
@@ -267,6 +271,9 @@ export function saveTenantStoreData(
     stockTransfers?: StockTransfer[];
     loyaltyLedger?: LoyaltyEntry[];
     cheques?: Cheque[];
+    bankAccounts?: BankAccount[];
+    cardSettlements?: CardSettlementBatch[];
+    bankLedgerEntries?: BankLedgerEntry[];
     stockBatches?: StockBatch[];
     serialUnits?: SerialUnit[];
   }
