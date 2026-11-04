@@ -1,6 +1,6 @@
 // FIN-18: atomic multi-resource sync. Every resource is validated and committed in one PostgreSQL transaction.
 import { commitSyncBatch, getAuthenticatedEmployee, getOne } from './_db.js';
-import { validateChequeAuxiliarySync, validateChequeCollectionSync } from '../src/utils/chequeSyncPolicy';
+import { validateChequeAuditSync, validateChequeAuxiliarySync, validateChequeCollectionSync } from '../src/utils/chequeSyncPolicy';
 import { createHash } from 'node:crypto';
 import { ApiError, clientIp, findLicense, rateLimit, sendError } from './_security.js';
 
@@ -16,7 +16,7 @@ const policy: Record<string, string[]> = {
   treasury: ['canManageTreasury','canSellPos','canManagePurchases','canManageChequeLifecycle'], bankAccounts: ['canManageTreasury'], cardSettlements: ['canManageTreasury'], bankLedgerEntries: ['canManageTreasury','canManageChequeLifecycle'],
   shifts: ['canSellPos','canManageTreasury'],
   stockMovements: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
-  auditLog: ['canSellPos','canManageInventory','canManagePurchases','canManageTreasury','canManageSettings'],
+  auditLog: ['canSellPos','canManageInventory','canManagePurchases','canManageTreasury','canManageSettings','canRegisterCheques','canManageChequeLifecycle'],
   carModels: ['canManageInventory'], reservations: ['canSellPos'], cheques: ['canManageTreasury','canRegisterCheques','canManageChequeLifecycle'],
 };
 
@@ -70,6 +70,21 @@ export default async function handler(req: any, res: any) {
       if (chequeOperation) {
         const chequeError = validateChequeCollectionSync(previousCheques, incomingCheques, employee, permissions);
         if (chequeError) return res.status(403).json({ code: chequeError, resource: 'cheques', error: 'تعديل الشيكات غير مسموح بهذه الصلاحية.' });
+      }
+      const auditOperation: any = operationMap.get('auditLog');
+      const hasOtherAuditPermission = ['canSellPos', 'canManageInventory', 'canManagePurchases', 'canManageTreasury', 'canManageSettings']
+        .some(permission => permissions[permission] === true);
+      if (auditOperation && !hasOtherAuditPermission) {
+        if (!chequeOperation) return res.status(403).json({ code: 'CHEQUE_AUDIT_STATE_REQUIRED', resource: 'auditLog', error: 'سجل التدقيق يحتاج إلى حالة الشيك المرتبطة به.' });
+        const previousAudit = await loadArray('auditLog');
+        const auditError = validateChequeAuditSync({
+          previous: previousAudit,
+          incoming: auditOperation.data,
+          previousCheques,
+          incomingCheques,
+          employee,
+        });
+        if (auditError) return res.status(403).json({ code: auditError, resource: 'auditLog', error: 'تعديل سجل الشيكات غير مسموح.' });
       }
       for (const resource of ['treasury', 'bankLedgerEntries']) {
         const operation: any = operationMap.get(resource);
