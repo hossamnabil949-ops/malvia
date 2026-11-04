@@ -118,7 +118,6 @@ export const BarcodeScanButton: React.FC<BarcodeScanButtonProps> = ({
     return () => {
       stopped = true;
       controls?.stop();
-      reader.reset();
       const v = videoRef.current;
       if (v) { (v.srcObject as MediaStream | null)?.getTracks().forEach(t => t.stop()); v.srcObject = null; }
     };
