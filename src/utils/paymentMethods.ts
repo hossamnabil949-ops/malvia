@@ -40,3 +40,10 @@ export const isCreditPaymentMethod = (method?: string): boolean => {
   try { return paymentAccountOf(method) === 'credit'; }
   catch { return false; }
 };
+
+
+/** Outgoing payments on bank/card rails must identify the exact active bank account. */
+export function requiresSpecificBankAccount(method?: string): boolean {
+  const account = paymentAccountOf(method);
+  return account === 'bank' || account === 'visa';
+}
