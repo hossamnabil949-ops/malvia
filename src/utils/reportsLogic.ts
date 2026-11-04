@@ -307,6 +307,8 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
   const drawerOverage = sum(d.treasury.filter(tx => inRange(tx.date, r) && tx.category === 'زيادة درج (تسوية وردية)'), tx => tx.amount);
   const net = sales - returns;
   const gross = net - cogs;
+  const vatSummary = reportVatSummary(d, r);
+  const netVatDue = Number(vatSummary.rows.find(row => row.item === 'صافي الضريبة المستحقة / الرصيد الدائن')?.amount) || 0;
   const rows = [
     { item: 'المبيعات (قبل الضريبة وبعد الخصم)', amount: r2(sales) },
     { item: 'يخصم: المرتجعات (قبل الضريبة وبعد الخصم)', amount: r2(-returns) },
@@ -314,15 +316,16 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
     { item: 'يخصم: تكلفة البضاعة المباعة', amount: r2(-cogs) },
     { item: 'مجمل الربح', amount: r2(gross) },
     { item: 'يخصم: المصروفات', amount: r2(-expenses) },
+    { item: 'يخصم: صافي ضريبة القيمة المضافة المستحقة', amount: r2(-netVatDue) },
     { item: 'يخصم: عجز الدرج', amount: r2(-drawerShortage) },
     { item: 'يضاف: زيادة الدرج', amount: r2(drawerOverage) },
-    { item: 'صافي الربح', amount: r2(gross - expenses - drawerShortage + drawerOverage) },
+    { item: 'صافي الربح', amount: r2(gross - expenses - netVatDue - drawerShortage + drawerOverage) },
   ];
   return {
     id: 'profit-loss', title: 'ملخص الأرباح والخسائر',
     columns: [{ key: 'item', label: 'البند' }, { key: 'amount', label: 'المبلغ (ج.م)', kind: 'money' }],
     rows,
-    note: 'المرتجعات تُحوَّل إلى أساس الفاتورة الأصلية قبل الضريبة وبعد الخصم، وتُستبعد مرتجعات الفواتير الملغاة. تكلفة البضاعة تستخدم تكلفة البيع المحفوظة، ثم تكلفة الصنف الحالية فقط عند وجود تطابق وحيد. يشمل عجز وزيادة الدرج المسجلين كتسويات ورديات، ولا يشمل توزيعات الشركاء ورأس المال.',
+    note: 'المرتجعات تُحوَّل إلى أساس الفاتورة الأصلية قبل الضريبة وبعد الخصم، وتُستبعد مرتجعات الفواتير الملغاة. ضريبة القيمة المضافة المعروضة هي صافي ضريبة المخرجات بعد مرتجعات المبيعات مطروحاً منها ضريبة المدخلات بعد مرتجعات المشتريات؛ تظهر بالسالب قبل صافي الربح. تكلفة البضاعة تستخدم تكلفة البيع المحفوظة. يشمل عجز وزيادة الدرج المسجلين كتسويات ورديات، ولا يشمل توزيعات الشركاء ورأس المال.',
   };
 }
 
