@@ -6,6 +6,7 @@ import { hasTabAccess, ROLE_PRESETS } from '../src/utils/permissions.ts';
 import { validateChequeCollectionSync, validateChequeAuxiliarySync, validateExpenseOnlySync, validatePurchaseAuditSync } from '../src/utils/chequeSyncPolicy.ts';
 import { registrationEffect, actionEffect, availableActions } from '../src/utils/chequeLogic.ts';
 import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
+import { validateBankLedgerSync } from '../src/utils/bankLedgerSyncPolicy.ts';
 import { createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, summarizeBankAccount, validateBankAccount } from '../src/utils/bankLedger.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
@@ -279,6 +280,16 @@ assert.deepEqual(bankTransfer.entries.map(entry => [entry.bankAccountId, entry.d
 ]);
 assert.equal(summarizeBankAccount(bankA, bankTransfer.entries), 750);
 assert.equal(summarizeBankAccount(bankB, bankTransfer.entries), 750);
+assert.equal(validateBankLedgerSync({
+  previous: [], incoming: bankTransfer.entries, bankAccounts: [bankA, bankB],
+}), null);
+assert.equal(validateBankLedgerSync({
+  previous: [bankTransfer.entries[0]], incoming: [bankTransfer.entries[0]], bankAccounts: [bankA, bankB],
+}), null);
+assert.equal(validateBankLedgerSync({
+  previous: [bankTransfer.entries[0]], incoming: [], bankAccounts: [bankA, bankB],
+}), 'BANK_LEDGER_HISTORY_MODIFIED');
+
 assert.equal(createBankTransferEntries({
   id: 'BANK-TRF-TEST-01', sourceBankAccountId: bankA.id, destinationBankAccountId: bankB.id,
   amount: 250, date: '2026-11-04', reference: 'TRF-778',
