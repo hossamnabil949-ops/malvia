@@ -4,9 +4,9 @@ import { accountOf, isCreditMethod } from '../src/utils/treasuryAccounts.ts';
 import { normalizePaymentMethod } from '../src/utils/paymentMethods.ts';
 import { hasTabAccess, ROLE_PRESETS } from '../src/utils/permissions.ts';
 import { validateChequeCollectionSync, validateChequeAuxiliarySync } from '../src/utils/chequeSyncPolicy.ts';
-import { registrationEffect, actionEffect } from '../src/utils/chequeLogic.ts';
+import { registrationEffect, actionEffect, availableActions } from '../src/utils/chequeLogic.ts';
 import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
-import { createCardSettlementEntries, createChequeBankEntry, summarizeBankAccount, validateBankAccount } from '../src/utils/bankLedger.ts';
+import { createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, summarizeBankAccount, validateBankAccount } from '../src/utils/bankLedger.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
 import { validateSale, SaleError, computeTotals, weightedAverageUnitCost } from '../src/utils/saleLogic.ts';
@@ -240,6 +240,32 @@ const outgoingChequePosting = createChequeBankEntry({
   amount: 125, date: '2026-11-04', reference: 'CHK-002', description: 'صرف شيك صادر',
 }, [bankA]);
 assert.equal(outgoingChequePosting.entry?.direction, 'out');
+
+const chequeBounceReversal = createChequeBankReversalEntry({
+  chequeId: 'CHQ-IN-001', date: '2026-11-05', reference: 'CHK-001',
+  description: 'عكس شيك مرتد',
+}, [incomingChequePosting.entry!]);
+assert.equal(chequeBounceReversal.error, null);
+assert.equal(chequeBounceReversal.entry?.direction, 'out');
+assert.equal(createChequeBankReversalEntry({
+  chequeId: 'CHQ-IN-001', date: '2026-11-05', reference: 'CHK-001',
+  description: 'عكس شيك مرتد',
+}, [incomingChequePosting.entry!, chequeBounceReversal.entry!]).error, 'CHEQUE_BANK_DUPLICATE');
+assert.equal(summarizeBankAccount(bankA, [incomingChequePosting.entry!, chequeBounceReversal.entry!]), 1000);
+assert.deepEqual(availableActions({ direction: 'incoming', status: 'محصّل' }), ['bounce']);
+assert.deepEqual(availableActions({ direction: 'outgoing', status: 'مصروف' }), ['bounce']);
+const clearedIncomingEffect = actionEffect({
+  ...remoteCheque, status: 'محصّل',
+}, 'bounce');
+assert.equal(clearedIncomingEffect.customerBalanceDelta, 250);
+assert.equal(clearedIncomingEffect.treasury?.type, 'صرف');
+assert.equal(clearedIncomingEffect.treasury?.category, 'ارتداد شيك وارد');
+const clearedOutgoingEffect = actionEffect({
+  ...remoteCheque, direction: 'outgoing', status: 'مصروف', appliedDebt: 200, appliedCredit: 50,
+}, 'bounce');
+assert.equal(clearedOutgoingEffect.treasury?.type, 'قبض');
+assert.equal(clearedOutgoingEffect.treasury?.category, 'ارتداد شيك صادر');
+
 assert.equal(summarizeBankAccount(bankA, [incomingChequePosting.entry!, outgoingChequePosting.entry!]), 1125);
 
 assert.equal(createCardSettlementEntries({ ...settlement, netAmount: 1000 }, [bankA]).error, 'SETTLEMENT_AMOUNT_INVALID');
@@ -263,6 +289,13 @@ const clearedCheque = {
   history: [...remoteCheque.history, { at: '2026-11-04T11:00:00.000Z', status: 'محصّل', by: 'مسؤول شيكات' }],
 };
 assert.equal(validateChequeCollectionSync([remoteCheque], [clearedCheque], { name: 'مسؤول شيكات' }, { canManageChequeLifecycle: true }), null);
+
+const bouncedCheque = {
+  ...clearedCheque, status: 'مرتد',
+  history: [...clearedCheque.history, { at: '2026-11-05T11:00:00.000Z', status: 'مرتد', by: 'مسؤول شيكات' }],
+};
+assert.equal(validateChequeCollectionSync([clearedCheque], [bouncedCheque], { name: 'مسؤول شيكات' }, { canManageChequeLifecycle: true }), null);
+
 assert.equal(validateChequeCollectionSync([], [newCheque], { name: 'مسؤول شيكات' }, { canManageChequeLifecycle: true }), 'CHEQUE_REGISTER_DENIED');
 const chequeTreasuryTx = {
   id: 'TX-CHQ-TEST', referenceId: remoteCheque.id, type: 'قبض',
