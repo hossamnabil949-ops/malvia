@@ -14,6 +14,9 @@ export function paymentAccountOf(method?: string): PaymentAccount {
   const m = textOf(method);
   if (!m) throw new Error('طريقة الدفع غير محددة؛ لا يمكن تصنيف الحركة.');
   if (m === 'credit' || m.includes('اجل') || m.includes('حساب ورشه') || m.includes('حساب ورشة')) return 'credit';
+  // Explicit InstaPay routing: the same payment rail may point to a bank account or a wallet.
+  if ((m.includes('insta') || m.includes('انستا')) && (m.includes('bank') || m.includes('بنك') || m.includes('حساب بنكي'))) return 'bank';
+  if ((m.includes('insta') || m.includes('انستا')) && (m.includes('wallet') || m.includes('محفظ'))) return 'wallet';
   if (m === 'bank' || m.includes('شيك') || m.includes('تحويل بنكي') || m.includes('حوالة بنكية') || m.includes('حواله بنكيه') || m.includes('bank transfer') || m.includes('wire transfer')) return 'bank';
   if (m.includes('insta') || m.includes('انستا')) return 'instapay';
   if (m.includes('محفظ') || m.includes('فودافون') || m.includes('wallet') || m.includes('mobile wallet')) return 'wallet';
