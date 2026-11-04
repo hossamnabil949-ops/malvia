@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { generateSupplierScheduleDates } from '../src/utils/supplierPaymentSchedule.ts';
 import { accountOf, isCreditMethod } from '../src/utils/treasuryAccounts.ts';
 import { normalizePaymentMethod } from '../src/utils/paymentMethods.ts';
+import { hasTabAccess, ROLE_PRESETS } from '../src/utils/permissions.ts';
 import { registrationEffect, actionEffect } from '../src/utils/chequeLogic.ts';
 import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
@@ -102,12 +103,25 @@ assert.equal(accountOf('كاش (نقدي)'), 'cash');
 assert.throws(() => accountOf('cash-like unknown'), /غير معروفة/);
 assert.throws(() => accountOf('آجل'), /ليست حركة خزنة/);
 assert.equal(accountOf('نقدي'), 'cash');
-assert.equal(accountOf('انستاباي / InstaPay'), 'instapay');
+assert.equal(accountOf('انستاباي / InstaPay'), 'instapay'); // legacy ambiguous label remains backward compatible
+assert.equal(accountOf('InstaPay - حساب بنكي'), 'bank');
+assert.equal(accountOf('InstaPay - محفظة'), 'wallet');
 assert.equal(accountOf('محفظة إلكترونية'), 'wallet');
 assert.equal(accountOf('فيزا / بطاقة'), 'visa');
 assert.equal(accountOf('bank transfer'), 'bank');
 assert.equal(isCreditMethod('credit'), true);
 assert.equal(normalizePaymentMethod('انستاباي / InstaPay'), 'إنستاباي / InstaPay');
+
+
+// CASH-PERM-1: a cashier can view operational cash and register cheques without treasury/partner access.
+const cashierPermissions = ROLE_PRESETS['كاشير مبيعات'];
+assert.equal(cashierPermissions.canViewCashBalances, true);
+assert.equal(cashierPermissions.canRegisterCheques, true);
+assert.equal(cashierPermissions.canManageChequeLifecycle, false);
+assert.equal(cashierPermissions.canManageTreasury, false);
+assert.equal(hasTabAccess('كاشير مبيعات', cashierPermissions, 'shifts'), true);
+assert.equal(hasTabAccess('كاشير مبيعات', cashierPermissions, 'cheques'), true);
+assert.equal(hasTabAccess('كاشير مبيعات', cashierPermissions, 'finance'), false);
 
 // FIN-9: incoming cheque excess remains as customer credit and is fully reversible on bounce.
 const incoming = registrationEffect('incoming', 150, { balance: 100 });
