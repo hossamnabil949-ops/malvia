@@ -2540,8 +2540,8 @@ export default function App() {
           <ShiftsView
             shifts={shifts}
             treasury={treasury}
-            isManager={currentUser?.role === 'مدير عام' || Boolean(currentUser?.permissions?.canManageTreasury)}
-            canViewCashBalances={currentUser?.role === 'مدير عام' || Boolean(currentUser?.permissions?.canViewCashBalances)}
+            isManager={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageTreasury)}
+            canViewCashBalances={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canViewCashBalances)}
             currentUserName={currentUser?.employeeName || ''}
             requireShiftForSales={Boolean(settings.requireShiftForSales)}
             openShiftsCount={openShiftsCount}
