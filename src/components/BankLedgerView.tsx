@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { todayISO } from '../utils/dateRange';
 import { BankAccount, CardSettlementBatch, BankLedgerEntry, validateBankAccount, summarizeBankAccount } from '../utils/bankLedger';
 
 interface BankLedgerViewProps {
@@ -10,7 +11,7 @@ interface BankLedgerViewProps {
   onSettleVisa: (batch: CardSettlementBatch) => { ok: boolean; message?: string };
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayISO();
 const money = (n: number) => `${n.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} ج.م`;
 const inputClass = 'w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-xs';
 
