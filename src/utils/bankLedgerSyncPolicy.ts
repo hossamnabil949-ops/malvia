@@ -83,6 +83,10 @@ export function validateBankLedgerSync(input: {
       matched = Boolean(tx && directBank(tx.paymentMethod) && tx.bankAccountId === entry.bankAccountId
         && Number(tx.amount) === Number(entry.amount) && tx.date === entry.date && tx.type === 'قبض'
         && partners.some(partner => partner.id === tx.referenceId));
+    } else if (entry.id.startsWith('distribution:')) {
+      const tx = treasury.find(item => item.id === entry.batchId && item.category === 'توزيع أرباح');
+      matched = Boolean(tx && directBank(tx.paymentMethod) && tx.bankAccountId === entry.bankAccountId
+        && Number(tx.amount) === Number(entry.amount) && tx.date === entry.date && tx.type === 'صرف' && entry.direction === 'out');
     } else if (entry.id.startsWith('bank-transfer:')) {
       matched = true;
     } else {
