@@ -2531,6 +2531,8 @@ export default function App() {
             suppliers={suppliers}
             onAdd={handleAddCheque}
             onAction={handleChequeAction}
+            canRegister={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canRegisterCheques || effectivePermissions?.canManageTreasury)}
+            canManageLifecycle={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageChequeLifecycle || effectivePermissions?.canManageTreasury)}
           />
         )}
 
@@ -2539,6 +2541,7 @@ export default function App() {
             shifts={shifts}
             treasury={treasury}
             isManager={currentUser?.role === 'مدير عام' || Boolean(currentUser?.permissions?.canManageTreasury)}
+            canViewCashBalances={currentUser?.role === 'مدير عام' || Boolean(currentUser?.permissions?.canViewCashBalances)}
             currentUserName={currentUser?.employeeName || ''}
             requireShiftForSales={Boolean(settings.requireShiftForSales)}
             openShiftsCount={openShiftsCount}
