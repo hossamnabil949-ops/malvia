@@ -151,3 +151,39 @@ export function validateChequeAuxiliarySync(input: {
   }
   return null;
 }
+
+export function validateChequeAuditSync(input: {
+  previous: ChequeRecord[];
+  incoming: ChequeRecord[];
+  previousCheques: ChequeRecord[];
+  incomingCheques: ChequeRecord[];
+  employee: { name?: string };
+}): string | null {
+  const oldById = new Map(input.previous.map(item => [String(item.id), item]));
+  const newById = new Map(input.incoming.map(item => [String(item.id), item]));
+  for (const oldItem of input.previous) {
+    const next = newById.get(String(oldItem.id));
+    if (!next || !same(oldItem, next)) return 'CHEQUE_AUDIT_UPDATE_DENIED';
+  }
+  const oldCheques = new Map(input.previousCheques.map(item => [String(item.id), item]));
+  const newCheques = new Map(input.incomingCheques.map(item => [String(item.id), item]));
+  for (const item of input.incoming) {
+    if (oldById.has(String(item.id))) continue;
+    if (input.employee.name && item.userName !== input.employee.name) return 'CHEQUE_AUDIT_ACTOR_MISMATCH';
+    const id = String(item.entityId || '');
+    const oldCheque = oldCheques.get(id);
+    const newCheque = newCheques.get(id);
+    if (!newCheque) return 'CHEQUE_AUDIT_REFERENCE_INVALID';
+    if (item.action === 'cheque.create') {
+      if (oldCheque || newCheque.createdBy !== input.employee.name || newCheque.status !== (newCheque.direction === 'incoming' ? 'في الحافظة' : 'صادر')) {
+        return 'CHEQUE_AUDIT_CREATE_INVALID';
+      }
+    } else if (item.action === 'cheque.action') {
+      if (!oldCheque || oldCheque.status === newCheque.status ||
+          newCheque.history?.[newCheque.history.length - 1]?.by !== input.employee.name) return 'CHEQUE_AUDIT_ACTION_INVALID';
+    } else {
+      return 'CHEQUE_AUDIT_ACTION_INVALID';
+    }
+  }
+  return null;
+}
