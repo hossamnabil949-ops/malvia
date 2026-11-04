@@ -3,6 +3,7 @@ import { generateSupplierScheduleDates } from '../src/utils/supplierPaymentSched
 import { accountOf, isCreditMethod } from '../src/utils/treasuryAccounts.ts';
 import { normalizePaymentMethod } from '../src/utils/paymentMethods.ts';
 import { hasTabAccess, ROLE_PRESETS } from '../src/utils/permissions.ts';
+import { validateChequeCollectionSync, validateChequeAuxiliarySync } from '../src/utils/chequeSyncPolicy.ts';
 import { registrationEffect, actionEffect } from '../src/utils/chequeLogic.ts';
 import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
 import { createCardSettlementEntries, createChequeBankEntry, summarizeBankAccount, validateBankAccount } from '../src/utils/bankLedger.ts';
@@ -244,3 +245,47 @@ assert.equal(summarizeBankAccount(bankA, [incomingChequePosting.entry!, outgoing
 assert.equal(createCardSettlementEntries({ ...settlement, netAmount: 1000 }, [bankA]).error, 'SETTLEMENT_AMOUNT_INVALID');
 assert.equal(createCardSettlementEntries({ ...settlement, settlementDate: '2026-02-31' }, [bankA]).error, 'SETTLEMENT_DATE_INVALID');
 assert.equal(createCardSettlementEntries(settlement, [{ ...bankA, active: false }]).error, 'BANK_ACCOUNT_INACTIVE');
+
+
+// CHEQUE-SYNC-SECURITY: registration is append-only; lifecycle changes require the separate permission.
+const remoteCheque = {
+  id: 'CHQ-SYNC-01', number: '9001', direction: 'incoming', status: 'في الحافظة',
+  amount: 250, bankName: 'CIB', dueDate: '2026-11-10', receivedDate: '2026-11-04',
+  partyType: 'customer', partyId: 'C-1', partyName: 'عميل', createdBy: 'كاشير',
+  createdAt: '2026-11-04T10:00:00.000Z', appliedAmount: 250,
+  history: [{ at: '2026-11-04T10:00:00.000Z', status: 'في الحافظة', by: 'كاشير' }],
+};
+const newCheque = { ...remoteCheque, id: 'CHQ-SYNC-02', number: '9002' };
+assert.equal(validateChequeCollectionSync([], [newCheque], { name: 'كاشير' }, { canRegisterCheques: true }), null);
+assert.equal(validateChequeCollectionSync([remoteCheque], [{ ...remoteCheque, status: 'محصّل' }], { name: 'كاشير' }, { canRegisterCheques: true }), 'CHEQUE_LIFECYCLE_DENIED');
+const clearedCheque = {
+  ...remoteCheque, status: 'محصّل', clearedBankAccountId: bankA.id,
+  history: [...remoteCheque.history, { at: '2026-11-04T11:00:00.000Z', status: 'محصّل', by: 'مسؤول شيكات' }],
+};
+assert.equal(validateChequeCollectionSync([remoteCheque], [clearedCheque], { name: 'مسؤول شيكات' }, { canManageChequeLifecycle: true }), null);
+assert.equal(validateChequeCollectionSync([], [newCheque], { name: 'مسؤول شيكات' }, { canManageChequeLifecycle: true }), 'CHEQUE_REGISTER_DENIED');
+const chequeTreasuryTx = {
+  id: 'TX-CHQ-TEST', referenceId: remoteCheque.id, type: 'قبض',
+  category: 'تحصيل من عميل / ورشة', paymentMethod: 'شيك (حساب بنكي)',
+  amount: 250, recordedBy: 'مسؤول شيكات',
+};
+assert.equal(validateChequeAuxiliarySync({
+  resource: 'treasury', previous: [], incoming: [chequeTreasuryTx],
+  previousCheques: [remoteCheque], incomingCheques: [clearedCheque], bankAccounts: [],
+  employee: { name: 'مسؤول شيكات' },
+}), null);
+const chequeBankEntry = {
+  id: 'cheque:' + remoteCheque.id, batchId: remoteCheque.id, accountKind: 'bank',
+  bankAccountId: bankA.id, direction: 'in', amount: 250, date: '2026-11-04',
+  reference: remoteCheque.number, description: 'تحصيل شيك وارد',
+};
+assert.equal(validateChequeAuxiliarySync({
+  resource: 'bankLedgerEntries', previous: [], incoming: [chequeBankEntry],
+  previousCheques: [remoteCheque], incomingCheques: [clearedCheque], bankAccounts: [bankA],
+  employee: { name: 'مسؤول شيكات' },
+}), null);
+assert.equal(validateChequeAuxiliarySync({
+  resource: 'bankLedgerEntries', previous: [], incoming: [{ ...chequeBankEntry, amount: 251 }],
+  previousCheques: [remoteCheque], incomingCheques: [clearedCheque], bankAccounts: [bankA],
+  employee: { name: 'مسؤول شيكات' },
+}), 'CHEQUE_BANK_ENTRY_INVALID');
