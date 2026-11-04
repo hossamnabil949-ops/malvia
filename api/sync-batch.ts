@@ -101,7 +101,7 @@ export default async function handler(req: any, res: any) {
         if (chequeError) return res.status(403).json({ code: chequeError, resource: 'cheques', error: 'تعديل الشيكات غير مسموح بهذه الصلاحية.' });
       }
       const auditOperation: any = operationMap.get('auditLog');
-      const hasOtherAuditPermission = ['canSellPos', 'canManageInventory', 'canManagePurchases', 'canManageTreasury', 'canManageSettings']
+      const hasOtherAuditPermission = ['canSellPos', 'canManageInventory', 'canManagePurchases', 'canManageTreasury', 'canManageSettings', 'canManageExpenses', 'canManagePartners']
         .some(permission => permissions[permission] === true);
       if (auditOperation && !hasOtherAuditPermission &&
           (permissions.canRegisterCheques === true || permissions.canManageChequeLifecycle === true)) {
@@ -133,7 +133,7 @@ export default async function handler(req: any, res: any) {
       }
 
       if (permissions.canManageExpenses === true && permissions.canManageTreasury !== true &&
-          permissions.canSellPos !== true && permissions.canManagePurchases !== true) {
+          permissions.canSellPos !== true && permissions.canManagePurchases !== true && permissions.canManagePartners !== true) {
         const expenseOperation: any = operationMap.get('expenses');
         const treasuryOperation: any = operationMap.get('treasury');
         if (expenseOperation || treasuryOperation) {
