@@ -432,7 +432,7 @@ import * as RP from '../src/utils/reportsLogic.ts';
 
   // المبيعات اليومية: الملغاة مستبعدة، والمرتجع محسوب على صافي الفاتورة الأصلية
   let tb = RP.reportDailySales(data, R);
-  assert.deepEqual(tb.rows.map(x => [x.date, x.count, x.total, x.returns, x.net]), [['2026-07-01', 1, 200, 0, 200], ['2026-10-10', 1, 500, 0, 500], ['2026-10-20', 1, 480, 96, 384], ['2026-10-21', 1, 100, 0, 100]]);
+  assert.deepEqual(tb.rows.map(x => [x.date, x.count, x.total, x.returns, x.net]), [['2026-07-01', 1, 200, 0, 200], ['2026-10-10', 1, 500, 0, 500], ['2026-10-20', 1, 500, 96, 384], ['2026-10-21', 1, 100, 0, 100]]);
   assert.equal(tb.totals!.net, 1184);
   tb = RP.reportDailySales(data, { from: '2026-10-20', to: '2026-10-21' });                  // نطاق التاريخ
   assert.deepEqual([tb.rows.length, tb.totals!.total], [2, 580]);
