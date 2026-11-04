@@ -51,6 +51,8 @@ import {
 } from 'recharts';
 import { 
   Invoice, 
+  Customer,
+  Supplier,
   Expense, 
   Partner, 
   ProfitDistributionRecord, 
@@ -75,6 +77,8 @@ import { requiresSpecificBankAccount } from '../utils/paymentMethods';
 interface FinanceViewProps {
   invoices: Invoice[];
   parts?: AutoPart[];
+  customers?: Customer[];
+  suppliers?: Supplier[];
   salesReturns?: SalesReturn[];
   purchaseInvoices?: import('../types/autoParts').PurchaseInvoice[];
   purchaseReturns?: import('../types/autoParts').PurchaseReturn[];
@@ -123,6 +127,8 @@ const PARTNER_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#a855f7', '#ec4899', '
 export const FinanceView: React.FC<FinanceViewProps> = ({
   invoices,
   parts = [],
+  customers = [],
+  suppliers = [],
   salesReturns = [],
   purchaseInvoices = [],
   purchaseReturns = [],
@@ -648,7 +654,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
       {activeFinanceTab === 'equity' && canManagePartners && (
         <div className="space-y-6">
-          {canManageOpeningBalances && onApproveOpeningBalances && <OpeningBalancesPanel existing={openingBalances} partners={partners} parts={parts} bankAccounts={bankAccounts} currentUser={currentUserName} onApprove={onApproveOpeningBalances} />}
+          {canManageOpeningBalances && onApproveOpeningBalances && <OpeningBalancesPanel existing={openingBalances} partners={partners} parts={parts} bankAccounts={bankAccounts} customers={customers} suppliers={suppliers} currentUser={currentUserName} onApprove={onApproveOpeningBalances} />}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
             <div className="p-4 rounded-3xl bg-surface-2 border border-neutral-800 relative overflow-hidden">
               <div className="flex items-center justify-between text-neutral-400 text-xs">
