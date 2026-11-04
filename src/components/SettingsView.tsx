@@ -167,6 +167,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     canViewReports: false,
     canManageSettings: false,
     canManagePartners: false,
+    canViewCashBalances: false,
+    canRegisterCheques: false,
+    canManageChequeLifecycle: false,
   });
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -313,7 +316,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     { key: 'canSellPos', label: 'إصدار فواتير البيع (الكاشير)', desc: 'استخدام POS وإصدار الفواتير للعملاء' },
     { key: 'canManageInventory', label: 'إدارة وتعديل المخزون والجرد', desc: 'إضافة أصناف جديدة وتعديل أسعار التكلفة والبيع' },
     { key: 'canManagePurchases', label: 'فواتير المشتريات والموردين', desc: 'إصدار فواتير الشراء وتوريد البضاعة للمستودع' },
-    { key: 'canManageTreasury', label: 'الخزينة وسندات الصرف والقبض', desc: 'سداد دفعات الموردين وتحصيل الديون الآجلة' },
+    { key: 'canManageTreasury', label: 'إدارة الخزينة والحسابات المالية', desc: 'إدارة الأرصدة والحركات والتحويلات والتسويات المالية' },
+    { key: 'canViewCashBalances', label: 'عرض رصيد درج الكاش والوردية فقط', desc: 'عرض رصيد الدرج وحركة الوردية دون الاطلاع على رأس المال أو الشركاء أو إدارة الحسابات' },
+    { key: 'canRegisterCheques', label: 'تسجيل الشيكات', desc: 'تسجيل شيك وارد من عميل أو صادر لمورد دون صلاحية تحصيله أو صرفه' },
+    { key: 'canManageChequeLifecycle', label: 'إدارة حالات الشيكات', desc: 'إيداع الشيك بالبنك أو تأكيد تحصيله أو صرفه أو تسجيل ارتداده وإلغائه' },
     { key: 'canViewReports', label: 'تقارير إكسيل والتقارير المالية', desc: 'الاطلاع على تقارير المبيعات وتصدير ملفات Excel' },
     { key: 'canManagePartners', label: 'إدارة الشركاء ورأس المال', desc: 'توزيع الأرباح وضخ رأس المال ونسب الحصص' },
     { key: 'canManageSettings', label: 'إدارة الإعدادات والموظفين', desc: 'تعديل بيانات المحل والشعار وتعيين الصلاحيات' },
@@ -1341,7 +1347,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     >
                       <input
                         type="checkbox"
-                        checked={editingEmployee.permissions[perm.key]}
+                        checked={Boolean(editingEmployee.permissions[perm.key])}
                         onChange={() => toggleEditPermission(perm.key)}
                         className="mt-0.5 rounded text-amber-500 focus:ring-0"
                       />
