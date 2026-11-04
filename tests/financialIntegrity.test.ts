@@ -6,7 +6,7 @@ import { hasTabAccess, ROLE_PRESETS } from '../src/utils/permissions.ts';
 import { validateChequeCollectionSync, validateChequeAuxiliarySync, validateExpenseOnlySync, validatePurchaseAuditSync } from '../src/utils/chequeSyncPolicy.ts';
 import { registrationEffect, actionEffect, availableActions } from '../src/utils/chequeLogic.ts';
 import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
-import { createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, summarizeBankAccount, validateBankAccount } from '../src/utils/bankLedger.ts';
+import { createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, summarizeBankAccount, validateBankAccount } from '../src/utils/bankLedger.ts';
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
 import { validateSale, SaleError, computeTotals, weightedAverageUnitCost } from '../src/utils/saleLogic.ts';
@@ -267,6 +267,27 @@ const bankA = {
 assert.equal(validateBankAccount(bankA, []), null);
 assert.equal(validateBankAccount(bankA, [bankA]), 'BANK_ACCOUNT_DUPLICATE');
 assert.equal(validateBankAccount({ ...bankA, openingDate: '2026-02-31' }), 'BANK_ACCOUNT_INVALID');
+const bankB = { id: 'bank-nbe-002', name: 'حساب التوفير', bankName: 'NBE', openingBalance: 500, openingDate: '2026-01-01', active: true };
+const bankTransfer = createBankTransferEntries({
+  id: 'BANK-TRF-TEST-01', sourceBankAccountId: bankA.id, destinationBankAccountId: bankB.id,
+  amount: 250, date: '2026-11-04', reference: 'TRF-778',
+}, [bankA, bankB]);
+assert.equal(bankTransfer.error, null);
+assert.equal(bankTransfer.entries.length, 2);
+assert.deepEqual(bankTransfer.entries.map(entry => [entry.bankAccountId, entry.direction, entry.amount]), [
+  [bankA.id, 'out', 250], [bankB.id, 'in', 250],
+]);
+assert.equal(summarizeBankAccount(bankA, bankTransfer.entries), 750);
+assert.equal(summarizeBankAccount(bankB, bankTransfer.entries), 750);
+assert.equal(createBankTransferEntries({
+  id: 'BANK-TRF-TEST-01', sourceBankAccountId: bankA.id, destinationBankAccountId: bankB.id,
+  amount: 250, date: '2026-11-04', reference: 'TRF-778',
+}, [bankA, bankB], bankTransfer.entries).error, 'BANK_TRANSFER_DUPLICATE');
+assert.equal(createBankTransferEntries({
+  id: 'BANK-TRF-TEST-02', sourceBankAccountId: bankA.id, destinationBankAccountId: bankA.id,
+  amount: 250, date: '2026-11-04', reference: 'TRF-779',
+}, [bankA, bankB]).error, 'BANK_TRANSFER_SAME_ACCOUNT');
+
 const settlement = {
   id: 'visa-settle-001', processor: 'البنك التجاري',
   grossAmount: 1000, feeAmount: 20, netAmount: 980,
