@@ -67,6 +67,8 @@ import { EXPENSE_CATEGORIES, PAYMENT_METHODS_LIST } from '../data/autoPartsData'
 import { TreasuryAccountsReport } from './TreasuryAccountsReport';
 import { AuditLogPanel } from './AuditLogPanel';
 import { BankLedgerView } from './BankLedgerView';
+import { OpeningBalancesPanel } from './OpeningBalancesPanel';
+import type { OpeningBalanceRecord } from '../utils/openingBalanceLogic';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from '../utils/bankLedger';
 import { requiresSpecificBankAccount } from '../utils/paymentMethods';
 
@@ -102,6 +104,8 @@ interface FinanceViewProps {
   onUpdatePartnerShare?: (partnerId: string, newSharePercentage: number) => void;
   onInjectCapital?: (partnerId: string, amount: number, paymentMethod: string, notes: string, recalculatePercentages: boolean, bankAccountId?: string) => void;
   onReinvestProfit?: (partnerId: string, amount: number, notes: string) => void;
+  openingBalances?: OpeningBalanceRecord[];
+  onApproveOpeningBalances?: (record: OpeningBalanceRecord) => boolean;
 }
 
 const PAYMENT_COLORS: Record<string, string> = {
@@ -139,6 +143,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   bankAccounts = [], cardSettlements = [], bankLedgerEntries = [], outstandingVisaBalance = 0,
   onAddBankAccount, onSettleVisa, onTransferBank,
   canManageExpenses = true, canManageTreasury = true, canManagePartners = true,
+  openingBalances = [], onApproveOpeningBalances,
 }) => {
   type FinanceTab = 'income' | 'equity' | 'treasury' | 'expenses' | 'audit' | 'bankLedger';
   const [activeFinanceTab, setActiveFinanceTab] = useState<FinanceTab>(canManagePartners ? 'equity' : canManageTreasury ? 'treasury' : 'expenses');
@@ -640,6 +645,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
       {activeFinanceTab === 'equity' && canManagePartners && (
         <div className="space-y-6">
+          {onApproveOpeningBalances && <OpeningBalancesPanel existing={openingBalances} partners={partners} parts={parts} bankAccounts={bankAccounts} currentUser="المدير العام" onApprove={onApproveOpeningBalances} />}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
             <div className="p-4 rounded-3xl bg-surface-2 border border-neutral-800 relative overflow-hidden">
               <div className="flex items-center justify-between text-neutral-400 text-xs">
