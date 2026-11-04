@@ -78,6 +78,7 @@ export interface ReportData {
   batches: StockBatch[];
   loyaltyLedger: LoyaltyEntry[];
   loyaltyPointValue: number;
+  taxRegistered?: boolean;
 }
 
 const r2 = (n: number): number => Math.round(n * 100) / 100;
@@ -279,23 +280,19 @@ export function reportPurchasesBySupplier(d: ReportData, r: DateRange): ReportTa
 
 export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
   const inv = active(d, r);
-  const invoiceById = new Map(inv.map(i => [i.id, i]));
   const partCostByNumber = new Map<string, number[]>();
   for (const part of d.parts) {
     const list = partCostByNumber.get(part.partNumber) ?? [];
     list.push(part.costPrice);
     partCostByNumber.set(part.partNumber, list);
   }
-  const sales = sum(inv, i => i.subtotal - i.discount);
+  // P&L starts from customer cash value (VAT-inclusive) so the net VAT payable
+  // is deducted exactly once below, rather than being omitted or double-counted.
+  const sales = sum(inv, i => i.grandTotal);
   const returns = sum(d.salesReturns.filter(ret => {
     const original = d.invoices.find(i => i.id === ret.invoiceId);
     return inRange(ret.date, r) && Boolean(original) && original!.status !== 'ملغاة';
-  }), ret => {
-    const original = invoiceById.get(ret.invoiceId) ?? d.invoices.find(i => i.id === ret.invoiceId);
-    if (!original || original.grandTotal <= 0) return 0;
-    const preTaxNet = Math.max(0, original.subtotal - original.discount);
-    return ret.totalRefundAmount * (preTaxNet / original.grandTotal);
-  });
+  }), ret => ret.totalRefundAmount);
   const cogs = sum(inv, i => sum(i.items, it => {
     const frozenCost = it.costPrice;
     const matches = partCostByNumber.get(it.partNumber) ?? [];
@@ -307,22 +304,27 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
   const drawerOverage = sum(d.treasury.filter(tx => inRange(tx.date, r) && tx.category === 'زيادة درج (تسوية وردية)'), tx => tx.amount);
   const net = sales - returns;
   const gross = net - cogs;
+  const vatSummary = d.taxRegistered ? reportVatSummary(d, r) : undefined;
+  const netVatDue = Number(vatSummary?.rows.find(row => row.item === 'صافي الضريبة المستحقة / الرصيد الدائن')?.amount) || 0;
   const rows = [
-    { item: 'المبيعات (قبل الضريبة وبعد الخصم)', amount: r2(sales) },
-    { item: 'يخصم: المرتجعات (قبل الضريبة وبعد الخصم)', amount: r2(-returns) },
+    { item: 'إجمالي المبيعات بعد الخصم (شامل الضريبة)', amount: r2(sales) },
+    { item: 'يخصم: مرتجعات المبيعات (شاملة الضريبة)', amount: r2(-returns) },
     { item: 'صافي المبيعات', amount: r2(net) },
     { item: 'يخصم: تكلفة البضاعة المباعة', amount: r2(-cogs) },
     { item: 'مجمل الربح', amount: r2(gross) },
     { item: 'يخصم: المصروفات', amount: r2(-expenses) },
+    ...(d.taxRegistered ? [{ item: 'يخصم: صافي ضريبة القيمة المضافة المستحقة', amount: r2(-netVatDue) }] : []),
     { item: 'يخصم: عجز الدرج', amount: r2(-drawerShortage) },
     { item: 'يضاف: زيادة الدرج', amount: r2(drawerOverage) },
-    { item: 'صافي الربح', amount: r2(gross - expenses - drawerShortage + drawerOverage) },
+    { item: 'صافي الربح', amount: r2(gross - expenses - netVatDue - drawerShortage + drawerOverage) },
   ];
   return {
     id: 'profit-loss', title: 'ملخص الأرباح والخسائر',
     columns: [{ key: 'item', label: 'البند' }, { key: 'amount', label: 'المبلغ (ج.م)', kind: 'money' }],
     rows,
-    note: 'المرتجعات تُحوَّل إلى أساس الفاتورة الأصلية قبل الضريبة وبعد الخصم، وتُستبعد مرتجعات الفواتير الملغاة. تكلفة البضاعة تستخدم تكلفة البيع المحفوظة، ثم تكلفة الصنف الحالية فقط عند وجود تطابق وحيد. يشمل عجز وزيادة الدرج المسجلين كتسويات ورديات، ولا يشمل توزيعات الشركاء ورأس المال.',
+    note: d.taxRegistered
+      ? 'المبيعات والمرتجعات بالقيمة الشاملة للضريبة، ثم يُخصم صافي ضريبة القيمة المضافة المستحقة مرة واحدة قبل صافي الربح. صافي الضريبة = ضريبة المخرجات بعد مرتجعات المبيعات ناقص ضريبة المدخلات بعد مرتجعات المشتريات. تُستبعد الفواتير الملغاة. تكلفة البضاعة تستخدم تكلفة البيع المحفوظة. يشمل عجز وزيادة الدرج المسجلين كتسويات ورديات، ولا يشمل توزيعات الشركاء ورأس المال.'
+      : 'المبيعات والمرتجعات بالقيمة المسجلة بالفواتير. لا يظهر بند ضريبة القيمة المضافة لأن الضريبة غير مفعلة للمنشأة. تُستبعد الفواتير الملغاة. تكلفة البضاعة تستخدم تكلفة البيع المحفوظة. يشمل عجز وزيادة الدرج المسجلين كتسويات ورديات، ولا يشمل توزيعات الشركاء ورأس المال.',
   };
 }
 
