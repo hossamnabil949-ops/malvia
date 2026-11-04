@@ -3015,6 +3015,8 @@ export default function App() {
             stockMovements={stockMovements}
             invoices={invoices}
             parts={parts}
+            customers={customers}
+            suppliers={suppliers}
             salesReturns={salesReturns}
             purchaseInvoices={purchaseInvoices}
             purchaseReturns={purchaseReturns}
