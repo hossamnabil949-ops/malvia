@@ -125,6 +125,15 @@ assert.equal(hasTabAccess('كاشير مبيعات', cashierPermissions, 'shifts
 assert.equal(hasTabAccess('كاشير مبيعات', cashierPermissions, 'cheques'), true);
 assert.equal(hasTabAccess('كاشير مبيعات', cashierPermissions, 'finance'), false);
 
+const expenseOnly = { canManageExpenses: true };
+assert.equal(hasTabAccess('موظف', expenseOnly, 'finance'), true);
+assert.equal(hasTabAccess('موظف', expenseOnly, 'cheques'), false);
+assert.equal(hasTabAccess('موظف', expenseOnly, 'settings'), false);
+const receivingOnly = { canReceivePurchases: true };
+assert.equal(hasTabAccess('موظف', receivingOnly, 'purchases'), true);
+assert.equal(hasTabAccess('موظف', receivingOnly, 'suppliers'), false);
+
+
 // FIN-9: incoming cheque excess remains as customer credit and is fully reversible on bounce.
 const incoming = registrationEffect('incoming', 150, { balance: 100 });
 assert.equal(incoming.effect.customerBalanceDelta, -150);
