@@ -3029,6 +3029,34 @@ export default function App() {
             bankAccounts={bankAccounts}
             cardSettlements={cardSettlements}
             bankLedgerEntries={bankLedgerEntries}
+            openingBalances={openingBalances}
+            onApproveOpeningBalances={(record: OpeningBalanceRecord) => {
+              if (currentUser?.role !== 'مدير عام' || openingBalances.length) return false;
+              const nextParts = parts.map(part => {
+                const rows = record.lines.filter(line => line.category === 'inventory' && line.partId === part.id);
+                if (!rows.length) return part;
+                const qty = rows.reduce((sum, line) => sum + (line.quantity || 0), 0);
+                const cost = rows.reduce((sum, line) => sum + line.amount, 0);
+                const nextQty = part.stockQuantity + qty;
+                return { ...part, stockQuantity: nextQty, costPrice: nextQty ? ((part.stockQuantity * part.costPrice) + cost) / nextQty : part.costPrice, updatedAt: record.cutoverDate };
+              });
+              const movements: StockMovement[] = record.lines.filter(line => line.category === 'inventory').map((line, i) => {
+                const part = nextParts.find(item => item.id === line.partId)!;
+                return { id: record.id + ':STOCK:' + i, at: record.approvedAt || new Date().toISOString(), partId: part.id, partNumber: part.partNumber, partName: part.name, type: 'import', qtyDelta: line.quantity || 0, balanceAfter: part.stockQuantity, refId: record.id, refNumber: record.id, userName: currentUser.employeeName };
+              });
+              const cash = record.lines.filter(line => line.category === 'cash').reduce((sum, line) => sum + line.amount, 0);
+              const cashRows: TreasuryTransaction[] = cash > 0 ? [{ id: record.id + ':CASH', txNumber: uniqueTransactionNumber('TX-OPEN'), date: record.cutoverDate, time: '00:00', type: 'قبض', category: 'إيداع نقدي إضافي', amount: cash, paymentMethod: 'نقدي', balanceAfter: treasuryBalance + cash, referenceId: record.id, description: 'رصيد خزينة افتتاحي عند بدء MALVIA', recordedBy: currentUser.employeeName }] : [];
+              const bankTotals = new Map<string, number>();
+              record.lines.filter(line => line.category === 'bank' && line.bankAccountId).forEach(line => bankTotals.set(line.bankAccountId!, (bankTotals.get(line.bankAccountId!) || 0) + line.amount));
+              const nextBanks = bankAccounts.map(account => bankTotals.has(account.id) ? { ...account, openingBalance: bankTotals.get(account.id)!, openingDate: record.cutoverDate } : account);
+              const nextTreasury = [...cashRows, ...treasury];
+              const nextMovements = [...movements, ...stockMovements];
+              const audit: AuditEntry = { id: record.id + ':AUDIT', at: record.approvedAt || new Date().toISOString(), userId: currentUser.employeeId, userName: currentUser.employeeName, userRole: currentUser.role, action: 'capital.opening.create', entityId: record.id, summary: 'اعتماد الأرصدة الافتتاحية بتاريخ ' + record.cutoverDate, amount: record.originalCapital };
+              const nextAudit = [audit, ...auditLog];
+              setParts(nextParts); setStockMovements(nextMovements); setTreasury(nextTreasury); setBankAccounts(nextBanks); setOpeningBalances([record]); setAuditLog(nextAudit);
+              persistChanges({ parts: nextParts, stockMovements: nextMovements, treasuryTransactions: nextTreasury, bankAccounts: nextBanks, openingBalances: [record], auditLog: nextAudit });
+              return true;
+            }}
             outstandingVisaBalance={Math.max(0, summarizeTreasury(treasury).accounts.find(a => a.key === 'visa')?.balance || 0)}
             onAddBankAccount={handleAddBankAccount}
             onSettleVisa={handleSettleVisa}
