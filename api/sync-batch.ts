@@ -74,7 +74,8 @@ export default async function handler(req: any, res: any) {
       const auditOperation: any = operationMap.get('auditLog');
       const hasOtherAuditPermission = ['canSellPos', 'canManageInventory', 'canManagePurchases', 'canManageTreasury', 'canManageSettings']
         .some(permission => permissions[permission] === true);
-      if (auditOperation && !hasOtherAuditPermission) {
+      if (auditOperation && !hasOtherAuditPermission &&
+          (permissions.canRegisterCheques === true || permissions.canManageChequeLifecycle === true)) {
         if (!chequeOperation) return res.status(403).json({ code: 'CHEQUE_AUDIT_STATE_REQUIRED', resource: 'auditLog', error: 'سجل التدقيق يحتاج إلى حالة الشيك المرتبطة به.' });
         const previousAudit = await loadArray('auditLog');
         const auditError = validateChequeAuditSync({
