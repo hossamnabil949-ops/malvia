@@ -2298,7 +2298,7 @@ export default function App() {
     }, ...expenses] : expenses;
     setCardSettlements(nextSettlements); setBankLedgerEntries(nextEntries); setExpenses(nextExpenses);
     persistChanges({ cardSettlements: nextSettlements, bankLedgerEntries: nextEntries, expenses: nextExpenses });
-    logAudit('supplier.payment', `تسوية فيزا بقيمة ${batch.grossAmount} ج.م إلى ${bankAccounts.find(a => a.id === batch.bankAccountId)?.name || 'حساب بنكي'} — عمولة ${batch.feeAmount} ج.م`, batch.id, batch.grossAmount);
+    logAudit('bank.settlement', `تسوية فيزا بقيمة ${batch.grossAmount} ج.م إلى ${bankAccounts.find(a => a.id === batch.bankAccountId)?.name || 'حساب بنكي'} — عمولة ${batch.feeAmount} ج.م`, batch.id, batch.grossAmount);
     return { ok: true };
   };
 
