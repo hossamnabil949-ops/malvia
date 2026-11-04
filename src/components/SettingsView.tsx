@@ -170,6 +170,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     canViewCashBalances: false,
     canRegisterCheques: false,
     canManageChequeLifecycle: false,
+    canManageExpenses: false,
+    canReceivePurchases: false,
   });
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -315,7 +317,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const permissionLabels: { key: keyof EmployeePermissions; label: string; desc: string }[] = [
     { key: 'canSellPos', label: 'إصدار فواتير البيع (الكاشير)', desc: 'استخدام POS وإصدار الفواتير للعملاء' },
     { key: 'canManageInventory', label: 'إدارة وتعديل المخزون والجرد', desc: 'إضافة أصناف جديدة وتعديل أسعار التكلفة والبيع' },
-    { key: 'canManagePurchases', label: 'فواتير المشتريات والموردين', desc: 'إصدار فواتير الشراء وتوريد البضاعة للمستودع' },
+    { key: 'canManagePurchases', label: 'إدارة المشتريات والموردين', desc: 'إدارة الموردين وفواتير الشراء والمرتجعات والمدفوعات' },
+    { key: 'canReceivePurchases', label: 'استلام وتسجيل فواتير المشتريات', desc: 'تسجيل فاتورة شراء واستلام البضاعة دون صلاحية إدارة مرتجعات الموردين والمدفوعات' },
+    { key: 'canManageExpenses', label: 'تسجيل ومراجعة المصروفات التشغيلية', desc: 'إضافة المصروفات والاطلاع على سجلها دون الوصول إلى رأس المال أو حسابات الشركاء أو أرصدة الخزينة' },
     { key: 'canManageTreasury', label: 'إدارة الخزينة والحسابات المالية', desc: 'إدارة الأرصدة والحركات والتحويلات والتسويات المالية' },
     { key: 'canViewCashBalances', label: 'عرض رصيد درج الكاش والوردية فقط', desc: 'عرض رصيد الدرج وحركة الوردية دون الاطلاع على رأس المال أو الشركاء أو إدارة الحسابات' },
     { key: 'canRegisterCheques', label: 'تسجيل الشيكات', desc: 'تسجيل شيك وارد من عميل أو صادر لمورد دون صلاحية تحصيله أو صرفه' },
