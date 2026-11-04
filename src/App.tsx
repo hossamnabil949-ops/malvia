@@ -3051,12 +3051,18 @@ export default function App() {
               const bankTotals = new Map<string, number>();
               record.lines.filter(line => line.category === 'bank' && line.bankAccountId).forEach(line => bankTotals.set(line.bankAccountId!, (bankTotals.get(line.bankAccountId!) || 0) + line.amount));
               const nextBanks = bankAccounts.map(account => bankTotals.has(account.id) ? { ...account, openingBalance: bankTotals.get(account.id)!, openingDate: record.cutoverDate } : account);
+              const nextPartners = partners.map(partner => {
+                const opening = record.partners.find(item => item.partnerId === partner.id);
+                if (!opening) return partner;
+                const initialCapital = opening.originalContribution;
+                return { ...partner, initialCapital, sharePercentage: opening.ownershipPercentage, totalCurrentCapital: initialCapital + (partner.addedCapital || 0) + (partner.reinvestedProfits || 0) };
+              });
               const nextTreasury = [...cashRows, ...treasury];
               const nextMovements = [...movements, ...stockMovements];
               const audit: AuditEntry = { id: record.id + ':AUDIT', at: record.approvedAt || new Date().toISOString(), userId: currentUser.employeeId, userName: currentUser.employeeName, userRole: currentUser.role, action: 'capital.opening.create', entityId: record.id, summary: 'اعتماد الأرصدة الافتتاحية بتاريخ ' + record.cutoverDate, amount: record.originalCapital };
               const nextAudit = [audit, ...auditLog];
-              setParts(nextParts); setStockMovements(nextMovements); setTreasury(nextTreasury); setBankAccounts(nextBanks); setOpeningBalances([record]); setAuditLog(nextAudit);
-              persistChanges({ parts: nextParts, stockMovements: nextMovements, treasuryTransactions: nextTreasury, bankAccounts: nextBanks, openingBalances: [record], auditLog: nextAudit });
+              setParts(nextParts); setStockMovements(nextMovements); setTreasury(nextTreasury); setBankAccounts(nextBanks); setPartners(nextPartners); setOpeningBalances([record]); setAuditLog(nextAudit);
+              persistChanges({ parts: nextParts, stockMovements: nextMovements, treasuryTransactions: nextTreasury, bankAccounts: nextBanks, partners: nextPartners, openingBalances: [record], auditLog: nextAudit });
               return true;
             }}
             outstandingVisaBalance={Math.max(0, summarizeTreasury(treasury).accounts.find(a => a.key === 'visa')?.balance || 0)}
