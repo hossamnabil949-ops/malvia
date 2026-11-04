@@ -454,12 +454,12 @@ import * as RP from '../src/utils/reportsLogic.ts';
   const mona = tb.rows.find(x => x.name === 'منى')!;
   assert.deepEqual([mona.count, mona.total, mona.voided], [1, 100, 1]);
 
-  // الأرباح والخسائر لشهر أكتوبر (المحسوبة يدوياً): مبيعات 480+100+500 = 1080
+  // October profit and loss is VAT-exclusive and separates discount and returns.
   tb = RP.reportProfitLoss(data, { from: '2026-10-01', to: '2026-10-31' });
   const pl = Object.fromEntries(tb.rows.map(x => [x.item, x.amount]));
   assert.deepEqual(
-    [pl['إجمالي المبيعات بعد الخصم (شامل الضريبة)'], pl['يخصم: مرتجعات المبيعات (شاملة الضريبة)'], pl['صافي المبيعات'], pl['يخصم: تكلفة البضاعة المباعة'], pl['مجمل الربح'], pl['يخصم: المصروفات'], pl['صافي الربح']],
-    [1080, -96, 984, -600, 384, -400, -16]
+    [pl['إجمالي المبيعات قبل الخصم والضريبة'], pl['يخصم: الخصومات'], pl['يخصم: المرتجعات قبل الضريبة'], pl['صافي المبيعات قبل الضريبة'], pl['يخصم: تكلفة البضاعة المباعة (دون الضريبة)'], pl['مجمل الربح قبل المصروفات'], pl['يخصم: المصروفات (دون الضريبة)'], pl['صافي الربح']],
+    [1100, -20, -96, 984, -600, 384, -400, -16]
   );
   const varianceData = {
     ...data,
