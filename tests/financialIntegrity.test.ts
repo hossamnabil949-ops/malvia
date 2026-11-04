@@ -3,7 +3,7 @@ import { generateSupplierScheduleDates } from '../src/utils/supplierPaymentSched
 import { accountOf, isCreditMethod } from '../src/utils/treasuryAccounts.ts';
 import { normalizePaymentMethod } from '../src/utils/paymentMethods.ts';
 import { hasTabAccess, ROLE_PRESETS } from '../src/utils/permissions.ts';
-import { validateChequeCollectionSync, validateChequeAuxiliarySync } from '../src/utils/chequeSyncPolicy.ts';
+import { validateChequeCollectionSync, validateChequeAuxiliarySync, validateExpenseOnlySync } from '../src/utils/chequeSyncPolicy.ts';
 import { registrationEffect, actionEffect, availableActions } from '../src/utils/chequeLogic.ts';
 import { refundForLine, computeVoidPlan } from '../src/utils/saleLogic.ts';
 import { createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, summarizeBankAccount, validateBankAccount } from '../src/utils/bankLedger.ts';
@@ -132,6 +132,32 @@ assert.equal(hasTabAccess('موظف', expenseOnly, 'settings'), false);
 const receivingOnly = { canReceivePurchases: true };
 assert.equal(hasTabAccess('موظف', receivingOnly, 'purchases'), true);
 assert.equal(hasTabAccess('موظف', receivingOnly, 'suppliers'), false);
+
+const expenseOnlyRecord = {
+  id: 'exp-only-1', title: 'مصروف تشغيل', category: 'صيانة ونثريات وضيافة',
+  amount: 125, date: '2026-11-04', paymentMethod: 'كاش (نقدي)', recordedBy: 'مسجل المصروف',
+};
+const expenseOnlyTx = {
+  id: 'TX-EXP-1', referenceId: expenseOnlyRecord.id, type: 'صرف',
+  category: 'مصروفات تشغيلية', amount: 125, date: '2026-11-04',
+  paymentMethod: 'كاش (نقدي)', recordedBy: 'مسجل المصروف',
+};
+assert.equal(validateExpenseOnlySync({
+  previousExpenses: [], incomingExpenses: [expenseOnlyRecord],
+  previousTreasury: [], incomingTreasury: [expenseOnlyTx],
+  employee: { name: 'مسجل المصروف' },
+}), null);
+assert.equal(validateExpenseOnlySync({
+  previousExpenses: [], incomingExpenses: [expenseOnlyRecord],
+  previousTreasury: [], incomingTreasury: [],
+  employee: { name: 'مسجل المصروف' },
+}), 'EXPENSE_TREASURY_MISMATCH');
+assert.equal(validateExpenseOnlySync({
+  previousExpenses: [expenseOnlyRecord], incomingExpenses: [],
+  previousTreasury: [expenseOnlyTx], incomingTreasury: [expenseOnlyTx],
+  employee: { name: 'مسجل المصروف' },
+}), 'EXPENSE_ONLY_UPDATE_DENIED');
+
 
 
 // FIN-9: incoming cheque excess remains as customer credit and is fully reversible on bounce.
