@@ -207,3 +207,26 @@ export function createChequeBankReversalEntry(
     error: null,
   };
 }
+
+
+export type BankMovementError = 'BANK_MOVEMENT_ACCOUNT_REQUIRED' | 'BANK_MOVEMENT_ACCOUNT_INACTIVE' | 'BANK_MOVEMENT_DUPLICATE' | 'BANK_MOVEMENT_AMOUNT_INVALID' | 'BANK_MOVEMENT_DATE_INVALID';
+
+/** Creates one idempotent bank-ledger posting for an ordinary incoming/outgoing bank movement. */
+export function createBankMovementEntry(
+  input: { id: string; batchId: string; bankAccountId: string; direction: 'in' | 'out'; amount: number; date: string; reference: string; description: string },
+  accounts: BankAccount[],
+  existing: BankLedgerEntry[] = [],
+): { entry: BankLedgerEntry | null; error: BankMovementError | null } {
+  if (!input.bankAccountId) return { entry: null, error: 'BANK_MOVEMENT_ACCOUNT_REQUIRED' };
+  const account = accounts.find(item => item.id === input.bankAccountId);
+  if (!account) return { entry: null, error: 'BANK_MOVEMENT_ACCOUNT_REQUIRED' };
+  if (!account.active) return { entry: null, error: 'BANK_MOVEMENT_ACCOUNT_INACTIVE' };
+  if (existing.some(entry => entry.id === input.id)) return { entry: null, error: 'BANK_MOVEMENT_DUPLICATE' };
+  if (!Number.isFinite(input.amount) || input.amount <= 0) return { entry: null, error: 'BANK_MOVEMENT_AMOUNT_INVALID' };
+  if (!validDate(input.date)) return { entry: null, error: 'BANK_MOVEMENT_DATE_INVALID' };
+  return { entry: {
+    id: input.id, batchId: input.batchId, accountKind: 'bank', bankAccountId: input.bankAccountId,
+    direction: input.direction, amount: roundMoney(input.amount), date: input.date,
+    reference: input.reference.trim(), description: input.description,
+  }, error: null };
+}
