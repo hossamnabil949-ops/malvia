@@ -42,7 +42,7 @@ import {
   Shift
 } from './types/autoParts';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
-import { createCardSettlementEntries, validateBankAccount } from './utils/bankLedger';
+import { createCardSettlementEntries, createChequeBankEntry, validateBankAccount } from './utils/bankLedger';
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
 import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands';
@@ -1037,14 +1037,43 @@ export default function App() {
     return { ok: true };
   };
 
-  const handleChequeAction = (id: string, action: ChequeAction, note?: string): { ok: boolean; message?: string } => {
+  const handleChequeAction = (id: string, action: ChequeAction, note?: string, bankAccountId?: string): { ok: boolean; message?: string } => {
     const cur = cheques.find(c => c.id === id);
     if (!cur) return { ok: false, message: 'الشيك غير موجود' };
     const by = currentUser?.employeeName || 'غير معروف';
     const updated = applyAction(cur, action, by, new Date().toISOString(), note);
     if (!updated) return { ok: false, message: 'هذا الإجراء غير مسموح في حالة الشيك الحالية (ربما تغيّرت من جهاز آخر)' };
     const effect = actionEffect(cur, action);
+    let nextBankEntries = bankLedgerEntries;
+    if (action === 'clear') {
+      if (!bankAccountId) return { ok: false, message: 'يجب تحديد الحساب البنكي الذي تم فيه التحصيل أو الصرف.' };
+      const posting = createChequeBankEntry({
+        chequeId: cur.id,
+        bankAccountId,
+        direction: cur.direction,
+        amount: cur.amount,
+        date: todayISO(),
+        reference: cur.number,
+        description: `${cur.direction === 'incoming' ? 'تحصيل شيك وارد' : 'صرف شيك صادر'} رقم ${cur.number} — ${cur.partyName}`,
+      }, bankAccounts, bankLedgerEntries);
+      if (posting.error || !posting.entry) {
+        const messages: Record<string, string> = {
+          CHEQUE_BANK_REQUIRED: 'الحساب البنكي غير موجود.',
+          CHEQUE_BANK_INACTIVE: 'الحساب البنكي المحدد موقوف.',
+          CHEQUE_BANK_DUPLICATE: 'تم ترحيل هذا الشيك إلى البنك من قبل.',
+          CHEQUE_AMOUNT_INVALID: 'قيمة الشيك غير صالحة.',
+          CHEQUE_DATE_INVALID: 'تاريخ ترحيل الشيك غير صالح.',
+        };
+        return { ok: false, message: messages[posting.error || ''] || 'تعذّر ترحيل الشيك إلى البنك.' };
+      }
+      nextBankEntries = [posting.entry, ...bankLedgerEntries];
+    }
+    const updatedCheque = action === 'clear' ? { ...updated, clearedBankAccountId: bankAccountId } : updated;
     applyChequeEffectToParty(cur, effect, false);
+    if (action === 'clear') {
+      setBankLedgerEntries(nextBankEntries);
+      persistChanges({ bankLedgerEntries: nextBankEntries });
+    }
     if (effect.treasury) {
       const t = effect.treasury;
       const tx: TreasuryTransaction = {
@@ -1068,7 +1097,7 @@ export default function App() {
       });
     }
     setCheques(prev => {
-      const list = prev.map(c => (c.id === id ? updated : c));
+      const list = prev.map(c => (c.id === id ? updatedCheque : c));
       persistChanges({ cheques: list });
       return list;
     });
@@ -2571,6 +2600,7 @@ export default function App() {
             suppliers={suppliers}
             onAdd={handleAddCheque}
             onAction={handleChequeAction}
+            bankAccounts={bankAccounts}
             canRegister={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canRegisterCheques || effectivePermissions?.canManageTreasury)}
             canManageLifecycle={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageChequeLifecycle || effectivePermissions?.canManageTreasury)}
           />
