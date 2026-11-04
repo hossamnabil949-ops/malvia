@@ -149,3 +149,36 @@ export function summarizeBankAccount(
     return balance + (entry.direction === 'in' ? entry.amount : -entry.amount);
   }, account.openingBalance));
 }
+
+
+export type ChequeBankDirection = 'incoming' | 'outgoing';
+export type ChequeBankEntryError = 'CHEQUE_BANK_REQUIRED' | 'CHEQUE_BANK_INACTIVE' | 'CHEQUE_BANK_DUPLICATE' | 'CHEQUE_AMOUNT_INVALID' | 'CHEQUE_DATE_INVALID';
+
+/** Posts a cleared cheque to exactly one bank account. Duplicate cheque postings are rejected. */
+export function createChequeBankEntry(
+  input: { chequeId: string; bankAccountId: string; direction: ChequeBankDirection; amount: number; date: string; reference: string; description: string },
+  accounts: BankAccount[],
+  existing: BankLedgerEntry[] = [],
+): { entry: BankLedgerEntry | null; error: ChequeBankEntryError | null } {
+  if (!input.chequeId || !input.bankAccountId) return { entry: null, error: 'CHEQUE_BANK_REQUIRED' };
+  if (existing.some(entry => entry.id === `cheque:${input.chequeId}`)) return { entry: null, error: 'CHEQUE_BANK_DUPLICATE' };
+  const account = accounts.find(item => item.id === input.bankAccountId);
+  if (!account) return { entry: null, error: 'CHEQUE_BANK_REQUIRED' };
+  if (!account.active) return { entry: null, error: 'CHEQUE_BANK_INACTIVE' };
+  if (!Number.isFinite(input.amount) || input.amount <= 0) return { entry: null, error: 'CHEQUE_AMOUNT_INVALID' };
+  if (!validDate(input.date)) return { entry: null, error: 'CHEQUE_DATE_INVALID' };
+  return {
+    entry: {
+      id: `cheque:${input.chequeId}`,
+      batchId: input.chequeId,
+      accountKind: 'bank',
+      bankAccountId: input.bankAccountId,
+      direction: input.direction === 'incoming' ? 'in' : 'out',
+      amount: roundMoney(input.amount),
+      date: input.date,
+      reference: input.reference.trim(),
+      description: input.description,
+    },
+    error: null,
+  };
+}
