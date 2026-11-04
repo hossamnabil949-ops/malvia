@@ -1,6 +1,7 @@
 // FIN-18: atomic multi-resource sync. Every resource is validated and committed in one PostgreSQL transaction.
 import { commitSyncBatch, getAuthenticatedEmployee, getOne } from './_db.js';
 import { validateChequeAuditSync, validateChequeAuxiliarySync, validateChequeCollectionSync, validateExpenseOnlySync, validatePurchaseAuditSync } from '../src/utils/chequeSyncPolicy';
+import { validateBankLedgerSync } from '../src/utils/bankLedgerSyncPolicy';
 import { createHash } from 'node:crypto';
 import { ApiError, clientIp, findLicense, rateLimit, sendError } from './_security.js';
 
@@ -13,10 +14,10 @@ const policy: Record<string, string[]> = {
   suppliers: ['canManagePurchases','canReceivePurchases','canManageTreasury'], supplierPayments: ['canManagePurchases','canManageTreasury'],
   supplierPaymentSchedules: ['canManagePurchases','canManageTreasury'], purchaseInvoices: ['canManagePurchases','canReceivePurchases'],
   purchaseReturns: ['canManagePurchases'], expenses: ['canManageExpenses','canManageTreasury'],
-  treasury: ['canManageTreasury','canSellPos','canManagePurchases','canManageChequeLifecycle','canManageExpenses'], bankAccounts: ['canManageTreasury'], cardSettlements: ['canManageTreasury'], bankLedgerEntries: ['canManageTreasury','canManageChequeLifecycle'],
+  treasury: ['canManageTreasury','canSellPos','canManagePurchases','canManageChequeLifecycle','canManageExpenses'], bankAccounts: ['canManageTreasury'], cardSettlements: ['canManageTreasury'], bankLedgerEntries: ['canManageTreasury','canManageChequeLifecycle','canSellPos','canManagePurchases','canManageExpenses','canManagePartners'],
   shifts: ['canSellPos','canManageTreasury'],
   stockMovements: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
-  auditLog: ['canSellPos','canManageInventory','canManagePurchases','canManageTreasury','canManageSettings','canRegisterCheques','canManageChequeLifecycle','canReceivePurchases'],
+  auditLog: ['canSellPos','canManageInventory','canManagePurchases','canManageTreasury','canManageSettings','canRegisterCheques','canManageChequeLifecycle','canReceivePurchases','canManageExpenses','canManagePartners'],
   carModels: ['canManageInventory'], reservations: ['canSellPos'], cheques: ['canManageTreasury','canRegisterCheques','canManageChequeLifecycle'],
 };
 
@@ -55,6 +56,34 @@ export default async function handler(req: any, res: any) {
     for (const op of operations) {
       const allowed = owner || policy[op.resource].some((permission) => permissions[permission] === true);
       if (!allowed) return res.status(403).json({ code: 'EMPLOYEE_PERMISSION_DENIED', resource: op.resource, error: 'لا تملك صلاحية مزامنة أحد عناصر الدفعة.' });
+    }
+
+    if (!owner && operations.some((op: any) => op.resource === 'bankLedgerEntries')) {
+      const operationMap = new Map(operations.map((op: any) => [op.resource, op]));
+      const loadArray = async (resource: string): Promise<any[]> => {
+        const row = await getOne(tenant, resource);
+        return Array.isArray(row?.data) ? row.data as any[] : [];
+      };
+      const currentArray = async (resource: string): Promise<any[]> => {
+        const operation: any = operationMap.get(resource);
+        return operation ? operation.data : loadArray(resource);
+      };
+      const bankOperation: any = operationMap.get('bankLedgerEntries');
+      const previousBankEntries = await loadArray('bankLedgerEntries');
+      const bankError = validateBankLedgerSync({
+        previous: previousBankEntries,
+        incoming: bankOperation.data,
+        bankAccounts: await currentArray('bankAccounts') as any[],
+        invoices: await currentArray('invoices'),
+        supplierPayments: await currentArray('supplierPayments'),
+        purchaseInvoices: await currentArray('purchaseInvoices'),
+        expenses: await currentArray('expenses'),
+        treasury: await currentArray('treasury'),
+        partners: await currentArray('partners'),
+        cardSettlements: await currentArray('cardSettlements'),
+        cheques: await currentArray('cheques'),
+      });
+      if (bankError) return res.status(403).json({ code: bankError, resource: 'bankLedgerEntries', error: 'حركة دفتر البنك غير مطابقة للمستند المالي أو تحاول تعديل سجل سابق.' });
     }
 
     if (!owner && operations.some((op: any) => ['cheques', 'treasury', 'bankLedgerEntries', 'expenses', 'auditLog'].includes(op.resource)) &&
@@ -126,6 +155,8 @@ export default async function handler(req: any, res: any) {
       for (const resource of ['treasury', 'bankLedgerEntries']) {
         const operation: any = operationMap.get(resource);
         if (!operation || permissions.canManageChequeLifecycle !== true) continue;
+        if (resource === 'bankLedgerEntries' && (permissions.canSellPos === true || permissions.canManagePurchases === true
+          || permissions.canManageExpenses === true || permissions.canManagePartners === true)) continue;
         // POS/purchase operators already have the legacy workflow permission for treasury writes;
         // apply the narrow cheque-only rule only to lifecycle-only staff.
         if (resource === 'treasury' && (permissions.canSellPos === true || permissions.canManagePurchases === true)) continue;
