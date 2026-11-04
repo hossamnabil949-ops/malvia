@@ -17,7 +17,7 @@ const CATEGORIES: { value: OpeningBalanceCategory; label: string }[] = [
   { value: 'bank', label: 'رصيد حساب بنكي' }, { value: 'fixed_asset', label: 'معدات وأثاث وأصول ثابتة' },
   { value: 'prepaid', label: 'تأمين / مقدم إيجار' }, { value: 'customer_receivable', label: 'مستحقات لدى العملاء' },
   { value: 'other_asset', label: 'أصول أخرى' }, { value: 'supplier_payable', label: 'مستحقات الموردين' },
-  { value: 'loan', label: 'قروض والتزامات' }, { value: 'other_liability', label: 'التزامات أخرى' },
+  { value: 'loan', label: 'قروض والتزامات' }, { value: 'other_liability', label: 'التزامات أخرى' }, { value: 'historical_expense', label: 'مصروفات تأسيس / إيجار مستهلكة' },
 ];
 const money = (n: number) => Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '0';
 
@@ -47,6 +47,7 @@ export const OpeningBalancesPanel: React.FC<Props> = ({ existing = [], partners,
   const selectedPart = parts.find(p => p.id === partId);
   const effectiveAmount = category === 'inventory' ? quantity * unitCost : amount;
   const isLiability = ['supplier_payable', 'loan', 'other_liability'].includes(category);
+  const isHistoricalExpense = category === 'historical_expense';
 
   const addLine = () => {
     if (category === 'inventory' && (!selectedPart || quantity <= 0 || unitCost < 0)) return;
