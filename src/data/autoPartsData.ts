@@ -614,6 +614,7 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   'صيانة ونثريات وضيافة',
   'تسويات وعجز جردي',
   'رسوم وتراخيص حكومية',
+  'عمولات ورسوم بنكية',
 ];
 
 export const PAYMENT_METHODS_LIST: { id: PaymentMethod; label: string; icon: string; desc: string }[] = [
