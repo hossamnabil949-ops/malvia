@@ -24,7 +24,8 @@ interface ChequesViewProps {
   customers: Customer[];
   suppliers: Supplier[];
   onAdd: (input: NewChequeInput) => { ok: boolean; error?: ChequeError };
-  onAction: (id: string, action: ChequeAction, note?: string) => { ok: boolean; message?: string };
+  onAction: (id: string, action: ChequeAction, note?: string, bankAccountId?: string) => { ok: boolean; message?: string };
+  bankAccounts?: BankAccount[];
   canRegister?: boolean;
   canManageLifecycle?: boolean;
 }
@@ -52,7 +53,7 @@ const inputCls =
   'w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400';
 const money = (n: number) => `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })} ج.م`;
 
-export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, suppliers, onAdd, onAction, canRegister = true, canManageLifecycle = true }) => {
+export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, suppliers, onAdd, onAction, bankAccounts = [], canRegister = true, canManageLifecycle = true }) => {
   const today = todayISO();
   const [direction, setDirection] = useState<ChequeDirection>('incoming');
   const [filter, setFilter] = useState<'open' | 'overdue' | 'due_soon' | 'closed' | 'all'>('open');
@@ -70,6 +71,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, su
   // ---- تأكيد إجراء ----
   const [confirm, setConfirm] = useState<{ cheque: Cheque; action: ChequeAction } | null>(null);
   const [confirmNote, setConfirmNote] = useState('');
+  const [confirmBankAccountId, setConfirmBankAccountId] = useState('');
 
   const summary = useMemo(() => summarize(cheques, direction, today), [cheques, direction, today]);
 
@@ -134,7 +136,11 @@ export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, su
 
   const runAction = () => {
     if (!confirm) return;
-    const res = onAction(confirm.cheque.id, confirm.action, confirmNote);
+    if (confirm.action === 'clear' && !bankAccounts.some(account => account.id === confirmBankAccountId && account.active)) {
+      setFlash({ ok: false, text: 'اختر الحساب البنكي النشط الذي استلم أو سيُصرف منه الشيك.' });
+      return;
+    }
+    const res = onAction(confirm.cheque.id, confirm.action, confirmNote, confirm.action === 'clear' ? confirmBankAccountId : undefined);
     setFlash({ ok: res.ok, text: res.message || (res.ok ? 'تم تنفيذ الإجراء' : 'تعذّر تنفيذ الإجراء') });
     setConfirm(null);
     setConfirmNote('');
@@ -256,7 +262,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, su
                     <button
                       key={a}
                       type="button"
-                      onClick={() => { setConfirm({ cheque: c, action: a }); setConfirmNote(''); }}
+                      onClick={() => { setConfirm({ cheque: c, action: a }); setConfirmNote(''); setConfirmBankAccountId(bankAccounts.find(account => account.active)?.id || ''); }}
                       className={`px-2.5 h-7 rounded-lg text-[11px] font-bold ${
                         a === 'clear' ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
                         : a === 'bounce' ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'
@@ -353,6 +359,16 @@ export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, su
               {confirm.action === 'clear' ? clearLabel(confirm.cheque.direction) : ACTION_LABEL[confirm.action]} — شيك {confirm.cheque.number}
             </h3>
             <p className="text-neutral-300">{confirmText(confirm.cheque, confirm.action)}</p>
+            {confirm.action === 'clear' && (
+              <label className="block space-y-1 text-neutral-300">
+                <span>الحساب البنكي الذي تم فيه التحصيل / الصرف</span>
+                <select value={confirmBankAccountId} onChange={e => setConfirmBankAccountId(e.target.value)} className={inputCls}>
+                  <option value="">اختر الحساب البنكي</option>
+                  {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}{account.accountLast4 ? " ••" + account.accountLast4 : ""}</option>)}
+                </select>
+                {!bankAccounts.some(account => account.active) && <span className="text-rose-300">يجب إضافة حساب بنكي نشط أولاً من شاشة المالية.</span>}
+              </label>
+            )}
             <input
               value={confirmNote}
               onChange={(e) => setConfirmNote(e.target.value)}
@@ -364,6 +380,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, su
                 type="button"
                 onClick={runAction}
                 className={`flex-1 h-10 rounded-xl font-black text-black ${confirm.action === 'bounce' ? 'bg-rose-400 hover:bg-rose-300' : 'bg-amber-500 hover:bg-amber-400'}`}
+                disabled={confirm.action === 'clear' && !bankAccounts.some(account => account.id === confirmBankAccountId && account.active)}
               >
                 تأكيد
               </button>
