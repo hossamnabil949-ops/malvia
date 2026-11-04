@@ -508,11 +508,14 @@ export interface TreasuryTransaction {
     | 'عجز درج (تسوية وردية)'
     | 'زيادة درج (تسوية وردية)'
     | 'ارتداد شيك وارد'
-    | 'ارتداد شيك صادر';
+    | 'ارتداد شيك صادر'
+    | 'تسوية مستحقات الفيزا'
+    | 'إيداع صافي تسوية الفيزا بالبنك';
   amount: number;
   paymentMethod: PaymentMethod | string;
   balanceAfter: number;
   referenceId?: string;
+  bankAccountId?: string; // الحساب البنكي المحدد للحركات البنكية الجديدة
   description: string;
   recordedBy: string;
   at?: string;       // وقت التسجيل الفعلي (ISO) — يُختم تلقائياً للحركات الجديدة
