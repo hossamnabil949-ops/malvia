@@ -187,3 +187,39 @@ export function validateChequeAuditSync(input: {
   }
   return null;
 }
+
+export function validateExpenseOnlySync(input: {
+  previousExpenses: ChequeRecord[];
+  incomingExpenses: ChequeRecord[];
+  previousTreasury: ChequeRecord[];
+  incomingTreasury: ChequeRecord[];
+  employee: { name?: string };
+}): string | null {
+  const assertAppendOnly = (previous: ChequeRecord[], incoming: ChequeRecord[]) => {
+    const next = new Map(incoming.map(item => [String(item.id), item]));
+    for (const oldItem of previous) {
+      if (!next.has(String(oldItem.id)) || !same(oldItem, next.get(String(oldItem.id)))) return false;
+    }
+    return true;
+  };
+  if (!assertAppendOnly(input.previousExpenses, input.incomingExpenses) ||
+      !assertAppendOnly(input.previousTreasury, input.incomingTreasury)) return 'EXPENSE_ONLY_UPDATE_DENIED';
+
+  const oldExpenseIds = new Set(input.previousExpenses.map(item => String(item.id)));
+  const newExpenses = input.incomingExpenses.filter(item => !oldExpenseIds.has(String(item.id)));
+  const oldTreasuryIds = new Set(input.previousTreasury.map(item => String(item.id)));
+  const newTransactions = input.incomingTreasury.filter(item => !oldTreasuryIds.has(String(item.id)));
+  if (newExpenses.length !== newTransactions.length) return 'EXPENSE_TREASURY_MISMATCH';
+
+  for (const expense of newExpenses) {
+    const tx = newTransactions.find(item => item.referenceId === expense.id);
+    if (!tx || !String(expense.id || '').trim() || !(Number(expense.amount) > 0) ||
+        !String(expense.title || '').trim() || !String(expense.date || '').trim() ||
+        (input.employee.name && expense.recordedBy !== input.employee.name) ||
+        tx.type !== 'صرف' || tx.category !== 'مصروفات تشغيلية' ||
+        tx.paymentMethod !== expense.paymentMethod || Number(tx.amount) !== Number(expense.amount) ||
+        tx.date !== expense.date || tx.recordedBy !== expense.recordedBy ||
+        !String(tx.id || '').startsWith('TX-EXP-')) return 'EXPENSE_TREASURY_MISMATCH';
+  }
+  return null;
+}
