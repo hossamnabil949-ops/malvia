@@ -230,3 +230,30 @@ export function createBankMovementEntry(
     reference: input.reference.trim(), description: input.description,
   }, error: null };
 }
+
+
+export type BankTransferError = 'BANK_TRANSFER_SOURCE_REQUIRED' | 'BANK_TRANSFER_DESTINATION_REQUIRED' | 'BANK_TRANSFER_SAME_ACCOUNT' | 'BANK_TRANSFER_ACCOUNT_INACTIVE' | 'BANK_TRANSFER_DUPLICATE' | 'BANK_TRANSFER_AMOUNT_INVALID' | 'BANK_TRANSFER_DATE_INVALID';
+
+/** Creates balanced, paired bank-ledger entries for a transfer between two owned bank accounts. */
+export function createBankTransferEntries(
+  input: { id: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; date: string; reference: string; description?: string },
+  accounts: BankAccount[],
+  existing: BankLedgerEntry[] = [],
+): { entries: BankLedgerEntry[]; error: BankTransferError | null } {
+  if (!input.sourceBankAccountId) return { entries: [], error: 'BANK_TRANSFER_SOURCE_REQUIRED' };
+  if (!input.destinationBankAccountId) return { entries: [], error: 'BANK_TRANSFER_DESTINATION_REQUIRED' };
+  if (input.sourceBankAccountId === input.destinationBankAccountId) return { entries: [], error: 'BANK_TRANSFER_SAME_ACCOUNT' };
+  const source = accounts.find(account => account.id === input.sourceBankAccountId);
+  const destination = accounts.find(account => account.id === input.destinationBankAccountId);
+  if (!source || !destination || !source.active || !destination.active) return { entries: [], error: 'BANK_TRANSFER_ACCOUNT_INACTIVE' };
+  if (existing.some(entry => entry.batchId === input.id || entry.id === `bank-transfer:${input.id}:out` || entry.id === `bank-transfer:${input.id}:in`)) return { entries: [], error: 'BANK_TRANSFER_DUPLICATE' };
+  if (!Number.isFinite(input.amount) || input.amount <= 0) return { entries: [], error: 'BANK_TRANSFER_AMOUNT_INVALID' };
+  if (!validDate(input.date)) return { entries: [], error: 'BANK_TRANSFER_DATE_INVALID' };
+  const amount = roundMoney(input.amount);
+  const reference = input.reference.trim() || input.id;
+  const description = input.description || 'تحويل بين حسابين بنكيين';
+  return { entries: [
+    { id: `bank-transfer:${input.id}:out`, batchId: input.id, accountKind: 'bank', bankAccountId: source.id, direction: 'out', amount, date: input.date, reference, description: `${description} — من ${source.bankName} / ${source.name}` },
+    { id: `bank-transfer:${input.id}:in`, batchId: input.id, accountKind: 'bank', bankAccountId: destination.id, direction: 'in', amount, date: input.date, reference, description: `${description} — إلى ${destination.bankName} / ${destination.name}` },
+  ], error: null };
+}
