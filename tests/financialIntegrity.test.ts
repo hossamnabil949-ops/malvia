@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { generateSupplierScheduleDates } from '../src/utils/supplierPaymentSchedule.ts';
-import { accountOf, isCreditMethod } from '../src/utils/treasuryAccounts.ts';
+import { accountOf, isCreditMethod, summarizeTreasury } from '../src/utils/treasuryAccounts.ts';
 import { normalizePaymentMethod } from '../src/utils/paymentMethods.ts';
 import { hasTabAccess, ROLE_PRESETS } from '../src/utils/permissions.ts';
 import { validateChequeCollectionSync, validateChequeAuxiliarySync, validateExpenseOnlySync } from '../src/utils/chequeSyncPolicy.ts';
@@ -111,6 +111,17 @@ assert.equal(accountOf('InstaPay - محفظة'), 'wallet');
 assert.equal(accountOf('محفظة إلكترونية'), 'wallet');
 assert.equal(accountOf('فيزا / بطاقة'), 'visa');
 assert.equal(accountOf('bank transfer'), 'bank');
+
+assert.equal(accountOf('تحويل بنكي'), 'bank');
+const visaSettlementSummary = summarizeTreasury([
+  { id: 'v1', type: 'قبض', amount: 1000, paymentMethod: 'فيزا / بطاقة', date: '2026-11-04' },
+  { id: 'v2', type: 'صرف', amount: 1000, paymentMethod: 'فيزا / بطاقة', date: '2026-11-04' },
+  { id: 'b1', type: 'قبض', amount: 980, paymentMethod: 'تحويل بنكي', date: '2026-11-04' },
+] as any);
+assert.equal(visaSettlementSummary.accounts.find(a => a.key === 'visa')?.balance, 0);
+assert.equal(visaSettlementSummary.accounts.find(a => a.key === 'bank')?.balance, 980);
+assert.equal(visaSettlementSummary.total.balance, 980);
+
 assert.equal(isCreditMethod('credit'), true);
 assert.equal(normalizePaymentMethod('انستاباي / InstaPay'), 'إنستاباي / InstaPay');
 
