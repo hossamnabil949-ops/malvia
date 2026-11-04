@@ -42,7 +42,7 @@ import {
   Shift
 } from './types/autoParts';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
-import { createCardSettlementEntries, createChequeBankEntry, validateBankAccount } from './utils/bankLedger';
+import { createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount } from './utils/bankLedger';
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
 import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands';
@@ -1068,9 +1068,24 @@ export default function App() {
       }
       nextBankEntries = [posting.entry, ...bankLedgerEntries];
     }
+    const isPostClearBounce = action === 'bounce' && (cur.status === 'محصّل' || cur.status === 'مصروف');
+    if (isPostClearBounce) {
+      const reversal = createChequeBankReversalEntry({
+        chequeId: cur.id,
+        date: todayISO(),
+        reference: cur.number,
+        description: `عكس حركة شيك مرتد رقم ${cur.number} — ${cur.partyName}`,
+      }, bankLedgerEntries);
+      if (reversal.error || !reversal.entry) {
+        return { ok: false, message: reversal.error === 'CHEQUE_BANK_DUPLICATE'
+          ? 'تم عكس حركة هذا الشيك البنكية من قبل.'
+          : 'تعذّر العثور على حركة البنك الأصلية لعكسها.' };
+      }
+      nextBankEntries = [reversal.entry, ...bankLedgerEntries];
+    }
     const updatedCheque = action === 'clear' ? { ...updated, clearedBankAccountId: bankAccountId } : updated;
     applyChequeEffectToParty(cur, effect, false);
-    if (action === 'clear') {
+    if (action === 'clear' || isPostClearBounce) {
       setBankLedgerEntries(nextBankEntries);
       persistChanges({ bankLedgerEntries: nextBankEntries });
     }
