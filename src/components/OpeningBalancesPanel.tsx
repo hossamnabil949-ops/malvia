@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import type { AutoPart, Partner } from '../types/autoParts';
+import type { AutoPart, Partner, Customer, Supplier } from '../types/autoParts';
 import type { BankAccount } from '../utils/bankLedger';
 import { openingDifferenceLabel, summarizeOpeningBalances, validateOpeningBalanceRecord } from '../utils/openingBalanceLogic';
 import type { OpeningBalanceCategory, OpeningBalanceLine, OpeningBalanceRecord } from '../utils/openingBalanceLogic';
@@ -9,6 +9,8 @@ interface Props {
   partners: Partner[];
   parts: AutoPart[];
   bankAccounts: BankAccount[];
+  customers: Customer[];
+  suppliers: Supplier[];
   currentUser: string;
   onApprove: (record: OpeningBalanceRecord) => boolean;
 }
@@ -21,7 +23,7 @@ const CATEGORIES: { value: OpeningBalanceCategory; label: string }[] = [
 ];
 const money = (n: number) => Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '0';
 
-export const OpeningBalancesPanel: React.FC<Props> = ({ existing = [], partners, parts, bankAccounts, currentUser, onApprove }) => {
+export const OpeningBalancesPanel: React.FC<Props> = ({ existing = [], partners, parts, bankAccounts, customers, suppliers, currentUser, onApprove }) => {
   const approved = existing.find(r => r.status === 'approved');
   const [capital, setCapital] = useState(0);
   const [cutoverDate, setCutoverDate] = useState(new Date().toISOString().slice(0, 10));
@@ -34,6 +36,7 @@ export const OpeningBalancesPanel: React.FC<Props> = ({ existing = [], partners,
   const [quantity, setQuantity] = useState(1);
   const [unitCost, setUnitCost] = useState(0);
   const [bankAccountId, setBankAccountId] = useState('');
+  const [entityId, setEntityId] = useState('');
   const [lines, setLines] = useState<OpeningBalanceLine[]>([]);
   const [partnerContributions, setPartnerContributions] = useState<Record<string, number>>(
     Object.fromEntries(partners.map(p => [p.id, p.initialCapital || 0]))
@@ -59,9 +62,10 @@ export const OpeningBalancesPanel: React.FC<Props> = ({ existing = [], partners,
       amount: Math.round(effectiveAmount * 100) / 100,
       ...(category === 'inventory' ? { partId, quantity, unitCost } : {}),
       ...(category === 'bank' ? { bankAccountId } : {}),
+      ...(['customer_receivable', 'supplier_payable'].includes(category) ? { entityId } : {}),
     };
     setLines(prev => [...prev, next]);
-    setLabel(''); setAmount(0); setQuantity(1); setUnitCost(0); setPartId(''); setBankAccountId('');
+    setLabel(''); setAmount(0); setQuantity(1); setUnitCost(0); setPartId(''); setBankAccountId(''); setEntityId('');
   };
 
   const approve = () => {
@@ -112,7 +116,7 @@ export const OpeningBalancesPanel: React.FC<Props> = ({ existing = [], partners,
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
         <label className="text-xs text-neutral-300">نوع البند<select value={category} onChange={e=>setCategory(e.target.value as OpeningBalanceCategory)} className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2 text-white">{CATEGORIES.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}</select></label>
         <label className="text-xs text-neutral-300">البيان<input value={label} onChange={e=>setLabel(e.target.value)} placeholder="اسم البند أو ملاحظته" className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2 text-white"/></label>
-        {category === 'inventory' ? <label className="text-xs text-neutral-300">الصنف<select value={partId} onChange={e=>{setPartId(e.target.value);const p=parts.find(x=>x.id===e.target.value);if(p)setUnitCost(p.costPrice||0);}} className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2 text-white"><option value="">اختر الصنف</option>{parts.map(p=><option key={p.id} value={p.id}>{p.partNumber} — {p.name}</option>)}</select></label> : category === 'bank' ? <label className="text-xs text-neutral-300">الحساب البنكي<select value={bankAccountId} onChange={e=>setBankAccountId(e.target.value)} className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2 text-white"><option value="">اختر حسابًا نشطًا</option>{bankAccounts.filter(a=>a.active).map(a=><option key={a.id} value={a.id}>{a.bankName} — {a.name}</option>)}</select></label> : <Field label="القيمة بالجنيه" value={amount} onChange={setAmount}/>}
+        {category === 'inventory' ? <label className="text-xs text-neutral-300">الصنف<select value={partId} onChange={e=>{setPartId(e.target.value);const p=parts.find(x=>x.id===e.target.value);if(p)setUnitCost(p.costPrice||0);}} className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2 text-white"><option value="">اختر الصنف</option>{parts.map(p=><option key={p.id} value={p.id}>{p.partNumber} — {p.name}</option>)}</select></label> : category === 'bank' ? <label className="text-xs text-neutral-300">الحساب البنكي<select value={bankAccountId} onChange={e=>setBankAccountId(e.target.value)} className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2 text-white"><option value="">اختر حسابًا نشطًا</option>{bankAccounts.filter(a=>a.active).map(a=><option key={a.id} value={a.id}>{a.bankName} — {a.name}</option>)}</select></label> : ['customer_receivable', 'supplier_payable'].includes(category) ? <label className="text-xs text-neutral-300">{category === 'customer_receivable' ? 'العميل' : 'المورد'}<select value={entityId} onChange={e=>setEntityId(e.target.value)} className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2 text-white"><option value="">اختر الطرف</option>{(category === 'customer_receivable' ? customers : suppliers).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : <Field label="القيمة بالجنيه" value={amount} onChange={setAmount}/>}
       </div>
       {category === 'inventory' && <div className="grid grid-cols-2 gap-2"><Field label="الكمية الفعلية" value={quantity} onChange={setQuantity}/><Field label="تكلفة الوحدة" value={unitCost} onChange={setUnitCost}/><div className="col-span-2 text-xs text-neutral-400">إجمالي قيمة المخزون: <b className="text-white">{money(effectiveAmount)} ج.م</b></div></div>}
       <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-neutral-500">{isLiability ? 'سيتم خصم هذا البند من صافي الأصول.' : isHistoricalExpense ? 'يسجل كمصروف تاريخي مستهلك ولا يدخل ضمن أصول أو مصروفات MALVIA التشغيلية.' : 'يُسجل ضمن الأصول الافتتاحية.'}</span><button type="button" onClick={addLine} className="rounded-lg bg-sky-600 text-white px-4 py-2 text-xs font-bold">إضافة بند للجرد</button></div>
