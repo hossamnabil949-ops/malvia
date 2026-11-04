@@ -41,10 +41,12 @@ import {
   ProfitDistributionRecord,
   Shift
 } from './types/autoParts';
+import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
+import { createCardSettlementEntries, validateBankAccount } from './utils/bankLedger';
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
 import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands';
-import { isCreditMethod } from './utils/treasuryAccounts';
+import { isCreditMethod, summarizeTreasury } from './utils/treasuryAccounts';
 import { findOpenShift, findOpenShifts, summarizeShift, stampNewTreasury, nextShiftNumber, countTotal, round2, varianceOf } from './utils/shiftLogic';
 import { nextSalesInvoiceNumber } from './utils/invoiceNumber';
 import { uniqueTransactionNumber } from './utils/uniqueTransactionNumber';
@@ -150,6 +152,9 @@ export default function App() {
   const [loyaltyLedger, setLoyaltyLedger] = useState<LoyaltyEntry[]>([]);
   const [loyaltyTick, setLoyaltyTick] = useState(0);
   const [cheques, setCheques] = useState<Cheque[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [cardSettlements, setCardSettlements] = useState<CardSettlementBatch[]>([]);
+  const [bankLedgerEntries, setBankLedgerEntries] = useState<BankLedgerEntry[]>([]);
   const [stockBatches, setStockBatches] = useState<StockBatch[]>([]);
   const [serialUnits, setSerialUnits] = useState<SerialUnit[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -257,6 +262,9 @@ export default function App() {
     setStockTransfers(data.stockTransfers || []);
     setLoyaltyLedger(data.loyaltyLedger || []);
     setCheques(data.cheques || []);
+    setBankAccounts(data.bankAccounts || []);
+    setCardSettlements(data.cardSettlements || []);
+    setBankLedgerEntries(data.bankLedgerEntries || []);
     setStockBatches(data.stockBatches || []);
     setSerialUnits(data.serialUnits || []);
   }, []);
@@ -2263,6 +2271,35 @@ export default function App() {
       persistChanges({ treasuryTransactions: updated });
       return updated;
     });
+  };
+
+  const handleAddBankAccount = (account: BankAccount) => {
+    const validation = validateBankAccount(account, bankAccounts);
+    if (validation) { window.alert('بيانات الحساب البنكي غير صالحة أو مكررة.'); return; }
+    const updated = [account, ...bankAccounts];
+    setBankAccounts(updated);
+    persistChanges({ bankAccounts: updated });
+  };
+
+  const handleSettleVisa = (batch: CardSettlementBatch): { ok: boolean; message?: string } => {
+    const currentVisa = summarizeTreasury(treasury).accounts.find(a => a.key === 'visa')?.balance || 0;
+    const alreadySettled = cardSettlements.reduce((sum, item) => sum + item.grossAmount, 0);
+    const outstanding = Math.max(0, currentVisa - alreadySettled);
+    if (batch.grossAmount > outstanding + 0.005) return { ok: false, message: 'قيمة التسوية أكبر من مستحقات الفيزا غير المسوّاة.' };
+    const result = createCardSettlementEntries(batch, bankAccounts, cardSettlements);
+    if (result.error) return { ok: false, message: result.error === 'SETTLEMENT_DUPLICATE' ? 'رقم التسوية مسجل من قبل.' : 'بيانات التسوية أو الحساب البنكي غير صالحة.' };
+    const nextSettlements = [batch, ...cardSettlements];
+    const nextEntries = [...result.entries, ...bankLedgerEntries];
+    const nextExpenses: Expense[] = batch.feeAmount > 0 ? [{
+      id: `EXP-${batch.id}-FEE`, title: `عمولة تسوية فيزا — ${batch.processor}`,
+      category: 'عمولات ورسوم بنكية', amount: batch.feeAmount, date: batch.settlementDate,
+      paymentMethod: 'فيزا / بطاقة', notes: `مرجع التسوية: ${batch.reference} — مسجلة ضمن دفتر التسوية البنكية`,
+      recordedBy: currentUser?.employeeName || 'النظام',
+    }, ...expenses] : expenses;
+    setCardSettlements(nextSettlements); setBankLedgerEntries(nextEntries); setExpenses(nextExpenses);
+    persistChanges({ cardSettlements: nextSettlements, bankLedgerEntries: nextEntries, expenses: nextExpenses });
+    logAudit('supplier.payment', `تسوية فيزا بقيمة ${batch.grossAmount} ج.م إلى ${bankAccounts.find(a => a.id === batch.bankAccountId)?.name || 'حساب بنكي'} — عمولة ${batch.feeAmount} ج.م`, batch.id, batch.grossAmount);
+    return { ok: true };
   };
 
   // Active Notifications Count
