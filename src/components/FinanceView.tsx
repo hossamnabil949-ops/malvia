@@ -71,6 +71,9 @@ interface FinanceViewProps {
   invoices: Invoice[];
   parts?: AutoPart[];
   salesReturns?: SalesReturn[];
+  purchaseInvoices?: import('../types/autoParts').PurchaseInvoice[];
+  purchaseReturns?: import('../types/autoParts').PurchaseReturn[];
+  taxRegistered?: boolean;
   expenses: Expense[];
   partners: Partner[];
   distributions: ProfitDistributionRecord[];
@@ -102,6 +105,9 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   invoices,
   parts = [],
   salesReturns = [],
+  purchaseInvoices = [],
+  purchaseReturns = [],
+  taxRegistered = false,
   expenses,
   partners,
   distributions,
@@ -233,6 +239,24 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   }, [invoices, parts, salesReturns]);
 
   const grossProfit = totalSalesRevenue - estimatedCOGS;
+  const netVatDue = useMemo(() => {
+    if (!taxRegistered) return 0;
+    const outputVat = invoices.filter(inv => inv.status !== 'ملغاة').reduce((sum, inv) => sum + (inv.tax || 0), 0);
+    const outputVatReturns = salesReturns.reduce((sum, ret) => {
+      const original = invoices.find(inv => inv.id === ret.invoiceId);
+      return original && original.status !== 'ملغاة' && original.grandTotal > 0
+        ? sum + ret.totalRefundAmount * ((original.tax || 0) / original.grandTotal)
+        : sum;
+    }, 0);
+    const inputVat = purchaseInvoices.reduce((sum, inv) => sum + (inv.tax || 0), 0);
+    const inputVatReturns = purchaseReturns.reduce((sum, ret) => {
+      const original = purchaseInvoices.find(inv => inv.id === ret.purchaseInvoiceId);
+      return original && original.grandTotal > 0
+        ? sum + ret.totalReturnAmount * ((original.tax || 0) / original.grandTotal)
+        : sum;
+    }, 0);
+    return Math.round((outputVat - outputVatReturns - inputVat + inputVatReturns) * 100) / 100;
+  }, [taxRegistered, invoices, salesReturns, purchaseInvoices, purchaseReturns]);
   // نسبة الربح على أساس التكلفة وليس سعر البيع
   const grossProfitMargin = estimatedCOGS > 0 ? ((grossProfit / estimatedCOGS) * 100).toFixed(1) : '0';
 
@@ -240,7 +264,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     return expenses.reduce((sum, exp) => sum + exp.amount, 0);
   }, [expenses]);
 
-  const netDistributableProfit = Math.max(0, grossProfit - totalOperatingExpenses);
+  const netDistributableProfit = Math.max(0, grossProfit - totalOperatingExpenses - netVatDue);
   const netProfitMargin = estimatedCOGS > 0 ? ((netDistributableProfit / estimatedCOGS) * 100).toFixed(1) : '0';
 
   const totalInitialCapital = useMemo(() => {
@@ -943,6 +967,12 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <span>(-) إجمالي المصروفات العامة والإدارية والتشغيلية</span>
                 <span className="font-mono text-rose-400">-{totalOperatingExpenses.toFixed(2)} ج.م</span>
               </div>
+              {taxRegistered && (
+                <div className="py-2.5 flex justify-between text-neutral-400">
+                  <span>{netVatDue >= 0 ? '(-) صافي ضريبة القيمة المضافة المستحقة' : '(+) رصيد ضريبة قيمة مضافة دائن'}</span>
+                  <span className="font-mono text-rose-400">{netVatDue >= 0 ? '-' : '+'}{Math.abs(netVatDue).toFixed(2)} ج.م</span>
+                </div>
+              )}
 
               <div className="py-3 flex justify-between font-black text-sm bg-emerald-950/30 px-3 rounded-xl border border-emerald-500/30 text-emerald-400">
                 <span>(=) صافي الدخل التشغيلي والأرباح القابلة للتوزيع بين الشركاء</span>
