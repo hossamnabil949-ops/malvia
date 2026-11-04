@@ -74,7 +74,6 @@ export const OpeningBalancesPanel: React.FC<Props> = ({ existing = [], partners,
     };
     const error = validateOpeningBalanceRecord(record, { activeBankAccountIds: bankAccounts.filter(a => a.active).map(a => a.id) });
     if (error) { window.alert('تعذر اعتماد الأرصدة الافتتاحية: ' + error); return; }
-    if (Math.abs(totalLines - (preview.assets + preview.liabilities)) > 0.01) return;
     if (!window.confirm('سيتم تثبيت الأرصدة الافتتاحية بتاريخ ' + cutoverDate + ' ولا يمكن تعديلها أو حذفها. هل تريد الاعتماد؟')) return;
     if (onApprove(record)) window.alert('تم اعتماد سجل الأرصدة الافتتاحية.');
   };
@@ -88,7 +87,7 @@ export const OpeningBalancesPanel: React.FC<Props> = ({ existing = [], partners,
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Metric label="رأس المال الأصلي" value={approved.originalCapital}/>
         <Metric label="إجمالي الأصول" value={summary.assets}/>
-        <Metric label="إجمالي الالتزامات" value={summary.liabilities}/>
+        <Metric label="إجمالي الالتزامات" value={summary.liabilities}/><Metric label="مصروفات تاريخية" value={summary.historicalExpenses}/>
         <Metric label="صافي الأصول" value={summary.netAssets}/>
       </div>
       <div className="rounded-xl bg-surface-1 border border-neutral-700 p-4">
