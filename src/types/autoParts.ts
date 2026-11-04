@@ -310,6 +310,8 @@ export interface ProfitDistributionRecord {
   grossProfit: number;
   totalExpenses: number;
   netProfit: number;
+  paymentMethod?: PaymentMethod | string;
+  bankAccountId?: string;
   partnerShares: {
     partnerId: string;
     partnerName: string;
