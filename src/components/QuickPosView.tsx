@@ -501,6 +501,8 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
     setPriceUnlocked(false);
     setSplitEnabled(false);
     setSplitAmount('');
+    setPaymentBankAccountId('');
+    setSplitBankAccountId('');
     setDiscountAmount(0);
     setCashGiven('');
     setCarDetailsInput('');
