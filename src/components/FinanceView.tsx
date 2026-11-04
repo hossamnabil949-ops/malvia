@@ -106,6 +106,8 @@ interface FinanceViewProps {
   onReinvestProfit?: (partnerId: string, amount: number, notes: string) => void;
   openingBalances?: OpeningBalanceRecord[];
   onApproveOpeningBalances?: (record: OpeningBalanceRecord) => boolean;
+  canManageOpeningBalances?: boolean;
+  currentUserName?: string;
 }
 
 const PAYMENT_COLORS: Record<string, string> = {
@@ -143,7 +145,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   bankAccounts = [], cardSettlements = [], bankLedgerEntries = [], outstandingVisaBalance = 0,
   onAddBankAccount, onSettleVisa, onTransferBank,
   canManageExpenses = true, canManageTreasury = true, canManagePartners = true,
-  openingBalances = [], onApproveOpeningBalances,
+  openingBalances = [], onApproveOpeningBalances, canManageOpeningBalances = false, currentUserName = 'المدير العام',
 }) => {
   type FinanceTab = 'income' | 'equity' | 'treasury' | 'expenses' | 'audit' | 'bankLedger';
   const [activeFinanceTab, setActiveFinanceTab] = useState<FinanceTab>(canManagePartners ? 'equity' : canManageTreasury ? 'treasury' : 'expenses');
@@ -645,7 +647,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
       {activeFinanceTab === 'equity' && canManagePartners && (
         <div className="space-y-6">
-          {onApproveOpeningBalances && <OpeningBalancesPanel existing={openingBalances} partners={partners} parts={parts} bankAccounts={bankAccounts} currentUser="المدير العام" onApprove={onApproveOpeningBalances} />}
+          {canManageOpeningBalances && onApproveOpeningBalances && <OpeningBalancesPanel existing={openingBalances} partners={partners} parts={parts} bankAccounts={bankAccounts} currentUser={currentUserName} onApprove={onApproveOpeningBalances} />}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
             <div className="p-4 rounded-3xl bg-surface-2 border border-neutral-800 relative overflow-hidden">
               <div className="flex items-center justify-between text-neutral-400 text-xs">
