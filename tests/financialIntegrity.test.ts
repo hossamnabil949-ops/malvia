@@ -11,7 +11,7 @@ import { createBankTransferEntries, createCardSettlementEntries, createChequeBan
 import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
 import { validateSale, SaleError, computeTotals, weightedAverageUnitCost } from '../src/utils/saleLogic.ts';
-import { cairoDateKey, salesForDate, netSales, reportDailySales, reportSalesByItem, reportVatSummary, reportSalesReconciliation } from '../src/utils/reportsLogic.ts';
+import { cairoDateKey, salesForDate, netSales, reportDailySales, reportSalesByItem, reportProfitLoss, reportVatSummary, reportSalesReconciliation } from '../src/utils/reportsLogic.ts';
 
 // FIN-1 / AI-4: dashboard sales use Cairo's calendar day and one consistent eligible-invoice set.
 const dashboardInvoices: any[] = [
@@ -45,7 +45,14 @@ const reportInput: any = {
   suppliers: [], expenses: [], treasury: [], cheques: [], batches: [], loyaltyLedger: [], loyaltyPointValue: 0,
 };
 const dailyReport = reportDailySales(reportInput, { from: '2026-11-01', to: '2026-11-01' });
+assert.equal(dailyReport.totals?.total, 1000);
+assert.equal(dailyReport.totals?.discount, 100);
+assert.equal(dailyReport.totals?.tax, 88.2);
+assert.equal(dailyReport.totals?.returns, 270);
 assert.equal(dailyReport.totals?.net, 630);
+const profitLoss = reportProfitLoss({ ...reportInput, taxRegistered: true }, { from: '2026-11-01', to: '2026-11-01' });
+assert.equal(profitLoss.rows.find(row => row.item === 'صافي المبيعات قبل الضريبة')?.amount, 630);
+assert.equal(profitLoss.rows.find(row => row.item === 'صافي الربح')?.amount, 330);
 const itemReport = reportSalesByItem(reportInput, { from: '2026-11-01', to: '2026-11-01' });
 assert.equal(itemReport.totals?.revenue, 630);
 assert.equal(itemReport.totals?.cost, 300);
