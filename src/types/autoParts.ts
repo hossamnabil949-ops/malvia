@@ -556,6 +556,8 @@ export interface EmployeePermissions {
   canViewReports: boolean;
   canManageSettings: boolean;
   canManagePartners: boolean;
+  canManageExpenses?: boolean;
+  canReceivePurchases?: boolean;
   /** Read-only visibility of operational cash drawer balances; does not grant treasury administration. */
   canViewCashBalances?: boolean;
   /** Allows registering incoming/outgoing cheques without access to full treasury administration. */
