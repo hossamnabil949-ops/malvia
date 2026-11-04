@@ -117,7 +117,7 @@ export default async function handler(req: any, res: any) {
         const previous = await loadArray(resource);
         const bankAccounts = resource === 'bankLedgerEntries' ? await loadArray('bankAccounts') : [];
         const error = validateChequeAuxiliarySync({
-          resource,
+          resource: resource as 'treasury' | 'bankLedgerEntries',
           previous,
           incoming: operation.data,
           previousCheques,
