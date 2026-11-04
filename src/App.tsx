@@ -2888,7 +2888,6 @@ export default function App() {
                 return updated;
               });
             }}
-            bankAccounts={bankAccounts}
             onSettleSupplierPayment={(supplierId, amount, paymentDate, paymentMethod, _treasurySource, notes, scheduleId, bankAccountId) => {
               const supplier = suppliers.find(s => s.id === supplierId);
               const schedule = scheduleId ? supplierPaymentSchedules.find(x => x.id === scheduleId) : undefined;
