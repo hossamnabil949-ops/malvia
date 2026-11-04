@@ -1,3 +1,4 @@
+import { summarizeOpeningBalances, validateOpeningBalanceRecord, openingDifferenceLabel } from '../src/utils/openingBalanceLogic';
 import assert from 'node:assert/strict';
 import { generateSupplierScheduleDates } from '../src/utils/supplierPaymentSchedule.ts';
 import { accountOf, isCreditMethod, summarizeTreasury } from '../src/utils/treasuryAccounts.ts';
@@ -451,3 +452,29 @@ assert.equal(validateChequeAuxiliarySync({
   employee: { name: 'مسؤول شيكات' },
 }), null);
 
+
+
+const openingFixture = {
+  id: 'OPEN-TEST', status: 'approved' as const, cutoverDate: '2026-11-04', originalCapital: 500000,
+  partners: [{ partnerId: 'P1', partnerName: 'شريك 1', originalContribution: 300000, ownershipPercentage: 60 }, { partnerId: 'P2', partnerName: 'شريك 2', originalContribution: 200000, ownershipPercentage: 40 }],
+  lines: [
+    { id: 'L1', category: 'inventory' as const, label: 'مخزون', amount: 300000, partId: 'PART-1', quantity: 100, unitCost: 3000 },
+    { id: 'L2', category: 'cash' as const, label: 'خزينة', amount: 25000 },
+    { id: 'L3', category: 'bank' as const, label: 'بنك', amount: 75000, bankAccountId: 'BANK-1' },
+    { id: 'L4', category: 'fixed_asset' as const, label: 'معدات', amount: 100000 },
+    { id: 'L5', category: 'supplier_payable' as const, label: 'موردون', amount: 50000 },
+  ],
+  createdAt: '2026-11-04T10:00:00.000Z', createdBy: 'Owner',
+};
+const openingSummary = summarizeOpeningBalances(openingFixture);
+assert.equal(openingSummary.assets, 500000);
+assert.equal(openingSummary.liabilities, 50000);
+assert.equal(openingSummary.netAssets, 450000);
+assert.equal(openingSummary.partnerCapital, 500000);
+assert.equal(openingSummary.reconciliationDifference, -50000);
+assert.equal(openingDifferenceLabel(-50000), 'opening_deficit');
+assert.equal(validateOpeningBalanceRecord(openingFixture, { activeBankAccountIds: ['BANK-1'] }), null);
+assert.equal(validateOpeningBalanceRecord({ ...openingFixture, lines: [...openingFixture.lines, { ...openingFixture.lines[0], id: 'L6', amount: -1 }] }, { activeBankAccountIds: ['BANK-1'] }), 'INVALID_LINE');
+assert.equal(validateOpeningBalanceRecord(openingFixture, { activeBankAccountIds: [] }), 'BANK_ACCOUNT_REQUIRED');
+assert.equal(validateOpeningBalanceRecord({ ...openingFixture, partners: [{ ...openingFixture.partners[0], ownershipPercentage: 50 }] }, { activeBankAccountIds: ['BANK-1'] }), 'INVALID_SHARE_TOTAL');
+assert.equal(validateOpeningBalanceRecord(openingFixture, { activeBankAccountIds: ['BANK-1'], existingRecord: openingFixture }), 'APPROVED_RECORD_IMMUTABLE');
