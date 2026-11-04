@@ -43,7 +43,7 @@ import {
 } from './types/autoParts';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
 import { createBankMovementEntry, createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount } from './utils/bankLedger';
-import { requiresSpecificBankAccount } from './utils/paymentMethods';
+import { requiresDirectBankAccount, requiresSpecificBankAccount } from './utils/paymentMethods';
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
 import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands';
@@ -1197,6 +1197,22 @@ export default function App() {
     const initialPayments: InvoicePayment[] = invoice.payments?.length
       ? invoice.payments
       : [{ method: invoice.paymentMethod, amount: invoice.grandTotal }];
+    const posBankEntries: BankLedgerEntry[] = [];
+    for (let index = 0; index < initialPayments.length; index++) {
+      const payment = initialPayments[index];
+      if (!requiresDirectBankAccount(String(payment.method))) continue;
+      const posting = createBankMovementEntry({
+        id: `pos-payment:${invoice.id}:${index}`, batchId: invoice.id,
+        bankAccountId: payment.bankAccountId || '', direction: 'in', amount: payment.amount,
+        date: invoice.date, reference: invoice.invoiceNumber,
+        description: `تحصيل InstaPay إلى البنك — فاتورة ${invoice.invoiceNumber}`,
+      }, bankAccounts, [...posBankEntries, ...bankLedgerEntries]);
+      if (posting.error || !posting.entry) {
+        window.alert('لا يمكن اعتماد الفاتورة: اختر حساباً بنكياً نشطاً لكل دفعة InstaPay البنكية.');
+        return false;
+      }
+      posBankEntries.push(posting.entry);
+    }
     const initialCreditAmount = initialPayments
       .filter(payment => isCreditPayment(String(payment.method)))
       .reduce((total, payment) => total + payment.amount, 0);
@@ -1350,6 +1366,7 @@ export default function App() {
           category: 'مبيعات كاشير (فواتير بيع)' as const,
           amount: p.amount,
           paymentMethod: String(p.method),
+          bankAccountId: requiresDirectBankAccount(String(p.method)) ? p.bankAccountId : undefined,
           balanceAfter: running,
           referenceId: finalInvoice.id,
           description: `مبيعات فاتورة #${finalInvoice.invoiceNumber} - عميل: ${finalInvoice.customerName}`,
@@ -1361,6 +1378,11 @@ export default function App() {
         persistChanges({ treasuryTransactions: updated });
         return updated;
       });
+    }
+    if (posBankEntries.length) {
+      const nextBankEntries = [...posBankEntries, ...bankLedgerEntries];
+      setBankLedgerEntries(nextBankEntries);
+      persistChanges({ bankLedgerEntries: nextBankEntries });
     }
 
     // 6) تدقيق: من باع، وهل في سعر معدّل أو خصم
@@ -2645,6 +2667,7 @@ export default function App() {
             onRemoveFromCart={handleRemoveFromCart}
             onClearCart={handleClearCart}
             onCheckoutComplete={handleCreateInvoice}
+            bankAccounts={bankAccounts}
             vatRate={settings.vatRate}
             taxRegistered={settings.taxRegistered}
             pricesIncludeVat={settings.pricesIncludeVat}
