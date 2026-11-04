@@ -98,7 +98,7 @@ export const BankLedgerView: React.FC<BankLedgerViewProps> = ({
         <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800">
           <div className="text-xs text-neutral-400">مستحقات الفيزا غير المسوّاة</div>
           <div className="mt-1 text-xl font-black text-amber-300 font-mono">{money(Math.max(0, outstandingVisaBalance))}</div>
-          <div className="text-[10px] text-neutral-500 mt-1">من الحركات التاريخية المسجلة كفيزا بعد خصم التسويات المسجلة هنا</div>
+          <div className="text-[10px] text-neutral-500 mt-1">من مستحقات الفيزا المسجلة بعد ترحيل التسويات السابقة إلى البنك</div>
         </div>
         <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800">
           <div className="text-xs text-neutral-400">الحسابات البنكية النشطة</div>
