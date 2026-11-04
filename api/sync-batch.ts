@@ -1,6 +1,6 @@
 // FIN-18: atomic multi-resource sync. Every resource is validated and committed in one PostgreSQL transaction.
 import { commitSyncBatch, getAuthenticatedEmployee, getOne } from './_db.js';
-import { validateChequeAuditSync, validateChequeAuxiliarySync, validateChequeCollectionSync, validateExpenseOnlySync } from '../src/utils/chequeSyncPolicy';
+import { validateChequeAuditSync, validateChequeAuxiliarySync, validateChequeCollectionSync, validateExpenseOnlySync, validatePurchaseAuditSync } from '../src/utils/chequeSyncPolicy';
 import { createHash } from 'node:crypto';
 import { ApiError, clientIp, findLicense, rateLimit, sendError } from './_security.js';
 
@@ -16,7 +16,7 @@ const policy: Record<string, string[]> = {
   treasury: ['canManageTreasury','canSellPos','canManagePurchases','canManageChequeLifecycle','canManageExpenses'], bankAccounts: ['canManageTreasury'], cardSettlements: ['canManageTreasury'], bankLedgerEntries: ['canManageTreasury','canManageChequeLifecycle'],
   shifts: ['canSellPos','canManageTreasury'],
   stockMovements: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
-  auditLog: ['canSellPos','canManageInventory','canManagePurchases','canManageTreasury','canManageSettings','canRegisterCheques','canManageChequeLifecycle'],
+  auditLog: ['canSellPos','canManageInventory','canManagePurchases','canManageTreasury','canManageSettings','canRegisterCheques','canManageChequeLifecycle','canReceivePurchases'],
   carModels: ['canManageInventory'], reservations: ['canSellPos'], cheques: ['canManageTreasury','canRegisterCheques','canManageChequeLifecycle'],
 };
 
@@ -85,6 +85,21 @@ export default async function handler(req: any, res: any) {
           employee,
         });
         if (auditError) return res.status(403).json({ code: auditError, resource: 'auditLog', error: 'تعديل سجل الشيكات غير مسموح.' });
+      }
+      if (auditOperation && permissions.canReceivePurchases === true &&
+          permissions.canManagePurchases !== true && !hasOtherAuditPermission) {
+        const purchaseOperation: any = operationMap.get('purchaseInvoices');
+        if (!purchaseOperation) return res.status(403).json({ code: 'PURCHASE_AUDIT_STATE_REQUIRED', resource: 'auditLog', error: 'سجل التدقيق يحتاج إلى فاتورة الاستلام المرتبطة به.' });
+        const previousAudit = await loadArray('auditLog');
+        const previousInvoices = await loadArray('purchaseInvoices');
+        const purchaseAuditError = validatePurchaseAuditSync({
+          previousAudit,
+          incomingAudit: auditOperation.data,
+          previousInvoices,
+          incomingInvoices: purchaseOperation.data,
+          employee,
+        });
+        if (purchaseAuditError) return res.status(403).json({ code: purchaseAuditError, resource: 'auditLog', error: 'تعديل سجل استلام المشتريات غير مسموح.' });
       }
 
       if (permissions.canManageExpenses === true && permissions.canManageTreasury !== true &&
