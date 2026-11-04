@@ -2329,8 +2329,7 @@ export default function App() {
 
   const handleSettleVisa = (batch: CardSettlementBatch): { ok: boolean; message?: string } => {
     const currentVisa = summarizeTreasury(treasury).accounts.find(a => a.key === 'visa')?.balance || 0;
-    const alreadySettled = cardSettlements.reduce((sum, item) => sum + item.grossAmount, 0);
-    const outstanding = Math.max(0, currentVisa - alreadySettled);
+    const outstanding = Math.max(0, currentVisa);
     if (batch.grossAmount > outstanding + 0.005) return { ok: false, message: 'قيمة التسوية أكبر من مستحقات الفيزا غير المسوّاة.' };
     const result = createCardSettlementEntries(batch, bankAccounts, cardSettlements);
     if (result.error) return { ok: false, message: result.error === 'SETTLEMENT_DUPLICATE' ? 'رقم التسوية مسجل من قبل.' : 'بيانات التسوية أو الحساب البنكي غير صالحة.' };
@@ -2342,8 +2341,36 @@ export default function App() {
       paymentMethod: 'فيزا / بطاقة', notes: `مرجع التسوية: ${batch.reference} — مسجلة ضمن دفتر التسوية البنكية`,
       recordedBy: currentUser?.employeeName || 'النظام',
     }, ...expenses] : expenses;
-    setCardSettlements(nextSettlements); setBankLedgerEntries(nextEntries); setExpenses(nextExpenses);
-    persistChanges({ cardSettlements: nextSettlements, bankLedgerEntries: nextEntries, expenses: nextExpenses });
+    // قيّدان في دفتر الخزينة: إقفال إجمالي مستحقات الفيزا وإيداع الصافي بالبنك.
+    // الفرق بينهما هو عمولة البنك، المسجلة كمصروف مستقل أعلاه.
+    const settlementTime = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    const visaClearingTx: TreasuryTransaction = {
+      id: `TX-VISA-CLEAR-${batch.id}`,
+      txNumber: uniqueTransactionNumber('TX-VSC'),
+      date: batch.settlementDate, time: settlementTime,
+      type: 'صرف', category: 'تسوية مستحقات الفيزا',
+      amount: batch.grossAmount, paymentMethod: 'فيزا / بطاقة',
+      balanceAfter: treasuryBalance - batch.grossAmount,
+      referenceId: batch.id, description: `إقفال مستحقات فيزا — مرجع ${batch.reference}`,
+      recordedBy: currentUser?.employeeName || 'النظام',
+    };
+    const bankDepositTx: TreasuryTransaction = {
+      id: `TX-VISA-BANK-${batch.id}`,
+      txNumber: uniqueTransactionNumber('TX-VSB'),
+      date: batch.settlementDate, time: settlementTime,
+      type: 'قبض', category: 'إيداع صافي تسوية الفيزا بالبنك',
+      amount: batch.netAmount, paymentMethod: 'تحويل بنكي',
+      balanceAfter: treasuryBalance - batch.grossAmount + batch.netAmount,
+      referenceId: batch.id, bankAccountId: batch.bankAccountId,
+      description: `إيداع صافي تسوية الفيزا — ${batch.processor} — ${batch.reference}`,
+      recordedBy: currentUser?.employeeName || 'النظام',
+    };
+    const nextTreasury = [bankDepositTx, visaClearingTx, ...treasury];
+    setCardSettlements(nextSettlements); setBankLedgerEntries(nextEntries); setExpenses(nextExpenses); setTreasury(nextTreasury);
+    persistChanges({
+      cardSettlements: nextSettlements, bankLedgerEntries: nextEntries,
+      expenses: nextExpenses, treasuryTransactions: nextTreasury,
+    });
     logAudit('bank.settlement', `تسوية فيزا بقيمة ${batch.grossAmount} ج.م إلى ${bankAccounts.find(a => a.id === batch.bankAccountId)?.name || 'حساب بنكي'} — عمولة ${batch.feeAmount} ج.م`, batch.id, batch.grossAmount);
     return { ok: true };
   };
@@ -2872,7 +2899,7 @@ export default function App() {
             bankAccounts={bankAccounts}
             cardSettlements={cardSettlements}
             bankLedgerEntries={bankLedgerEntries}
-            outstandingVisaBalance={Math.max(0, (summarizeTreasury(treasury).accounts.find(a => a.key === 'visa')?.balance || 0) - cardSettlements.reduce((sum, batch) => sum + batch.grossAmount, 0))}
+            outstandingVisaBalance={Math.max(0, summarizeTreasury(treasury).accounts.find(a => a.key === 'visa')?.balance || 0)}
             onAddBankAccount={handleAddBankAccount}
             onSettleVisa={handleSettleVisa}
             canManageExpenses={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury)}
