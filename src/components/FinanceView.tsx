@@ -248,8 +248,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           unitCost = 0;
           estimatedCount += 1;
         }
-        const soldQty = Math.max(0, it.quantity - (it.returnedQuantity || 0));
-        cogs += unitCost * soldQty;
+        cogs += unitCost * it.quantity;
       });
     });
 
