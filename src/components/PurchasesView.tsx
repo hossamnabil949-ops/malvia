@@ -62,6 +62,7 @@ interface PurchasesViewProps {
   carBrands?: string[];
   defaultTaxEnabled?: boolean;
   defaultTaxRate?: number;
+  canReceiveOnly?: boolean;
 }
 
 export const PurchasesView: React.FC<PurchasesViewProps> = ({
@@ -81,8 +82,10 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   carBrands = [],
   defaultTaxEnabled = false,
   defaultTaxRate = 14,
+  canReceiveOnly = false,
 }) => {
   const [currentTab, setCurrentTab] = useState<'invoices' | 'returns'>('invoices');
+  useEffect(() => { if (canReceiveOnly) setCurrentTab('invoices'); }, [canReceiveOnly]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [dateRange, setDateRange] = useState<DateRange>(EMPTY_DATE_RANGE);
@@ -540,7 +543,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             >
               فواتير المشتريات ({purchaseInvoices.length})
             </button>
-            <button
+            {!canReceiveOnly && <button
               onClick={() => setCurrentTab('returns')}
               className={`px-2 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-bold leading-tight whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 currentTab === 'returns'
@@ -550,7 +553,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>مرتجعات الموردين ({purchaseReturns.length})</span>
-            </button>
+            </button>}
           </div>
 
           <button
@@ -760,14 +763,14 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                         </td>
                         <td className="p-3.5 text-center">
                           <div className="flex items-center justify-center gap-1.5">
-                            <button
+                            {!canReceiveOnly && <button
                               onClick={() => handleOpenReturnModal(inv)}
                               className="px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all flex items-center gap-1"
                               title="إجراء مرتجع مشتريات للمورد وتعديل الفاتورة وإعادة جدولة الدفعات"
                             >
                               <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
                               <span>مرتجع</span>
-                            </button>
+                            </button>}
 
                             <button
                               onClick={() => setSelectedInvoiceForModal(inv)}
@@ -788,7 +791,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         </div>
       )}
 
-      {currentTab === 'returns' && (
+      {currentTab === 'returns' && !canReceiveOnly && (
         <div className="bg-surface-2 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
           <div className="p-4 bg-rose-950/20 border-b border-rose-500/20 flex items-center justify-between">
             <div className="flex items-center gap-2">
