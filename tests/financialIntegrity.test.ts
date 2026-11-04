@@ -300,6 +300,28 @@ const bouncedCheque = {
 };
 assert.equal(validateChequeCollectionSync([clearedCheque], [bouncedCheque], { name: 'مسؤول شيكات' }, { canManageChequeLifecycle: true }), null);
 
+const bouncedTreasuryTx = {
+  id: 'TX-CHQ-BOUNCE-TEST', referenceId: remoteCheque.id, type: 'صرف',
+  category: 'ارتداد شيك وارد', paymentMethod: 'شيك (حساب بنكي)',
+  amount: 250, recordedBy: 'مسؤول شيكات',
+};
+assert.equal(validateChequeAuxiliarySync({
+  resource: 'treasury', previous: [chequeTreasuryTx], incoming: [chequeTreasuryTx, bouncedTreasuryTx],
+  previousCheques: [clearedCheque], incomingCheques: [bouncedCheque], bankAccounts: [],
+  employee: { name: 'مسؤول شيكات' },
+}), null);
+const bouncedBankEntry = {
+  id: 'cheque-bounce:' + remoteCheque.id, batchId: remoteCheque.id, accountKind: 'bank',
+  bankAccountId: bankA.id, direction: 'out', amount: 250, date: '2026-11-05',
+  reference: remoteCheque.number, description: 'عكس شيك مرتد',
+};
+assert.equal(validateChequeAuxiliarySync({
+  resource: 'bankLedgerEntries', previous: [chequeBankEntry], incoming: [chequeBankEntry, bouncedBankEntry],
+  previousCheques: [clearedCheque], incomingCheques: [bouncedCheque], bankAccounts: [bankA],
+  employee: { name: 'مسؤول شيكات' },
+}), null);
+
+
 assert.equal(validateChequeCollectionSync([], [newCheque], { name: 'مسؤول شيكات' }, { canManageChequeLifecycle: true }), 'CHEQUE_REGISTER_DENIED');
 const chequeTreasuryTx = {
   id: 'TX-CHQ-TEST', referenceId: remoteCheque.id, type: 'قبض',
