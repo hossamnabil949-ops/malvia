@@ -108,7 +108,7 @@ export function validateChequeAuxiliarySync(input: {
       ? ['في الحافظة', 'مودع بالبنك'].includes(String(previousCheque.status))
       : previousCheque.status === 'صادر';
     if (!oldOpen || cheque.status !== expectedStatus || !(Number(cheque.amount) > 0)) return 'CHEQUE_STATE_INVALID';
-    if (input.employee.name && (item.recordedBy !== input.employee.name)) return 'CHEQUE_ACTOR_MISMATCH';
+    if (input.resource === 'treasury' && input.employee.name && item.recordedBy !== input.employee.name) return 'CHEQUE_ACTOR_MISMATCH';
     if (input.resource === 'treasury') {
       const expectedType = cheque.direction === 'incoming' ? 'قبض' : 'صرف';
       const expectedCategory = cheque.direction === 'incoming' ? 'تحصيل من عميل / ورشة' : 'سداد دفعة لمورد';
