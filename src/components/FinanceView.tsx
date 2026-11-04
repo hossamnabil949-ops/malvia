@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Calculator, 
   DollarSign, 
@@ -66,6 +66,8 @@ import {
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS_LIST } from '../data/autoPartsData';
 import { TreasuryAccountsReport } from './TreasuryAccountsReport';
 import { AuditLogPanel } from './AuditLogPanel';
+import { BankLedgerView } from './BankLedgerView';
+import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from '../utils/bankLedger';
 
 interface FinanceViewProps {
   invoices: Invoice[];
@@ -83,6 +85,15 @@ interface FinanceViewProps {
   auditLog?: import('../types/autoParts').AuditEntry[];
   stockMovements?: import('../types/autoParts').StockMovement[];
   treasuryBalance?: number;
+  bankAccounts?: BankAccount[];
+  cardSettlements?: CardSettlementBatch[];
+  bankLedgerEntries?: BankLedgerEntry[];
+  outstandingVisaBalance?: number;
+  onAddBankAccount?: (account: BankAccount) => void;
+  onSettleVisa?: (batch: CardSettlementBatch) => { ok: boolean; message?: string };
+  canManageExpenses?: boolean;
+  canManageTreasury?: boolean;
+  canManagePartners?: boolean;
   onAddExpense: (expense: Expense) => void;
   onAddDistribution: (record: ProfitDistributionRecord) => void;
   onAddPartner?: (partner: Partner, paymentMethod: string, notes: string) => boolean | void;
@@ -123,8 +134,20 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   onUpdatePartnerShare,
   onInjectCapital,
   onReinvestProfit,
+  bankAccounts = [], cardSettlements = [], bankLedgerEntries = [], outstandingVisaBalance = 0,
+  onAddBankAccount, onSettleVisa,
+  canManageExpenses = true, canManageTreasury = true, canManagePartners = true,
 }) => {
-  const [activeFinanceTab, setActiveFinanceTab] = useState<'income' | 'equity' | 'treasury' | 'expenses' | 'audit'>('equity');
+  type FinanceTab = 'income' | 'equity' | 'treasury' | 'expenses' | 'audit' | 'bankLedger';
+  const [activeFinanceTab, setActiveFinanceTab] = useState<FinanceTab>(canManagePartners ? 'equity' : canManageTreasury ? 'treasury' : 'expenses');
+  const availableFinanceTabs: FinanceTab[] = [
+    ...(canManagePartners ? ['equity' as FinanceTab] : []),
+    ...(canManageTreasury ? ['income', 'treasury', 'bankLedger', 'audit'] as FinanceTab[] : []),
+    ...(canManageExpenses ? ['expenses' as FinanceTab] : []),
+  ];
+  useEffect(() => {
+    if (availableFinanceTabs.length && !availableFinanceTabs.includes(activeFinanceTab)) setActiveFinanceTab(availableFinanceTabs[0]);
+  }, [canManageExpenses, canManageTreasury, canManagePartners, activeFinanceTab]);
   
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
   const [showDistributeModal, setShowDistributeModal] = useState(false);
@@ -537,31 +560,34 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
+          {canManageExpenses && <button
             onClick={() => setShowAddExpenseModal(true)}
             className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-surface-3 hover:bg-surface-4 text-white border border-neutral-700 font-bold text-xs transition-all shadow-sm"
           >
             <Plus className="w-4 h-4 text-amber-400" />
             <span>تسجيل مصروف</span>
-          </button>
+          </button>}
 
-          <button
+          {(canManageTreasury || canManagePartners) && <button
             onClick={() => setShowReportModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-neutral-950 font-black text-xs transition-all shadow-md active:scale-95"
           >
             <FileText className="w-4 h-4" />
             <span>القوائم المالية الختامية</span>
-          </button>
+          </button>}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2 border-b border-neutral-800 pb-3">
+      {availableFinanceTabs.length > 1 && <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 border-b border-neutral-800 pb-3">
         {[
-          { id: 'equity', label: 'رأس المال والشركاء وحصص الملكية', icon: Users, badge: `${partners.length} شركاء` },
-          { id: 'income', label: 'قائمة الدخل والأرباح (P&L)', icon: TrendingUp },
-          { id: 'treasury', label: 'أنظمة الدفع والخزينة', icon: Banknote },
-          { id: 'expenses', label: 'سجل المصروفات التشغيلية', icon: TrendingDown },
-          { id: 'audit', label: 'سجل التدقيق وحركات المخزون', icon: FileText },
+          ...(canManagePartners ? [{ id: 'equity', label: 'رأس المال والشركاء وحصص الملكية', icon: Users, badge: `${partners.length} شركاء` }] : []),
+          ...(canManageTreasury ? [
+            { id: 'income', label: 'قائمة الدخل والأرباح (P&L)', icon: TrendingUp },
+            { id: 'treasury', label: 'أنظمة الدفع والخزينة', icon: Banknote },
+            { id: 'bankLedger', label: 'الحسابات البنكية والتسويات', icon: Building2 },
+            { id: 'audit', label: 'سجل التدقيق وحركات المخزون', icon: FileText },
+          ] : []),
+          ...(canManageExpenses ? [{ id: 'expenses', label: 'سجل المصروفات التشغيلية', icon: TrendingDown }] : []),
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeFinanceTab === tab.id;
@@ -587,9 +613,13 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             </button>
           );
         })}
-      </div>
+      </div>}
 
-      {activeFinanceTab === 'equity' && (
+      {activeFinanceTab === 'bankLedger' && canManageTreasury && onAddBankAccount && onSettleVisa && (
+        <BankLedgerView accounts={bankAccounts} settlements={cardSettlements} entries={bankLedgerEntries} outstandingVisaBalance={outstandingVisaBalance} onAddBankAccount={onAddBankAccount} onSettleVisa={onSettleVisa} />
+      )}
+
+      {activeFinanceTab === 'equity' && canManagePartners && (
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
             <div className="p-4 rounded-3xl bg-surface-2 border border-neutral-800 relative overflow-hidden">
@@ -901,7 +931,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
       )}
 
-      {activeFinanceTab === 'income' && (
+      {activeFinanceTab === 'income' && canManageTreasury && (
         <div className="space-y-5">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
             <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800">
@@ -986,11 +1016,11 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
       )}
 
-      {activeFinanceTab === 'audit' && (
+      {activeFinanceTab === 'audit' && canManageTreasury && (
         <AuditLogPanel auditLog={auditLog} stockMovements={stockMovements} />
       )}
 
-      {activeFinanceTab === 'treasury' && (
+      {activeFinanceTab === 'treasury' && canManageTreasury && (
         <div className="space-y-6">
           <TreasuryAccountsReport transactions={treasuryTransactions} shifts={shifts} />
 
@@ -1066,7 +1096,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
       )}
 
-      {activeFinanceTab === 'expenses' && (
+      {activeFinanceTab === 'expenses' && canManageExpenses && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-bold text-white flex items-center gap-2">
@@ -1426,7 +1456,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
       )}
 
-      {showAddExpenseModal && (
+      {showAddExpenseModal && canManageExpenses && (
         <div 
           className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
           onClick={() => setShowAddExpenseModal(false)}
