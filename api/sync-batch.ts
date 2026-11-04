@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { ApiError, clientIp, findLicense, rateLimit, sendError } from './_security.js';
 
 const policy: Record<string, string[]> = {
-  employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'],
+  employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'], openingBalances: [],
   parts: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], stockLevels: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
   stockBatches: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], serialUnits: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
   inventoryErrors: ['canManageInventory'], stockTransfers: ['canManageInventory'], warehouses: ['canManageInventory'],
@@ -86,6 +86,27 @@ export default async function handler(req: any, res: any) {
       if (bankError) return res.status(403).json({ code: bankError, resource: 'bankLedgerEntries', error: 'حركة دفتر البنك غير مطابقة للمستند المالي أو تحاول تعديل سجل سابق.' });
     }
 
+    const openingOperation: any = operations.find((op: any) => op.resource === 'openingBalances');
+    if (openingOperation) {
+      if (!owner) return res.status(403).json({ code: 'OPENING_BALANCE_OWNER_ONLY', resource: 'openingBalances', error: 'تهيئة الأرصدة الافتتاحية متاحة للمالك فقط.' });
+      const previousRow = await getOne(tenant, 'openingBalances');
+      const previous = Array.isArray(previousRow?.data) ? previousRow.data as any[] : [];
+      const incoming = openingOperation.data;
+      if (!Array.isArray(incoming) || incoming.length > 1 || (previous.length > 0 && JSON.stringify(previous) !== JSON.stringify(incoming))) return res.status(409).json({ code: 'OPENING_BALANCE_IMMUTABLE', resource: 'openingBalances', error: 'سجل الأرصدة الافتتاحية موجود بالفعل ولا يسمح باستبداله أو حذفه.' });
+      if (incoming.length === 1) {
+        const record = incoming[0];
+        if (!record || record.status !== 'approved' || !record.id || !/^\\d{4}-\\d{2}-\\d{2}$/.test(String(record.cutoverDate || '')) || !Number.isFinite(record.originalCapital) || record.originalCapital < 0 || !Array.isArray(record.lines) || !Array.isArray(record.partners)) return res.status(400).json({ code: 'OPENING_BALANCE_INVALID', resource: 'openingBalances', error: 'بيانات الأرصدة الافتتاحية غير صالحة.' });
+        const lineIds = new Set<string>();
+        for (const line of record.lines) {
+          if (!line || !line.id || lineIds.has(String(line.id)) || !String(line.label || '').trim() || !Number.isFinite(line.amount) || line.amount < 0) return res.status(400).json({ code: 'OPENING_BALANCE_LINE_INVALID', resource: 'openingBalances', error: 'أحد بنود الأرصدة الافتتاحية غير صالح أو مكرر.' });
+          lineIds.add(String(line.id));
+          if (line.category === 'bank') { const row = await getOne(tenant, 'bankAccounts'); const accounts = Array.isArray(row?.data) ? row.data as any[] : []; if (!line.bankAccountId || !accounts.some((a: any) => a.id === line.bankAccountId && a.active === true)) return res.status(400).json({ code: 'OPENING_BALANCE_BANK_INVALID', resource: 'openingBalances', error: 'الحساب البنكي غير موجود أو غير نشط.' }); }
+          if (line.category === 'inventory' && (!line.partId || !Number.isFinite(line.quantity) || line.quantity <= 0 || !Number.isFinite(line.unitCost) || line.unitCost < 0 || Math.round(line.quantity * line.unitCost * 100) !== Math.round(line.amount * 100))) return res.status(400).json({ code: 'OPENING_BALANCE_INVENTORY_INVALID', resource: 'openingBalances', error: 'بيانات صنف المخزون الافتتاحي غير صالحة.' });
+        }
+        const shares = record.partners.reduce((sum: number, p: any) => sum + (Number.isFinite(p?.ownershipPercentage) ? p.ownershipPercentage : NaN), 0);
+        if (record.partners.some((p: any) => !p.partnerId || !String(p.partnerName || '').trim() || !Number.isFinite(p.originalContribution) || p.originalContribution < 0 || !Number.isFinite(p.ownershipPercentage) || p.ownershipPercentage < 0 || p.ownershipPercentage > 100) || (record.partners.length > 0 && Math.abs(shares - 100) > 0.01)) return res.status(400).json({ code: 'OPENING_BALANCE_PARTNERS_INVALID', resource: 'openingBalances', error: 'بيانات الشركاء أو مجموع نسب الملكية غير صالحة.' });
+      }
+    }
     if (!owner && operations.some((op: any) => ['cheques', 'treasury', 'bankLedgerEntries', 'expenses', 'auditLog'].includes(op.resource)) &&
         permissions.canManageTreasury !== true) {
       const operationMap = new Map(operations.map((op: any) => [op.resource, op]));
