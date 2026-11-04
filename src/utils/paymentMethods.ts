@@ -47,3 +47,9 @@ export function requiresSpecificBankAccount(method?: string): boolean {
   const account = paymentAccountOf(method);
   return account === 'bank' || account === 'visa';
 }
+
+
+/** Payment rails that deposit directly into a named bank account (not Visa clearing). */
+export function requiresDirectBankAccount(method?: string): boolean {
+  return paymentAccountOf(method) === 'bank';
+}
