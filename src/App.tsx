@@ -3089,6 +3089,80 @@ export default function App() {
             canManageExpenses={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury)}
             canManageTreasury={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageTreasury)}
             canManagePartners={canManageCapital}
+            partnerWithdrawals={partnerWithdrawals}
+            partnerExitSettlements={partnerExitSettlements}
+            partnerSettlementPayments={partnerSettlementPayments}
+            onUpdatePartnerProfile={(partnerId, profile) => {
+              if (!canManageCapital) return false;
+              if (!profile.name.trim() || !profile.phone.trim() || partners.some(p => p.id !== partnerId && p.phone === profile.phone.trim())) { window.alert('بيانات الشريك غير صالحة أو رقم الهاتف مستخدم.'); return false; }
+              const next = partners.map(p => p.id === partnerId ? { ...p, name: profile.name.trim(), role: profile.role.trim(), phone: profile.phone.trim() } : p);
+              setPartners(next); persistChanges({ partners: next });
+              logAudit('partner.profile.update', `تعديل بيانات الشريك ${profile.name}`, partnerId);
+              return true;
+            }}
+            onRecordPartnerWithdrawal={(record: PartnerWithdrawal) => {
+              if (!canManageCapital) return false;
+              const target = partners.find(p => p.id === record.partnerId && (p.status || 'ACTIVE') === 'ACTIVE');
+              if (!target || !Number.isFinite(record.amount) || record.amount <= 0 || partnerWithdrawals.some(x => x.id === record.id)) return false;
+              let bankEntry: BankLedgerEntry | null = null;
+              if (requiresSpecificBankAccount(record.paymentMethod)) {
+                const posting = createBankMovementEntry({ id: `partner-withdrawal:${record.id}`, batchId: record.id, bankAccountId: record.bankAccountId || '', direction: 'out', amount: record.amount, date: record.date, reference: record.id, description: `${record.kind === 'advance' ? 'سلفة على' : 'مسحوبات'} الشريك ${target.name}` }, bankAccounts, bankLedgerEntries);
+                if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً للصرف.'); return false; }
+                bankEntry = posting.entry;
+              }
+              const nextWithdrawals = [record, ...partnerWithdrawals]; setPartnerWithdrawals(nextWithdrawals); persistChanges({ partnerWithdrawals: nextWithdrawals });
+              if (record.kind === 'withdrawal') {
+                const nextPartners = partners.map(p => p.id === target.id ? { ...p, totalWithdrawn: (p.totalWithdrawn || 0) + record.amount } : p);
+                setPartners(nextPartners); persistChanges({ partners: nextPartners });
+              }
+              if (!requiresSpecificBankAccount(record.paymentMethod)) {
+                const tx: TreasuryTransaction = { id: `TX-PW-${record.id}`, txNumber: uniqueTransactionNumber('TX-PW'), date: record.date, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'مسحوبات شريك', amount: record.amount, paymentMethod: 'نقدي', balanceAfter: treasuryBalance - record.amount, referenceId: record.id, description: `${record.kind === 'advance' ? 'سلفة على' : 'مسحوبات'} الشريك ${target.name}`, recordedBy: currentUser?.employeeName || 'المحاسب' };
+                const nextTreasury = [tx, ...treasury]; setTreasury(nextTreasury); persistChanges({ treasuryTransactions: nextTreasury });
+              }
+              if (bankEntry) { const nextEntries = [bankEntry, ...bankLedgerEntries]; setBankLedgerEntries(nextEntries); persistChanges({ bankLedgerEntries: nextEntries }); }
+              logAudit(record.kind === 'advance' ? 'partner.advance' : 'partner.withdrawal', `${record.kind === 'advance' ? 'سلفة' : 'مسحوبات شخصية'} للشريك ${target.name}: ${record.amount} ج.م`, record.id, record.amount);
+              return true;
+            }}
+            onCreatePartnerExitSettlement={(record: PartnerExitSettlement) => {
+              if (!canManageCapital || !partners.some(p => p.id === record.partnerId && (p.status || 'ACTIVE') === 'ACTIVE') || partnerExitSettlements.some(s => s.partnerId === record.partnerId && !['paid','cancelled'].includes(s.status))) return false;
+              const next = [record, ...partnerExitSettlements]; setPartnerExitSettlements(next); persistChanges({ partnerExitSettlements: next });
+              logAudit('partner.exit', `إنشاء مسودة تسوية تخارج للشريك ${record.partnerName} بصافي ${record.netPayable} ج.م — لم يعتمد بعد`, record.id, record.netPayable);
+              return true;
+            }}
+            onApprovePartnerExitSettlement={(settlementId: string) => {
+              if (!canManageCapital) return false;
+              const settlement = partnerExitSettlements.find(s => s.id === settlementId && s.status === 'draft');
+              if (!settlement) return false;
+              const nextSettlements = partnerExitSettlements.map(s => s.id === settlementId ? { ...s, status: 'approved' as const, approvedAt: new Date().toISOString(), approvedBy: currentUser?.employeeName || 'المحاسب' } : s);
+              const nextPartners = partners.map(p => p.id === settlement.partnerId ? { ...p, status: 'EXITED' as const, exitDate: settlement.exitDate, exitSettlementId: settlement.id } : p);
+              setPartnerExitSettlements(nextSettlements); setPartners(nextPartners);
+              persistChanges({ partnerExitSettlements: nextSettlements, partners: nextPartners });
+              logAudit('partner.exit', `اعتماد تخارج الشريك ${settlement.partnerName} اعتباراً من ${settlement.exitDate} مع إثبات مستحق ${settlement.netPayable} ج.م`, settlement.id, settlement.netPayable);
+              return true;
+            }}
+            onRecordPartnerSettlementPayment={(payment: PartnerSettlementPayment) => {
+              if (!canManageCapital || partnerSettlementPayments.some(p => p.id === payment.id)) return false;
+              const settlement = partnerExitSettlements.find(s => s.id === payment.settlementId && ['approved','partially_paid'].includes(s.status));
+              const paidBefore = partnerSettlementPayments.filter(p => p.settlementId === payment.settlementId).reduce((sum,p) => sum + p.amount, 0);
+              if (!settlement || !Number.isFinite(payment.amount) || payment.amount <= 0 || payment.amount > settlement.netPayable - paidBefore + 0.0001) { window.alert('قيمة الدفعة تتجاوز المستحق المتبقي.'); return false; }
+              let bankEntry: BankLedgerEntry | null = null;
+              if (requiresSpecificBankAccount(payment.paymentMethod)) {
+                const posting = createBankMovementEntry({ id: `partner-exit-payment:${payment.id}`, batchId: payment.id, bankAccountId: payment.bankAccountId || '', direction: 'out', amount: payment.amount, date: payment.date, reference: payment.transferReference || payment.receiptNumber, description: `سداد مستحقات الشريك المتخارج ${settlement.partnerName}` }, bankAccounts, bankLedgerEntries);
+                if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً للسداد.'); return false; }
+                bankEntry = posting.entry;
+              }
+              const nextPayments = [payment, ...partnerSettlementPayments]; setPartnerSettlementPayments(nextPayments); persistChanges({ partnerSettlementPayments: nextPayments });
+              const totalPaid = paidBefore + payment.amount;
+              const nextSettlements = partnerExitSettlements.map(s => s.id === settlement.id ? { ...s, status: totalPaid + 0.0001 >= s.netPayable ? 'paid' as const : 'partially_paid' as const } : s);
+              setPartnerExitSettlements(nextSettlements); persistChanges({ partnerExitSettlements: nextSettlements });
+              if (!requiresSpecificBankAccount(payment.paymentMethod)) {
+                const tx: TreasuryTransaction = { id: `TX-PX-${payment.id}`, txNumber: uniqueTransactionNumber('TX-PX'), date: payment.date, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'سداد مستحقات شريك متخارج', amount: payment.amount, paymentMethod: 'نقدي', balanceAfter: treasuryBalance - payment.amount, referenceId: settlement.id, description: `سداد دفعة ${payment.receiptNumber} للشريك ${settlement.partnerName}`, recordedBy: currentUser?.employeeName || 'المحاسب' };
+                const nextTreasury = [tx, ...treasury]; setTreasury(nextTreasury); persistChanges({ treasuryTransactions: nextTreasury });
+              }
+              if (bankEntry) { const nextEntries = [bankEntry, ...bankLedgerEntries]; setBankLedgerEntries(nextEntries); persistChanges({ bankLedgerEntries: nextEntries }); }
+              logAudit('partner.settlement.payment', `سداد ${payment.amount} ج.م للشريك المتخارج ${settlement.partnerName} — إيصال ${payment.receiptNumber}`, payment.id, payment.amount);
+              return true;
+            }}
             onAddPartner={(newPartner: Partner, paymentMethod: string, notes: string, bankAccountId?: string) => {
               if (!canManageCapital) { window.alert('تعديل رأس المال والشركاء متاح للمالك والمحاسب المالي فقط.'); return false; }
               if (partners.some(partner => partner.id === newPartner.id || partner.phone === newPartner.phone)) {
