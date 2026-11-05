@@ -495,3 +495,132 @@ select:focus-visible, textarea:focus-visible {
   /* Keep the invoice action visible above the bottom navigation without leaving a blank panel. */
   .malvia-pos-cart-sheet { z-index: 80 !important; }
 }
+
+
+/* ================================================================
+   MALVIA UX refresh — Phase 1 preview
+   Scoped to the navigation shell and dashboard; operational modules
+   retain their existing behavior, forms, permissions and data flows.
+   ================================================================ */
+.malvia-navigation-shell {
+  background: #f4f7fb !important;
+  color: #17243b;
+}
+.malvia-sidebar {
+  background: #101b30 !important;
+  border-color: rgba(148, 163, 184, .16) !important;
+  box-shadow: 8px 0 28px rgba(15, 23, 42, .08);
+}
+.malvia-sidebar > button:first-child {
+  border-color: rgba(148, 163, 184, .14) !important;
+}
+.malvia-nav-button {
+  border-radius: 12px !important;
+  min-height: 43px;
+}
+.malvia-nav-button[aria-current="page"] {
+  background: linear-gradient(110deg, #dceafe, #eff6ff) !important;
+  color: #174ea6 !important;
+  box-shadow: inset -3px 0 0 #3478e5, 0 4px 12px rgba(15, 23, 42, .10) !important;
+}
+.malvia-nav-button:not([aria-current="page"]):hover {
+  background: rgba(148, 163, 184, .12) !important;
+}
+.malvia-topbar {
+  background: rgba(255,255,255,.94) !important;
+  border-color: #e4eaf2 !important;
+  color: #17243b !important;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, .035) !important;
+}
+.malvia-topbar h1 { color: #17243b !important; }
+.malvia-topbar button {
+  border-color: #e5eaf1 !important;
+}
+.malvia-content {
+  max-width: 1680px !important;
+  padding: 26px clamp(14px, 2.2vw, 34px) !important;
+}
+.malvia-dashboard {
+  color: #17243b !important;
+  display: flex;
+  flex-direction: column;
+  gap: 20px !important;
+}
+.malvia-dashboard-hero {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(59,130,246,.10), transparent 34%),
+    linear-gradient(115deg, #ffffff, #f8fbff) !important;
+  border: 1px solid #e3eaf3 !important;
+  border-radius: 24px !important;
+  box-shadow: 0 12px 34px rgba(23, 42, 72, .055) !important;
+  padding: clamp(20px, 3vw, 34px) !important;
+}
+.malvia-dashboard-hero h2 {
+  color: #14233b !important;
+  font-size: clamp(22px, 2.3vw, 30px) !important;
+  letter-spacing: -.55px;
+  line-height: 1.45 !important;
+}
+.malvia-dashboard-hero p { color: #64748b !important; line-height: 1.8 !important; }
+.malvia-dashboard-hero > div > div:first-child > div:first-child {
+  color: #2563eb !important;
+}
+.malvia-dashboard-hero button { min-height: 44px; border-radius: 13px !important; }
+.malvia-dashboard-kpis {
+  gap: 13px !important;
+}
+.malvia-kpi-card {
+  min-height: 132px;
+  background: #fff !important;
+  border: 1px solid #e7edf5 !important;
+  border-radius: 19px !important;
+  box-shadow: 0 5px 18px rgba(23, 42, 72, .035) !important;
+  padding: 18px !important;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.malvia-kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: #cbdcf4 !important;
+  box-shadow: 0 12px 26px rgba(23, 42, 72, .075) !important;
+}
+.malvia-kpi-card > div:first-child { color: #64748b !important; font-weight: 700; }
+.malvia-kpi-card > div:nth-child(2) { margin-top: 14px !important; }
+.malvia-kpi-card > div:nth-child(2) > div { color: #17243b !important; }
+.malvia-kpi-card > div:nth-child(2) span,
+.malvia-kpi-card > div:nth-child(2) div + span { color: #8492a6 !important; }
+.malvia-dashboard-panel {
+  background: #fff !important;
+  border: 1px solid #e7edf5 !important;
+  border-radius: 20px !important;
+  box-shadow: 0 5px 18px rgba(23, 42, 72, .035) !important;
+}
+.malvia-dashboard-panel h3 { color: #17243b !important; }
+.malvia-dashboard-panel input {
+  background: #f8fafc !important;
+  border-color: #dbe4ef !important;
+  color: #17243b !important;
+}
+.malvia-dashboard-panel input::placeholder { color: #94a3b8 !important; }
+.malvia-dashboard-panel .divide-y > * { border-color: #edf1f6 !important; }
+.malvia-dashboard-panel .text-white { color: #17243b !important; }
+.malvia-dashboard-panel .text-neutral-300,
+.malvia-dashboard-panel .text-neutral-400,
+.malvia-dashboard-panel .text-neutral-500 { color: #718096 !important; }
+.malvia-dashboard-panel .bg-surface-1 { background: #f8fafc !important; }
+.malvia-mobile-nav {
+  background: rgba(255,255,255,.96) !important;
+  border-top: 1px solid #e5eaf1 !important;
+  box-shadow: 0 -8px 26px rgba(15,23,42,.08) !important;
+}
+.malvia-mobile-nav-item { color: #718096 !important; }
+.malvia-mobile-nav-item.is-active {
+  color: #2563eb !important;
+  background: #eff6ff !important;
+}
+@media (max-width: 767px) {
+  .malvia-content { padding: 16px 12px calc(86px + env(safe-area-inset-bottom)) !important; }
+  .malvia-dashboard { gap: 14px !important; }
+  .malvia-dashboard-hero { padding: 19px 16px !important; }
+  .malvia-kpi-card { min-height: 112px; padding: 13px !important; }
+  .malvia-dashboard-panel { padding: 15px !important; }
+}
