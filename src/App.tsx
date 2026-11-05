@@ -39,12 +39,19 @@ import {
   InventoryDiscrepancyError,
   PaymentMethod,
   ProfitDistributionRecord,
+  PartnerWithdrawal,
+  PartnerExitSettlement,
+  PartnerSettlementPayment,
   Shift
 } from './types/autoParts';
+import type { OpeningBalanceRecord } from './utils/openingBalanceLogic';
+import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
+import { createBankMovementEntry, createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount } from './utils/bankLedger';
+import { requiresDirectBankAccount, requiresSpecificBankAccount } from './utils/paymentMethods';
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
 import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands';
-import { isCreditMethod } from './utils/treasuryAccounts';
+import { isCreditMethod, summarizeTreasury } from './utils/treasuryAccounts';
 import { findOpenShift, findOpenShifts, summarizeShift, stampNewTreasury, nextShiftNumber, countTotal, round2, varianceOf } from './utils/shiftLogic';
 import { nextSalesInvoiceNumber } from './utils/invoiceNumber';
 import { uniqueTransactionNumber } from './utils/uniqueTransactionNumber';
@@ -140,6 +147,9 @@ export default function App() {
   const [purchaseReturns, setPurchaseReturns] = useState<PurchaseReturn[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [partnerWithdrawals, setPartnerWithdrawals] = useState<PartnerWithdrawal[]>([]);
+  const [partnerExitSettlements, setPartnerExitSettlements] = useState<PartnerExitSettlement[]>([]);
+  const [partnerSettlementPayments, setPartnerSettlementPayments] = useState<PartnerSettlementPayment[]>([]);
   const [carModels, setCarModels] = useState<CarModel[]>([]);
   const [inventoryErrors, setInventoryErrors] = useState<InventoryDiscrepancyError[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
@@ -150,6 +160,10 @@ export default function App() {
   const [loyaltyLedger, setLoyaltyLedger] = useState<LoyaltyEntry[]>([]);
   const [loyaltyTick, setLoyaltyTick] = useState(0);
   const [cheques, setCheques] = useState<Cheque[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [cardSettlements, setCardSettlements] = useState<CardSettlementBatch[]>([]);
+  const [bankLedgerEntries, setBankLedgerEntries] = useState<BankLedgerEntry[]>([]);
+  const [openingBalances, setOpeningBalances] = useState<OpeningBalanceRecord[]>([]);
   const [stockBatches, setStockBatches] = useState<StockBatch[]>([]);
   const [serialUnits, setSerialUnits] = useState<SerialUnit[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -165,6 +179,7 @@ export default function App() {
   // الصلاحيات تُقرأ من سجل الموظف الحالي (تسري فوراً عند تعديلها) وليس من لقطة وقت الدخول
   const liveEmployee = currentUser ? employees.find(e => e.id === currentUser.employeeId) : undefined;
   const effectiveRole = liveEmployee?.role ?? currentUser?.role;
+  const canManageCapital = effectiveRole === 'مدير عام' || effectiveRole === 'محاسب مالي';
   const effectivePermissions = liveEmployee?.permissions ?? currentUser?.permissions;
   const simpleMode = Boolean(currentUser) && isSimpleCashier(effectiveRole, effectivePermissions);
   const canAccessTab = (tab: string): boolean =>
@@ -247,7 +262,10 @@ export default function App() {
     setPurchaseInvoices(data.purchaseInvoices);
     setPurchaseReturns(data.purchaseReturns);
     setExpenses(data.expenses);
-    setPartners(data.partners);
+    setPartners((data.partners || []).map(partner => ({ ...partner, status: partner.status || 'ACTIVE' })));
+    setPartnerWithdrawals(data.partnerWithdrawals || []);
+    setPartnerExitSettlements(data.partnerExitSettlements || []);
+    setPartnerSettlementPayments(data.partnerSettlementPayments || []);
     setCarModels(modelsData);
     setInventoryErrors(data.inventoryErrors);
     setAuditLog(data.auditLog || []);
@@ -257,6 +275,10 @@ export default function App() {
     setStockTransfers(data.stockTransfers || []);
     setLoyaltyLedger(data.loyaltyLedger || []);
     setCheques(data.cheques || []);
+    setBankAccounts(data.bankAccounts || []);
+    setCardSettlements(data.cardSettlements || []);
+    setBankLedgerEntries(data.bankLedgerEntries || []);
+    setOpeningBalances(data.openingBalances || []);
     setStockBatches(data.stockBatches || []);
     setSerialUnits(data.serialUnits || []);
   }, []);
@@ -1029,14 +1051,58 @@ export default function App() {
     return { ok: true };
   };
 
-  const handleChequeAction = (id: string, action: ChequeAction, note?: string): { ok: boolean; message?: string } => {
+  const handleChequeAction = (id: string, action: ChequeAction, note?: string, bankAccountId?: string): { ok: boolean; message?: string } => {
     const cur = cheques.find(c => c.id === id);
     if (!cur) return { ok: false, message: 'الشيك غير موجود' };
     const by = currentUser?.employeeName || 'غير معروف';
     const updated = applyAction(cur, action, by, new Date().toISOString(), note);
     if (!updated) return { ok: false, message: 'هذا الإجراء غير مسموح في حالة الشيك الحالية (ربما تغيّرت من جهاز آخر)' };
     const effect = actionEffect(cur, action);
+    let nextBankEntries = bankLedgerEntries;
+    if (action === 'clear') {
+      if (!bankAccountId) return { ok: false, message: 'يجب تحديد الحساب البنكي الذي تم فيه التحصيل أو الصرف.' };
+      const posting = createChequeBankEntry({
+        chequeId: cur.id,
+        bankAccountId,
+        direction: cur.direction,
+        amount: cur.amount,
+        date: todayISO(),
+        reference: cur.number,
+        description: `${cur.direction === 'incoming' ? 'تحصيل شيك وارد' : 'صرف شيك صادر'} رقم ${cur.number} — ${cur.partyName}`,
+      }, bankAccounts, bankLedgerEntries);
+      if (posting.error || !posting.entry) {
+        const messages: Record<string, string> = {
+          CHEQUE_BANK_REQUIRED: 'الحساب البنكي غير موجود.',
+          CHEQUE_BANK_INACTIVE: 'الحساب البنكي المحدد موقوف.',
+          CHEQUE_BANK_DUPLICATE: 'تم ترحيل هذا الشيك إلى البنك من قبل.',
+          CHEQUE_AMOUNT_INVALID: 'قيمة الشيك غير صالحة.',
+          CHEQUE_DATE_INVALID: 'تاريخ ترحيل الشيك غير صالح.',
+        };
+        return { ok: false, message: messages[posting.error || ''] || 'تعذّر ترحيل الشيك إلى البنك.' };
+      }
+      nextBankEntries = [posting.entry, ...bankLedgerEntries];
+    }
+    const isPostClearBounce = action === 'bounce' && (cur.status === 'محصّل' || cur.status === 'مصروف');
+    if (isPostClearBounce) {
+      const reversal = createChequeBankReversalEntry({
+        chequeId: cur.id,
+        date: todayISO(),
+        reference: cur.number,
+        description: `عكس حركة شيك مرتد رقم ${cur.number} — ${cur.partyName}`,
+      }, bankLedgerEntries);
+      if (reversal.error || !reversal.entry) {
+        return { ok: false, message: reversal.error === 'CHEQUE_BANK_DUPLICATE'
+          ? 'تم عكس حركة هذا الشيك البنكية من قبل.'
+          : 'تعذّر العثور على حركة البنك الأصلية لعكسها.' };
+      }
+      nextBankEntries = [reversal.entry, ...bankLedgerEntries];
+    }
+    const updatedCheque = action === 'clear' ? { ...updated, clearedBankAccountId: bankAccountId } : updated;
     applyChequeEffectToParty(cur, effect, false);
+    if (action === 'clear' || isPostClearBounce) {
+      setBankLedgerEntries(nextBankEntries);
+      persistChanges({ bankLedgerEntries: nextBankEntries });
+    }
     if (effect.treasury) {
       const t = effect.treasury;
       const tx: TreasuryTransaction = {
@@ -1060,7 +1126,7 @@ export default function App() {
       });
     }
     setCheques(prev => {
-      const list = prev.map(c => (c.id === id ? updated : c));
+      const list = prev.map(c => (c.id === id ? updatedCheque : c));
       persistChanges({ cheques: list });
       return list;
     });
@@ -1144,6 +1210,22 @@ export default function App() {
     const initialPayments: InvoicePayment[] = invoice.payments?.length
       ? invoice.payments
       : [{ method: invoice.paymentMethod, amount: invoice.grandTotal }];
+    const posBankEntries: BankLedgerEntry[] = [];
+    for (let index = 0; index < initialPayments.length; index++) {
+      const payment = initialPayments[index];
+      if (!requiresDirectBankAccount(String(payment.method))) continue;
+      const posting = createBankMovementEntry({
+        id: `pos-payment:${invoice.id}:${index}`, batchId: invoice.id,
+        bankAccountId: payment.bankAccountId || '', direction: 'in', amount: payment.amount,
+        date: invoice.date, reference: invoice.invoiceNumber,
+        description: `تحصيل InstaPay إلى البنك — فاتورة ${invoice.invoiceNumber}`,
+      }, bankAccounts, [...posBankEntries, ...bankLedgerEntries]);
+      if (posting.error || !posting.entry) {
+        window.alert('لا يمكن اعتماد الفاتورة: اختر حساباً بنكياً نشطاً لكل دفعة InstaPay البنكية.');
+        return false;
+      }
+      posBankEntries.push(posting.entry);
+    }
     const initialCreditAmount = initialPayments
       .filter(payment => isCreditPayment(String(payment.method)))
       .reduce((total, payment) => total + payment.amount, 0);
@@ -1297,6 +1379,7 @@ export default function App() {
           category: 'مبيعات كاشير (فواتير بيع)' as const,
           amount: p.amount,
           paymentMethod: String(p.method),
+          bankAccountId: requiresDirectBankAccount(String(p.method)) ? p.bankAccountId : undefined,
           balanceAfter: running,
           referenceId: finalInvoice.id,
           description: `مبيعات فاتورة #${finalInvoice.invoiceNumber} - عميل: ${finalInvoice.customerName}`,
@@ -1308,6 +1391,11 @@ export default function App() {
         persistChanges({ treasuryTransactions: updated });
         return updated;
       });
+    }
+    if (posBankEntries.length) {
+      const nextBankEntries = [...posBankEntries, ...bankLedgerEntries];
+      setBankLedgerEntries(nextBankEntries);
+      persistChanges({ bankLedgerEntries: nextBankEntries });
     }
 
     // 6) تدقيق: من باع، وهل في سعر معدّل أو خصم
@@ -1699,6 +1787,17 @@ export default function App() {
       window.alert('فاتورة المشتريات مسجلة بالفعل؛ تم إيقاف العملية لمنع التكرار.');
       return false;
     }
+    if (invoice.amountPaid > 0 && requiresSpecificBankAccount(invoice.paymentMethod)) {
+      const posting = createBankMovementEntry({
+        id: `purchase:${invoice.id}`, batchId: invoice.id, bankAccountId: invoice.bankAccountId || '',
+        direction: 'out', amount: invoice.amountPaid, date: invoice.date, reference: invoice.invoiceNumber,
+        description: `سداد فاتورة مشتريات ${invoice.invoiceNumber}`,
+      }, bankAccounts, bankLedgerEntries);
+      if (posting.error || !posting.entry) {
+        window.alert('لا يمكن اعتماد السداد البنكي: اختر حساباً بنكياً نشطاً وتأكد من عدم تكرار الحركة.');
+        return false;
+      }
+    }
     if (invoice.items.some(item => item.partId && !parts.some(part => part.id === item.partId))) {
       window.alert('أحد الأصناف المرتبطة بالفاتورة لم يعد موجوداً بالمخزون. حدّث الفاتورة قبل الحفظ.');
       return false;
@@ -1835,6 +1934,7 @@ export default function App() {
         paymentMethod: invoice.paymentMethod,
         balanceAfter: treasuryBalance - invoice.amountPaid,
         referenceId: invoice.id,
+        bankAccountId: invoice.bankAccountId,
         description: `مشتريات بضاعة فاتورة #${invoice.invoiceNumber} - مورد: ${invoice.supplierName}`,
         recordedBy: currentUser?.employeeName || 'إدارة المشتريات'
       };
@@ -1843,6 +1943,18 @@ export default function App() {
         persistChanges({ treasuryTransactions: updated });
         return updated;
       });
+      if (requiresSpecificBankAccount(invoice.paymentMethod)) {
+        const posting = createBankMovementEntry({
+          id: `purchase:${invoice.id}`, batchId: invoice.id, bankAccountId: invoice.bankAccountId || '',
+          direction: 'out', amount: invoice.amountPaid, date: invoice.date, reference: invoice.invoiceNumber,
+          description: `سداد فاتورة مشتريات ${invoice.invoiceNumber}`,
+        }, bankAccounts, bankLedgerEntries);
+        if (posting.entry) {
+          const nextBankEntries = [posting.entry, ...bankLedgerEntries];
+          setBankLedgerEntries(nextBankEntries);
+          persistChanges({ bankLedgerEntries: nextBankEntries });
+        }
+      }
     }
     return true;
   };
@@ -2239,30 +2351,130 @@ export default function App() {
 
   // Add Expense
   const handleAddExpense = (newExp: Expense) => {
-    setExpenses(prev => {
-      const updated = [newExp, ...prev];
-      persistChanges({ expenses: updated });
-      return updated;
-    });
-    // Add to treasury
+    const canRecord = currentUser?.role === 'مدير عام' ||
+      Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury);
+    if (!canRecord || !Number.isFinite(newExp.amount) || newExp.amount <= 0) return;
+    if (requiresSpecificBankAccount(newExp.paymentMethod)) {
+      const posting = createBankMovementEntry({
+        id: `expense:${newExp.id}`, batchId: newExp.id, bankAccountId: newExp.bankAccountId || '',
+        direction: 'out', amount: newExp.amount, date: newExp.date, reference: newExp.id,
+        description: `مصروف بنكي: ${newExp.title}`,
+      }, bankAccounts, bankLedgerEntries);
+      if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً لتسجيل هذا المصروف.'); return; }
+    }
+    const expense: Expense = {
+      ...newExp,
+      recordedBy: currentUser?.employeeName || newExp.recordedBy || 'المحاسب',
+    };
     const tx: TreasuryTransaction = {
       id: `TX-EXP-${Date.now()}`,
       txNumber: uniqueTransactionNumber('TX-EX'),
-      date: newExp.date,
+      date: expense.date,
       time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
       type: 'صرف',
       category: 'مصروفات تشغيلية',
-      amount: newExp.amount,
-      paymentMethod: newExp.paymentMethod,
-      balanceAfter: treasuryBalance - newExp.amount,
-      description: `مصروف: ${newExp.title} (${newExp.category})`,
-      recordedBy: newExp.recordedBy || currentUser?.employeeName || 'المحاسب'
+      amount: expense.amount,
+      paymentMethod: expense.paymentMethod,
+      bankAccountId: expense.bankAccountId,
+      balanceAfter: treasuryBalance - expense.amount,
+      referenceId: expense.id,
+      description: `مصروف: ${expense.title} (${expense.category})`,
+      recordedBy: expense.recordedBy,
     };
-    setTreasury(prev => {
-      const updated = [tx, ...prev];
-      persistChanges({ treasuryTransactions: updated });
-      return updated;
+    const nextExpenses = [expense, ...expenses];
+    const nextTreasury = [tx, ...treasury];
+    setExpenses(nextExpenses);
+    setTreasury(nextTreasury);
+    persistChanges({ expenses: nextExpenses, treasuryTransactions: nextTreasury });
+    if (requiresSpecificBankAccount(expense.paymentMethod)) {
+      const posting = createBankMovementEntry({
+        id: `expense:${expense.id}`, batchId: expense.id, bankAccountId: expense.bankAccountId || '',
+        direction: 'out', amount: expense.amount, date: expense.date, reference: expense.id,
+        description: `مصروف بنكي: ${expense.title}`,
+      }, bankAccounts, bankLedgerEntries);
+      if (posting.entry) {
+        const nextBankEntries = [posting.entry, ...bankLedgerEntries];
+        setBankLedgerEntries(nextBankEntries);
+        persistChanges({ bankLedgerEntries: nextBankEntries });
+      }
+    }
+  };
+
+  const handleAddBankAccount = (account: BankAccount) => {
+    const validation = validateBankAccount(account, bankAccounts);
+    if (validation) { window.alert('بيانات الحساب البنكي غير صالحة أو مكررة.'); return; }
+    const updated = [account, ...bankAccounts];
+    setBankAccounts(updated);
+    persistChanges({ bankAccounts: updated });
+  };
+
+  const handleBankTransfer = (input: { id: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; date: string; reference: string }): { ok: boolean; message?: string } => {
+    const result = createBankTransferEntries(input, bankAccounts, bankLedgerEntries);
+    if (result.error) {
+      const messages: Record<string, string> = {
+        BANK_TRANSFER_SOURCE_REQUIRED: 'اختر الحساب المصدر.',
+        BANK_TRANSFER_DESTINATION_REQUIRED: 'اختر الحساب المستلم.',
+        BANK_TRANSFER_SAME_ACCOUNT: 'يجب اختيار حسابين مختلفين.',
+        BANK_TRANSFER_ACCOUNT_INACTIVE: 'الحساب المصدر أو المستلم غير موجود أو موقوف.',
+        BANK_TRANSFER_DUPLICATE: 'تم تسجيل هذا التحويل من قبل.',
+        BANK_TRANSFER_AMOUNT_INVALID: 'قيمة التحويل يجب أن تكون أكبر من صفر.',
+        BANK_TRANSFER_DATE_INVALID: 'تاريخ التحويل غير صحيح.',
+      };
+      return { ok: false, message: messages[result.error] || 'بيانات التحويل غير صالحة.' };
+    }
+    const nextEntries = [...result.entries, ...bankLedgerEntries];
+    setBankLedgerEntries(nextEntries);
+    persistChanges({ bankLedgerEntries: nextEntries });
+    logAudit('bank.transfer', `تحويل بنكي بقيمة ${input.amount} ج.م من ${bankAccounts.find(a => a.id === input.sourceBankAccountId)?.name || ''} إلى ${bankAccounts.find(a => a.id === input.destinationBankAccountId)?.name || ''}`, input.id, input.amount);
+    return { ok: true };
+  };
+
+  const handleSettleVisa = (batch: CardSettlementBatch): { ok: boolean; message?: string } => {
+    const currentVisa = summarizeTreasury(treasury).accounts.find(a => a.key === 'visa')?.balance || 0;
+    const outstanding = Math.max(0, currentVisa);
+    if (batch.grossAmount > outstanding + 0.005) return { ok: false, message: 'قيمة التسوية أكبر من مستحقات الفيزا غير المسوّاة.' };
+    const result = createCardSettlementEntries(batch, bankAccounts, cardSettlements);
+    if (result.error) return { ok: false, message: result.error === 'SETTLEMENT_DUPLICATE' ? 'رقم التسوية مسجل من قبل.' : 'بيانات التسوية أو الحساب البنكي غير صالحة.' };
+    const nextSettlements = [batch, ...cardSettlements];
+    const nextEntries = [...result.entries, ...bankLedgerEntries];
+    const nextExpenses: Expense[] = batch.feeAmount > 0 ? [{
+      id: `EXP-${batch.id}-FEE`, title: `عمولة تسوية فيزا — ${batch.processor}`,
+      category: 'عمولات ورسوم بنكية', amount: batch.feeAmount, date: batch.settlementDate,
+      paymentMethod: 'فيزا / بطاقة', notes: `مرجع التسوية: ${batch.reference} — مسجلة ضمن دفتر التسوية البنكية`,
+      recordedBy: currentUser?.employeeName || 'النظام',
+    }, ...expenses] : expenses;
+    // قيّدان في دفتر الخزينة: إقفال إجمالي مستحقات الفيزا وإيداع الصافي بالبنك.
+    // الفرق بينهما هو عمولة البنك، المسجلة كمصروف مستقل أعلاه.
+    const settlementTime = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    const visaClearingTx: TreasuryTransaction = {
+      id: `TX-VISA-CLEAR-${batch.id}`,
+      txNumber: uniqueTransactionNumber('TX-VSC'),
+      date: batch.settlementDate, time: settlementTime,
+      type: 'صرف', category: 'تسوية مستحقات الفيزا',
+      amount: batch.grossAmount, paymentMethod: 'فيزا / بطاقة',
+      balanceAfter: treasuryBalance - batch.grossAmount,
+      referenceId: batch.id, description: `إقفال مستحقات فيزا — مرجع ${batch.reference}`,
+      recordedBy: currentUser?.employeeName || 'النظام',
+    };
+    const bankDepositTx: TreasuryTransaction = {
+      id: `TX-VISA-BANK-${batch.id}`,
+      txNumber: uniqueTransactionNumber('TX-VSB'),
+      date: batch.settlementDate, time: settlementTime,
+      type: 'قبض', category: 'إيداع صافي تسوية الفيزا بالبنك',
+      amount: batch.netAmount, paymentMethod: 'تحويل بنكي',
+      balanceAfter: treasuryBalance - batch.grossAmount + batch.netAmount,
+      referenceId: batch.id, bankAccountId: batch.bankAccountId,
+      description: `إيداع صافي تسوية الفيزا — ${batch.processor} — ${batch.reference}`,
+      recordedBy: currentUser?.employeeName || 'النظام',
+    };
+    const nextTreasury = [bankDepositTx, visaClearingTx, ...treasury];
+    setCardSettlements(nextSettlements); setBankLedgerEntries(nextEntries); setExpenses(nextExpenses); setTreasury(nextTreasury);
+    persistChanges({
+      cardSettlements: nextSettlements, bankLedgerEntries: nextEntries,
+      expenses: nextExpenses, treasuryTransactions: nextTreasury,
     });
+    logAudit('bank.settlement', `تسوية فيزا بقيمة ${batch.grossAmount} ج.م إلى ${bankAccounts.find(a => a.id === batch.bankAccountId)?.name || 'حساب بنكي'} — عمولة ${batch.feeAmount} ج.م`, batch.id, batch.grossAmount);
+    return { ok: true };
   };
 
   // Active Notifications Count
@@ -2469,6 +2681,7 @@ export default function App() {
             onRemoveFromCart={handleRemoveFromCart}
             onClearCart={handleClearCart}
             onCheckoutComplete={handleCreateInvoice}
+            bankAccounts={bankAccounts}
             vatRate={settings.vatRate}
             taxRegistered={settings.taxRegistered}
             pricesIncludeVat={settings.pricesIncludeVat}
@@ -2532,6 +2745,9 @@ export default function App() {
             suppliers={suppliers}
             onAdd={handleAddCheque}
             onAction={handleChequeAction}
+            bankAccounts={bankAccounts}
+            canRegister={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canRegisterCheques || effectivePermissions?.canManageTreasury)}
+            canManageLifecycle={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageChequeLifecycle || effectivePermissions?.canManageTreasury)}
           />
         )}
 
@@ -2539,7 +2755,8 @@ export default function App() {
           <ShiftsView
             shifts={shifts}
             treasury={treasury}
-            isManager={currentUser?.role === 'مدير عام' || Boolean(currentUser?.permissions?.canManageTreasury)}
+            isManager={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageTreasury)}
+            canViewCashBalances={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canViewCashBalances)}
             currentUserName={currentUser?.employeeName || ''}
             requireShiftForSales={Boolean(settings.requireShiftForSales)}
             openShiftsCount={openShiftsCount}
@@ -2600,8 +2817,10 @@ export default function App() {
             parts={parts}
             treasuryBalance={treasuryBalance}
             onAddPurchaseInvoice={handleAddPurchaseInvoice}
+            bankAccounts={bankAccounts}
             onPurchaseReturn={handleAddPurchaseReturn}
             onDeletePurchaseReturn={handleDeletePurchaseReturn}
+            canReceiveOnly={currentUser?.role !== 'مدير عام' && Boolean(effectivePermissions?.canReceivePurchases && !effectivePermissions?.canManagePurchases)}
             onAddSupplier={(newSup: Supplier) => {
               setSuppliers(prev => {
                 const updated = [newSup, ...prev];
@@ -2616,6 +2835,7 @@ export default function App() {
           <CustomersView
             customers={customersWithPoints}
             invoices={invoices}
+            bankAccounts={bankAccounts}
             onAddCustomer={handleAddCustomer}
             loyaltyEnabled={resolveLoyalty(settings.loyalty).enabled}
             canAdjustLoyalty={effectiveRole === 'مدير عام'}
@@ -2630,11 +2850,14 @@ export default function App() {
                 return updated;
               });
             }}
-            onSettleBalance={(customerId: string, amount: number) => {
+            onSettleBalance={(customerId: string, amount: number, paymentMethod = 'نقدي', bankAccountId?: string) => {
               const cust = customers.find(c => c.id === customerId);
               if (!cust || !Number.isFinite(amount) || amount <= 0 || amount > cust.balance + 0.005) {
                 window.alert('قيمة التحصيل غير صحيحة أو أكبر من رصيد العميل المستحق.');
                 return;
+              }
+              if (requiresSpecificBankAccount(paymentMethod) && !bankAccounts.some(account => account.id === bankAccountId && account.active)) {
+                window.alert('اختر حساباً بنكياً نشطاً قبل اعتماد التحصيل.'); return;
               }
               const receiptNumber = uniqueTransactionNumber('RCPT');
               const collectedAt = new Date();
@@ -2657,7 +2880,7 @@ export default function App() {
                   if (outstanding <= 0.005) continue;
                   const applied = Math.min(remaining, outstanding);
                   const settlementPayments = [...(invoice.settlementPayments || []), {
-                    amount: applied, date: collectedDate, time: collectedTime, paymentMethod: 'نقدي', receiptNumber,
+                    amount: applied, date: collectedDate, time: collectedTime, paymentMethod, receiptNumber,
                   }];
                   const newOutstanding = Math.max(0, outstanding - applied);
                   const paymentStatus = newOutstanding <= 0.005 ? 'مسددة' as const
@@ -2690,7 +2913,8 @@ export default function App() {
                 type: 'قبض',
                 category: 'تحصيل من عميل / ورشة',
                 amount,
-                paymentMethod: 'نقدي',
+                paymentMethod: paymentMethod as PaymentMethod,
+                bankAccountId: requiresSpecificBankAccount(paymentMethod) ? bankAccountId : undefined,
                 balanceAfter: treasuryBalance + amount,
                 referenceId: customerId,
                 description: `تحصيل من عميل: ${cust?.name || customerId}`,
@@ -2701,6 +2925,17 @@ export default function App() {
                 persistChanges({ treasuryTransactions: updated });
                 return updated;
               });
+              if (requiresSpecificBankAccount(paymentMethod)) {
+                const posting = createBankMovementEntry({
+                  id: `customer-collection:${receiptNumber}`, batchId: receiptNumber,
+                  bankAccountId: bankAccountId || '', direction: 'in', amount, date: collectedDate,
+                  reference: receiptNumber, description: `تحصيل من العميل ${cust.name}`,
+                }, bankAccounts, bankLedgerEntries);
+                if (posting.entry) {
+                  const nextEntries = [posting.entry, ...bankLedgerEntries];
+                  setBankLedgerEntries(nextEntries); persistChanges({ bankLedgerEntries: nextEntries });
+                }
+              }
             }}
           />
         )}
@@ -2708,6 +2943,7 @@ export default function App() {
         {viewTab === 'suppliers' && (
           <SuppliersView
             suppliers={suppliers}
+            bankAccounts={bankAccounts}
             supplierPayments={supplierPayments}
             supplierPaymentSchedules={supplierPaymentSchedules}
             onChangeSupplierPaymentSchedules={(next) => { setSupplierPaymentSchedules(next); persistChanges({ supplierPaymentSchedules: next }); }}
@@ -2726,7 +2962,7 @@ export default function App() {
                 return updated;
               });
             }}
-            onSettleSupplierPayment={(supplierId, amount, paymentDate, paymentMethod, _treasurySource, notes, scheduleId) => {
+            onSettleSupplierPayment={(supplierId, amount, paymentDate, paymentMethod, _treasurySource, notes, scheduleId, bankAccountId) => {
               const supplier = suppliers.find(s => s.id === supplierId);
               const schedule = scheduleId ? supplierPaymentSchedules.find(x => x.id === scheduleId) : undefined;
               if (scheduleId && (!schedule || schedule.status !== 'scheduled' || supplierPayments.some(p => p.scheduleId === scheduleId && p.amount >= schedule.amount - schedule.amountPaid))) return;
@@ -2734,17 +2970,36 @@ export default function App() {
               const stamp = Date.now();
               const paymentId = `SP-${stamp}-${Math.random().toString(36).slice(2,7)}`;
               const txId = `TX-SUPP-${stamp}-${Math.random().toString(36).slice(2,7)}`;
+              if (requiresSpecificBankAccount(paymentMethod)) {
+                const posting = createBankMovementEntry({
+                  id: `supplier-payment:${paymentId}`, batchId: paymentId, bankAccountId: bankAccountId || '',
+                  direction: 'out', amount, date: paymentDate, reference: paymentId,
+                  description: `سداد مورد ${supplier.name}`,
+                }, bankAccounts, bankLedgerEntries);
+                if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً قبل اعتماد السداد.'); return; }
+              }
               const debt = supplier.deferredDebt ?? supplier.balance ?? 0;
               const newDebt = Math.max(0, debt - amount);
               const overpaid = Math.max(0, amount - debt);
               const updatedSuppliers = suppliers.map(s => s.id === supplierId ? { ...s, balance: newDebt, deferredDebt: newDebt, storeCredit: (s.storeCredit || 0) + overpaid, totalPaid: (s.totalPaid || 0) + amount, lastPaymentDate: paymentDate } : s);
-              const paymentRecord: import('./types/autoParts').SupplierPayment = { id: paymentId, paymentNumber: paymentId.slice(-6), supplierId, supplierName: supplier.name, amount, paymentDate, paymentMethod, treasurySource: _treasurySource, notes, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات', scheduleId };
-              const tx: TreasuryTransaction = { id: txId, txNumber: uniqueTransactionNumber('TX-S'), date: paymentDate, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'سداد دفعة لمورد', amount, paymentMethod: paymentMethod as PaymentMethod, balanceAfter: treasuryBalance - amount, referenceId: paymentId, description: `سداد مورد #${supplierId}: ${notes}`, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات' };
+              const paymentRecord: import('./types/autoParts').SupplierPayment = { id: paymentId, paymentNumber: paymentId.slice(-6), supplierId, supplierName: supplier.name, amount, paymentDate, paymentMethod, treasurySource: _treasurySource, bankAccountId, notes, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات', scheduleId };
+              const tx: TreasuryTransaction = { id: txId, txNumber: uniqueTransactionNumber('TX-S'), date: paymentDate, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'سداد دفعة لمورد', amount, paymentMethod: paymentMethod as PaymentMethod, balanceAfter: treasuryBalance - amount, referenceId: paymentId, bankAccountId, description: `سداد مورد #${supplierId}: ${notes}`, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات' };
               const updatedPayments = [paymentRecord, ...supplierPayments];
               const updatedTreasury = [tx, ...treasury];
               setSuppliers(updatedSuppliers); persistChanges({ suppliers: updatedSuppliers });
               setSupplierPayments(updatedPayments); persistChanges({ supplierPayments: updatedPayments });
               setTreasury(updatedTreasury); persistChanges({ treasuryTransactions: updatedTreasury });
+              if (requiresSpecificBankAccount(paymentMethod)) {
+                const posting = createBankMovementEntry({
+                  id: `supplier-payment:${paymentId}`, batchId: paymentId, bankAccountId: bankAccountId || '',
+                  direction: 'out', amount, date: paymentDate, reference: paymentId,
+                  description: `سداد مورد ${supplier.name}`,
+                }, bankAccounts, bankLedgerEntries);
+                if (posting.entry) {
+                  const nextBankEntries = [posting.entry, ...bankLedgerEntries];
+                  setBankLedgerEntries(nextBankEntries); persistChanges({ bankLedgerEntries: nextBankEntries });
+                }
+              }
               if (schedule) {
                 const paid = Math.min(schedule.amount, schedule.amountPaid + amount);
                 const nextStatus: import('./types/autoParts').SupplierPaymentSchedule['status'] = paid >= schedule.amount ? 'paid' : 'scheduled';
@@ -2771,6 +3026,8 @@ export default function App() {
             stockMovements={stockMovements}
             invoices={invoices}
             parts={parts}
+            customers={customers}
+            suppliers={suppliers}
             salesReturns={salesReturns}
             purchaseInvoices={purchaseInvoices}
             purchaseReturns={purchaseReturns}
@@ -2782,12 +3039,153 @@ export default function App() {
             shifts={shifts}
             treasuryBalance={treasuryBalance}
             onAddExpense={handleAddExpense}
-            onAddPartner={(newPartner: Partner, paymentMethod: string, notes: string) => {
+            bankAccounts={bankAccounts}
+            cardSettlements={cardSettlements}
+            bankLedgerEntries={bankLedgerEntries}
+            openingBalances={openingBalances}
+            canManageOpeningBalances={canManageCapital}
+            currentUserName={currentUser?.employeeName || 'المدير العام'}
+            onApproveOpeningBalances={(record: OpeningBalanceRecord) => {
+              if (!canManageCapital || openingBalances.length) return false;
+              const nextParts = parts.map(part => {
+                const rows = record.lines.filter(line => line.category === 'inventory' && line.partId === part.id);
+                if (!rows.length) return part;
+                const qty = rows.reduce((sum, line) => sum + (line.quantity || 0), 0);
+                const cost = rows.reduce((sum, line) => sum + line.amount, 0);
+                const nextQty = part.stockQuantity + qty;
+                return { ...part, stockQuantity: nextQty, costPrice: nextQty ? ((part.stockQuantity * part.costPrice) + cost) / nextQty : part.costPrice, updatedAt: record.cutoverDate };
+              });
+              const movements: StockMovement[] = record.lines.filter(line => line.category === 'inventory' && line.partId && line.quantity && line.unitCost !== undefined).map((line, i) => {
+                const part = nextParts.find(item => item.id === line.partId)!;
+                return { id: record.id + ':STOCK:' + i, at: record.approvedAt || new Date().toISOString(), partId: part.id, partNumber: part.partNumber, partName: part.name, type: 'import', qtyDelta: line.quantity || 0, balanceAfter: part.stockQuantity, refId: record.id, refNumber: record.id, userName: currentUser.employeeName };
+              });
+              const cash = record.lines.filter(line => line.category === 'cash').reduce((sum, line) => sum + line.amount, 0);
+              const cashRows: TreasuryTransaction[] = cash > 0 ? [{ id: record.id + ':CASH', txNumber: uniqueTransactionNumber('TX-OPEN'), date: record.cutoverDate, time: '00:00', type: 'قبض', category: 'إيداع نقدي إضافي', amount: cash, paymentMethod: 'نقدي', balanceAfter: treasuryBalance + cash, referenceId: record.id, description: 'رصيد خزينة افتتاحي عند بدء MALVIA', recordedBy: currentUser.employeeName }] : [];
+              const bankTotals = new Map<string, number>();
+              record.lines.filter(line => line.category === 'bank' && line.bankAccountId).forEach(line => bankTotals.set(line.bankAccountId!, (bankTotals.get(line.bankAccountId!) || 0) + line.amount));
+              const nextBanks = bankAccounts.map(account => bankTotals.has(account.id) ? { ...account, openingBalance: bankTotals.get(account.id)!, openingDate: record.cutoverDate } : account);
+              const receivables = new Map<string, number>();
+              const payables = new Map<string, number>();
+              record.lines.forEach(line => { if (line.entityId && line.category === 'customer_receivable') receivables.set(line.entityId, (receivables.get(line.entityId) || 0) + line.amount); if (line.entityId && line.category === 'supplier_payable') payables.set(line.entityId, (payables.get(line.entityId) || 0) + line.amount); });
+              const nextCustomers = customers.map(customer => receivables.has(customer.id) ? { ...customer, balance: (customer.balance || 0) + receivables.get(customer.id)! } : customer);
+              const nextSuppliers = suppliers.map(supplier => payables.has(supplier.id) ? { ...supplier, balance: (supplier.balance || 0) + payables.get(supplier.id)!, deferredDebt: (supplier.deferredDebt || 0) + payables.get(supplier.id)! } : supplier);
+              const nextPartners = partners.map(partner => {
+                const opening = record.partners.find(item => item.partnerId === partner.id);
+                if (!opening) return partner;
+                const initialCapital = opening.originalContribution;
+                return { ...partner, initialCapital, sharePercentage: opening.ownershipPercentage, totalCurrentCapital: initialCapital + (partner.addedCapital || 0) + (partner.reinvestedProfits || 0) };
+              });
+              const nextTreasury = [...cashRows, ...treasury];
+              const nextMovements = [...movements, ...stockMovements];
+              const audit: AuditEntry = { id: record.id + ':AUDIT', at: record.approvedAt || new Date().toISOString(), userId: currentUser.employeeId, userName: currentUser.employeeName, userRole: currentUser.role, action: 'capital.opening.create', entityId: record.id, summary: 'اعتماد الأرصدة الافتتاحية بتاريخ ' + record.cutoverDate, amount: record.originalCapital };
+              const nextAudit = [audit, ...auditLog];
+              setParts(nextParts); setStockMovements(nextMovements); setTreasury(nextTreasury); setBankAccounts(nextBanks); setPartners(nextPartners); setCustomers(nextCustomers); setSuppliers(nextSuppliers); setOpeningBalances([record]); setAuditLog(nextAudit);
+              persistChanges({ parts: nextParts, stockMovements: nextMovements, treasuryTransactions: nextTreasury, bankAccounts: nextBanks, partners: nextPartners, customers: nextCustomers, suppliers: nextSuppliers, openingBalances: [record], auditLog: nextAudit });
+              return true;
+            }}
+            outstandingVisaBalance={Math.max(0, summarizeTreasury(treasury).accounts.find(a => a.key === 'visa')?.balance || 0)}
+            onAddBankAccount={handleAddBankAccount}
+            onSettleVisa={handleSettleVisa}
+            onTransferBank={handleBankTransfer}
+            canManageExpenses={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury)}
+            canManageTreasury={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageTreasury)}
+            canManagePartners={canManageCapital}
+            partnerWithdrawals={partnerWithdrawals}
+            partnerExitSettlements={partnerExitSettlements}
+            partnerSettlementPayments={partnerSettlementPayments}
+            onUpdatePartnerProfile={(partnerId, profile) => {
+              if (!canManageCapital) return false;
+              if (!profile.name.trim() || !profile.phone.trim() || partners.some(p => p.id !== partnerId && p.phone === profile.phone.trim())) { window.alert('بيانات الشريك غير صالحة أو رقم الهاتف مستخدم.'); return false; }
+              const next = partners.map(p => p.id === partnerId ? { ...p, name: profile.name.trim(), role: profile.role.trim(), phone: profile.phone.trim() } : p);
+              setPartners(next); persistChanges({ partners: next });
+              logAudit('partner.profile.update', `تعديل بيانات الشريك ${profile.name}`, partnerId);
+              return true;
+            }}
+            onRecordPartnerWithdrawal={(record: PartnerWithdrawal) => {
+              if (!canManageCapital) return false;
+              const target = partners.find(p => p.id === record.partnerId && (p.status || 'ACTIVE') === 'ACTIVE');
+              if (!target || !Number.isFinite(record.amount) || record.amount <= 0 || partnerWithdrawals.some(x => x.id === record.id)) return false;
+              let bankEntry: BankLedgerEntry | null = null;
+              if (requiresSpecificBankAccount(record.paymentMethod)) {
+                const posting = createBankMovementEntry({ id: `partner-withdrawal:${record.id}`, batchId: record.id, bankAccountId: record.bankAccountId || '', direction: 'out', amount: record.amount, date: record.date, reference: record.id, description: `${record.kind === 'advance' ? 'سلفة على' : 'مسحوبات'} الشريك ${target.name}` }, bankAccounts, bankLedgerEntries);
+                if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً للصرف.'); return false; }
+                bankEntry = posting.entry;
+              }
+              const nextWithdrawals = [record, ...partnerWithdrawals]; setPartnerWithdrawals(nextWithdrawals); persistChanges({ partnerWithdrawals: nextWithdrawals });
+              if (record.kind === 'withdrawal') {
+                const nextPartners = partners.map(p => p.id === target.id ? { ...p, totalWithdrawn: (p.totalWithdrawn || 0) + record.amount } : p);
+                setPartners(nextPartners); persistChanges({ partners: nextPartners });
+              }
+              if (!requiresSpecificBankAccount(record.paymentMethod)) {
+                const tx: TreasuryTransaction = { id: `TX-PW-${record.id}`, txNumber: uniqueTransactionNumber('TX-PW'), date: record.date, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'مسحوبات شريك', amount: record.amount, paymentMethod: 'نقدي', balanceAfter: treasuryBalance - record.amount, referenceId: record.id, description: `${record.kind === 'advance' ? 'سلفة على' : 'مسحوبات'} الشريك ${target.name}`, recordedBy: currentUser?.employeeName || 'المحاسب' };
+                const nextTreasury = [tx, ...treasury]; setTreasury(nextTreasury); persistChanges({ treasuryTransactions: nextTreasury });
+              }
+              if (bankEntry) { const nextEntries = [bankEntry, ...bankLedgerEntries]; setBankLedgerEntries(nextEntries); persistChanges({ bankLedgerEntries: nextEntries }); }
+              logAudit(record.kind === 'advance' ? 'partner.advance' : 'partner.withdrawal', `${record.kind === 'advance' ? 'سلفة' : 'مسحوبات شخصية'} للشريك ${target.name}: ${record.amount} ج.م`, record.id, record.amount);
+              return true;
+            }}
+            onCreatePartnerExitSettlement={(record: PartnerExitSettlement) => {
+              if (!canManageCapital || !partners.some(p => p.id === record.partnerId && (p.status || 'ACTIVE') === 'ACTIVE') || partnerExitSettlements.some(s => s.partnerId === record.partnerId && !['paid','cancelled'].includes(s.status))) return false;
+              const next = [record, ...partnerExitSettlements]; setPartnerExitSettlements(next); persistChanges({ partnerExitSettlements: next });
+              logAudit('partner.exit', `إنشاء مسودة تسوية تخارج للشريك ${record.partnerName} بصافي ${record.netPayable} ج.م — لم يعتمد بعد`, record.id, record.netPayable);
+              return true;
+            }}
+            onApprovePartnerExitSettlement={(settlementId: string) => {
+              if (!canManageCapital) return false;
+              const settlement = partnerExitSettlements.find(s => s.id === settlementId && s.status === 'draft');
+              if (!settlement) return false;
+              const nextSettlements = partnerExitSettlements.map(s => s.id === settlementId ? { ...s, status: 'approved' as const, approvedAt: new Date().toISOString(), approvedBy: currentUser?.employeeName || 'المحاسب' } : s);
+              const nextPartners = partners.map(p => p.id === settlement.partnerId ? { ...p, status: 'EXITED' as const, exitDate: settlement.exitDate, exitSettlementId: settlement.id } : p);
+              setPartnerExitSettlements(nextSettlements); setPartners(nextPartners);
+              persistChanges({ partnerExitSettlements: nextSettlements, partners: nextPartners });
+              logAudit('partner.exit', `اعتماد تخارج الشريك ${settlement.partnerName} اعتباراً من ${settlement.exitDate} مع إثبات مستحق ${settlement.netPayable} ج.م`, settlement.id, settlement.netPayable);
+              return true;
+            }}
+            onRecordPartnerSettlementPayment={(payment: PartnerSettlementPayment) => {
+              if (!canManageCapital || partnerSettlementPayments.some(p => p.id === payment.id)) return false;
+              const settlement = partnerExitSettlements.find(s => s.id === payment.settlementId && ['approved','partially_paid'].includes(s.status));
+              const paidBefore = partnerSettlementPayments.filter(p => p.settlementId === payment.settlementId).reduce((sum,p) => sum + p.amount, 0);
+              if (!settlement || !Number.isFinite(payment.amount) || payment.amount <= 0 || payment.amount > settlement.netPayable - paidBefore + 0.0001) { window.alert('قيمة الدفعة تتجاوز المستحق المتبقي.'); return false; }
+              let bankEntry: BankLedgerEntry | null = null;
+              if (requiresSpecificBankAccount(payment.paymentMethod)) {
+                const posting = createBankMovementEntry({ id: `partner-exit-payment:${payment.id}`, batchId: payment.id, bankAccountId: payment.bankAccountId || '', direction: 'out', amount: payment.amount, date: payment.date, reference: payment.transferReference || payment.receiptNumber, description: `سداد مستحقات الشريك المتخارج ${settlement.partnerName}` }, bankAccounts, bankLedgerEntries);
+                if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً للسداد.'); return false; }
+                bankEntry = posting.entry;
+              }
+              const nextPayments = [payment, ...partnerSettlementPayments]; setPartnerSettlementPayments(nextPayments); persistChanges({ partnerSettlementPayments: nextPayments });
+              const totalPaid = paidBefore + payment.amount;
+              const nextSettlements = partnerExitSettlements.map(s => s.id === settlement.id ? { ...s, status: totalPaid + 0.0001 >= s.netPayable ? 'paid' as const : 'partially_paid' as const } : s);
+              setPartnerExitSettlements(nextSettlements); persistChanges({ partnerExitSettlements: nextSettlements });
+              if (!requiresSpecificBankAccount(payment.paymentMethod)) {
+                const tx: TreasuryTransaction = { id: `TX-PX-${payment.id}`, txNumber: uniqueTransactionNumber('TX-PX'), date: payment.date, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'سداد مستحقات شريك متخارج', amount: payment.amount, paymentMethod: 'نقدي', balanceAfter: treasuryBalance - payment.amount, referenceId: settlement.id, description: `سداد دفعة ${payment.receiptNumber} للشريك ${settlement.partnerName}`, recordedBy: currentUser?.employeeName || 'المحاسب' };
+                const nextTreasury = [tx, ...treasury]; setTreasury(nextTreasury); persistChanges({ treasuryTransactions: nextTreasury });
+              }
+              if (bankEntry) { const nextEntries = [bankEntry, ...bankLedgerEntries]; setBankLedgerEntries(nextEntries); persistChanges({ bankLedgerEntries: nextEntries }); }
+              logAudit('partner.settlement.payment', `سداد ${payment.amount} ج.م للشريك المتخارج ${settlement.partnerName} — إيصال ${payment.receiptNumber}`, payment.id, payment.amount);
+              return true;
+            }}
+            onAddPartner={(newPartner: Partner, paymentMethod: string, notes: string, bankAccountId?: string) => {
+              if (!canManageCapital) { window.alert('تعديل رأس المال والشركاء متاح للمالك والمحاسب المالي فقط.'); return false; }
               if (partners.some(partner => partner.id === newPartner.id || partner.phone === newPartner.phone)) {
                 window.alert('هذا الشريك مسجل بالفعل أو رقم هاتفه مستخدم لشريك آخر.');
                 return false;
               }
-              const updatedPartners = [newPartner, ...partners];
+              let capitalBankEntry: BankLedgerEntry | null = null;
+              if (requiresSpecificBankAccount(paymentMethod)) {
+                const posting = createBankMovementEntry({
+                  id: `partner-capital:${newPartner.id}`, batchId: newPartner.id, bankAccountId: bankAccountId || '',
+                  direction: 'in', amount: newPartner.initialCapital, date: newPartner.joinDate,
+                  reference: newPartner.id, description: `رأس مال تأسيسي للشريك ${newPartner.name}`,
+                }, bankAccounts, bankLedgerEntries);
+                if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً لاستلام رأس المال.'); return false; }
+                capitalBankEntry = posting.entry;
+              }
+              const updatedPartnersRaw = [newPartner, ...partners];
+              const capitalTotal = updatedPartnersRaw.reduce((sum, partner) => sum + (partner.totalCurrentCapital || partner.initialCapital || 0), 0);
+              const updatedPartners = updatedPartnersRaw.map(partner => ({
+                ...partner,
+                sharePercentage: capitalTotal > 0 ? Number((((partner.totalCurrentCapital || partner.initialCapital || 0) / capitalTotal) * 100).toFixed(4)) : 0,
+              }));
               setPartners(updatedPartners);
               persistChanges({ partners: updatedPartners });
               const capitalReceipt: TreasuryTransaction = {
@@ -2799,6 +3197,7 @@ export default function App() {
                 category: 'ضخ رأس مال من شريك',
                 amount: newPartner.initialCapital,
                 paymentMethod: paymentMethod as PaymentMethod,
+                bankAccountId: requiresSpecificBankAccount(paymentMethod) ? bankAccountId : undefined,
                 balanceAfter: treasuryBalance + newPartner.initialCapital,
                 referenceId: newPartner.id,
                 description: `رأس مال تأسيسي للشريك ${newPartner.name} — ${notes || ''}`,
@@ -2809,10 +3208,15 @@ export default function App() {
                 persistChanges({ treasuryTransactions: updated });
                 return updated;
               });
+              if (capitalBankEntry) {
+                const nextBankEntries = [capitalBankEntry, ...bankLedgerEntries];
+                setBankLedgerEntries(nextBankEntries); persistChanges({ bankLedgerEntries: nextBankEntries });
+              }
               logAudit('partner.add', `إضافة الشريك ${newPartner.name} بحصة ${newPartner.sharePercentage}% ورأس مال ${newPartner.initialCapital} ج.م`, newPartner.id, newPartner.initialCapital);
               return true;
             }}
             onUpdatePartnerShare={(partnerId: string, newSharePercentage: number) => {
+              if (!canManageCapital) { window.alert('تعديل نسب الشركاء متاح للمالك والمحاسب المالي فقط.'); return; }
               if (!Number.isFinite(newSharePercentage) || newSharePercentage < 0 || newSharePercentage > 100) {
                 window.alert('نسبة الشريك يجب أن تكون بين 0 و100%.');
                 return;
@@ -2824,9 +3228,21 @@ export default function App() {
               });
               logAudit('partner.share.update', `تعديل نسبة الشريك ${partnerId} إلى ${newSharePercentage}%`, partnerId, newSharePercentage);
             }}
-            onInjectCapital={(partnerId: string, amount: number, paymentMethod: string, notes: string, recalculatePercentages: boolean) => {
+            onInjectCapital={(partnerId: string, amount: number, paymentMethod: string, notes: string, recalculatePercentages: boolean, bankAccountId?: string) => {
+              if (!canManageCapital) { window.alert('تعديل رأس المال متاح للمالك والمحاسب المالي فقط.'); return; }
               const target = partners.find(partner => partner.id === partnerId);
               if (!target || !Number.isFinite(amount) || amount <= 0) return;
+              const capitalTxId = `TX-CAPITAL-${partnerId}-${Date.now()}`;
+              let capitalBankEntry: BankLedgerEntry | null = null;
+              if (requiresSpecificBankAccount(paymentMethod)) {
+                const posting = createBankMovementEntry({
+                  id: `partner-capital:${capitalTxId}`, batchId: capitalTxId, bankAccountId: bankAccountId || '',
+                  direction: 'in', amount, date: todayISO(), reference: capitalTxId,
+                  description: `ضخ رأس مال إضافي للشريك ${target.name}`,
+                }, bankAccounts, bankLedgerEntries);
+                if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً لاستلام ضخ رأس المال.'); return; }
+                capitalBankEntry = posting.entry;
+              }
               const updatedPartners = partners.map(partner => {
                 if (partner.id !== partnerId) return partner;
                 const addedCapital = (partner.addedCapital || 0) + amount;
@@ -2839,7 +3255,7 @@ export default function App() {
               setPartners(finalPartners);
               persistChanges({ partners: finalPartners });
               const tx: TreasuryTransaction = {
-                id: `TX-CAPITAL-${partnerId}-${Date.now()}`,
+                id: capitalTxId,
                 txNumber: uniqueTransactionNumber('TX-CAP'),
                 date: todayISO(),
                 time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
@@ -2847,15 +3263,21 @@ export default function App() {
                 category: 'ضخ رأس مال من شريك',
                 amount,
                 paymentMethod: paymentMethod as PaymentMethod,
+                bankAccountId: requiresSpecificBankAccount(paymentMethod) ? bankAccountId : undefined,
                 balanceAfter: treasuryBalance + amount,
                 referenceId: partnerId,
                 description: `ضخ رأس مال إضافي للشريك ${target.name} — ${notes || ''}`,
                 recordedBy: currentUser?.employeeName || 'المدير العام',
               };
               setTreasury(prev => { const updated = [tx, ...prev]; persistChanges({ treasuryTransactions: updated }); return updated; });
+              if (capitalBankEntry) {
+                const nextBankEntries = [capitalBankEntry, ...bankLedgerEntries];
+                setBankLedgerEntries(nextBankEntries); persistChanges({ bankLedgerEntries: nextBankEntries });
+              }
               logAudit('partner.capital.add', `ضخ ${amount} ج.م كرأس مال إضافي للشريك ${target.name}`, partnerId, amount);
             }}
             onReinvestProfit={(partnerId: string, amount: number, notes: string) => {
+              if (!canManageCapital) { window.alert('تعديل رأس المال متاح للمالك والمحاسب المالي فقط.'); return; }
               const target = partners.find(partner => partner.id === partnerId);
               if (!target || !Number.isFinite(amount) || amount <= 0) return;
               setPartners(prev => {
@@ -2870,8 +3292,20 @@ export default function App() {
               logAudit('partner.profit.reinvest', `رسملة ${amount} ج.م من أرباح الشريك ${target.name} — ${notes || ''}`, partnerId, amount);
             }}
             onAddDistribution={(record: ProfitDistributionRecord) => {
+              const paymentMethod = record.paymentMethod || 'نقدي';
+              const txId = `TX-DIST-${record.id}`;
+              let distributionBankEntry: BankLedgerEntry | null = null;
+              if (requiresSpecificBankAccount(paymentMethod)) {
+                const posting = createBankMovementEntry({
+                  id: `distribution:${txId}`, batchId: txId, bankAccountId: record.bankAccountId || '',
+                  direction: 'out', amount: record.netProfit, date: record.date, reference: record.id,
+                  description: `توزيع أرباح للشركاء — ${record.period}`,
+                }, bankAccounts, bankLedgerEntries);
+                if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً لصرف توزيعات الأرباح.'); return; }
+                distributionBankEntry = posting.entry;
+              }
               const tx: TreasuryTransaction = {
-                id: `TX-DIST-${Date.now()}`,
+                id: txId,
                 txNumber: uniqueTransactionNumber('TX-D'),
                 date: record.date,
                 time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
@@ -2879,7 +3313,8 @@ export default function App() {
                 amount: record.netProfit,
                 description: `توزيع أرباح: ${record.period}`,
                 category: 'توزيع أرباح',
-                paymentMethod: 'نقدي',
+                paymentMethod: paymentMethod as PaymentMethod,
+                bankAccountId: requiresSpecificBankAccount(paymentMethod) ? record.bankAccountId : undefined,
                 balanceAfter: treasuryBalance - record.netProfit,
                 recordedBy: currentUser?.employeeName || 'المدير المالي'
               };
@@ -2888,6 +3323,10 @@ export default function App() {
                 persistChanges({ treasuryTransactions: updated });
                 return updated;
               });
+              if (distributionBankEntry) {
+                const nextEntries = [distributionBankEntry, ...bankLedgerEntries];
+                setBankLedgerEntries(nextEntries); persistChanges({ bankLedgerEntries: nextEntries });
+              }
             }}
           />
         )}
