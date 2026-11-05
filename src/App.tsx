@@ -39,6 +39,9 @@ import {
   InventoryDiscrepancyError,
   PaymentMethod,
   ProfitDistributionRecord,
+  PartnerWithdrawal,
+  PartnerExitSettlement,
+  PartnerSettlementPayment,
   Shift
 } from './types/autoParts';
 import type { OpeningBalanceRecord } from './utils/openingBalanceLogic';
@@ -144,6 +147,9 @@ export default function App() {
   const [purchaseReturns, setPurchaseReturns] = useState<PurchaseReturn[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [partnerWithdrawals, setPartnerWithdrawals] = useState<PartnerWithdrawal[]>([]);
+  const [partnerExitSettlements, setPartnerExitSettlements] = useState<PartnerExitSettlement[]>([]);
+  const [partnerSettlementPayments, setPartnerSettlementPayments] = useState<PartnerSettlementPayment[]>([]);
   const [carModels, setCarModels] = useState<CarModel[]>([]);
   const [inventoryErrors, setInventoryErrors] = useState<InventoryDiscrepancyError[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
@@ -256,7 +262,10 @@ export default function App() {
     setPurchaseInvoices(data.purchaseInvoices);
     setPurchaseReturns(data.purchaseReturns);
     setExpenses(data.expenses);
-    setPartners(data.partners);
+    setPartners((data.partners || []).map(partner => ({ ...partner, status: partner.status || 'ACTIVE' })));
+    setPartnerWithdrawals(data.partnerWithdrawals || []);
+    setPartnerExitSettlements(data.partnerExitSettlements || []);
+    setPartnerSettlementPayments(data.partnerSettlementPayments || []);
     setCarModels(modelsData);
     setInventoryErrors(data.inventoryErrors);
     setAuditLog(data.auditLog || []);
