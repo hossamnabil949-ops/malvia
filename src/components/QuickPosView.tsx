@@ -951,14 +951,16 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between bg-surface-1 p-2 rounded-xl border border-neutral-800">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-neutral-400 font-bold">سعر البيع للقطعة:</span>
-                        <div className="flex items-center gap-1">
+                    <div className="malvia-price-control-row bg-surface-1 p-2.5 rounded-xl border border-neutral-800">
+                      <div className="malvia-price-main">
+                        <span className="text-[11px] text-neutral-400 font-bold whitespace-nowrap">سعر البيع للقطعة:</span>
+                        <div className="malvia-price-editor">
                           <input
                             type="number"
                             min="0"
                             step="1"
+                            inputMode="decimal"
+                            aria-label={`سعر بيع ${item.part.name}`}
                             value={effectivePrice}
                             readOnly={!priceUnlocked}
                             onChange={(e) => {
@@ -967,11 +969,10 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                               onUpdateCartPrice(item.part.id, isNaN(val) ? 0 : val);
                             }}
                             onBlur={() => {
-                              // لا نسمح بالخروج من الحقل بسعر أقل من الحد الأدنى المسموح
                               const floor = minAllowedPrice(item.part);
                               if (priceUnlocked && effectivePrice < floor) onUpdateCartPrice(item.part.id, floor);
                             }}
-                            className={`w-20 h-6 px-1.5 text-center text-xs font-mono font-bold rounded focus:outline-none ${
+                            className={`malvia-price-input text-center text-xs font-mono font-bold rounded focus:outline-none ${
                               priceUnlocked
                                 ? 'text-amber-300 bg-surface-2 border border-amber-500/50 focus:border-amber-400 focus:bg-surface-3'
                                 : 'text-neutral-300 bg-surface-1 border border-neutral-700 cursor-not-allowed'
@@ -980,48 +981,33 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                           />
                           <span className="text-[10px] text-neutral-400 font-bold">ج.م</span>
                           {priceUnlocked ? (
-                            <button
-                              type="button"
-                              onClick={() => setPriceUnlocked(false)}
-                              className="p-1 rounded text-emerald-400 hover:text-emerald-300"
-                              title="إعادة قفل تعديل الأسعار"
-                            >
-                              <Unlock className="w-3.5 h-3.5" />
+                            <button type="button" onClick={() => setPriceUnlocked(false)}
+                              className="malvia-price-lock-button text-emerald-400 border-emerald-500/30"
+                              title="إعادة قفل تعديل الأسعار" aria-label="إعادة قفل تعديل الأسعار">
+                              <Unlock className="w-4 h-4" /><span>قفل السعر</span>
                             </button>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => setShowUnlockModal(true)}
-                              className="p-1 rounded text-amber-400 hover:text-amber-300"
-                              title="فتح تعديل السعر بباسورد المالك"
-                            >
-                              <Lock className="w-3.5 h-3.5" />
+                            <button type="button" onClick={() => setShowUnlockModal(true)}
+                              className="malvia-price-lock-button text-amber-400 border-amber-500/30"
+                              title="فتح تعديل السعر بباسورد المالك" aria-label="فتح تعديل السعر بباسورد المالك">
+                              <Lock className="w-4 h-4" /><span>فتح القفل</span>
                             </button>
                           )}
                         </div>
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            disabled={!priceUnlocked}
-                            onClick={() => onUpdateCartPrice(item.part.id, minAllowedPrice(item.part))}
-                            className="px-1.5 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed text-[9px] text-neutral-300 font-medium"
-                            title={priceUnlocked ? 'أقصى خصم مسموح' : 'مقفول — يحتاج باسورد المالك'}
-                          >
-                            -{maxDiscountPercent}% ورش
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onUpdateCartPrice(item.part.id, item.part.salePrice)}
-                            className="px-1.5 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-[9px] text-neutral-300 font-medium"
-                            title="استعادة السعر الأصلي"
-                          >
-                            الأصلي
-                          </button>
-                        </div>
                       </div>
-
-                      <div className="text-left rtl:text-right">
+                      <div className="malvia-price-actions">
+                        <button type="button" disabled={!priceUnlocked}
+                          onClick={() => onUpdateCartPrice(item.part.id, minAllowedPrice(item.part))}
+                          className="px-2.5 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed text-[10px] text-neutral-300 font-medium"
+                          title={priceUnlocked ? 'أقصى خصم مسموح' : 'مقفول — يحتاج باسورد المالك'}>
+                          -{maxDiscountPercent}% ورش
+                        </button>
+                        <button type="button" disabled={!priceUnlocked}
+                          onClick={() => onUpdateCartPrice(item.part.id, item.part.salePrice)}
+                          className="px-2.5 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed text-[10px] text-neutral-300 font-medium"
+                          title="استعادة السعر الأصلي">الأصلي</button>
+                      </div>
+                      <div className="malvia-price-total">
                         <span className="text-xs font-mono font-bold text-white">
                           {rowTotal.toFixed(2)} <span className="text-[10px] text-neutral-400">ج.م</span>
                         </span>
