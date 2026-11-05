@@ -6,7 +6,7 @@ import type {
 } from '../types/autoParts';
 import type { BankAccount, BankLedgerEntry } from './bankLedger';
 import type { OpeningBalanceRecord } from './openingBalanceLogic';
-import { paymentAccountOf } from './paymentMethods';
+import { paymentAccountOf } from './paymentMethods.js';
 
 export const PARTNER_CURRENT_ACCOUNT_CATEGORIES: Record<PartnerCurrentAccountMovementType, TreasuryTransaction['category']> = {
   partner_deposit: 'جاري شركاء - إيداع من شريك',
