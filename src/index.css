@@ -789,3 +789,47 @@ select:focus-visible, textarea:focus-visible {
   .malvia-price-lock-button,
   .malvia-price-actions button { min-height: 44px; }
 }
+
+
+/* ===== POS scroll chaining fix: one predictable vertical scroll surface =====
+ * The cart panel previously had nested overflow-y:auto containers combined
+ * with overscroll-contain. At their boundaries this trapped wheel/touch
+ * gestures, so the page only moved when the pointer was outside the panel.
+ */
+.malvia-pos-products,
+.malvia-pos-cart-sheet .divide-y {
+  overscroll-behavior-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 768px) {
+  .malvia-pos-cart-sheet {
+    min-height: 0;
+    max-height: calc(100dvh - 7.5rem) !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
+  .malvia-pos-cart-sheet > div {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    overscroll-behavior-y: auto !important;
+  }
+}
+
+@media (max-width: 767px) {
+  /* The full-screen invoice sheet owns scrolling; its inner card must not
+     create a second scroll area that steals touch gestures. */
+  .malvia-pos-cart-sheet {
+    overscroll-behavior-y: auto !important;
+    touch-action: pan-y;
+  }
+
+  .malvia-pos-cart-sheet > div {
+    overflow: visible !important;
+    overscroll-behavior-y: auto !important;
+  }
+}
