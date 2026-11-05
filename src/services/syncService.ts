@@ -316,7 +316,13 @@ async function flush() {
     emitStatus('syncing', dirty.size ? `عناصر بانتظار الرفع: ${dirty.size}` : 'فحص التغييرات المحلية');
     const list = [...dirty];
     if (!active || active.tenantId !== tenantId) return;
-    await pushBatch(tenantId, licenseKey, list);
+    // Keep administrator credential changes independent from unrelated pending
+    // resources. A malformed/stale finance or inventory document must not block
+    // the employees record (including the owner password hash) from reaching cloud.
+    const employeeResources = list.filter((resource) => resource === 'employees');
+    const otherResources = list.filter((resource) => resource !== 'employees');
+    if (employeeResources.length) await pushBatch(tenantId, licenseKey, employeeResources);
+    if (otherResources.length) await pushBatch(tenantId, licenseKey, otherResources);
     for (const res of list) {
       const latest = readLocal(tenantId, res);
       const latestMeta = readMeta(tenantId);
