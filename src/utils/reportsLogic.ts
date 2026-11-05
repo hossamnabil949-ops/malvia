@@ -112,20 +112,33 @@ export function reportDailySales(d: ReportData, r: DateRange): ReportTable {
   const days = new Set<string>(inv.map(i => i.date.slice(0, 10)));
   const rows = [...days].sort().map(day => {
     const di = inv.filter(i => i.date.slice(0, 10) === day);
-    const grossPreTax = sum(di, i => Math.max(0, i.subtotal - i.discount));
-    const net = sum(di, netSales);
-    const ret = Math.max(0, grossPreTax - net);
-    return { date: day, count: di.length, total: r2(grossPreTax), discount: r2(sum(di, i => i.discount)), tax: r2(sum(di, i => i.tax)), returns: r2(ret), net: r2(net) };
+    const grossBeforeDiscount = sum(di, i => Math.max(0, i.subtotal));
+    const discounts = sum(di, i => i.discount);
+    const netBeforeTax = sum(di, netSales);
+    const returnsBeforeTax = Math.max(0, grossBeforeDiscount - discounts - netBeforeTax);
+    const returnedTax = sum(di, invoice => invoice.grandTotal > 0
+      ? (invoice.tax || 0) * ((invoice.returnedAmount || 0) / invoice.grandTotal)
+      : 0);
+    const netTax = Math.max(0, sum(di, invoice => invoice.tax || 0) - returnedTax);
+    return {
+      date: day,
+      count: di.length,
+      total: r2(grossBeforeDiscount),
+      discount: r2(discounts),
+      tax: r2(netTax),
+      returns: r2(returnsBeforeTax),
+      net: r2(netBeforeTax),
+    };
   });
   return {
     id: 'daily-sales', title: 'المبيعات اليومية',
     columns: [
-      { key: 'date', label: 'التاريخ', kind: 'date' }, { key: 'count', label: 'عدد الفواتير', kind: 'int' }, { key: 'total', label: 'إجمالي المبيعات', kind: 'money' },
-      { key: 'discount', label: 'الخصومات', kind: 'money' }, { key: 'tax', label: 'الضريبة', kind: 'money' }, { key: 'returns', label: 'المرتجعات', kind: 'money' }, { key: 'net', label: 'الصافي', kind: 'money' },
+      { key: 'date', label: 'التاريخ', kind: 'date' }, { key: 'count', label: 'عدد الفواتير', kind: 'int' }, { key: 'total', label: 'إجمالي المبيعات قبل الخصم والضريبة', kind: 'money' },
+      { key: 'discount', label: 'الخصومات', kind: 'money' }, { key: 'tax', label: 'الضريبة بعد المرتجعات', kind: 'money' }, { key: 'returns', label: 'المرتجعات قبل الضريبة', kind: 'money' }, { key: 'net', label: 'صافي المبيعات قبل الضريبة', kind: 'money' },
     ],
     rows,
     totals: { date: 'الإجمالي', count: sum(rows, x => x.count), total: r2(sum(rows, x => x.total)), discount: r2(sum(rows, x => x.discount)), tax: r2(sum(rows, x => x.tax)), returns: r2(sum(rows, x => x.returns)), net: r2(sum(rows, x => x.net)) },
-    note: 'المبيعات منسوبة إلى تاريخ الفاتورة، قبل الضريبة وبعد الخصم، وصافيها بعد المرتجعات المسجلة على الفاتورة.',
+    note: 'إجمالي المبيعات قبل الخصم والضريبة. تُخصم الخصومات والمرتجعات قبل الضريبة للوصول إلى صافي المبيعات، وتُعرض ضريبة المخرجات بعد خصم ضريبة المرتجعات بصورة مستقلة. تُستبعد الفواتير الملغاة.',
   };
 }
 
@@ -286,45 +299,45 @@ export function reportProfitLoss(d: ReportData, r: DateRange): ReportTable {
     list.push(part.costPrice);
     partCostByNumber.set(part.partNumber, list);
   }
-  // P&L starts from customer cash value (VAT-inclusive) so the net VAT payable
-  // is deducted exactly once below, rather than being omitted or double-counted.
-  const sales = sum(inv, i => i.grandTotal);
-  const returns = sum(d.salesReturns.filter(ret => {
-    const original = d.invoices.find(i => i.id === ret.invoiceId);
-    return inRange(ret.date, r) && Boolean(original) && original!.status !== 'ملغاة';
-  }), ret => ret.totalRefundAmount);
-  const cogs = sum(inv, i => sum(i.items, it => {
-    const frozenCost = it.costPrice;
-    const matches = partCostByNumber.get(it.partNumber) ?? [];
+  // Sales revenue is recognized before VAT. Purchase costs and operating expenses
+  // are entered VAT-exclusive, so output VAT is a liability, not an operating expense.
+  const grossSalesBeforeDiscount = sum(inv, invoice => invoice.subtotal);
+  const discounts = sum(inv, invoice => invoice.discount);
+  const netSalesBeforeTax = sum(inv, netSales);
+  const returnsBeforeTax = Math.max(0, grossSalesBeforeDiscount - discounts - netSalesBeforeTax);
+  const cogs = sum(inv, invoice => sum(invoice.items, item => {
+    const frozenCost = item.costPrice;
+    const matches = partCostByNumber.get(item.partNumber) ?? [];
     const fallbackCost = matches.length === 1 ? matches[0] : 0;
-    return netQty(it) * (frozenCost ?? fallbackCost);
+    return netQty(item) * (frozenCost ?? fallbackCost);
   }));
-  const expenses = sum(d.expenses.filter(e => inRange(e.date, r)), e => e.amount);
+  const expenses = sum(d.expenses.filter(expense => inRange(expense.date, r)), expense => expense.amount);
   const drawerShortage = sum(d.treasury.filter(tx => inRange(tx.date, r) && tx.category === 'عجز درج (تسوية وردية)'), tx => tx.amount);
   const drawerOverage = sum(d.treasury.filter(tx => inRange(tx.date, r) && tx.category === 'زيادة درج (تسوية وردية)'), tx => tx.amount);
-  const net = sales - returns;
-  const gross = net - cogs;
+  const gross = netSalesBeforeTax - cogs;
   const vatSummary = d.taxRegistered ? reportVatSummary(d, r) : undefined;
   const netVatDue = Number(vatSummary?.rows.find(row => row.item === 'صافي الضريبة المستحقة / الرصيد الدائن')?.amount) || 0;
   const rows = [
-    { item: 'إجمالي المبيعات بعد الخصم (شامل الضريبة)', amount: r2(sales) },
-    { item: 'يخصم: مرتجعات المبيعات (شاملة الضريبة)', amount: r2(-returns) },
-    { item: 'صافي المبيعات', amount: r2(net) },
-    { item: 'يخصم: تكلفة البضاعة المباعة', amount: r2(-cogs) },
-    { item: 'مجمل الربح', amount: r2(gross) },
-    { item: 'يخصم: المصروفات', amount: r2(-expenses) },
-    ...(d.taxRegistered ? [{ item: 'يخصم: صافي ضريبة القيمة المضافة المستحقة', amount: r2(-netVatDue) }] : []),
+    { item: 'إجمالي المبيعات قبل الخصم والضريبة', amount: r2(grossSalesBeforeDiscount) },
+    { item: 'يخصم: الخصومات', amount: r2(-discounts) },
+    { item: 'يخصم: المرتجعات قبل الضريبة', amount: r2(-returnsBeforeTax) },
+    { item: 'صافي المبيعات قبل الضريبة', amount: r2(netSalesBeforeTax) },
+    { item: 'يخصم: تكلفة البضاعة المباعة (دون الضريبة)', amount: r2(-cogs) },
+    { item: 'مجمل الربح قبل المصروفات', amount: r2(gross) },
+    { item: 'يخصم: المصروفات (دون الضريبة)', amount: r2(-expenses) },
+    { item: 'صافي الربح التشغيلي', amount: r2(gross - expenses) },
+    ...(d.taxRegistered ? [{ item: 'صافي ضريبة القيمة المضافة المستحقة (التزام ضريبي — لا تخصم من الربح مرة أخرى)', amount: r2(netVatDue) }] : []),
     { item: 'يخصم: عجز الدرج', amount: r2(-drawerShortage) },
     { item: 'يضاف: زيادة الدرج', amount: r2(drawerOverage) },
-    { item: 'صافي الربح', amount: r2(gross - expenses - netVatDue - drawerShortage + drawerOverage) },
+    { item: 'صافي الربح', amount: r2(gross - expenses - drawerShortage + drawerOverage) },
   ];
   return {
     id: 'profit-loss', title: 'ملخص الأرباح والخسائر',
     columns: [{ key: 'item', label: 'البند' }, { key: 'amount', label: 'المبلغ (ج.م)', kind: 'money' }],
     rows,
     note: d.taxRegistered
-      ? 'المبيعات والمرتجعات بالقيمة الشاملة للضريبة، ثم يُخصم صافي ضريبة القيمة المضافة المستحقة مرة واحدة قبل صافي الربح. صافي الضريبة = ضريبة المخرجات بعد مرتجعات المبيعات ناقص ضريبة المدخلات بعد مرتجعات المشتريات. تُستبعد الفواتير الملغاة. تكلفة البضاعة تستخدم تكلفة البيع المحفوظة. يشمل عجز وزيادة الدرج المسجلين كتسويات ورديات، ولا يشمل توزيعات الشركاء ورأس المال.'
-      : 'المبيعات والمرتجعات بالقيمة المسجلة بالفواتير. لا يظهر بند ضريبة القيمة المضافة لأن الضريبة غير مفعلة للمنشأة. تُستبعد الفواتير الملغاة. تكلفة البضاعة تستخدم تكلفة البيع المحفوظة. يشمل عجز وزيادة الدرج المسجلين كتسويات ورديات، ولا يشمل توزيعات الشركاء ورأس المال.',
+      ? 'الإيرادات محسوبة قبل ضريبة القيمة المضافة، والمرتجعات موزعة قبل الضريبة. تكاليف الشراء والمصروفات مسجلة دون الضريبة؛ لذلك لا تخصم ضريبة المخرجات أو صافي الضريبة المستحقة من الربح مرة أخرى. يظهر صافي الضريبة المستحقة كبند التزام مستقل. تُستبعد الفواتير الملغاة وتستخدم تكلفة البيع المحفوظة.'
+      : 'الإيرادات محسوبة قبل الضريبة، والمرتجعات قبل الضريبة. تكاليف الشراء والمصروفات مسجلة دون الضريبة. تُستبعد الفواتير الملغاة وتستخدم تكلفة البيع المحفوظة.',
   };
 }
 
