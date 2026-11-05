@@ -24,6 +24,9 @@ export function validateBankLedgerSync(input: {
   expenses?: any[];
   treasury?: any[];
   partners?: any[];
+  partnerWithdrawals?: any[];
+  partnerSettlementPayments?: any[];
+  partnerExitSettlements?: any[];
   cardSettlements?: any[];
   cheques?: any[];
 }): BankLedgerSyncError | null {
@@ -44,6 +47,9 @@ export function validateBankLedgerSync(input: {
   const expenses = input.expenses || [];
   const treasury = input.treasury || [];
   const partners = input.partners || [];
+  const partnerWithdrawals = input.partnerWithdrawals || [];
+  const partnerSettlementPayments = input.partnerSettlementPayments || [];
+  const partnerExitSettlements = input.partnerExitSettlements || [];
   const cardSettlements = input.cardSettlements || [];
   const cheques = input.cheques || [];
   const directBank = (method: unknown) => ['bank', 'visa'].includes(paymentAccountOf(String(method || '')));
@@ -83,6 +89,17 @@ export function validateBankLedgerSync(input: {
       matched = Boolean(tx && directBank(tx.paymentMethod) && tx.bankAccountId === entry.bankAccountId
         && Number(tx.amount) === Number(entry.amount) && tx.date === entry.date && tx.type === 'قبض'
         && partners.some(partner => partner.id === tx.referenceId));
+    } else if (entry.id.startsWith('partner-withdrawal:')) {
+      const withdrawal = partnerWithdrawals.find(item => item.id === entry.batchId);
+      matched = Boolean(withdrawal && directBank(withdrawal.paymentMethod) && withdrawal.bankAccountId === entry.bankAccountId
+        && Number(withdrawal.amount) === Number(entry.amount) && withdrawal.date === entry.date && entry.direction === 'out'
+        && partners.some(partner => partner.id === withdrawal.partnerId));
+    } else if (entry.id.startsWith('partner-exit-payment:')) {
+      const payment = partnerSettlementPayments.find(item => item.id === entry.batchId);
+      const settlement = payment && partnerExitSettlements.find(item => item.id === payment.settlementId);
+      matched = Boolean(payment && settlement && directBank(payment.paymentMethod) && payment.bankAccountId === entry.bankAccountId
+        && Number(payment.amount) === Number(entry.amount) && payment.date === entry.date && entry.direction === 'out'
+        && settlement.partnerId === payment.partnerId);
     } else if (entry.id.startsWith('distribution:')) {
       const tx = treasury.find(item => item.id === entry.batchId && item.category === 'توزيع أرباح');
       matched = Boolean(tx && directBank(tx.paymentMethod) && tx.bankAccountId === entry.bankAccountId
