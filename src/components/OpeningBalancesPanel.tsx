@@ -16,7 +16,7 @@ interface Props {
 }
 const CATEGORIES: { value: OpeningBalanceCategory; label: string }[] = [
   { value: 'inventory', label: 'مخزون بضاعة' }, { value: 'cash', label: 'نقدية بالخزينة' },
-  { value: 'bank', label: 'رصيد حساب بنكي' }, { value: 'fixed_asset', label: 'معدات وأثاث وأصول ثابتة' },
+  { value: 'bank', label: 'رصيد حساب بنكي' }, { value: 'wallet', label: 'رصيد المحفظة الإلكترونية' }, { value: 'fixed_asset', label: 'معدات وأثاث وأصول ثابتة' },
   { value: 'prepaid', label: 'تأمين / مقدم إيجار' }, { value: 'customer_receivable', label: 'مستحقات لدى العملاء' },
   { value: 'other_asset', label: 'أصول أخرى' }, { value: 'supplier_payable', label: 'مستحقات الموردين' },
   { value: 'loan', label: 'قروض والتزامات' }, { value: 'other_liability', label: 'التزامات أخرى' }, { value: 'historical_expense', label: 'مصروفات تأسيس / إيجار مستهلكة' },
@@ -38,14 +38,17 @@ export const OpeningBalancesPanel: React.FC<Props> = ({ existing = [], partners,
   const [partnerContributions, setPartnerContributions] = useState<Record<string, number>>(
     Object.fromEntries(partners.map(p => [p.id, p.initialCapital || 0]))
   );
+  const [partnerCurrentBalances, setPartnerCurrentBalances] = useState<Record<string, number>>(
+    Object.fromEntries(partners.map(p => [p.id, 0]))
+  );
   const totalLines = useMemo(() => lines.reduce((sum, line) => sum + line.amount, 0), [lines]);
   const contributionTotal = partners.reduce((sum, p) => sum + Number(partnerContributions[p.id] || 0), 0);
   const shareDenominator = capital > 0 ? capital : contributionTotal;
   const partnerRows = partners.map(p => {
     const contribution = Number(partnerContributions[p.id] || 0);
-    return { partnerId: p.id, partnerName: p.name, originalContribution: contribution, ownershipPercentage: shareDenominator > 0 ? Number(((contribution / shareDenominator) * 100).toFixed(4)) : 0 };
+    return { partnerId: p.id, partnerName: p.name, originalContribution: contribution, ownershipPercentage: shareDenominator > 0 ? Number(((contribution / shareDenominator) * 100).toFixed(4)) : 0, currentAccountBalance: Number(partnerCurrentBalances[p.id] || 0) };
   });
-  const preview = useMemo(() => summarizeOpeningBalances({ partners: partnerRows, lines }), [lines, partners, partnerContributions, capital]);
+  const preview = useMemo(() => summarizeOpeningBalances({ partners: partnerRows, lines }), [lines, partners, partnerContributions, partnerCurrentBalances, capital]);
   const effectiveAmount = amount;
   const isLiability = ['supplier_payable', 'loan', 'other_liability'].includes(category);
   const isHistoricalExpense = category === 'historical_expense';
@@ -82,7 +85,7 @@ export const OpeningBalancesPanel: React.FC<Props> = ({ existing = [], partners,
 
   if (approved) {
     const summary = summarizeOpeningBalances(approved);
-    const difference = summary.netAssets - summary.partnerCapital;
+    const difference = summary.reconciliationDifference;
     const status = openingDifferenceLabel(difference);
     return <section className="rounded-2xl border border-neutral-800 bg-surface-2 p-5 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold text-white">الأرصدة الافتتاحية المعتمدة</h3><span className="text-xs text-emerald-400">معتمد — {approved.cutoverDate}</span></div>
@@ -90,7 +93,7 @@ export const OpeningBalancesPanel: React.FC<Props> = ({ existing = [], partners,
         <Metric label="رأس المال الأصلي" value={approved.originalCapital}/>
         <Metric label="إجمالي الأصول" value={summary.assets}/>
         <Metric label="إجمالي الالتزامات" value={summary.liabilities}/><Metric label="مصروفات تاريخية" value={summary.historicalExpenses}/>
-        <Metric label="صافي الأصول" value={summary.netAssets}/>
+        <Metric label="صافي الأصول" value={summary.netAssets}/><Metric label="جاري شركاء (مستحق لهم)" value={summary.partnerCurrentAccountPayable}/><Metric label="جاري شركاء (مستحق عليهم)" value={summary.partnerCurrentAccountReceivable}/>
       </div>
       <div className="rounded-xl bg-surface-1 border border-neutral-700 p-4">
         <div className="text-xs text-neutral-400">فرق التسوية مقابل مساهمات الشركاء المسجلة</div>
@@ -108,7 +111,7 @@ export const OpeningBalancesPanel: React.FC<Props> = ({ existing = [], partners,
       <label className="text-xs text-neutral-300">تاريخ بدء MALVIA<input type="date" value={cutoverDate} onChange={e=>setCutoverDate(e.target.value)} className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2 text-white"/></label>
       <label className="text-xs text-neutral-300">تاريخ افتتاح المحل الأصلي<input type="date" value={originalOpeningDate} onChange={e=>setOriginalOpeningDate(e.target.value)} className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2 text-white"/></label>
     </div>
-    {partners.length > 0 && <div className="space-y-2"><h4 className="text-sm text-white font-bold">مساهمات الشركاء ونسب الملكية</h4>{partners.map(p=><div key={p.id} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center rounded-lg bg-surface-1 p-3"><span className="text-xs text-white">{p.name}</span><Field label="المساهمة الأصلية" value={partnerContributions[p.id] || 0} onChange={v=>setPartnerContributions(x=>({...x,[p.id]:v}))}/><div className="text-xs text-neutral-300">النسبة المحسوبة تلقائيًا <b className="text-amber-400">{(shareDenominator > 0 ? ((Number(partnerContributions[p.id] || 0) / shareDenominator) * 100) : 0).toFixed(2)}%</b></div></div>)}</div>}
+    {partners.length > 0 && <div className="space-y-2"><h4 className="text-sm text-white font-bold">مساهمات الشركاء ونسب الملكية</h4>{partners.map(p=><div key={p.id} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center rounded-lg bg-surface-1 p-3"><span className="text-xs text-white">{p.name}</span><Field label="المساهمة الأصلية" value={partnerContributions[p.id] || 0} onChange={v=>setPartnerContributions(x=>({...x,[p.id]:v}))}/><div className="text-xs text-neutral-300">النسبة المحسوبة تلقائيًا <b className="text-amber-400">{(shareDenominator > 0 ? ((Number(partnerContributions[p.id] || 0) / shareDenominator) * 100) : 0).toFixed(2)}%</b></div><label className="text-xs text-neutral-300">رصيد جاري الشريك (موجب له / سالب عليه)<input type="number" step="0.01" value={partnerCurrentBalances[p.id] || 0} onChange={e=>setPartnerCurrentBalances(x=>({...x,[p.id]:Number(e.target.value)}))} className="mt-1 w-full rounded-lg bg-surface-2 border border-neutral-700 p-2 text-white font-mono"/></label></div>)}</div>}
     <div className="border-t border-neutral-700 pt-4 space-y-3">
       <h4 className="text-sm text-white font-bold">جرد الأصول والالتزامات الحالية</h4>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
