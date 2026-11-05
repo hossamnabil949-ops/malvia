@@ -605,6 +605,14 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       if (netPayable < 0) { window.alert('صافي التسوية لا يمكن أن يكون سالباً؛ راجع الاستحقاقات والخصومات.'); return; }
       const record: PartnerExitSettlement = { id: `PXS-${Date.now()}`, partnerId: partner.id, partnerName: partner.name, exitDate, capitalEntitlement: exitCapital, profitEntitlement: exitProfit, otherEntitlements: exitOtherEntitlements, withdrawalsDeducted: exitWithdrawals, advancesDeducted: exitAdvances, otherDeductions: exitDeductions, netPayable, status: 'draft', notes: exitNotes, createdAt: new Date().toISOString(), createdBy: currentUserName, dueDate: exitDueDate || undefined };
       if (onCreatePartnerExitSettlement?.(record) === false) return;
+    } else if (partnerAction === 'payment') {
+      const settlement = partnerExitSettlements.find(s => s.id === actionSettlementId);
+      const paid = partnerSettlementPayments.filter(p => p.settlementId === actionSettlementId).reduce((sum, p) => sum + p.amount, 0);
+      const remaining = (settlement?.netPayable || 0) - paid;
+      if (!settlement || partnerActionAmount <= 0 || partnerActionAmount > remaining + 0.0001) { window.alert('المبلغ يتجاوز المستحق المتبقي أو غير صالح.'); return; }
+      if (requiresSpecificBankAccount(partnerActionMethod) && !bankAccounts.some(a => a.id === partnerActionBankId && a.active)) return;
+      const payment: PartnerSettlementPayment = { id: `PX-PAY-${Date.now()}`, settlementId: settlement.id, partnerId: settlement.partnerId, amount: partnerActionAmount, date: new Date().toISOString().slice(0,10), paymentMethod: partnerActionMethod, bankAccountId: requiresSpecificBankAccount(partnerActionMethod) ? partnerActionBankId : undefined, transferReference: paymentTransferReference.trim() || undefined, receiptNumber: `PX-R-${Date.now()}`, notes: '', recordedBy: currentUserName };
+      if (onRecordPartnerSettlementPayment?.(payment) === false) return;
     }
     setPartnerAction(null);
   };
@@ -1009,6 +1017,20 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {partnerExitSettlements.length > 0 && canManagePartners && (
+        <div className="p-5 rounded-3xl bg-surface-2 border border-neutral-800 space-y-3">
+          <h3 className="text-sm font-bold text-white">تسويات تخارج الشركاء والمبالغ المستحقة</h3>
+          {partnerExitSettlements.map(settlement => {
+            const paid = partnerSettlementPayments.filter(p => p.settlementId === settlement.id).reduce((sum,p) => sum + p.amount, 0);
+            const remaining = Math.max(0, settlement.netPayable - paid);
+            return <div key={settlement.id} className="p-3 rounded-2xl bg-surface-1 border border-neutral-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="text-xs space-y-1"><strong className="text-white">{settlement.partnerName}</strong><p className="text-neutral-400">تاريخ التخارج: {settlement.exitDate} · صافي المستحق: {settlement.netPayable.toLocaleString()} ج.م</p><p className="text-neutral-400">مدفوع: {paid.toLocaleString()} · متبقي: <b className="text-amber-300">{remaining.toLocaleString()} ج.م</b></p><span className="text-[10px] text-neutral-500">الحالة: {settlement.status === 'draft' ? 'مسودة — لم يعتمد التخارج' : settlement.status === 'approved' ? 'معتمد' : settlement.status === 'partially_paid' ? 'مسدد جزئياً' : settlement.status === 'paid' ? 'مسدد بالكامل' : 'ملغي'}</span></div>
+              <div className="flex gap-2">{settlement.status === 'draft' && <button onClick={() => { if (window.confirm('اعتماد التخارج وإيقاف استحقاق الأرباح من تاريخ التخارج؟')) onApprovePartnerExitSettlement?.(settlement.id); }} className="px-3 py-2 rounded-xl bg-amber-500 text-neutral-950 text-xs font-bold">اعتماد التخارج</button>}{['approved','partially_paid'].includes(settlement.status) && remaining > 0 && <button onClick={() => { setActionSettlementId(settlement.id); setActionPartnerId(settlement.partnerId); setPartnerAction('payment'); setPartnerActionAmount(remaining); setPartnerActionMethod('نقدي'); setPartnerActionBankId(''); setPaymentTransferReference(''); }} className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold">تسجيل دفعة / قسط</button>}</div>
+            </div>;
+          })}
         </div>
       )}
 
