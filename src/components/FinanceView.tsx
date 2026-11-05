@@ -1874,6 +1874,24 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 </table>
               </div>
             </div>
+
+            <div className="rounded-2xl border border-neutral-800 bg-surface-1 p-4 space-y-3">
+              <div>
+                <h4 className="text-xs font-black text-amber-400">أرصدة جاري الشركاء</h4>
+                <p className="text-[10px] text-neutral-500 mt-1">أرصدة دائنة مستحقة للشركاء أو مدينة مستحقة على الشركاء؛ مستقلة عن رأس المال وأرباح الدورة.</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {partners.map(partner => {
+                  const balance = getPartnerCurrentAccountBalance(partner.id, partnerCurrentAccountTransactions, openingBalances);
+                  return <div key={partner.id} className="rounded-xl border border-neutral-800 bg-surface-2 p-3 flex items-center justify-between gap-3">
+                    <span className="text-xs text-white font-bold">{partner.name}</span>
+                    <span className={`text-xs font-mono font-black ${balance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {balance >= 0 ? 'له ' : 'عليه '}{Math.abs(balance).toLocaleString()} ج.م
+                    </span>
+                  </div>;
+                })}
+              </div>
+            </div>
           </div>
         </div>
       )}
