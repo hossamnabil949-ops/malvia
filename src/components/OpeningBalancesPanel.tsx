@@ -98,7 +98,7 @@ export const OpeningBalancesPanel: React.FC<Props> = ({ existing = [], partners,
       <div className="rounded-xl bg-surface-1 border border-neutral-700 p-4">
         <div className="text-xs text-neutral-400">فرق التسوية مقابل مساهمات الشركاء المسجلة</div>
         <div className={`text-2xl font-black font-mono mt-1 ${status === 'balanced' ? 'text-emerald-400' : 'text-amber-400'}`}>{difference > 0 ? '+' : ''}{money(difference)} ج.م</div>
-        <p className="text-xs text-neutral-400 mt-2">{status === 'balanced' ? 'الأرصدة متوازنة مع مساهمات الشركاء.' : status === 'unexplained_surplus' ? 'فائض افتتاحي غير مفسر؛ لا يُسجل ربحًا تلقائيًا.' : 'عجز افتتاحي غير مفسر؛ لا يُسجل خسارة تلقائيًا.'}</p>
+        <p className="text-xs text-neutral-400 mt-2">{status === 'balanced' ? 'الأرصدة متوازنة بعد احتساب رأس المال وجاري الشركاء.' : status === 'unexplained_surplus' ? 'فائض افتتاحي غير مفسر؛ لا يُسجل ربحًا تلقائيًا.' : 'عجز افتتاحي غير مفسر؛ لا يُسجل خسارة تلقائيًا.'}</p>
       </div>
       <p className="text-xs text-neutral-500">السجل محفوظ وغير قابل للتعديل. أي تصحيح لاحق يجب أن يتم بتسوية مستقلة موثقة.</p>
     </section>;
