@@ -355,7 +355,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const totalCurrentCapital = useMemo(() => {
     return activePartners.reduce((sum, p) => {
       const current = p.totalCurrentCapital || (p.initialCapital + (p.addedCapital || 0) + (p.reinvestedProfits || 0));
-      return sum + current;
+      return sum + current - (p.totalWithdrawn || 0);
     }, 0);
   }, [activePartners]);
 
@@ -586,7 +586,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     setProfileName(partner.name); setProfileRole(partner.role); setProfilePhone(partner.phone);
     setPartnerActionAmount(0); setPartnerActionKind('withdrawal'); setPartnerActionMethod('نقدي'); setPartnerActionBankId('');
     setExitDate(new Date().toISOString().slice(0, 10)); setExitCapital(partner.totalCurrentCapital || partner.initialCapital || 0);
-    setExitProfit(0); setExitOtherEntitlements(0); setExitWithdrawals(0); setExitAdvances(0); setExitDeductions(0); setExitDueDate(''); setExitNotes('');
+    const priorPartnerMovements = partnerWithdrawals.filter(w => w.partnerId === partner.id && w.date <= new Date().toISOString().slice(0,10));
+    setExitProfit(0); setExitOtherEntitlements(0); setExitWithdrawals(priorPartnerMovements.filter(w => w.kind === 'withdrawal').reduce((sum,w) => sum + w.amount, 0)); setExitAdvances(priorPartnerMovements.filter(w => w.kind === 'advance').reduce((sum,w) => sum + w.amount, 0)); setExitDeductions(0); setExitDueDate(''); setExitNotes('');
   };
 
   const submitPartnerAction = (e: React.FormEvent) => {
