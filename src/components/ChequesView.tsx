@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Landmark, Plus, Search, AlertTriangle, CheckCircle2, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { Customer, Supplier } from '../types/autoParts';
+import type { BankAccount } from '../utils/bankLedger';
 import {
   Cheque, ChequeAction, ChequeDirection, ChequeError, ACTION_LABEL, availableActions, clearLabel, dueState, daysBetween, summarize,
   registrationEffect, isOpen,
@@ -24,7 +25,10 @@ interface ChequesViewProps {
   customers: Customer[];
   suppliers: Supplier[];
   onAdd: (input: NewChequeInput) => { ok: boolean; error?: ChequeError };
-  onAction: (id: string, action: ChequeAction, note?: string) => { ok: boolean; message?: string };
+  onAction: (id: string, action: ChequeAction, note?: string, bankAccountId?: string) => { ok: boolean; message?: string };
+  bankAccounts?: BankAccount[];
+  canRegister?: boolean;
+  canManageLifecycle?: boolean;
 }
 
 const ERROR_TEXT: Record<ChequeError, string> = {
@@ -50,7 +54,7 @@ const inputCls =
   'w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400';
 const money = (n: number) => `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })} ج.م`;
 
-export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, suppliers, onAdd, onAction }) => {
+export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, suppliers, onAdd, onAction, bankAccounts = [], canRegister = true, canManageLifecycle = true }) => {
   const today = todayISO();
   const [direction, setDirection] = useState<ChequeDirection>('incoming');
   const [filter, setFilter] = useState<'open' | 'overdue' | 'due_soon' | 'closed' | 'all'>('open');
@@ -68,6 +72,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, su
   // ---- تأكيد إجراء ----
   const [confirm, setConfirm] = useState<{ cheque: Cheque; action: ChequeAction } | null>(null);
   const [confirmNote, setConfirmNote] = useState('');
+  const [confirmBankAccountId, setConfirmBankAccountId] = useState('');
 
   const summary = useMemo(() => summarize(cheques, direction, today), [cheques, direction, today]);
 
@@ -132,7 +137,11 @@ export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, su
 
   const runAction = () => {
     if (!confirm) return;
-    const res = onAction(confirm.cheque.id, confirm.action, confirmNote);
+    if (confirm.action === 'clear' && !bankAccounts.some(account => account.id === confirmBankAccountId && account.active)) {
+      setFlash({ ok: false, text: 'اختر الحساب البنكي النشط الذي استلم أو سيُصرف منه الشيك.' });
+      return;
+    }
+    const res = onAction(confirm.cheque.id, confirm.action, confirmNote, confirm.action === 'clear' ? confirmBankAccountId : undefined);
     setFlash({ ok: res.ok, text: res.message || (res.ok ? 'تم تنفيذ الإجراء' : 'تعذّر تنفيذ الإجراء') });
     setConfirm(null);
     setConfirmNote('');
@@ -144,6 +153,11 @@ export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, su
       return c.direction === 'incoming'
         ? `سيُسجَّل قبض ${money(c.amount)} في الخزنة (حساب بنكي). لا يمكن التراجع.`
         : `سيُسجَّل صرف ${money(c.amount)} من الخزنة (حساب بنكي) للمورد. لا يمكن التراجع.`;
+    if (a === 'bounce' && (c.status === 'محصّل' || c.status === 'مصروف')) {
+      return c.direction === 'incoming'
+        ? `سيُعكس مبلغ ${money(c.amount)} من الحساب البنكي الذي تم التحصيل عليه، وتعود مديونية العميل ${c.partyName}.`
+        : `سيُعاد مبلغ ${money(c.amount)} إلى الحساب البنكي، وتعود مستحقات المورد ${c.partyName}.`;
+    }
     return c.direction === 'incoming'
       ? `سيعود ${money(c.appliedAmount ?? 0)} على مديونية العميل ${c.partyName} وتُغلق حالة الشيك. لا يمكن التراجع.`
       : `ستعود مستحقات المورد ${c.partyName} كما كانت قبل الشيك (${money(c.amount)}) وتُغلق حالة الشيك. لا يمكن التراجع.`;
@@ -164,13 +178,13 @@ export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, su
           <Landmark className="w-5 h-5 text-amber-400" />
           <h2 className="text-base font-black text-white">الشيكات</h2>
         </div>
-        <button
+        {canRegister && <button
           type="button"
           onClick={() => { setShowAdd(true); setForm(blank); setFormError(''); }}
           className="h-9 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-black flex items-center gap-1.5"
         >
           <Plus className="w-4 h-4" /> تسجيل شيك {direction === 'incoming' ? 'وارد' : 'صادر'}
-        </button>
+        </button>}
       </div>
 
       <div className="flex gap-2">
@@ -250,11 +264,11 @@ export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, su
                 <div className="font-mono font-black text-amber-300">{money(c.amount)}</div>
                 <span className={`px-2 py-0.5 rounded-lg text-[11px] font-bold ${STATUS_STYLE[c.status] || ''}`}>{c.status}</span>
                 <div className="flex flex-wrap gap-1.5">
-                  {actions.map((a) => (
+                  {canManageLifecycle && actions.map((a) => (
                     <button
                       key={a}
                       type="button"
-                      onClick={() => { setConfirm({ cheque: c, action: a }); setConfirmNote(''); }}
+                      onClick={() => { setConfirm({ cheque: c, action: a }); setConfirmNote(''); setConfirmBankAccountId(bankAccounts.find(account => account.active)?.id || ''); }}
                       className={`px-2.5 h-7 rounded-lg text-[11px] font-bold ${
                         a === 'clear' ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
                         : a === 'bounce' ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'
@@ -286,7 +300,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, su
       </div>
 
       {/* نافذة التسجيل */}
-      {showAdd && (
+      {showAdd && canRegister && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAdd(false)}>
           <div className="w-full max-w-lg max-h-[90vh] overflow-auto rounded-2xl bg-surface-1 border border-neutral-700 p-5 space-y-3 text-xs" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
@@ -351,6 +365,16 @@ export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, su
               {confirm.action === 'clear' ? clearLabel(confirm.cheque.direction) : ACTION_LABEL[confirm.action]} — شيك {confirm.cheque.number}
             </h3>
             <p className="text-neutral-300">{confirmText(confirm.cheque, confirm.action)}</p>
+            {confirm.action === 'clear' && (
+              <label className="block space-y-1 text-neutral-300">
+                <span>الحساب البنكي الذي تم فيه التحصيل / الصرف</span>
+                <select value={confirmBankAccountId} onChange={e => setConfirmBankAccountId(e.target.value)} className={inputCls}>
+                  <option value="">اختر الحساب البنكي</option>
+                  {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}{account.accountLast4 ? " ••" + account.accountLast4 : ""}</option>)}
+                </select>
+                {!bankAccounts.some(account => account.active) && <span className="text-rose-300">يجب إضافة حساب بنكي نشط أولاً من شاشة المالية.</span>}
+              </label>
+            )}
             <input
               value={confirmNote}
               onChange={(e) => setConfirmNote(e.target.value)}
@@ -362,6 +386,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({ cheques, customers, su
                 type="button"
                 onClick={runAction}
                 className={`flex-1 h-10 rounded-xl font-black text-black ${confirm.action === 'bounce' ? 'bg-rose-400 hover:bg-rose-300' : 'bg-amber-500 hover:bg-amber-400'}`}
+                disabled={confirm.action === 'clear' && !bankAccounts.some(account => account.id === confirmBankAccountId && account.active)}
               >
                 تأكيد
               </button>

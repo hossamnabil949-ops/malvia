@@ -310,7 +310,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   ].filter(t => typeof t.onClick === 'function' && (!t.needsInventory || canManageInventory));
 
   if (simpleMode) {
-    const simpleTabs = ALL_ITEMS.filter(i => ['pos', 'shifts', 'invoices', 'customers'].includes(i.id) && canAccessTab(i.id));
+    const simpleTabs = ALL_ITEMS.filter(i => ['pos', 'shifts', 'invoices', 'customers', 'cheques'].includes(i.id) && canAccessTab(i.id));
     return (
       <div className="min-h-screen flex flex-col" data-simple-cashier="true">
         <header className="sticky top-0 z-40 bg-nav-bg border-b border-nav-line px-3 sm:px-6 h-14 flex items-center gap-3">

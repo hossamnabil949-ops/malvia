@@ -40,6 +40,8 @@ import {
   PurchaseReturn, 
   PaymentMethod 
 } from '../types/autoParts';
+import type { BankAccount } from '../utils/bankLedger';
+import { requiresSpecificBankAccount } from '../utils/paymentMethods';
 
 interface SuppliersViewProps {
   suppliers: Supplier[];
@@ -58,10 +60,12 @@ interface SuppliersViewProps {
     paymentMethod: PaymentMethod | string, 
     treasurySource: string, 
     notes: string,
-    scheduleId?: string
+    scheduleId?: string,
+    bankAccountId?: string
   ) => void;
   onAddPurchaseReturn?: (returnData: PurchaseReturn) => void;
   onSettlePurchaseReturn?: (returnId: string) => void;
+  bankAccounts?: BankAccount[];
 }
 
 export const SuppliersView: React.FC<SuppliersViewProps> = ({
@@ -77,6 +81,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
   onSettleSupplierPayment,
   onAddPurchaseReturn,
   onSettlePurchaseReturn,
+  bankAccounts = [],
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -104,6 +109,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
   const [settleAmount, setSettleAmount] = useState<number>(1000);
   const [settleDate, setSettleDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [settleMethod, setSettleMethod] = useState<PaymentMethod | string>('نقدي');
+  const [settleBankAccountId, setSettleBankAccountId] = useState('');
   const [treasurySource, setTreasurySource] = useState<string>('خزينة المحل النقدية');
   const [settleNotes, setSettleNotes] = useState<string>('');
 
@@ -180,7 +186,8 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
       settleMethod,
       treasurySource,
       settleNotes || `دفعة سداد للمورد ${settleModalSupplier.name}`,
-      settleSchedule?.id
+      settleSchedule?.id,
+      requiresSpecificBankAccount(settleMethod) ? settleBankAccountId : undefined
     );
 
     setSettleSchedule(null);
@@ -954,12 +961,25 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
                   >
                     <option value="نقدي">نقدي (كاش من الخزينة)</option>
-                    <option value="إنستاباي / InstaPay">إنستاباي / InstaPay</option>
+                    <option value="InstaPay - حساب بنكي">InstaPay إلى حساب بنكي</option>
+                    <option value="InstaPay - محفظة">InstaPay إلى محفظة</option>
+                    <option value="إنستاباي / InstaPay">InstaPay قديم / غير محدد</option>
                     <option value="فودافون كاش ومحافظ إلكترونية">فودافون كاش ومحافظ إلكترونية</option>
-                    <option value="فيزا / بطاقة بنكية">تحويل بنكي / بطاقة</option>
+                    <option value="تحويل بنكي">تحويل بنكي</option>
+                    <option value="فيزا / بطاقة بنكية">فيزا / بطاقة بنكية</option>
                     <option value="شيك بنكي">شيك بنكي</option>
                   </select>
                 </div>
+                {requiresSpecificBankAccount(settleMethod) && (
+                  <div className="col-span-2">
+                    <label className="block text-amber-300 font-bold mb-1">الحساب البنكي الذي خرجت منه الدفعة *</label>
+                    <select required value={settleBankAccountId} onChange={e => setSettleBankAccountId(e.target.value)} className="w-full bg-slate-950 border border-amber-500/50 rounded-xl px-3 py-2 text-white">
+                      <option value="">اختر الحساب البنكي</option>
+                      {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}{account.accountLast4 ? ` ••${account.accountLast4}` : ''}</option>)}
+                    </select>
+                    {!bankAccounts.some(account => account.active) && <p className="text-[10px] text-rose-300 mt-1">لا يوجد حساب بنكي نشط. أضف حساباً من المالية أولاً.</p>}
+                  </div>
+                )}
               </div>
 
               <div>
