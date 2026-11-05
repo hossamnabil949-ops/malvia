@@ -173,7 +173,7 @@ export default function App() {
   // الصلاحيات تُقرأ من سجل الموظف الحالي (تسري فوراً عند تعديلها) وليس من لقطة وقت الدخول
   const liveEmployee = currentUser ? employees.find(e => e.id === currentUser.employeeId) : undefined;
   const effectiveRole = liveEmployee?.role ?? currentUser?.role;
-  const canManageCapital = currentUser?.role === 'مدير عام' || currentUser?.role === 'محاسب مالي';
+  const canManageCapital = effectiveRole === 'مدير عام' || effectiveRole === 'محاسب مالي';
   const effectivePermissions = liveEmployee?.permissions ?? currentUser?.permissions;
   const simpleMode = Boolean(currentUser) && isSimpleCashier(effectiveRole, effectivePermissions);
   const canAccessTab = (tab: string): boolean =>
