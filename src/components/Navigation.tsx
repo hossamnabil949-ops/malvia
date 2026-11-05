@@ -87,42 +87,35 @@ interface NavGroup {
 }
 
 const NAV_GROUPS: NavGroup[] = [
-  {
-    title: 'التشغيل',
-    items: [
-      { id: 'dashboard', label: 'الرئيسية', icon: Home },
-      { id: 'pos', label: 'الكاشير (POS)', icon: ShoppingCart },
-      { id: 'shifts', label: 'الورديات والدرج', icon: Wallet },
-      { id: 'inventory', label: 'المخزون والقطع', icon: Boxes },
-      { id: 'lowstock', label: 'المخزون الحرج', icon: AlertTriangle },
-      { id: 'warehouses', label: 'المخازن والفروع', icon: Warehouse },
-      { id: 'tracking', label: 'الدفعات والسيريال', icon: ScanBarcode },
-      { id: 'invoices', label: 'الفواتير والمرتجعات', icon: Receipt },
-    ],
-  },
-  {
-    title: 'المشتريات والحسابات',
-    items: [
-      { id: 'purchases', label: 'فواتير المشتريات', icon: ClipboardList },
-      { id: 'suppliers', label: 'الموردين والحسابات', icon: Truck },
-      { id: 'customers', label: 'العملاء والورش', icon: Users },
-    ],
-  },
-  {
-    title: 'المالية والتقارير',
-    items: [
-      { id: 'finance', label: 'المالية والخزينة', icon: DollarSign },
-      { id: 'cheques', label: 'الشيكات', icon: Landmark },
-      { id: 'reports', label: 'التقارير الشاملة', icon: TrendingUp },
-    ],
-  },
-  {
-    title: 'النظام',
-    items: [{ id: 'settings', label: 'الإعدادات', icon: Settings }],
-  },
+  { title: 'المبيعات', items: [
+    { id: 'pos', label: 'الكاشير ونقطة البيع', icon: ShoppingCart },
+    { id: 'invoices', label: 'الفواتير والمرتجعات', icon: Receipt },
+    { id: 'shifts', label: 'الورديات والدرج', icon: Wallet },
+    { id: 'customers', label: 'العملاء والورش', icon: Users },
+  ]},
+  { title: 'المشتريات', items: [
+    { id: 'purchases', label: 'فواتير المشتريات', icon: ClipboardList },
+    { id: 'suppliers', label: 'الموردون وحساباتهم', icon: Truck },
+  ]},
+  { title: 'المخزون والمخازن', items: [
+    { id: 'inventory', label: 'الأصناف والمخزون', icon: Boxes },
+    { id: 'lowstock', label: 'المخزون الحرج', icon: AlertTriangle },
+    { id: 'warehouses', label: 'المخازن والفروع', icon: Warehouse },
+    { id: 'tracking', label: 'الدفعات والسيريال', icon: ScanBarcode },
+  ]},
+  { title: 'المالية والخزينة', items: [
+    { id: 'finance', label: 'المالية والخزينة', icon: DollarSign },
+    { id: 'cheques', label: 'الشيكات', icon: Landmark },
+  ]},
+  { title: 'التقارير', items: [
+    { id: 'reports', label: 'التقارير والتحليلات', icon: TrendingUp },
+  ]},
+  { title: 'الإعدادات', items: [
+    { id: 'settings', label: 'إعدادات النظام', icon: Settings },
+  ]},
 ];
 
-const ALL_ITEMS: NavItem[] = NAV_GROUPS.flatMap(g => g.items);
+const ALL_ITEMS: NavItem[] = [{ id: 'dashboard', label: 'الرئيسية', icon: Home }, ...NAV_GROUPS.flatMap(g => g.items)];
 
 const COLLAPSE_KEY = 'malvia.sidebar.collapsed';
 
@@ -172,9 +165,19 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
       )}
     </button>
 
-    {/* Navigation groups */}
+    {/* Home + current section only */}
     <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y overflow-x-hidden py-3 px-2.5 space-y-4">
-      {NAV_GROUPS.map(g => ({ ...g, items: g.items.filter(i => canAccessTab(i.id)) }))
+      <button
+        onClick={() => onSelect('dashboard')}
+        title={collapsed ? 'الرئيسية' : undefined}
+        aria-current={currentTab === 'dashboard' ? 'page' : undefined}
+        className={`malvia-nav-button w-full flex items-center rounded-xl text-sm font-semibold transition whitespace-nowrap ${collapsed ? 'justify-center h-11' : 'gap-3 px-3 py-2.5'} ${currentTab === 'dashboard' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-nav-text hover:text-nav-strong hover:bg-nav-hover'}`}
+      >
+        <Home className="w-5 h-5 shrink-0" />
+        {!collapsed && <span>الرئيسية</span>}
+      </button>
+      {NAV_GROUPS.filter(g => g.items.some(i => i.id === currentTab))
+        .map(group => ({ ...group, items: group.items.filter(i => canAccessTab(i.id)) }))
         .filter(g => g.items.length > 0)
         .map((group, gi) => (
         <div key={group.title}>
@@ -195,7 +198,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
                     onClick={() => onSelect(item.id)}
                     title={collapsed ? item.label : undefined}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`w-full flex items-center rounded-xl text-sm font-semibold transition whitespace-nowrap ${
+                    className={`malvia-nav-button w-full flex items-center rounded-xl text-sm font-semibold transition whitespace-nowrap ${
                       collapsed ? 'justify-center h-11' : 'gap-3 px-3 py-2.5'
                     } ${
                       isActive
@@ -310,7 +313,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   ].filter(t => typeof t.onClick === 'function' && (!t.needsInventory || canManageInventory));
 
   if (simpleMode) {
-    const simpleTabs = ALL_ITEMS.filter(i => ['pos', 'shifts', 'invoices', 'customers'].includes(i.id) && canAccessTab(i.id));
+    const simpleTabs = ALL_ITEMS.filter(i => ['pos', 'shifts', 'invoices', 'customers', 'cheques'].includes(i.id) && canAccessTab(i.id));
     return (
       <div className="min-h-screen flex flex-col" data-simple-cashier="true">
         <header className="sticky top-0 z-40 bg-nav-bg border-b border-nav-line px-3 sm:px-6 h-14 flex items-center gap-3">
@@ -349,10 +352,10 @@ export const Navigation: React.FC<NavigationProps> = ({
   }
 
   return (
-    <div className="min-h-screen w-full flex bg-surface-0">
+    <div className="malvia-navigation-shell min-h-screen w-full flex bg-surface-0">
       {/* ===== Desktop sidebar (right side in RTL) ===== */}
       <aside
-        className={`hidden lg:flex flex-col fixed inset-y-0 start-0 z-40 bg-nav-bg border-e border-nav-line transition-[width] duration-200 ${
+        className={`malvia-sidebar hidden lg:flex flex-col fixed inset-y-0 start-0 z-40 bg-nav-bg border-e border-nav-line transition-[width] duration-200 ${
           collapsed ? 'w-[72px]' : 'w-64'
         }`}
       >
@@ -416,7 +419,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         }`}
       >
         {/* Top bar */}
-        <header className="sticky top-0 z-30 h-14 sm:h-16 bg-nav-bg/95 backdrop-blur-xl border-b border-nav-line text-nav-strong shadow-sm">
+        <header className="malvia-topbar sticky top-0 z-30 h-14 sm:h-16 bg-nav-bg/95 backdrop-blur-xl border-b border-nav-line text-nav-strong shadow-sm">
           <div className="h-full flex items-center justify-between gap-3 px-3 sm:px-6">
             {/* Start side: menu button (mobile) + page title */}
             <div className="flex items-center gap-3 min-w-0">
@@ -540,7 +543,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         </header>
 
         {/* Page content */}
-        <main className="flex-1 w-full max-w-[1600px] mx-auto p-3 sm:p-6">{children}</main>
+        <main className="malvia-content flex-1 w-full max-w-[1600px] mx-auto p-3 sm:p-6">{children}</main>
       </div>
 
       {/* ===== Mobile bottom navigation ===== */}
