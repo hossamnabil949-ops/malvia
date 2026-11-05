@@ -191,6 +191,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [showInjectCapitalModal, setShowInjectCapitalModal] = useState(false);
   const [showReinvestProfitModal, setShowReinvestProfitModal] = useState(false);
   const [showAdjustSharesModal, setShowAdjustSharesModal] = useState(false);
+  const [editingShares, setEditingShares] = useState<Record<string, number>>(() => Object.fromEntries(partners.map(partner => [partner.id, partner.sharePercentage])));
   const [partnerAction, setPartnerAction] = useState<'edit' | 'withdrawal' | 'exit' | 'payment' | null>(null);
   const [actionPartnerId, setActionPartnerId] = useState('');
   const [profileName, setProfileName] = useState('');
