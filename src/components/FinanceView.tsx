@@ -252,7 +252,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     if (!targetPartnerId && partners.length > 0) setTargetPartnerId(partners[0].id);
   }, [partners, targetPartnerId]);
 
-  const currentPartnerCapitalTotal = partners.reduce((sum, partner) =>
+  const activePartners = partners.filter(partner => (partner.status || 'ACTIVE') === 'ACTIVE');
+  const currentPartnerCapitalTotal = activePartners.reduce((sum, partner) =>
     sum + (partner.totalCurrentCapital || partner.initialCapital + (partner.addedCapital || 0) + (partner.reinvestedProfits || 0)), 0);
   const newPartnerSharePercent = currentPartnerCapitalTotal + newPartnerInitialCapital > 0
     ? Number(((newPartnerInitialCapital / (currentPartnerCapitalTotal + newPartnerInitialCapital)) * 100).toFixed(4))
@@ -417,13 +418,13 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   }, [paymentBreakdown, totalOperatingExpenses]);
 
   const partnerPieData = useMemo(() => {
-    return partners.map((p, idx) => ({
+    return activePartners.map((p, idx) => ({
       name: p.name,
       value: p.sharePercentage,
       capital: p.totalCurrentCapital || (p.initialCapital + (p.addedCapital || 0) + (p.reinvestedProfits || 0)),
       color: PARTNER_COLORS[idx % PARTNER_COLORS.length],
     }));
-  }, [partners]);
+  }, [activePartners]);
 
   const selectedTargetPartner = useMemo(() => {
     return partners.find((p) => p.id === targetPartnerId) || partners[0];
@@ -472,7 +473,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       netProfit: netDistributableProfit,
       paymentMethod: distributionPaymentMethod,
       bankAccountId: requiresSpecificBankAccount(distributionPaymentMethod) ? distributionBankAccountId : undefined,
-      partnerShares: partners.map((p) => ({
+      partnerShares: activePartners.map((p) => ({
         partnerId: p.id,
         partnerName: p.name,
         percentage: p.sharePercentage,
@@ -575,6 +576,37 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     });
 
     setShowReinvestProfitModal(false);
+  };
+
+
+  const openPartnerAction = (partner: Partner, action: 'edit' | 'withdrawal' | 'exit') => {
+    setActionPartnerId(partner.id);
+    setPartnerAction(action);
+    setProfileName(partner.name); setProfileRole(partner.role); setProfilePhone(partner.phone);
+    setPartnerActionAmount(0); setPartnerActionKind('withdrawal'); setPartnerActionMethod('نقدي'); setPartnerActionBankId('');
+    setExitDate(new Date().toISOString().slice(0, 10)); setExitCapital(partner.totalCurrentCapital || partner.initialCapital || 0);
+    setExitProfit(0); setExitOtherEntitlements(0); setExitWithdrawals(0); setExitAdvances(0); setExitDeductions(0); setExitDueDate(''); setExitNotes('');
+  };
+
+  const submitPartnerAction = (e: React.FormEvent) => {
+    e.preventDefault();
+    const partner = partners.find(p => p.id === actionPartnerId);
+    if (!partner || !partnerAction) return;
+    if (partnerAction === 'edit') {
+      if (!profileName.trim() || !profilePhone.trim()) return;
+      if (onUpdatePartnerProfile?.(partner.id, { name: profileName.trim(), role: profileRole.trim(), phone: profilePhone.trim() }) === false) return;
+    } else if (partnerAction === 'withdrawal') {
+      if (!Number.isFinite(partnerActionAmount) || partnerActionAmount <= 0) return;
+      if (requiresSpecificBankAccount(partnerActionMethod) && !bankAccounts.some(a => a.id === partnerActionBankId && a.active)) return;
+      const record: PartnerWithdrawal = { id: `PW-${Date.now()}`, partnerId: partner.id, partnerName: partner.name, kind: partnerActionKind, amount: partnerActionAmount, date: new Date().toISOString().slice(0,10), paymentMethod: partnerActionMethod, bankAccountId: requiresSpecificBankAccount(partnerActionMethod) ? partnerActionBankId : undefined, notes: '', recordedBy: currentUserName };
+      if (onRecordPartnerWithdrawal?.(record) === false) return;
+    } else if (partnerAction === 'exit') {
+      const netPayable = Number((exitCapital + exitProfit + exitOtherEntitlements - exitWithdrawals - exitAdvances - exitDeductions).toFixed(2));
+      if (netPayable < 0) { window.alert('صافي التسوية لا يمكن أن يكون سالباً؛ راجع الاستحقاقات والخصومات.'); return; }
+      const record: PartnerExitSettlement = { id: `PXS-${Date.now()}`, partnerId: partner.id, partnerName: partner.name, exitDate, capitalEntitlement: exitCapital, profitEntitlement: exitProfit, otherEntitlements: exitOtherEntitlements, withdrawalsDeducted: exitWithdrawals, advancesDeducted: exitAdvances, otherDeductions: exitDeductions, netPayable, status: 'draft', notes: exitNotes, createdAt: new Date().toISOString(), createdBy: currentUserName, dueDate: exitDueDate || undefined };
+      if (onCreatePartnerExitSettlement?.(record) === false) return;
+    }
+    setPartnerAction(null);
   };
 
   const handleSaveAdjustedShares = () => {
@@ -853,7 +885,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {partners.map((partner, idx) => {
-                  const partnerShareAmount = Number(((netDistributableProfit * partner.sharePercentage) / 100).toFixed(2));
+                  const partnerShareAmount = (partner.status || 'ACTIVE') === 'ACTIVE' ? Number(((netDistributableProfit * partner.sharePercentage) / 100).toFixed(2)) : 0;
                   const currentCapital = partner.totalCurrentCapital || (partner.initialCapital + (partner.addedCapital || 0) + (partner.reinvestedProfits || 0));
 
                   return (
@@ -1652,7 +1684,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             <div className="space-y-2">
               <span className="text-xs font-bold text-neutral-300 block">حصص الشركاء المحددة تعاقدياً:</span>
               <div className="divide-y divide-neutral-800 bg-surface-1 rounded-2xl p-3 border border-neutral-800">
-                {partners.map((p) => {
+                {activePartners.map((p) => {
                   const amt = ((netDistributableProfit * p.sharePercentage) / 100).toFixed(2);
                   return (
                     <div key={p.id} className="py-2 flex items-center justify-between text-xs">
