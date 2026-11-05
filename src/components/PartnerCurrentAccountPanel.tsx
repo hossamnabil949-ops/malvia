@@ -49,7 +49,7 @@ export const PartnerCurrentAccountPanel: React.FC<Props> = ({
       : []
   ), [partnerId, type, transactions, openingBalances]);
   const selectedOrigin = origins.find(origin => origin.id === relatedTransactionId);
-  const activeBankAccounts = bankAccounts.filter(account => account.active);
+  const activeBankAccounts = useMemo(() => bankAccounts.filter(account => account.active), [bankAccounts]);
 
   useEffect(() => {
     if (!partnerId && partners.length) setPartnerId(partners.find(p => (p.status || 'ACTIVE') === 'ACTIVE')?.id || partners[0].id);
