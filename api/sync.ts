@@ -45,7 +45,7 @@ export default async function handler(req: any, res: any) {
       const owner = role === 'مدير عام';
       const allowed = (keys: string[]) => owner || (role === 'محاسب مالي' && keys.includes('canManagePartners')) || keys.some((key) => p[key] === true);
       const policy: Record<string, string[]> = {
-        employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'], partnerWithdrawals: ['canManagePartners'], partnerExitSettlements: ['canManagePartners'], partnerSettlementPayments: ['canManagePartners'],
+        employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'], partnerWithdrawals: ['canManagePartners'], partnerCurrentAccountTransactions: ['canManagePartners','canManageTreasury'], partnerExitSettlements: ['canManagePartners'], partnerSettlementPayments: ['canManagePartners'],
         parts: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], stockLevels: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
         stockBatches: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], serialUnits: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
         inventoryErrors: ['canManageInventory'], stockTransfers: ['canManageInventory'], warehouses: ['canManageInventory'],
@@ -60,6 +60,9 @@ export default async function handler(req: any, res: any) {
       };
       const keys = policy[resource] || ['canManageSettings'];
       if (!allowed(keys)) return res.status(403).json({ code: 'EMPLOYEE_PERMISSION_DENIED', error: 'لا تملك صلاحية مزامنة هذا النوع من البيانات.' });
+      if (resource === 'partnerCurrentAccountTransactions') {
+        return res.status(409).json({ code: 'PARTNER_CURRENT_ACCOUNT_SYNC_BATCH_REQUIRED', error: 'يجب مزامنة حركة جاري الشركاء مع الخزينة ودفتر البنك في معاملة واحدة.' });
+      }
       phase = 'database_write';
       const v = await putIfVersion(tenant, resource, data, baseVersion);
       if (v === -1) {
