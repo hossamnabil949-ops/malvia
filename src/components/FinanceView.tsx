@@ -998,6 +998,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           <Receipt className="w-3.5 h-3.5" />
                           <span>سند الصرف</span>
                         </button>
+                        <button onClick={() => openPartnerAction(partner, 'edit')} className="py-2 px-1 rounded-xl bg-surface-3 text-sky-300 text-[11px] font-bold">تعديل البيانات</button>
+                        {(partner.status || 'ACTIVE') === 'ACTIVE' && <button onClick={() => openPartnerAction(partner, 'withdrawal')} className="py-2 px-1 rounded-xl bg-surface-3 text-orange-300 text-[11px] font-bold">مسحوبات / سلفة</button>}
+                        {(partner.status || 'ACTIVE') === 'ACTIVE' && <button onClick={() => openPartnerAction(partner, 'exit')} className="py-2 px-1 rounded-xl bg-rose-950/40 text-rose-300 text-[11px] font-bold">بدء التخارج</button>}
+                        {(partner.status || 'ACTIVE') !== 'ACTIVE' && <span className="col-span-3 text-center text-[11px] text-rose-300 py-2">الشريك غير نشط — {partner.exitDate || 'بانتظار اعتماد التخارج'}</span>}
                       </div>
                     </div>
                   );
