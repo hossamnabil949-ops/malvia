@@ -85,7 +85,7 @@ export const PartnerCurrentAccountPanel: React.FC<Props> = ({
     })),
     ...(Math.abs(openingBalance) > 0.005 ? [{
       id: `OPENING:${partnerId}`, title: 'رصيد جاري افتتاحي', date: openingDate, paymentMethod: 'رصيد مرحل',
-      amount: Math.abs(openingBalance), isIn: openingBalance < 0, reference: undefined, notes: openingBalance > 0 ? 'مستحق للشريك عند بدء MALVIA' : 'مستحق على الشريك عند بدء MALVIA',
+      amount: Math.abs(openingBalance), isIn: openingBalance > 0, reference: undefined, notes: openingBalance > 0 ? 'مستحق للشريك عند بدء MALVIA' : 'مستحق على الشريك عند بدء MALVIA',
     }] : []),
   ];
 
