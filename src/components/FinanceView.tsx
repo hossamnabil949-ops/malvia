@@ -60,6 +60,9 @@ import {
   ExpenseCategory,
   CapitalTransaction,
   CapitalTransactionType,
+  PartnerWithdrawal,
+  PartnerExitSettlement,
+  PartnerSettlementPayment,
   TreasuryTransaction,
   AutoPart,
   SalesReturn,
@@ -102,6 +105,14 @@ interface FinanceViewProps {
   canManageExpenses?: boolean;
   canManageTreasury?: boolean;
   canManagePartners?: boolean;
+  partnerWithdrawals?: PartnerWithdrawal[];
+  partnerExitSettlements?: PartnerExitSettlement[];
+  partnerSettlementPayments?: PartnerSettlementPayment[];
+  onUpdatePartnerProfile?: (partnerId: string, profile: { name: string; role: string; phone: string }) => boolean | void;
+  onRecordPartnerWithdrawal?: (withdrawal: PartnerWithdrawal) => boolean | void;
+  onCreatePartnerExitSettlement?: (settlement: PartnerExitSettlement) => boolean | void;
+  onApprovePartnerExitSettlement?: (settlementId: string) => boolean | void;
+  onRecordPartnerSettlementPayment?: (payment: PartnerSettlementPayment) => boolean | void;
   onAddExpense: (expense: Expense) => void;
   onAddDistribution: (record: ProfitDistributionRecord) => void;
   onAddPartner?: (partner: Partner, paymentMethod: string, notes: string, bankAccountId?: string) => boolean | void;
@@ -151,6 +162,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   bankAccounts = [], cardSettlements = [], bankLedgerEntries = [], outstandingVisaBalance = 0,
   onAddBankAccount, onSettleVisa, onTransferBank,
   canManageExpenses = true, canManageTreasury = true, canManagePartners = true,
+  partnerWithdrawals = [], partnerExitSettlements = [], partnerSettlementPayments = [],
+  onUpdatePartnerProfile, onRecordPartnerWithdrawal, onCreatePartnerExitSettlement, onApprovePartnerExitSettlement, onRecordPartnerSettlementPayment,
   openingBalances = [], onApproveOpeningBalances, canManageOpeningBalances = false, currentUserName = 'المدير العام',
 }) => {
   type FinanceTab = 'income' | 'equity' | 'treasury' | 'expenses' | 'audit' | 'bankLedger';
@@ -171,6 +184,26 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [showInjectCapitalModal, setShowInjectCapitalModal] = useState(false);
   const [showReinvestProfitModal, setShowReinvestProfitModal] = useState(false);
   const [showAdjustSharesModal, setShowAdjustSharesModal] = useState(false);
+  const [partnerAction, setPartnerAction] = useState<'edit' | 'withdrawal' | 'exit' | 'payment' | null>(null);
+  const [actionPartnerId, setActionPartnerId] = useState('');
+  const [profileName, setProfileName] = useState('');
+  const [profileRole, setProfileRole] = useState('');
+  const [profilePhone, setProfilePhone] = useState('');
+  const [partnerActionAmount, setPartnerActionAmount] = useState(0);
+  const [partnerActionKind, setPartnerActionKind] = useState<'withdrawal' | 'advance'>('withdrawal');
+  const [partnerActionMethod, setPartnerActionMethod] = useState('نقدي');
+  const [partnerActionBankId, setPartnerActionBankId] = useState('');
+  const [exitDate, setExitDate] = useState(new Date().toISOString().slice(0, 10));
+  const [exitCapital, setExitCapital] = useState(0);
+  const [exitProfit, setExitProfit] = useState(0);
+  const [exitOtherEntitlements, setExitOtherEntitlements] = useState(0);
+  const [exitWithdrawals, setExitWithdrawals] = useState(0);
+  const [exitAdvances, setExitAdvances] = useState(0);
+  const [exitDeductions, setExitDeductions] = useState(0);
+  const [exitDueDate, setExitDueDate] = useState('');
+  const [exitNotes, setExitNotes] = useState('');
+  const [actionSettlementId, setActionSettlementId] = useState('');
+  const [paymentTransferReference, setPaymentTransferReference] = useState('');
 
   const [targetPartnerId, setTargetPartnerId] = useState<string>(partners[0]?.id || '');
   
