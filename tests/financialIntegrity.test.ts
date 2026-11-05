@@ -569,3 +569,60 @@ const pcaBankInput: any = {
 assert.equal(validatePartnerCurrentAccountSync(pcaBankInput), null);
 assert.equal(validatePartnerCurrentAccountSync({ ...pcaBankInput, bankLedgerEntries: [] }), 'PARTNER_CURRENT_ACCOUNT_BANK_MISMATCH');
 
+
+
+const pcaOpeningCredit: any = {
+  ...currentAccountOpening,
+  id: 'OB-PCA-CREDIT',
+  partners: [{ partnerId: 'pca-partner', partnerName: 'Partner A', originalContribution: 1000, ownershipPercentage: 100, currentAccountBalance: 400 }],
+};
+const pcaCompanyRepayment: any = {
+  id: 'PCA-COMPANY-REPAY-1', partnerId: 'pca-partner', partnerName: 'Partner A',
+  type: 'company_repayment', amount: 150, date: '2026-11-04', paymentMethod: 'نقدي',
+  relatedTransactionId: 'OPENING:pca-partner', treasuryTransactionId: 'TX-PCA-COMPANY-REPAY-1',
+  recordedBy: 'Test', createdAt: '2026-11-04T14:00:00.000Z',
+};
+const pcaCompanyRepaymentTreasury: any = {
+  id: 'TX-PCA-COMPANY-REPAY-1', referenceId: 'PCA-COMPANY-REPAY-1', type: 'صرف',
+  category: 'جاري شركاء - سداد المنشأة للشريك', amount: 150,
+  date: '2026-11-04', paymentMethod: 'نقدي',
+};
+assert.equal(validatePartnerCurrentAccountSync({
+  previous: [], incoming: [pcaCompanyRepayment], partners: [{ id: 'pca-partner', name: 'Partner A' }],
+  bankAccounts: [], treasury: [pcaCompanyRepaymentTreasury], bankLedgerEntries: [],
+  openingBalances: [pcaOpeningCredit],
+}), null);
+assert.equal(getPartnerCurrentAccountBalance('pca-partner', [pcaCompanyRepayment], [pcaOpeningCredit]), 250);
+assert.equal(getOpenPartnerCurrentAccountOrigins('pca-partner', 'company_repayment', [pcaCompanyRepayment], [pcaOpeningCredit])[0].remainingAmount, 250);
+
+const pcaPartnerDeposit: any = {
+  id: 'PCA-DEPOSIT-1', partnerId: 'pca-partner', partnerName: 'Partner A',
+  type: 'partner_deposit', amount: 350, date: '2026-11-04', paymentMethod: 'محفظة إلكترونية',
+  treasuryTransactionId: 'TX-PCA-DEPOSIT-1', recordedBy: 'Test', createdAt: '2026-11-04T15:00:00.000Z',
+};
+const pcaPartnerDepositTreasury: any = {
+  id: 'TX-PCA-DEPOSIT-1', referenceId: 'PCA-DEPOSIT-1', type: 'قبض',
+  category: 'جاري شركاء - إيداع من شريك', amount: 350,
+  date: '2026-11-04', paymentMethod: 'محفظة إلكترونية',
+};
+assert.equal(validatePartnerCurrentAccountSync({
+  previous: [], incoming: [pcaPartnerDeposit], partners: [{ id: 'pca-partner', name: 'Partner A' }],
+  bankAccounts: [], treasury: [pcaPartnerDepositTreasury], bankLedgerEntries: [], openingBalances: [],
+}), null);
+assert.equal(getPartnerCurrentAccountBalance('pca-partner', [pcaPartnerDeposit], []), 350);
+
+const pcaPartnerWithdrawal: any = {
+  id: 'PCA-WITHDRAW-1', partnerId: 'pca-partner', partnerName: 'Partner A',
+  type: 'partner_withdrawal', amount: 120, date: '2026-11-04', paymentMethod: 'نقدي',
+  treasuryTransactionId: 'TX-PCA-WITHDRAW-1', recordedBy: 'Test', createdAt: '2026-11-04T16:00:00.000Z',
+};
+const pcaPartnerWithdrawalTreasury: any = {
+  id: 'TX-PCA-WITHDRAW-1', referenceId: 'PCA-WITHDRAW-1', type: 'صرف',
+  category: 'جاري شركاء - سحب شريك', amount: 120,
+  date: '2026-11-04', paymentMethod: 'نقدي',
+};
+assert.equal(validatePartnerCurrentAccountSync({
+  previous: [], incoming: [pcaPartnerWithdrawal], partners: [{ id: 'pca-partner', name: 'Partner A' }],
+  bankAccounts: [], treasury: [pcaPartnerWithdrawalTreasury], bankLedgerEntries: [], openingBalances: [],
+}), null);
+assert.equal(getPartnerCurrentAccountBalance('pca-partner', [pcaPartnerDeposit, pcaPartnerWithdrawal], []), 230);
