@@ -195,7 +195,7 @@ const SidebarBody: React.FC<SidebarBodyProps> = ({
                     onClick={() => onSelect(item.id)}
                     title={collapsed ? item.label : undefined}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`w-full flex items-center rounded-xl text-sm font-semibold transition whitespace-nowrap ${
+                    className={`malvia-nav-button w-full flex items-center rounded-xl text-sm font-semibold transition whitespace-nowrap ${
                       collapsed ? 'justify-center h-11' : 'gap-3 px-3 py-2.5'
                     } ${
                       isActive
@@ -349,10 +349,10 @@ export const Navigation: React.FC<NavigationProps> = ({
   }
 
   return (
-    <div className="min-h-screen w-full flex bg-surface-0">
+    <div className="malvia-navigation-shell min-h-screen w-full flex bg-surface-0">
       {/* ===== Desktop sidebar (right side in RTL) ===== */}
       <aside
-        className={`hidden lg:flex flex-col fixed inset-y-0 start-0 z-40 bg-nav-bg border-e border-nav-line transition-[width] duration-200 ${
+        className={`malvia-sidebar hidden lg:flex flex-col fixed inset-y-0 start-0 z-40 bg-nav-bg border-e border-nav-line transition-[width] duration-200 ${
           collapsed ? 'w-[72px]' : 'w-64'
         }`}
       >
@@ -416,7 +416,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         }`}
       >
         {/* Top bar */}
-        <header className="sticky top-0 z-30 h-14 sm:h-16 bg-nav-bg/95 backdrop-blur-xl border-b border-nav-line text-nav-strong shadow-sm">
+        <header className="malvia-topbar sticky top-0 z-30 h-14 sm:h-16 bg-nav-bg/95 backdrop-blur-xl border-b border-nav-line text-nav-strong shadow-sm">
           <div className="h-full flex items-center justify-between gap-3 px-3 sm:px-6">
             {/* Start side: menu button (mobile) + page title */}
             <div className="flex items-center gap-3 min-w-0">
@@ -540,7 +540,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         </header>
 
         {/* Page content */}
-        <main className="flex-1 w-full max-w-[1600px] mx-auto p-3 sm:p-6">{children}</main>
+        <main className="malvia-content flex-1 w-full max-w-[1600px] mx-auto p-3 sm:p-6">{children}</main>
       </div>
 
       {/* ===== Mobile bottom navigation ===== */}
