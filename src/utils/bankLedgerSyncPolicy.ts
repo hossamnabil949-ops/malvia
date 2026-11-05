@@ -1,5 +1,7 @@
 import { paymentAccountOf } from './paymentMethods';
 import type { BankAccount, BankLedgerEntry } from './bankLedger';
+import type { PartnerCurrentAccountTransaction } from '../types/autoParts';
+import { partnerCurrentAccountCashDirection } from './partnerCurrentAccount';
 
 export type BankLedgerSyncError =
   | 'BANK_LEDGER_NOT_ARRAY'
@@ -25,6 +27,7 @@ export function validateBankLedgerSync(input: {
   treasury?: any[];
   partners?: any[];
   partnerWithdrawals?: any[];
+  partnerCurrentAccountTransactions?: PartnerCurrentAccountTransaction[];
   partnerSettlementPayments?: any[];
   partnerExitSettlements?: any[];
   cardSettlements?: any[];
@@ -48,6 +51,7 @@ export function validateBankLedgerSync(input: {
   const treasury = input.treasury || [];
   const partners = input.partners || [];
   const partnerWithdrawals = input.partnerWithdrawals || [];
+  const partnerCurrentAccountTransactions = input.partnerCurrentAccountTransactions || [];
   const partnerSettlementPayments = input.partnerSettlementPayments || [];
   const partnerExitSettlements = input.partnerExitSettlements || [];
   const cardSettlements = input.cardSettlements || [];
@@ -94,6 +98,11 @@ export function validateBankLedgerSync(input: {
       matched = Boolean(withdrawal && directBank(withdrawal.paymentMethod) && withdrawal.bankAccountId === entry.bankAccountId
         && Number(withdrawal.amount) === Number(entry.amount) && withdrawal.date === entry.date && entry.direction === 'out'
         && partners.some(partner => partner.id === withdrawal.partnerId));
+    } else if (entry.id.startsWith('partner-current-account:')) {
+      const movement = partnerCurrentAccountTransactions.find(item => item.id === entry.batchId);
+      matched = Boolean(movement && directBank(movement.paymentMethod) && movement.bankAccountId === entry.bankAccountId
+        && Number(movement.amount) === Number(entry.amount) && movement.date === entry.date
+        && entry.direction === partnerCurrentAccountCashDirection(movement.type));
     } else if (entry.id.startsWith('partner-exit-payment:')) {
       const payment = partnerSettlementPayments.find(item => item.id === entry.batchId);
       const settlement = payment && partnerExitSettlements.find(item => item.id === payment.settlementId);
