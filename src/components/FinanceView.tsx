@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Calculator, 
   DollarSign, 
@@ -51,6 +51,8 @@ import {
 } from 'recharts';
 import { 
   Invoice, 
+  Customer,
+  Supplier,
   Expense, 
   Partner, 
   ProfitDistributionRecord, 
@@ -58,6 +60,10 @@ import {
   ExpenseCategory,
   CapitalTransaction,
   CapitalTransactionType,
+  PartnerWithdrawal,
+  PartnerExitSettlement,
+  PartnerSettlementPayment,
+  PartnerCurrentAccountTransaction,
   TreasuryTransaction,
   AutoPart,
   SalesReturn,
@@ -66,10 +72,19 @@ import {
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS_LIST } from '../data/autoPartsData';
 import { TreasuryAccountsReport } from './TreasuryAccountsReport';
 import { AuditLogPanel } from './AuditLogPanel';
+import { BankLedgerView } from './BankLedgerView';
+import { OpeningBalancesPanel } from './OpeningBalancesPanel';
+import { PartnerCurrentAccountPanel } from './PartnerCurrentAccountPanel';
+import { getPartnerCurrentAccountBalance } from '../utils/partnerCurrentAccount';
+import type { OpeningBalanceRecord } from '../utils/openingBalanceLogic';
+import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from '../utils/bankLedger';
+import { requiresSpecificBankAccount } from '../utils/paymentMethods';
 
 interface FinanceViewProps {
   invoices: Invoice[];
   parts?: AutoPart[];
+  customers?: Customer[];
+  suppliers?: Supplier[];
   salesReturns?: SalesReturn[];
   purchaseInvoices?: import('../types/autoParts').PurchaseInvoice[];
   purchaseReturns?: import('../types/autoParts').PurchaseReturn[];
@@ -83,12 +98,36 @@ interface FinanceViewProps {
   auditLog?: import('../types/autoParts').AuditEntry[];
   stockMovements?: import('../types/autoParts').StockMovement[];
   treasuryBalance?: number;
+  bankAccounts?: BankAccount[];
+  cardSettlements?: CardSettlementBatch[];
+  bankLedgerEntries?: BankLedgerEntry[];
+  outstandingVisaBalance?: number;
+  onAddBankAccount?: (account: BankAccount) => void;
+  onSettleVisa?: (batch: CardSettlementBatch) => { ok: boolean; message?: string };
+  onTransferBank?: (input: { id: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; date: string; reference: string }) => { ok: boolean; message?: string };
+  canManageExpenses?: boolean;
+  canManageTreasury?: boolean;
+  canManagePartners?: boolean;
+  partnerWithdrawals?: PartnerWithdrawal[];
+  partnerExitSettlements?: PartnerExitSettlement[];
+  partnerSettlementPayments?: PartnerSettlementPayment[];
+  partnerCurrentAccountTransactions?: PartnerCurrentAccountTransaction[];
+  onRecordPartnerCurrentAccount?: (record: PartnerCurrentAccountTransaction) => boolean | void;
+  onUpdatePartnerProfile?: (partnerId: string, profile: { name: string; role: string; phone: string }) => boolean | void;
+  onRecordPartnerWithdrawal?: (withdrawal: PartnerWithdrawal) => boolean | void;
+  onCreatePartnerExitSettlement?: (settlement: PartnerExitSettlement) => boolean | void;
+  onApprovePartnerExitSettlement?: (settlementId: string) => boolean | void;
+  onRecordPartnerSettlementPayment?: (payment: PartnerSettlementPayment) => boolean | void;
   onAddExpense: (expense: Expense) => void;
   onAddDistribution: (record: ProfitDistributionRecord) => void;
-  onAddPartner?: (partner: Partner, paymentMethod: string, notes: string) => boolean | void;
+  onAddPartner?: (partner: Partner, paymentMethod: string, notes: string, bankAccountId?: string) => boolean | void;
   onUpdatePartnerShare?: (partnerId: string, newSharePercentage: number) => void;
-  onInjectCapital?: (partnerId: string, amount: number, paymentMethod: string, notes: string, recalculatePercentages: boolean) => void;
+  onInjectCapital?: (partnerId: string, amount: number, paymentMethod: string, notes: string, recalculatePercentages: boolean, bankAccountId?: string) => void;
   onReinvestProfit?: (partnerId: string, amount: number, notes: string) => void;
+  openingBalances?: OpeningBalanceRecord[];
+  onApproveOpeningBalances?: (record: OpeningBalanceRecord) => boolean;
+  canManageOpeningBalances?: boolean;
+  currentUserName?: string;
 }
 
 const PAYMENT_COLORS: Record<string, string> = {
@@ -104,6 +143,8 @@ const PARTNER_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#a855f7', '#ec4899', '
 export const FinanceView: React.FC<FinanceViewProps> = ({
   invoices,
   parts = [],
+  customers = [],
+  suppliers = [],
   salesReturns = [],
   purchaseInvoices = [],
   purchaseReturns = [],
@@ -123,8 +164,25 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   onUpdatePartnerShare,
   onInjectCapital,
   onReinvestProfit,
+  bankAccounts = [], cardSettlements = [], bankLedgerEntries = [], outstandingVisaBalance = 0,
+  onAddBankAccount, onSettleVisa, onTransferBank,
+  canManageExpenses = true, canManageTreasury = true, canManagePartners = true,
+  partnerWithdrawals = [], partnerExitSettlements = [], partnerSettlementPayments = [],
+  partnerCurrentAccountTransactions = [], onRecordPartnerCurrentAccount,
+  onUpdatePartnerProfile, onRecordPartnerWithdrawal, onCreatePartnerExitSettlement, onApprovePartnerExitSettlement, onRecordPartnerSettlementPayment,
+  openingBalances = [], onApproveOpeningBalances, canManageOpeningBalances = false, currentUserName = 'المدير العام',
 }) => {
-  const [activeFinanceTab, setActiveFinanceTab] = useState<'income' | 'equity' | 'treasury' | 'expenses' | 'audit'>('equity');
+  type FinanceTab = 'income' | 'equity' | 'treasury' | 'expenses' | 'audit' | 'bankLedger' | 'partnerCurrentAccount';
+  const [activeFinanceTab, setActiveFinanceTab] = useState<FinanceTab>(canManagePartners ? 'equity' : canManageTreasury ? 'treasury' : 'expenses');
+  const availableFinanceTabs: FinanceTab[] = [
+    ...(canManagePartners ? ['equity' as FinanceTab] : []),
+    ...(canManagePartners && canManageTreasury ? ['partnerCurrentAccount' as FinanceTab] : []),
+    ...(canManageTreasury ? ['income', 'treasury', 'bankLedger', 'audit'] as FinanceTab[] : []),
+    ...(canManageExpenses ? ['expenses' as FinanceTab] : []),
+  ];
+  useEffect(() => {
+    if (availableFinanceTabs.length && !availableFinanceTabs.includes(activeFinanceTab)) setActiveFinanceTab(availableFinanceTabs[0]);
+  }, [canManageExpenses, canManageTreasury, canManagePartners, activeFinanceTab]);
   
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
   const [showDistributeModal, setShowDistributeModal] = useState(false);
@@ -133,6 +191,27 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [showInjectCapitalModal, setShowInjectCapitalModal] = useState(false);
   const [showReinvestProfitModal, setShowReinvestProfitModal] = useState(false);
   const [showAdjustSharesModal, setShowAdjustSharesModal] = useState(false);
+  const [editingShares, setEditingShares] = useState<Record<string, number>>(() => Object.fromEntries(partners.map(partner => [partner.id, partner.sharePercentage])));
+  const [partnerAction, setPartnerAction] = useState<'edit' | 'withdrawal' | 'exit' | 'payment' | null>(null);
+  const [actionPartnerId, setActionPartnerId] = useState('');
+  const [profileName, setProfileName] = useState('');
+  const [profileRole, setProfileRole] = useState('');
+  const [profilePhone, setProfilePhone] = useState('');
+  const [partnerActionAmount, setPartnerActionAmount] = useState(0);
+  const [partnerActionKind, setPartnerActionKind] = useState<'withdrawal' | 'advance'>('withdrawal');
+  const [partnerActionMethod, setPartnerActionMethod] = useState('نقدي');
+  const [partnerActionBankId, setPartnerActionBankId] = useState('');
+  const [exitDate, setExitDate] = useState(new Date().toISOString().slice(0, 10));
+  const [exitCapital, setExitCapital] = useState(0);
+  const [exitProfit, setExitProfit] = useState(0);
+  const [exitOtherEntitlements, setExitOtherEntitlements] = useState(0);
+  const [exitWithdrawals, setExitWithdrawals] = useState(0);
+  const [exitAdvances, setExitAdvances] = useState(0);
+  const [exitDeductions, setExitDeductions] = useState(0);
+  const [exitDueDate, setExitDueDate] = useState('');
+  const [exitNotes, setExitNotes] = useState('');
+  const [actionSettlementId, setActionSettlementId] = useState('');
+  const [paymentTransferReference, setPaymentTransferReference] = useState('');
 
   const [targetPartnerId, setTargetPartnerId] = useState<string>(partners[0]?.id || '');
   
@@ -156,42 +235,37 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [expenseAmount, setExpenseAmount] = useState<number>(0);
   const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory>('إيجار المحل والمستودع');
   const [expensePaymentMethod, setExpensePaymentMethod] = useState<PaymentMethod>('نقدي');
+  const [expenseBankAccountId, setExpenseBankAccountId] = useState('');
   const [expenseNotes, setExpenseNotes] = useState('');
 
   const [newPartnerName, setNewPartnerName] = useState('');
   const [newPartnerRole, setNewPartnerRole] = useState('شريك ممول ورأس المال');
   const [newPartnerPhone, setNewPartnerPhone] = useState('');
   const [newPartnerInitialCapital, setNewPartnerInitialCapital] = useState<number>(100000);
-  const [newPartnerSharePercent, setNewPartnerSharePercent] = useState<number>(20);
   const [newPartnerPaymentMethod, setNewPartnerPaymentMethod] = useState<string>('فيزا / بطاقة');
+  const [newPartnerBankAccountId, setNewPartnerBankAccountId] = useState('');
   const [newPartnerNotes, setNewPartnerNotes] = useState('حصة تأسيسية جديدة بموجب عقد الشراكة');
 
   const [injectAmount, setInjectAmount] = useState<number>(25000);
   const [injectPaymentMethod, setInjectPaymentMethod] = useState<string>('فيزا / بطاقة');
+  const [injectBankAccountId, setInjectBankAccountId] = useState('');
   const [injectNotes, setInjectNotes] = useState('ضخ سيولة لتمويل شراء دفعة قطع غيار أصلية');
-  const [injectAutoRecalculate, setInjectAutoRecalculate] = useState(false);
 
+  const [distributionPaymentMethod, setDistributionPaymentMethod] = useState<string>('نقدي');
+  const [distributionBankAccountId, setDistributionBankAccountId] = useState('');
   const [reinvestAmount, setReinvestAmount] = useState<number>(5000);
   const [reinvestNotes, setReinvestNotes] = useState('رسملة الأرباح الدورية وإضافتها لحصة رأس المال المستثمر');
 
-  const [editingShares, setEditingShares] = useState<Record<string, number>>(() => {
-    const map: Record<string, number> = {};
-    partners.forEach((p) => {
-      map[p.id] = p.sharePercentage;
-    });
-    return map;
-  });
-
   React.useEffect(() => {
-    const map: Record<string, number> = {};
-    partners.forEach((p) => {
-      map[p.id] = p.sharePercentage;
-    });
-    setEditingShares(map);
-    if (!targetPartnerId && partners.length > 0) {
-      setTargetPartnerId(partners[0].id);
-    }
+    if (!targetPartnerId && partners.length > 0) setTargetPartnerId(partners[0].id);
   }, [partners, targetPartnerId]);
+
+  const activePartners = partners.filter(partner => (partner.status || 'ACTIVE') === 'ACTIVE');
+  const currentPartnerCapitalTotal = activePartners.reduce((sum, partner) =>
+    sum + (partner.totalCurrentCapital || partner.initialCapital + (partner.addedCapital || 0) + (partner.reinvestedProfits || 0)), 0);
+  const newPartnerSharePercent = currentPartnerCapitalTotal + newPartnerInitialCapital > 0
+    ? Number(((newPartnerInitialCapital / (currentPartnerCapitalTotal + newPartnerInitialCapital)) * 100).toFixed(4))
+    : 0;
 
   // تكلفة البضاعة المباعة من تكلفة كل صنف مباع فعلياً:
   // 1) تكلفة الوحدة المسجلة في الفاتورة وقت البيع، وإلا
@@ -208,12 +282,14 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
     invoices.forEach((inv) => {
       if (inv.status === 'ملغاة') return;
-      revenue += inv.grandTotal;
+      // Revenue is recorded before VAT: tax collected from customers is not business income.
+      revenue += Math.max(0, inv.subtotal - inv.discount);
       inv.items.forEach((it) => {
         let unitCost = it.costPrice;
         if (unitCost === undefined) unitCost = costByPart.get(norm(it.partNumber));
         if (unitCost === undefined) {
-          unitCost = it.unitPrice * 0.7;
+          // Never invent a 70% cost estimate: missing cost must be visible as incomplete data.
+          unitCost = 0;
           estimatedCount += 1;
         }
         cogs += unitCost * it.quantity;
@@ -224,9 +300,13 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     const voidedIds = new Set(invoices.filter(i => i.status === 'ملغاة').map(i => i.id));
     salesReturns.forEach((ret) => {
       if (voidedIds.has(ret.invoiceId)) return; // فاتورة ملغاة: خرجت كلها من الإيراد والتكلفة ولا تُخصم مرتجعاتها مرتين
-      revenue -= ret.totalRefundAmount || 0;
+      const original = invoices.find(inv => inv.id === ret.invoiceId);
+      const refundBeforeTax = original && original.grandTotal > 0
+        ? (ret.totalRefundAmount || 0) * (Math.max(0, original.subtotal - original.discount) / original.grandTotal)
+        : 0;
+      revenue -= refundBeforeTax;
       ret.items.forEach((it) => {
-        const unitCost = costByPart.get(norm(it.partNumber)) ?? it.unitPrice * 0.7;
+        const unitCost = costByPart.get(norm(it.partNumber)) ?? 0;
         cogs -= unitCost * it.quantity;
       });
     });
@@ -264,27 +344,28 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     return expenses.reduce((sum, exp) => sum + exp.amount, 0);
   }, [expenses]);
 
-  const netDistributableProfit = Math.max(0, grossProfit - totalOperatingExpenses - netVatDue);
+  // VAT is excluded from sales revenue above; do not deduct the VAT liability from profit again.
+  const netDistributableProfit = Math.max(0, grossProfit - totalOperatingExpenses);
   const netProfitMargin = estimatedCOGS > 0 ? ((netDistributableProfit / estimatedCOGS) * 100).toFixed(1) : '0';
 
   const totalInitialCapital = useMemo(() => {
-    return partners.reduce((sum, p) => sum + (p.initialCapital || 0), 0);
-  }, [partners]);
+    return activePartners.reduce((sum, p) => sum + (p.initialCapital || 0), 0);
+  }, [activePartners]);
 
   const totalAddedCapital = useMemo(() => {
-    return partners.reduce((sum, p) => sum + (p.addedCapital || 0), 0);
-  }, [partners]);
+    return activePartners.reduce((sum, p) => sum + (p.addedCapital || 0), 0);
+  }, [activePartners]);
 
   const totalReinvestedProfits = useMemo(() => {
-    return partners.reduce((sum, p) => sum + (p.reinvestedProfits || 0), 0);
-  }, [partners]);
+    return activePartners.reduce((sum, p) => sum + (p.reinvestedProfits || 0), 0);
+  }, [activePartners]);
 
   const totalCurrentCapital = useMemo(() => {
-    return partners.reduce((sum, p) => {
+    return activePartners.reduce((sum, p) => {
       const current = p.totalCurrentCapital || (p.initialCapital + (p.addedCapital || 0) + (p.reinvestedProfits || 0));
-      return sum + current;
+      return sum + current - (p.totalWithdrawn || 0);
     }, 0);
-  }, [partners]);
+  }, [activePartners]);
 
   const totalEquity = totalCurrentCapital + netDistributableProfit;
 
@@ -345,17 +426,17 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   }, [paymentBreakdown, totalOperatingExpenses]);
 
   const partnerPieData = useMemo(() => {
-    return partners.map((p, idx) => ({
+    return activePartners.map((p, idx) => ({
       name: p.name,
       value: p.sharePercentage,
       capital: p.totalCurrentCapital || (p.initialCapital + (p.addedCapital || 0) + (p.reinvestedProfits || 0)),
       color: PARTNER_COLORS[idx % PARTNER_COLORS.length],
     }));
-  }, [partners]);
+  }, [activePartners]);
 
   const selectedTargetPartner = useMemo(() => {
-    return partners.find((p) => p.id === targetPartnerId) || partners[0];
-  }, [partners, targetPartnerId]);
+    return activePartners.find((p) => p.id === targetPartnerId) || activePartners[0];
+  }, [activePartners, targetPartnerId]);
 
   const targetPartnerProfitShare = useMemo(() => {
     if (!selectedTargetPartner) return 0;
@@ -373,6 +454,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       amount: expenseAmount,
       date: new Date().toISOString().split('T')[0],
       paymentMethod: expensePaymentMethod,
+      bankAccountId: requiresSpecificBankAccount(expensePaymentMethod) ? expenseBankAccountId : undefined,
       notes: expenseNotes,
       recordedBy: 'المحاسب المالي',
     };
@@ -386,6 +468,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
   const handleExecuteDistribution = () => {
     if (netDistributableProfit <= 0) return;
+    if (requiresSpecificBankAccount(distributionPaymentMethod) && !bankAccounts.some(account => account.id === distributionBankAccountId && account.active)) return;
 
     const record: ProfitDistributionRecord = {
       id: `dist-${Date.now()}`,
@@ -396,7 +479,9 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       grossProfit: grossProfit,
       totalExpenses: totalOperatingExpenses,
       netProfit: netDistributableProfit,
-      partnerShares: partners.map((p) => ({
+      paymentMethod: distributionPaymentMethod,
+      bankAccountId: requiresSpecificBankAccount(distributionPaymentMethod) ? distributionBankAccountId : undefined,
+      partnerShares: activePartners.map((p) => ({
         partnerId: p.id,
         partnerName: p.name,
         percentage: p.sharePercentage,
@@ -410,12 +495,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
   const handleSubmitAddPartner = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPartnerName.trim() || newPartnerInitialCapital <= 0 || newPartnerSharePercent <= 0 || newPartnerSharePercent > 100) return;
-    const committedShare = partners.reduce((sum, partner) => sum + (Number(partner.sharePercentage) || 0), 0);
-    if (committedShare + newPartnerSharePercent > 100.0001) {
-      window.alert(`إجمالي نسب الشركاء سيصبح ${(committedShare + newPartnerSharePercent).toFixed(2)}%، ولا يجوز أن يتجاوز 100%.`);
-      return;
-    }
+    if (!newPartnerName.trim() || newPartnerInitialCapital <= 0 || newPartnerSharePercent <= 0) return;
 
     const newPartner: Partner = {
       id: `part-${Date.now()}`,
@@ -429,9 +509,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       totalCurrentCapital: newPartnerInitialCapital,
       totalWithdrawn: 0,
       joinDate: new Date().toISOString().split('T')[0],
+      status: 'ACTIVE',
     };
 
-    if (onAddPartner && onAddPartner(newPartner, newPartnerPaymentMethod, newPartnerNotes) === false) return;
+    if (onAddPartner && onAddPartner(newPartner, newPartnerPaymentMethod, newPartnerNotes, requiresSpecificBankAccount(newPartnerPaymentMethod) ? newPartnerBankAccountId : undefined) === false) return;
 
     setShowAddPartnerModal(false);
     setNewPartnerName('');
@@ -441,6 +522,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const handleSubmitInjectCapital = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTargetPartner || injectAmount <= 0) return;
+    if (requiresSpecificBankAccount(injectPaymentMethod) && !bankAccounts.some(account => account.id === injectBankAccountId && account.active)) return;
 
     const currentCap = selectedTargetPartner.totalCurrentCapital || (selectedTargetPartner.initialCapital + (selectedTargetPartner.addedCapital || 0) + (selectedTargetPartner.reinvestedProfits || 0));
     const newCap = currentCap + injectAmount;
@@ -451,7 +533,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         injectAmount,
         injectPaymentMethod,
         injectNotes,
-        injectAutoRecalculate
+        true,
+        requiresSpecificBankAccount(injectPaymentMethod) ? injectBankAccountId : undefined
       );
     }
 
@@ -504,6 +587,46 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     setShowReinvestProfitModal(false);
   };
 
+
+  const openPartnerAction = (partner: Partner, action: 'edit' | 'withdrawal' | 'exit') => {
+    setActionPartnerId(partner.id);
+    setPartnerAction(action);
+    setProfileName(partner.name); setProfileRole(partner.role); setProfilePhone(partner.phone);
+    setPartnerActionAmount(0); setPartnerActionKind('withdrawal'); setPartnerActionMethod('نقدي'); setPartnerActionBankId('');
+    setExitDate(new Date().toISOString().slice(0, 10)); setExitCapital(partner.totalCurrentCapital || partner.initialCapital || 0);
+    const priorPartnerMovements = partnerWithdrawals.filter(w => w.partnerId === partner.id && w.date <= new Date().toISOString().slice(0,10));
+    setExitProfit(0); setExitOtherEntitlements(0); setExitWithdrawals(Math.max(partner.totalWithdrawn || 0, priorPartnerMovements.filter(w => w.kind === 'withdrawal').reduce((sum,w) => sum + w.amount, 0))); setExitAdvances(priorPartnerMovements.filter(w => w.kind === 'advance').reduce((sum,w) => sum + w.amount, 0)); setExitDeductions(0); setExitDueDate(''); setExitNotes('');
+  };
+
+  const submitPartnerAction = (e: React.FormEvent) => {
+    e.preventDefault();
+    const partner = partners.find(p => p.id === actionPartnerId);
+    if (!partner || !partnerAction) return;
+    if (partnerAction === 'edit') {
+      if (!profileName.trim() || !profilePhone.trim()) return;
+      if (onUpdatePartnerProfile?.(partner.id, { name: profileName.trim(), role: profileRole.trim(), phone: profilePhone.trim() }) === false) return;
+    } else if (partnerAction === 'withdrawal') {
+      if (!Number.isFinite(partnerActionAmount) || partnerActionAmount <= 0) return;
+      if (requiresSpecificBankAccount(partnerActionMethod) && !bankAccounts.some(a => a.id === partnerActionBankId && a.active)) return;
+      const record: PartnerWithdrawal = { id: `PW-${Date.now()}`, partnerId: partner.id, partnerName: partner.name, kind: partnerActionKind, amount: partnerActionAmount, date: new Date().toISOString().slice(0,10), paymentMethod: partnerActionMethod, bankAccountId: requiresSpecificBankAccount(partnerActionMethod) ? partnerActionBankId : undefined, notes: '', recordedBy: currentUserName };
+      if (onRecordPartnerWithdrawal?.(record) === false) return;
+    } else if (partnerAction === 'exit') {
+      const netPayable = Number((exitCapital + exitProfit + exitOtherEntitlements - exitWithdrawals - exitAdvances - exitDeductions).toFixed(2));
+      if (netPayable < 0) { window.alert('صافي التسوية لا يمكن أن يكون سالباً؛ راجع الاستحقاقات والخصومات.'); return; }
+      const record: PartnerExitSettlement = { id: `PXS-${Date.now()}`, partnerId: partner.id, partnerName: partner.name, exitDate, capitalEntitlement: exitCapital, profitEntitlement: exitProfit, otherEntitlements: exitOtherEntitlements, withdrawalsDeducted: exitWithdrawals, advancesDeducted: exitAdvances, otherDeductions: exitDeductions, netPayable, status: 'draft', notes: exitNotes, createdAt: new Date().toISOString(), createdBy: currentUserName, dueDate: exitDueDate || undefined };
+      if (onCreatePartnerExitSettlement?.(record) === false) return;
+    } else if (partnerAction === 'payment') {
+      const settlement = partnerExitSettlements.find(s => s.id === actionSettlementId);
+      const paid = partnerSettlementPayments.filter(p => p.settlementId === actionSettlementId).reduce((sum, p) => sum + p.amount, 0);
+      const remaining = (settlement?.netPayable || 0) - paid;
+      if (!settlement || partnerActionAmount <= 0 || partnerActionAmount > remaining + 0.0001) { window.alert('المبلغ يتجاوز المستحق المتبقي أو غير صالح.'); return; }
+      if (requiresSpecificBankAccount(partnerActionMethod) && !bankAccounts.some(a => a.id === partnerActionBankId && a.active)) return;
+      const payment: PartnerSettlementPayment = { id: `PX-PAY-${Date.now()}`, settlementId: settlement.id, partnerId: settlement.partnerId, amount: partnerActionAmount, date: new Date().toISOString().slice(0,10), paymentMethod: partnerActionMethod, bankAccountId: requiresSpecificBankAccount(partnerActionMethod) ? partnerActionBankId : undefined, transferReference: paymentTransferReference.trim() || undefined, receiptNumber: `PX-R-${Date.now()}`, notes: '', recordedBy: currentUserName };
+      if (onRecordPartnerSettlementPayment?.(payment) === false) return;
+    }
+    setPartnerAction(null);
+  };
+
   const handleSaveAdjustedShares = () => {
     if (onUpdatePartnerShare) {
       Object.entries(editingShares).forEach(([partnerId, share]) => {
@@ -537,31 +660,35 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
+          {canManageExpenses && <button
             onClick={() => setShowAddExpenseModal(true)}
             className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-surface-3 hover:bg-surface-4 text-white border border-neutral-700 font-bold text-xs transition-all shadow-sm"
           >
             <Plus className="w-4 h-4 text-amber-400" />
             <span>تسجيل مصروف</span>
-          </button>
+          </button>}
 
-          <button
+          {(canManageTreasury || canManagePartners) && <button
             onClick={() => setShowReportModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-neutral-950 font-black text-xs transition-all shadow-md active:scale-95"
           >
             <FileText className="w-4 h-4" />
             <span>القوائم المالية الختامية</span>
-          </button>
+          </button>}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2 border-b border-neutral-800 pb-3">
+      {availableFinanceTabs.length > 1 && <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 border-b border-neutral-800 pb-3">
         {[
-          { id: 'equity', label: 'رأس المال والشركاء وحصص الملكية', icon: Users, badge: `${partners.length} شركاء` },
-          { id: 'income', label: 'قائمة الدخل والأرباح (P&L)', icon: TrendingUp },
-          { id: 'treasury', label: 'أنظمة الدفع والخزينة', icon: Banknote },
-          { id: 'expenses', label: 'سجل المصروفات التشغيلية', icon: TrendingDown },
-          { id: 'audit', label: 'سجل التدقيق وحركات المخزون', icon: FileText },
+          ...(canManagePartners ? [{ id: 'equity', label: 'رأس المال والشركاء وحصص الملكية', icon: Users, badge: `${partners.length} شركاء` }] : []),
+          ...(canManagePartners && canManageTreasury ? [{ id: 'partnerCurrentAccount', label: 'جاري الشركاء', icon: ArrowRightLeft }] : []),
+          ...(canManageTreasury ? [
+            { id: 'income', label: 'قائمة الدخل والأرباح (P&L)', icon: TrendingUp },
+            { id: 'treasury', label: 'أنظمة الدفع والخزينة', icon: Banknote },
+            { id: 'bankLedger', label: 'الحسابات البنكية والتسويات', icon: Building2 },
+            { id: 'audit', label: 'سجل التدقيق وحركات المخزون', icon: FileText },
+          ] : []),
+          ...(canManageExpenses ? [{ id: 'expenses', label: 'سجل المصروفات التشغيلية', icon: TrendingDown }] : []),
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeFinanceTab === tab.id;
@@ -587,10 +714,40 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             </button>
           );
         })}
-      </div>
+      </div>}
 
-      {activeFinanceTab === 'equity' && (
+      {activeFinanceTab === 'partnerCurrentAccount' && canManagePartners && canManageTreasury && onRecordPartnerCurrentAccount && (
+        <PartnerCurrentAccountPanel
+          partners={partners}
+          transactions={partnerCurrentAccountTransactions}
+          openingBalances={openingBalances}
+          bankAccounts={bankAccounts}
+          canManage={canManagePartners && canManageTreasury}
+          currentUserName={currentUserName}
+          onRecord={onRecordPartnerCurrentAccount}
+        />
+      )}
+
+      {activeFinanceTab === 'bankLedger' && canManageTreasury && onAddBankAccount && onSettleVisa && (
+        <BankLedgerView accounts={bankAccounts} settlements={cardSettlements} entries={bankLedgerEntries} outstandingVisaBalance={outstandingVisaBalance} onAddBankAccount={onAddBankAccount} onSettleVisa={onSettleVisa} onTransferBank={onTransferBank} />
+      )}
+
+      {activeFinanceTab === 'equity' && canManagePartners && (
         <div className="space-y-6">
+          {canManageOpeningBalances && onApproveOpeningBalances && <OpeningBalancesPanel existing={openingBalances} partners={partners} parts={parts} bankAccounts={bankAccounts} customers={customers} suppliers={suppliers} currentUser={currentUserName} onApprove={onApproveOpeningBalances} />}
+          {canManageTreasury && (
+            <div className="rounded-2xl border border-amber-500/20 bg-surface-2 p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-black text-white">حساب جاري الشركاء</h4>
+                <p className="text-[11px] text-neutral-400 mt-1">رصيد مستقل عن رأس المال والأرباح والمسحوبات الشخصية</p>
+                <div className="flex flex-wrap gap-4 mt-2 text-xs">
+                  <span className="text-emerald-400">مستحق للشركاء: <b className="font-mono">{partners.reduce((sum, p) => sum + Math.max(0, getPartnerCurrentAccountBalance(p.id, partnerCurrentAccountTransactions, openingBalances)), 0).toLocaleString()} ج.م</b></span>
+                  <span className="text-rose-400">مستحق على الشركاء: <b className="font-mono">{partners.reduce((sum, p) => sum + Math.max(0, -getPartnerCurrentAccountBalance(p.id, partnerCurrentAccountTransactions, openingBalances)), 0).toLocaleString()} ج.م</b></span>
+                </div>
+              </div>
+              <button type="button" onClick={() => setActiveFinanceTab('partnerCurrentAccount')} className="rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs px-4 py-3 min-h-[44px]">فتح دفتر جاري الشركاء</button>
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
             <div className="p-4 rounded-3xl bg-surface-2 border border-neutral-800 relative overflow-hidden">
               <div className="flex items-center justify-between text-neutral-400 text-xs">
@@ -690,13 +847,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <span>رسملة الأرباح (إدخالها برأس المال)</span>
               </button>
 
-              <button
-                onClick={() => setShowAdjustSharesModal(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-surface-3 hover:bg-surface-4 text-neutral-300 border border-neutral-700 font-bold text-xs transition-all shadow-sm active:scale-95"
-              >
-                <Percent className="w-4 h-4 text-amber-400" />
-                <span>تعديل نسب الحصص</span>
-              </button>
+              <span className="text-[11px] text-neutral-500 self-center">النسب محسوبة تلقائيًا من مساهمات رأس المال</span>
 
               <button
                 onClick={() => setShowDistributeModal(true)}
@@ -778,7 +929,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {partners.map((partner, idx) => {
-                  const partnerShareAmount = Number(((netDistributableProfit * partner.sharePercentage) / 100).toFixed(2));
+                  const partnerShareAmount = (partner.status || 'ACTIVE') === 'ACTIVE' ? Number(((netDistributableProfit * partner.sharePercentage) / 100).toFixed(2)) : 0;
                   const currentCapital = partner.totalCurrentCapital || (partner.initialCapital + (partner.addedCapital || 0) + (partner.reinvestedProfits || 0));
 
                   return (
@@ -843,6 +994,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                       </div>
 
                       <div className="pt-2 border-t border-neutral-800 grid grid-cols-3 gap-1.5">
+                        {(partner.status || 'ACTIVE') === 'ACTIVE' && <>
                         <button
                           onClick={() => {
                             setTargetPartnerId(partner.id);
@@ -891,6 +1043,11 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           <Receipt className="w-3.5 h-3.5" />
                           <span>سند الصرف</span>
                         </button>
+                        <button onClick={() => openPartnerAction(partner, 'edit')} className="py-2 px-1 rounded-xl bg-surface-3 text-sky-300 text-[11px] font-bold">تعديل البيانات</button>
+                        {(partner.status || 'ACTIVE') === 'ACTIVE' && <button onClick={() => openPartnerAction(partner, 'withdrawal')} className="py-2 px-1 rounded-xl bg-surface-3 text-orange-300 text-[11px] font-bold">مسحوبات / سلفة</button>}
+                        {(partner.status || 'ACTIVE') === 'ACTIVE' && <button onClick={() => openPartnerAction(partner, 'exit')} className="py-2 px-1 rounded-xl bg-rose-950/40 text-rose-300 text-[11px] font-bold">بدء التخارج</button>}
+                        </>}
+                        {(partner.status || 'ACTIVE') !== 'ACTIVE' && <span className="col-span-3 text-center text-[11px] text-rose-300 py-2">الشريك غير نشط — {partner.exitDate || 'بانتظار اعتماد التخارج'}</span>}
                       </div>
                     </div>
                   );
@@ -901,7 +1058,21 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
       )}
 
-      {activeFinanceTab === 'income' && (
+      {partnerExitSettlements.length > 0 && canManagePartners && (
+        <div className="p-5 rounded-3xl bg-surface-2 border border-neutral-800 space-y-3">
+          <h3 className="text-sm font-bold text-white">تسويات تخارج الشركاء والمبالغ المستحقة</h3>
+          {partnerExitSettlements.map(settlement => {
+            const paid = partnerSettlementPayments.filter(p => p.settlementId === settlement.id).reduce((sum,p) => sum + p.amount, 0);
+            const remaining = Math.max(0, settlement.netPayable - paid);
+            return <div key={settlement.id} className="p-3 rounded-2xl bg-surface-1 border border-neutral-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="text-xs space-y-1"><strong className="text-white">{settlement.partnerName}</strong><p className="text-neutral-400">تاريخ التخارج: {settlement.exitDate} · صافي المستحق: {settlement.netPayable.toLocaleString()} ج.م</p><p className="text-neutral-400">مدفوع: {paid.toLocaleString()} · متبقي: <b className="text-amber-300">{remaining.toLocaleString()} ج.م</b></p><span className="text-[10px] text-neutral-500">الحالة: {settlement.status === 'draft' ? 'مسودة — لم يعتمد التخارج' : settlement.status === 'approved' ? 'معتمد' : settlement.status === 'partially_paid' ? 'مسدد جزئياً' : settlement.status === 'paid' ? 'مسدد بالكامل' : 'ملغي'}</span></div>
+              <div className="flex gap-2">{settlement.status === 'draft' && <button onClick={() => { if (window.confirm('اعتماد التخارج وإيقاف استحقاق الأرباح من تاريخ التخارج؟')) onApprovePartnerExitSettlement?.(settlement.id); }} className="px-3 py-2 rounded-xl bg-amber-500 text-neutral-950 text-xs font-bold">اعتماد التخارج</button>}{['approved','partially_paid'].includes(settlement.status) && remaining > 0 && <button onClick={() => { setActionSettlementId(settlement.id); setActionPartnerId(settlement.partnerId); setPartnerAction('payment'); setPartnerActionAmount(remaining); setPartnerActionMethod('نقدي'); setPartnerActionBankId(''); setPaymentTransferReference(''); }} className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold">تسجيل دفعة / قسط</button>}</div>
+            </div>;
+          })}
+        </div>
+      )}
+
+      {activeFinanceTab === 'income' && canManageTreasury && (
         <div className="space-y-5">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
             <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800">
@@ -986,13 +1157,22 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
       )}
 
-      {activeFinanceTab === 'audit' && (
+      {activeFinanceTab === 'audit' && canManageTreasury && (
         <AuditLogPanel auditLog={auditLog} stockMovements={stockMovements} />
       )}
 
-      {activeFinanceTab === 'treasury' && (
+      {activeFinanceTab === 'treasury' && canManageTreasury && (
         <div className="space-y-6">
           <TreasuryAccountsReport transactions={treasuryTransactions} shifts={shifts} />
+          {canManagePartners && (
+            <div className="rounded-2xl border border-neutral-800 bg-surface-2 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-bold text-white">جاري الشركاء</h4>
+                <p className="text-[11px] text-neutral-400 mt-1">حركات الإيداع والسحب والرد والسداد، مرتبطة بحسابات القبض والصرف.</p>
+              </div>
+              <button type="button" onClick={() => setActiveFinanceTab('partnerCurrentAccount')} className="rounded-xl border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 font-bold text-xs px-4 py-3 min-h-[44px]">عرض حساب جاري الشركاء</button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
             {paymentBreakdown.map((pb) => {
@@ -1066,7 +1246,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
       )}
 
-      {activeFinanceTab === 'expenses' && (
+      {activeFinanceTab === 'expenses' && canManageExpenses && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-bold text-white flex items-center gap-2">
@@ -1188,17 +1368,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   />
                 </div>
 
-                <div>
-                  <label className="text-neutral-300 font-bold block mb-1">نسبة حصة الأرباح التعاقدية (%) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    max="100"
-                    value={newPartnerSharePercent || ''}
-                    onChange={(e) => setNewPartnerSharePercent(Number(e.target.value))}
-                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono text-amber-400 font-bold"
-                  />
+                <div className="rounded-xl bg-surface-1 border border-neutral-800 p-3 flex flex-col justify-center">
+                  <span className="text-neutral-400">نسبة الشريك المحسوبة تلقائيًا</span>
+                  <strong className="text-amber-400 text-lg font-mono">%{newPartnerSharePercent.toFixed(2)}</strong>
+                  <span className="text-[10px] text-neutral-500">بناءً على إجمالي رأس المال بعد الإضافة</span>
                 </div>
               </div>
 
@@ -1212,10 +1385,23 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   >
                     <option value="نقدي">نقدي — الخزينة</option>
                     <option value="فيزا / بطاقة">فيزا / بطاقة بنكية</option>
-                    <option value="انستاباي / InstaPay">InstaPay</option>
+                    <option value="InstaPay - حساب بنكي">InstaPay إلى حساب بنكي</option>
+                    <option value="InstaPay - محفظة">InstaPay إلى محفظة</option>
+                    <option value="انستاباي / InstaPay">InstaPay قديم / غير محدد</option>
+                    <option value="تحويل بنكي">تحويل بنكي</option>
                     <option value="محفظة إلكترونية">محفظة إلكترونية</option>
                   </select>
                 </div>
+                {requiresSpecificBankAccount(newPartnerPaymentMethod) && (
+                  <div className="sm:col-span-2">
+                    <label className="text-amber-300 font-bold block mb-1">الحساب البنكي المستلم لرأس المال *</label>
+                    <select required value={newPartnerBankAccountId} onChange={e => setNewPartnerBankAccountId(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-amber-500/50 text-white">
+                      <option value="">اختر الحساب البنكي</option>
+                      {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}</option>)}
+                    </select>
+                    {!bankAccounts.some(account => account.active) && <p className="text-[10px] text-rose-300 mt-1">أضف حساباً بنكياً نشطاً أولاً.</p>}
+                  </div>
+                )}
                 <div>
                   <label className="text-neutral-300 font-bold block mb-1">بيان / ملاحظات الإيداع</label>
                   <input
@@ -1296,10 +1482,23 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   >
                     <option value="نقدي">نقدي (إيداع الخزينة)</option>
                     <option value="فيزا / بطاقة">فيزا / مدى (الحساب البنكي)</option>
-                    <option value="انستاباي / InstaPay">انستاباي InstaPay</option>
+                    <option value="InstaPay - حساب بنكي">InstaPay إلى حساب بنكي</option>
+                    <option value="InstaPay - محفظة">InstaPay إلى محفظة</option>
+                    <option value="انستاباي / InstaPay">InstaPay قديم / غير محدد</option>
+                    <option value="تحويل بنكي">تحويل بنكي</option>
                   </select>
                 </div>
               </div>
+              {requiresSpecificBankAccount(injectPaymentMethod) && (
+                <div>
+                  <label className="text-amber-300 font-bold block mb-1">الحساب البنكي المستلم لضخ رأس المال *</label>
+                  <select required value={injectBankAccountId} onChange={e => setInjectBankAccountId(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-amber-500/50 text-white">
+                    <option value="">اختر الحساب البنكي</option>
+                    {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}</option>)}
+                  </select>
+                  {!bankAccounts.some(account => account.active) && <p className="text-[10px] text-rose-300 mt-1">أضف حساباً بنكياً نشطاً أولاً.</p>}
+                </div>
+              )}
 
               <button
                 type="submit"
@@ -1426,7 +1625,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
       )}
 
-      {showAddExpenseModal && (
+      {showAddExpenseModal && canManageExpenses && (
         <div 
           className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
           onClick={() => setShowAddExpenseModal(false)}
@@ -1484,6 +1683,16 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   </select>
                 </div>
               </div>
+              {requiresSpecificBankAccount(expensePaymentMethod) && (
+                <div>
+                  <label className="text-amber-300 font-bold block mb-1">الحساب البنكي الذي خرج منه المصروف *</label>
+                  <select required value={expenseBankAccountId} onChange={e => setExpenseBankAccountId(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-amber-500/50 text-white">
+                    <option value="">اختر الحساب البنكي</option>
+                    {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}{account.accountLast4 ? ` ••${account.accountLast4}` : ''}</option>)}
+                  </select>
+                  {!bankAccounts.some(account => account.active) && <p className="text-[10px] text-rose-300 mt-1">لا يوجد حساب بنكي نشط. أضف حساباً من دفتر الحسابات البنكية.</p>}
+                </div>
+              )}
 
               <button
                 type="submit"
@@ -1508,7 +1717,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
               <h3 className="text-sm font-bold flex items-center gap-2">
                 <Receipt className="w-4 h-4 text-amber-400" />
-                <span>اعتماد وتوزيع أرباح الدورة الحالية نقدياً</span>
+                <span>اعتماد وتوزيع أرباح الدورة الحالية</span>
               </h3>
               <button onClick={() => setShowDistributeModal(false)} className="text-neutral-400 hover:text-white">
                 <X className="w-4 h-4" />
@@ -1524,10 +1733,31 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               </div>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-neutral-300 font-bold block mb-1 text-xs">طريقة صرف التوزيعات</label>
+                <select value={distributionPaymentMethod} onChange={e => { setDistributionPaymentMethod(e.target.value); setDistributionBankAccountId(''); }} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-xs">
+                  <option value="نقدي">نقدي — الخزينة</option>
+                  <option value="تحويل بنكي">تحويل بنكي</option>
+                  <option value="InstaPay - حساب بنكي">InstaPay إلى حساب بنكي</option>
+                  <option value="InstaPay - محفظة">InstaPay إلى محفظة</option>
+                </select>
+              </div>
+              {requiresSpecificBankAccount(distributionPaymentMethod) && (
+                <div>
+                  <label className="text-amber-300 font-bold block mb-1 text-xs">الحساب البنكي الذي ستُصرف منه التوزيعات *</label>
+                  <select required value={distributionBankAccountId} onChange={e => setDistributionBankAccountId(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-amber-500/50 text-white text-xs">
+                    <option value="">اختر الحساب البنكي</option>
+                    {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-2">
               <span className="text-xs font-bold text-neutral-300 block">حصص الشركاء المحددة تعاقدياً:</span>
               <div className="divide-y divide-neutral-800 bg-surface-1 rounded-2xl p-3 border border-neutral-800">
-                {partners.map((p) => {
+                {activePartners.map((p) => {
                   const amt = ((netDistributableProfit * p.sharePercentage) / 100).toFixed(2);
                   return (
                     <div key={p.id} className="py-2 flex items-center justify-between text-xs">
@@ -1551,6 +1781,19 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               تأكيد صرف وحفظ سند التوزيع
             </button>
           </div>
+        </div>
+      )}
+
+      {partnerAction && (
+        <div className="fixed inset-0 z-[70] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" onClick={() => setPartnerAction(null)}>
+          <form onSubmit={submitPartnerAction} onClick={e => e.stopPropagation()} className="w-full max-w-xl bg-surface-2 border border-neutral-700 rounded-3xl p-5 md:p-6 space-y-4 text-white max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-neutral-700 pb-3"><h3 className="font-black text-base">{partnerAction === 'edit' ? 'تعديل بيانات الشريك' : partnerAction === 'withdrawal' ? 'تسجيل مسحوبات شخصية للشريك' : partnerAction === 'exit' ? 'إعداد تسوية تخارج الشريك' : 'تسجيل دفعة فعلية من مستحقات التخارج'}</h3><button type="button" onClick={() => setPartnerAction(null)} className="text-neutral-400"><X className="w-5 h-5"/></button></div>
+            {partnerAction === 'edit' && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><label className="text-xs text-neutral-300">اسم الشريك<input required value={profileName} onChange={e=>setProfileName(e.target.value)} className="mt-1 w-full h-10 rounded-xl bg-surface-1 border border-neutral-700 px-3 text-white"/></label><label className="text-xs text-neutral-300">الصفة / الدور<input value={profileRole} onChange={e=>setProfileRole(e.target.value)} className="mt-1 w-full h-10 rounded-xl bg-surface-1 border border-neutral-700 px-3 text-white"/></label><label className="text-xs text-neutral-300 sm:col-span-2">رقم الهاتف<input required value={profilePhone} onChange={e=>setProfilePhone(e.target.value)} className="mt-1 w-full h-10 rounded-xl bg-surface-1 border border-neutral-700 px-3 text-white"/></label></div>}
+            {partnerAction === 'withdrawal' && <div className="space-y-3"><div className="p-3 rounded-xl bg-amber-950/30 border border-amber-700/40 text-xs text-amber-200">المسحوبات الشخصية تخصم من حصة الشريك ولا تعتبر مصروفاً تشغيلياً. أي سلفة أو تمويل متبادل يُسجل من دفتر جاري الشركاء.</div><div className="grid grid-cols-2 gap-3"><div className="text-xs text-neutral-400">النوع: مسحوبات شخصية فقط — السلف والتمويل المتبادل من دفتر جاري الشركاء.</div><label className="text-xs text-neutral-300">المبلغ ج.م<input type="number" min="0.01" step="0.01" required value={partnerActionAmount || ''} onChange={e=>setPartnerActionAmount(Number(e.target.value))} className="mt-1 w-full h-10 rounded-xl bg-surface-1 border border-neutral-700 px-3"/></label></div><label className="block text-xs text-neutral-300">طريقة الصرف<select value={partnerActionMethod} onChange={e=>{setPartnerActionMethod(e.target.value);setPartnerActionBankId('')}} className="mt-1 w-full h-10 rounded-xl bg-surface-1 border border-neutral-700 px-3"><option value="نقدي">نقدي من الخزينة</option><option value="تحويل بنكي">تحويل بنكي</option></select></label>{requiresSpecificBankAccount(partnerActionMethod) && <label className="block text-xs text-neutral-300">الحساب البنكي<select required value={partnerActionBankId} onChange={e=>setPartnerActionBankId(e.target.value)} className="mt-1 w-full h-10 rounded-xl bg-surface-1 border border-neutral-700 px-3"><option value="">اختر الحساب</option>{bankAccounts.filter(a=>a.active).map(a=><option key={a.id} value={a.id}>{a.bankName} — {a.name}</option>)}</select></label>}</div>}
+            {partnerAction === 'exit' && <div className="space-y-3"><p className="text-xs text-neutral-400">أدخل الحقوق والخصومات المعتمدة حتى تاريخ التخارج. لن يتم خصم أي مبلغ من الخزينة أو البنك عند إنشاء التسوية.</p><p className="text-xs text-amber-300 bg-amber-950/20 border border-amber-700/30 rounded-lg p-2">رصيد جاري الشريك حساب مستقل عن رأس المال؛ يظل ظاهرًا ويمكن تسويته من دفتر جاري الشركاء بعد التخارج، ولا يُكرر ضمن المسحوبات الشخصية هنا.</p><label className="block text-xs text-neutral-300">تاريخ سريان التخارج<input type="date" required value={exitDate} onChange={e=>setExitDate(e.target.value)} className="mt-1 w-full h-10 rounded-xl bg-surface-1 border border-neutral-700 px-3"/></label><div className="grid grid-cols-2 gap-3">{[['رأس المال المستحق',exitCapital,setExitCapital],['أرباح مستحقة حتى تاريخ التخارج',exitProfit,setExitProfit],['استحقاقات أخرى',exitOtherEntitlements,setExitOtherEntitlements],['مسحوبات واجبة الخصم',exitWithdrawals,setExitWithdrawals],['سلف / مديونيات على الشريك',exitAdvances,setExitAdvances],['خصومات أخرى',exitDeductions,setExitDeductions]].map(([label,value,setter]: any)=><label key={label} className="text-xs text-neutral-300">{label}<input type="number" min="0" step="0.01" value={value} onChange={e=>setter(Number(e.target.value))} className="mt-1 w-full h-10 rounded-xl bg-surface-1 border border-neutral-700 px-3"/></label>)}</div><div className="p-3 rounded-xl bg-surface-1 border border-neutral-700 flex justify-between text-sm"><b>صافي المستحق للشريك</b><strong className="text-emerald-300">{(exitCapital+exitProfit+exitOtherEntitlements-exitWithdrawals-exitAdvances-exitDeductions).toLocaleString()} ج.م</strong></div><div className="grid grid-cols-2 gap-3"><label className="text-xs text-neutral-300">تاريخ الاستحقاق / القسط الأول<input type="date" value={exitDueDate} onChange={e=>setExitDueDate(e.target.value)} className="mt-1 w-full h-10 rounded-xl bg-surface-1 border border-neutral-700 px-3"/></label><label className="text-xs text-neutral-300">ملاحظات<input value={exitNotes} onChange={e=>setExitNotes(e.target.value)} className="mt-1 w-full h-10 rounded-xl bg-surface-1 border border-neutral-700 px-3"/></label></div></div>}
+            {partnerAction === 'payment' && <div className="space-y-3"><p className="text-xs text-neutral-400">كل تسجيل هنا يمثل دفعة تم سدادها فعلياً، ويمكن تكرار العملية للأقساط. لا تسجل الدفعة قبل تنفيذ التحويل أو الدفع.</p><label className="block text-xs text-neutral-300">المبلغ المدفوع<input type="number" min="0.01" step="0.01" required value={partnerActionAmount || ''} onChange={e=>setPartnerActionAmount(Number(e.target.value))} className="mt-1 w-full h-10 rounded-xl bg-surface-1 border border-neutral-700 px-3"/></label><label className="block text-xs text-neutral-300">طريقة السداد<select value={partnerActionMethod} onChange={e=>{setPartnerActionMethod(e.target.value);setPartnerActionBankId('')}} className="mt-1 w-full h-10 rounded-xl bg-surface-1 border border-neutral-700 px-3"><option value="نقدي">نقدي من الخزينة</option><option value="تحويل بنكي">تحويل بنكي</option></select></label>{requiresSpecificBankAccount(partnerActionMethod) && <label className="block text-xs text-neutral-300">الحساب البنكي<select required value={partnerActionBankId} onChange={e=>setPartnerActionBankId(e.target.value)} className="mt-1 w-full h-10 rounded-xl bg-surface-1 border border-neutral-700 px-3"><option value="">اختر الحساب</option>{bankAccounts.filter(a=>a.active).map(a=><option key={a.id} value={a.id}>{a.bankName} — {a.name}</option>)}</select></label>}<label className="block text-xs text-neutral-300">مرجع التحويل / رقم العملية<input value={paymentTransferReference} onChange={e=>setPaymentTransferReference(e.target.value)} className="mt-1 w-full h-10 rounded-xl bg-surface-1 border border-neutral-700 px-3"/></label></div>}
+            <div className="flex gap-2"><button type="button" onClick={()=>setPartnerAction(null)} className="flex-1 py-3 rounded-xl bg-surface-3 text-neutral-300 text-xs font-bold">إلغاء</button><button type="submit" className="flex-1 py-3 rounded-xl bg-amber-500 text-neutral-950 text-xs font-black">حفظ ومتابعة</button></div>
+          </form>
         </div>
       )}
 
@@ -1630,6 +1873,24 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-neutral-800 bg-surface-1 p-4 space-y-3">
+              <div>
+                <h4 className="text-xs font-black text-amber-400">أرصدة جاري الشركاء</h4>
+                <p className="text-[10px] text-neutral-500 mt-1">أرصدة دائنة مستحقة للشركاء أو مدينة مستحقة على الشركاء؛ مستقلة عن رأس المال وأرباح الدورة.</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {partners.map(partner => {
+                  const balance = getPartnerCurrentAccountBalance(partner.id, partnerCurrentAccountTransactions, openingBalances);
+                  return <div key={partner.id} className="rounded-xl border border-neutral-800 bg-surface-2 p-3 flex items-center justify-between gap-3">
+                    <span className="text-xs text-white font-bold">{partner.name}</span>
+                    <span className={`text-xs font-mono font-black ${balance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {balance >= 0 ? 'له ' : 'عليه '}{Math.abs(balance).toLocaleString()} ج.م
+                    </span>
+                  </div>;
+                })}
               </div>
             </div>
           </div>

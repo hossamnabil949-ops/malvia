@@ -142,6 +142,7 @@ export interface InvoiceItem {
 export interface InvoicePayment {
   method: PaymentMethod | string;
   amount: number;
+  bankAccountId?: string;
 }
 
 export interface InvoiceSettlement {
@@ -158,7 +159,7 @@ export type AuditAction =
   | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
   | 'stock.adjust' | 'part.restock' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'cheque.create' | 'cheque.action' | 'batch.create' | 'batch.writeoff' | 'serial.register' | 'serial.scrap' | 'stock.transfer' | 'supplier.payment'
   | 'shift.open' | 'shift.close' | 'shift.variance' | 'part.delete'
-  | 'partner.add' | 'partner.share.update' | 'partner.capital.add' | 'partner.profit.reinvest';
+  | 'partner.add' | 'partner.share.update' | 'partner.capital.add' | 'partner.profit.reinvest' | 'partner.profile.update' | 'partner.withdrawal' | 'partner.advance' | 'partner.exit' | 'partner.settlement.payment' | 'partner.current_account' | 'bank.settlement' | 'bank.transfer' | 'capital.opening.create';
 
 export interface AuditEntry {
   id: string;
@@ -249,7 +250,8 @@ export type ExpenseCategory =
   | 'شحن وتوصيل بضائع' 
   | 'صيانة ونثريات وضيافة' 
   | 'تسويات وعجز جردي'
-  | 'رسوم وتراخيص حكومية';
+  | 'رسوم وتراخيص حكومية'
+  | 'عمولات ورسوم بنكية';
 
 export interface Expense {
   id: string;
@@ -259,6 +261,7 @@ export interface Expense {
   date: string;
   notes?: string;
   paymentMethod: PaymentMethod | string;
+  bankAccountId?: string;
   recordedBy: string;
 }
 
@@ -296,6 +299,84 @@ export interface Partner {
   totalCurrentCapital: number;
   totalWithdrawn: number;
   joinDate: string;
+  status?: 'ACTIVE' | 'EXIT_PENDING' | 'EXITED';
+  exitDate?: string;
+  exitReason?: string;
+  exitSettlementId?: string;
+}
+
+export type PartnerWithdrawalKind = 'withdrawal' | 'advance';
+export interface PartnerWithdrawal {
+  id: string;
+  partnerId: string;
+  partnerName: string;
+  kind: PartnerWithdrawalKind;
+  amount: number;
+  date: string;
+  paymentMethod: PaymentMethod | string;
+  bankAccountId?: string;
+  reference?: string;
+  notes?: string;
+  recordedBy: string;
+}
+
+export type PartnerSettlementStatus = 'draft' | 'approved' | 'partially_paid' | 'paid' | 'cancelled';
+export interface PartnerExitSettlement {
+  id: string;
+  partnerId: string;
+  partnerName: string;
+  exitDate: string;
+  capitalEntitlement: number;
+  profitEntitlement: number;
+  otherEntitlements: number;
+  withdrawalsDeducted: number;
+  advancesDeducted: number;
+  otherDeductions: number;
+  netPayable: number;
+  status: PartnerSettlementStatus;
+  notes?: string;
+  createdAt: string;
+  createdBy: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  dueDate?: string;
+}
+
+export interface PartnerSettlementPayment {
+  id: string;
+  settlementId: string;
+  partnerId: string;
+  amount: number;
+  date: string;
+  paymentMethod: PaymentMethod | string;
+  bankAccountId?: string;
+  transferReference?: string;
+  receiptNumber: string;
+  notes?: string;
+  recordedBy: string;
+}
+
+export type PartnerCurrentAccountMovementType =
+  | 'partner_deposit'
+  | 'partner_withdrawal'
+  | 'partner_repayment'
+  | 'company_repayment';
+
+export interface PartnerCurrentAccountTransaction {
+  id: string;
+  partnerId: string;
+  partnerName: string;
+  type: PartnerCurrentAccountMovementType;
+  amount: number;
+  date: string;
+  paymentMethod: PaymentMethod | string;
+  bankAccountId?: string;
+  relatedTransactionId?: string;
+  treasuryTransactionId: string;
+  reference?: string;
+  notes?: string;
+  recordedBy: string;
+  createdAt: string;
 }
 
 export interface ProfitDistributionRecord {
@@ -307,6 +388,8 @@ export interface ProfitDistributionRecord {
   grossProfit: number;
   totalExpenses: number;
   netProfit: number;
+  paymentMethod?: PaymentMethod | string;
+  bankAccountId?: string;
   partnerShares: {
     partnerId: string;
     partnerName: string;
@@ -355,6 +438,7 @@ export interface SupplierPayment {
   amount: number;
   paymentDate: string;
   paymentMethod: PaymentMethod | string;
+  bankAccountId?: string;
   treasurySource: string;
   notes?: string;
   recordedBy: string;
@@ -411,6 +495,7 @@ export interface PurchaseInvoice {
   amountPaid: number;
   remainingBalance?: number;
   paymentMethod: PaymentMethod | string;
+  bankAccountId?: string;
   notes?: string;
   receivedBy: string;
   returnedAmount?: number;
@@ -501,15 +586,26 @@ export interface TreasuryTransaction {
     | 'عربون حجز شاشة أو قطعة'
     | 'مصروفات تشغيلية'
     | 'ضخ رأس مال من شريك'
+    | 'مسحوبات شريك'
+    | 'سداد مستحقات شريك متخارج'
+    | 'جاري شركاء - إيداع من شريك'
+    | 'جاري شركاء - سحب شريك'
+    | 'جاري شركاء - رد الشريك للمبلغ المسحوب'
+    | 'جاري شركاء - سداد المنشأة للشريك'
     | 'توزيع أرباح'
     | 'إيداع نقدي إضافي'
     | 'سحب نقدي'
     | 'عجز درج (تسوية وردية)'
-    | 'زيادة درج (تسوية وردية)';
+    | 'زيادة درج (تسوية وردية)'
+    | 'ارتداد شيك وارد'
+    | 'ارتداد شيك صادر'
+    | 'تسوية مستحقات الفيزا'
+    | 'إيداع صافي تسوية الفيزا بالبنك';
   amount: number;
   paymentMethod: PaymentMethod | string;
   balanceAfter: number;
   referenceId?: string;
+  bankAccountId?: string; // الحساب البنكي المحدد للحركات البنكية الجديدة
   description: string;
   recordedBy: string;
   at?: string;       // وقت التسجيل الفعلي (ISO) — يُختم تلقائياً للحركات الجديدة
@@ -556,6 +652,14 @@ export interface EmployeePermissions {
   canViewReports: boolean;
   canManageSettings: boolean;
   canManagePartners: boolean;
+  canManageExpenses?: boolean;
+  canReceivePurchases?: boolean;
+  /** Read-only visibility of operational cash drawer balances; does not grant treasury administration. */
+  canViewCashBalances?: boolean;
+  /** Allows registering incoming/outgoing cheques without access to full treasury administration. */
+  canRegisterCheques?: boolean;
+  /** Allows changing cheque lifecycle (deposit, clear, bounce, cancel). */
+  canManageChequeLifecycle?: boolean;
   simpleCashierMode?: boolean; // وضع الكاشير المبسط: شاشة بيع فقط بدون قوائم وأدوات متقدمة
 }
 

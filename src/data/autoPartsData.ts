@@ -614,12 +614,15 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   'صيانة ونثريات وضيافة',
   'تسويات وعجز جردي',
   'رسوم وتراخيص حكومية',
+  'عمولات ورسوم بنكية',
 ];
 
 export const PAYMENT_METHODS_LIST: { id: PaymentMethod; label: string; icon: string; desc: string }[] = [
   { id: 'نقدي', label: 'كاش / نقدي', icon: 'Banknote', desc: 'صندوق النقدية المباشر' },
   { id: 'فيزا / بطاقة', label: 'فيزا / مدى', icon: 'CreditCard', desc: 'بطاقات الدفع البنكية' },
-  { id: 'انستاباي / InstaPay', label: 'انستاباي InstaPay', icon: 'Zap', desc: 'تحويل بنكي لحظي' },
+  { id: 'انستاباي / InstaPay', label: 'InstaPay (قديم / غير محدد)', icon: 'Zap', desc: 'طريقة تاريخية؛ تظل في حساب InstaPay المستقل حتى تحديد وجهتها' },
+  { id: 'InstaPay - حساب بنكي', label: 'InstaPay إلى حساب بنكي', icon: 'Landmark', desc: 'يُسجل مباشرة ضمن حساب البنك' },
+  { id: 'InstaPay - محفظة', label: 'InstaPay إلى محفظة', icon: 'Smartphone', desc: 'يُسجل ضمن رصيد المحفظة الإلكترونية' },
   { id: 'محفظة إلكترونية', label: 'محفظة إلكترونية', icon: 'Smartphone', desc: 'Vodafone / STC Pay / Waffar' },
   { id: 'آجل / حساب ورشة', label: 'آجل (حساب ورشة)', icon: 'Clock', desc: 'ذمم مدينة تسدد لاحقاً' },
 ];

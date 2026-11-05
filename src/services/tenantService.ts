@@ -14,6 +14,10 @@ import {
   PurchaseReturn, 
   Expense, 
   Partner, 
+  PartnerCurrentAccountTransaction,
+  PartnerWithdrawal,
+  PartnerExitSettlement,
+  PartnerSettlementPayment,
   UserSession,
   CarModel,
   PartReservation,
@@ -49,6 +53,7 @@ import {
 import { markDirty, SYNC_STATUS_EVENT } from './syncService';
 import type { LoyaltyEntry } from '../utils/loyaltyLogic';
 import type { Cheque } from '../utils/chequeLogic';
+import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from '../utils/bankLedger';
 import type { StockBatch, SerialUnit } from '../utils/trackingLogic';
 import { DEFAULT_PASSWORDS, hashPassword, isHashed, verifyPassword } from './passwordService';
 
@@ -223,6 +228,10 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     purchaseReturns: loadResource<PurchaseReturn[]>('purchaseReturns', INITIAL_PURCHASE_RETURNS),
     expenses: loadResource<Expense[]>('expenses', INITIAL_EXPENSES),
     partners: loadResource<Partner[]>('partners', INITIAL_PARTNERS),
+    partnerWithdrawals: loadResource<PartnerWithdrawal[]>('partnerWithdrawals', []),
+    partnerCurrentAccountTransactions: loadResource<PartnerCurrentAccountTransaction[]>('partnerCurrentAccountTransactions', []),
+    partnerExitSettlements: loadResource<PartnerExitSettlement[]>('partnerExitSettlements', []),
+    partnerSettlementPayments: loadResource<PartnerSettlementPayment[]>('partnerSettlementPayments', []),
     carModels: loadResource<CarModel[]>('carModels', INITIAL_CAR_MODELS),
     reservations: loadResource<PartReservation[]>('reservations', INITIAL_RESERVATIONS),
     inventoryErrors: loadResource<InventoryDiscrepancyError[]>('inventoryErrors', INITIAL_INVENTORY_ERRORS),
@@ -234,6 +243,10 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     stockTransfers: loadResource<StockTransfer[]>('stockTransfers', []),
     loyaltyLedger: loadResource<LoyaltyEntry[]>('loyaltyLedger', []),
     cheques: loadResource<Cheque[]>('cheques', []),
+    bankAccounts: loadResource<BankAccount[]>('bankAccounts', []),
+    cardSettlements: loadResource<CardSettlementBatch[]>('cardSettlements', []),
+    bankLedgerEntries: loadResource<BankLedgerEntry[]>('bankLedgerEntries', []),
+    openingBalances: loadResource<import('../utils/openingBalanceLogic').OpeningBalanceRecord[]>('openingBalances', []),
     stockBatches: loadResource<StockBatch[]>('stockBatches', []),
     serialUnits: loadResource<SerialUnit[]>('serialUnits', []),
   };
@@ -256,6 +269,10 @@ export function saveTenantStoreData(
     purchaseReturns?: PurchaseReturn[];
     expenses?: Expense[];
     partners?: Partner[];
+    partnerWithdrawals?: PartnerWithdrawal[];
+    partnerCurrentAccountTransactions?: PartnerCurrentAccountTransaction[];
+    partnerExitSettlements?: PartnerExitSettlement[];
+    partnerSettlementPayments?: PartnerSettlementPayment[];
     carModels?: CarModel[];
     reservations?: PartReservation[];
     inventoryErrors?: InventoryDiscrepancyError[];
@@ -267,6 +284,10 @@ export function saveTenantStoreData(
     stockTransfers?: StockTransfer[];
     loyaltyLedger?: LoyaltyEntry[];
     cheques?: Cheque[];
+    bankAccounts?: BankAccount[];
+    cardSettlements?: CardSettlementBatch[];
+    bankLedgerEntries?: BankLedgerEntry[];
+    openingBalances?: import('../utils/openingBalanceLogic').OpeningBalanceRecord[];
     stockBatches?: StockBatch[];
     serialUnits?: SerialUnit[];
   }
@@ -298,6 +319,10 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     localStorage.setItem(getTenantKey(tenantId, 'purchaseReturns'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'expenses'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'partners'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'partnerWithdrawals'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'partnerCurrentAccountTransactions'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'partnerExitSettlements'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'partnerSettlementPayments'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'reservations'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'inventoryErrors'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'auditLog'), emptyArrayJson);
@@ -308,6 +333,10 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     localStorage.setItem(getTenantKey(tenantId, 'stockTransfers'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'loyaltyLedger'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'cheques'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'bankAccounts'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'cardSettlements'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'bankLedgerEntries'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'openingBalances'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'stockBatches'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'serialUnits'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'demo_cleared'), 'true');
@@ -317,7 +346,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     const ownerAccount = empsList.find(e => e.role === 'مدير عام' || e.username === 'admin') || INITIAL_EMPLOYEES[0];
     const cleanedStaff = [ownerAccount];
     localStorage.setItem(getTenantKey(tenantId, 'employees'), JSON.stringify(cleanedStaff));
-    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','supplierPaymentSchedules','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers','loyaltyLedger','cheques','stockBatches','serialUnits']);
+    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','supplierPaymentSchedules','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','partnerWithdrawals','partnerCurrentAccountTransactions','partnerExitSettlements','partnerSettlementPayments','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers','loyaltyLedger','cheques','stockBatches','serialUnits','bankAccounts','cardSettlements','bankLedgerEntries','openingBalances']);
 
     return cleanedStaff;
   } catch (err) {

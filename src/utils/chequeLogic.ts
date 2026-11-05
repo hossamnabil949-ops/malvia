@@ -29,6 +29,7 @@ export interface Cheque {
   appliedAmount?: number;      // واردة: ما خُصم فعلاً من مديونية العميل عند التسجيل
   appliedDebt?: number;        // صادرة: ما خُصم فعلاً من مستحقات المورد
   appliedCredit?: number;      // صادرة: الزيادة عن المستحقات (رصيد دائن للمحل)
+  clearedBankAccountId?: string; // الحساب البنكي الفعلي عند التحصيل/الصرف
   history: ChequeEvent[];
 }
 
@@ -48,9 +49,12 @@ export function availableActions(c: Pick<Cheque, 'direction' | 'status'>): Chequ
   if (c.direction === 'incoming') {
     if (c.status === 'في الحافظة') return ['deposit', 'clear', 'bounce', 'cancel'];
     if (c.status === 'مودع بالبنك') return ['clear', 'bounce'];
+    if (c.status === 'محصّل') return ['bounce']; // قد يرتد الشيك بعد إيداعه وتحصيله ظاهرياً
     return [];
   }
-  return c.status === 'صادر' ? ['clear', 'bounce', 'cancel'] : [];
+  if (c.status === 'صادر') return ['clear', 'bounce', 'cancel'];
+  if (c.status === 'مصروف') return ['bounce']; // عكس الصرف إذا أعاد البنك الشيك مرتداً
+  return [];
 }
 
 export function nextStatus(c: Pick<Cheque, 'direction' | 'status'>, a: ChequeAction): ChequeStatus | null {
@@ -64,7 +68,7 @@ export function nextStatus(c: Pick<Cheque, 'direction' | 'status'>, a: ChequeAct
 export interface ChequeEffect {
   customerBalanceDelta: number;                                   // يضاف على رصيد مديونية العميل
   supplier?: { debtDelta: number; creditDelta: number; paidDelta: number };
-  treasury?: { type: 'قبض' | 'صرف'; amount: number; category: 'تحصيل من عميل / ورشة' | 'سداد دفعة لمورد' };
+  treasury?: { type: 'قبض' | 'صرف'; amount: number; category: 'تحصيل من عميل / ورشة' | 'سداد دفعة لمورد' | 'ارتداد شيك وارد' | 'ارتداد شيك صادر' };
 }
 const NONE: ChequeEffect = { customerBalanceDelta: 0 };
 
@@ -96,11 +100,16 @@ export function actionEffect(c: Cheque, a: ChequeAction): ChequeEffect {
       ? { customerBalanceDelta: 0, treasury: { type: 'قبض', amount: c.amount, category: 'تحصيل من عميل / ورشة' } }
       : { customerBalanceDelta: 0, treasury: { type: 'صرف', amount: c.amount, category: 'سداد دفعة لمورد' } };
   }
-  // ارتداد أو إلغاء: يعود الحساب كما كان قبل تسجيل الشيك
-  if (c.direction === 'incoming') return { customerBalanceDelta: c.appliedAmount ?? 0 };
+  // ارتداد أو إلغاء: يعود الحساب كما كان قبل تسجيل الشيك.
+  // إذا كان قد تم تحصيله/صرفه بالفعل، نعكس أيضاً حركة البنك والخزنة.
+  if (c.direction === 'incoming') return {
+    customerBalanceDelta: c.appliedAmount ?? 0,
+    ...(c.status === 'محصّل' ? { treasury: { type: 'صرف' as const, amount: c.amount, category: 'ارتداد شيك وارد' as const } } : {}),
+  };
   return {
     customerBalanceDelta: 0,
     supplier: { debtDelta: c.appliedDebt ?? 0, creditDelta: -(c.appliedCredit ?? 0), paidDelta: -c.amount },
+    ...(c.status === 'مصروف' ? { treasury: { type: 'قبض' as const, amount: c.amount, category: 'ارتداد شيك صادر' as const } } : {}),
   };
 }
 
