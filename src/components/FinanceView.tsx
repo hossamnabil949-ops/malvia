@@ -341,23 +341,23 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const netProfitMargin = estimatedCOGS > 0 ? ((netDistributableProfit / estimatedCOGS) * 100).toFixed(1) : '0';
 
   const totalInitialCapital = useMemo(() => {
-    return partners.reduce((sum, p) => sum + (p.initialCapital || 0), 0);
-  }, [partners]);
+    return activePartners.reduce((sum, p) => sum + (p.initialCapital || 0), 0);
+  }, [activePartners]);
 
   const totalAddedCapital = useMemo(() => {
-    return partners.reduce((sum, p) => sum + (p.addedCapital || 0), 0);
-  }, [partners]);
+    return activePartners.reduce((sum, p) => sum + (p.addedCapital || 0), 0);
+  }, [activePartners]);
 
   const totalReinvestedProfits = useMemo(() => {
-    return partners.reduce((sum, p) => sum + (p.reinvestedProfits || 0), 0);
-  }, [partners]);
+    return activePartners.reduce((sum, p) => sum + (p.reinvestedProfits || 0), 0);
+  }, [activePartners]);
 
   const totalCurrentCapital = useMemo(() => {
-    return partners.reduce((sum, p) => {
+    return activePartners.reduce((sum, p) => {
       const current = p.totalCurrentCapital || (p.initialCapital + (p.addedCapital || 0) + (p.reinvestedProfits || 0));
       return sum + current;
     }, 0);
-  }, [partners]);
+  }, [activePartners]);
 
   const totalEquity = totalCurrentCapital + netDistributableProfit;
 
@@ -427,8 +427,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   }, [activePartners]);
 
   const selectedTargetPartner = useMemo(() => {
-    return partners.find((p) => p.id === targetPartnerId) || partners[0];
-  }, [partners, targetPartnerId]);
+    return activePartners.find((p) => p.id === targetPartnerId) || activePartners[0];
+  }, [activePartners, targetPartnerId]);
 
   const targetPartnerProfitShare = useMemo(() => {
     if (!selectedTargetPartner) return 0;
