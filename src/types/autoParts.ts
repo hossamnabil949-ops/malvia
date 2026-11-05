@@ -159,7 +159,7 @@ export type AuditAction =
   | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
   | 'stock.adjust' | 'part.restock' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'cheque.create' | 'cheque.action' | 'batch.create' | 'batch.writeoff' | 'serial.register' | 'serial.scrap' | 'stock.transfer' | 'supplier.payment'
   | 'shift.open' | 'shift.close' | 'shift.variance' | 'part.delete'
-  | 'partner.add' | 'partner.share.update' | 'partner.capital.add' | 'partner.profit.reinvest' | 'bank.settlement' | 'bank.transfer' | 'capital.opening.create';
+  | 'partner.add' | 'partner.share.update' | 'partner.capital.add' | 'partner.profit.reinvest' | 'partner.profile.update' | 'partner.withdrawal' | 'partner.advance' | 'partner.exit' | 'partner.settlement.payment' | 'bank.settlement' | 'bank.transfer' | 'capital.opening.create';
 
 export interface AuditEntry {
   id: string;
@@ -299,6 +299,61 @@ export interface Partner {
   totalCurrentCapital: number;
   totalWithdrawn: number;
   joinDate: string;
+  status?: 'ACTIVE' | 'EXIT_PENDING' | 'EXITED';
+  exitDate?: string;
+  exitReason?: string;
+  exitSettlementId?: string;
+}
+
+export type PartnerWithdrawalKind = 'withdrawal' | 'advance';
+export interface PartnerWithdrawal {
+  id: string;
+  partnerId: string;
+  partnerName: string;
+  kind: PartnerWithdrawalKind;
+  amount: number;
+  date: string;
+  paymentMethod: PaymentMethod | string;
+  bankAccountId?: string;
+  reference?: string;
+  notes?: string;
+  recordedBy: string;
+}
+
+export type PartnerSettlementStatus = 'draft' | 'approved' | 'partially_paid' | 'paid' | 'cancelled';
+export interface PartnerExitSettlement {
+  id: string;
+  partnerId: string;
+  partnerName: string;
+  exitDate: string;
+  capitalEntitlement: number;
+  profitEntitlement: number;
+  otherEntitlements: number;
+  withdrawalsDeducted: number;
+  advancesDeducted: number;
+  otherDeductions: number;
+  netPayable: number;
+  status: PartnerSettlementStatus;
+  notes?: string;
+  createdAt: string;
+  createdBy: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  dueDate?: string;
+}
+
+export interface PartnerSettlementPayment {
+  id: string;
+  settlementId: string;
+  partnerId: string;
+  amount: number;
+  date: string;
+  paymentMethod: PaymentMethod | string;
+  bankAccountId?: string;
+  transferReference?: string;
+  receiptNumber: string;
+  notes?: string;
+  recordedBy: string;
 }
 
 export interface ProfitDistributionRecord {
