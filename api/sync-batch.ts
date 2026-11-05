@@ -273,6 +273,20 @@ export default async function handler(req: any, res: any) {
       errorCode,
     });
     res.setHeader?.('x-malvia-trace-id', traceId);
+    if (!(error instanceof ApiError)) {
+      return res.status(500).json({
+        error: 'خطأ داخلي في الخادم',
+        code: 'INTERNAL',
+        diagnostic: {
+          traceId,
+          phase,
+          resource: resource || operationResources.join(',') || 'unknown',
+          operationCount: operationResources.length,
+          errorName,
+          errorCode: errorCode || 'NO_CODE',
+        },
+      });
+    }
     return sendError(res, error);
   }
 }
