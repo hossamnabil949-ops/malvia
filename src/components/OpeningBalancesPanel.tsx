@@ -45,7 +45,7 @@ export const OpeningBalancesPanel: React.FC<Props> = ({ existing = [], partners,
     const contribution = Number(partnerContributions[p.id] || 0);
     return { partnerId: p.id, partnerName: p.name, originalContribution: contribution, ownershipPercentage: shareDenominator > 0 ? Number(((contribution / shareDenominator) * 100).toFixed(4)) : 0 };
   });
-  const preview = useMemo(() => summarizeOpeningBalances({ partners: partnerRows, lines }), [lines, partners, partnerContributions, shares]);
+  const preview = useMemo(() => summarizeOpeningBalances({ partners: partnerRows, lines }), [lines, partners, partnerContributions, capital]);
   const effectiveAmount = amount;
   const isLiability = ['supplier_payable', 'loan', 'other_liability'].includes(category);
   const isHistoricalExpense = category === 'historical_expense';
