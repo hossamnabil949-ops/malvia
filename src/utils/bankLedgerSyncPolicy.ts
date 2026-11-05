@@ -100,7 +100,7 @@ export function validateBankLedgerSync(input: {
         && partners.some(partner => partner.id === withdrawal.partnerId));
     } else if (entry.id.startsWith('partner-current-account:')) {
       const movement = partnerCurrentAccountTransactions.find(item => item.id === entry.batchId);
-      matched = Boolean(movement && directBank(movement.paymentMethod) && movement.bankAccountId === entry.bankAccountId
+      matched = Boolean(movement && entry.accountKind === 'bank' && directBank(movement.paymentMethod) && movement.bankAccountId === entry.bankAccountId
         && Number(movement.amount) === Number(entry.amount) && movement.date === entry.date
         && entry.direction === partnerCurrentAccountCashDirection(movement.type));
     } else if (entry.id.startsWith('partner-exit-payment:')) {
