@@ -519,7 +519,7 @@ const pcaRepaymentTreasury: any = {
   date: '2026-11-04', paymentMethod: 'نقدي',
 };
 const pcaSyncInput: any = {
-  previous: [], incoming: [pcaRepayment], partners: [{ id: 'pca-partner', name: 'Partner A' }],
+  previous: [], incoming: [pcaRepayment], partners: [{ id: 'pca-partner', name: 'Partner A', role: 'Test', phone: '01000000000', sharePercentage: 100, initialCapital: 1000, addedCapital: 0, reinvestedProfits: 0, totalCurrentCapital: 1000, totalWithdrawn: 0, joinDate: '2026-01-01', status: 'ACTIVE' }],
   bankAccounts: [], treasury: [pcaRepaymentTreasury], bankLedgerEntries: [],
   openingBalances: [pcaOpeningDebit],
 };
