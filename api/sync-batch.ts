@@ -54,7 +54,7 @@ export default async function handler(req: any, res: any) {
     const permissions = employee.permissions || {};
     const owner = role === 'مدير عام';
     for (const op of operations) {
-      const allowed = owner || policy[op.resource].some((permission) => permissions[permission] === true);
+      const allowed = owner || (role === 'محاسب مالي' && policy[op.resource].includes('canManagePartners')) || policy[op.resource].some((permission) => permissions[permission] === true);
       if (!allowed) return res.status(403).json({ code: 'EMPLOYEE_PERMISSION_DENIED', resource: op.resource, error: 'لا تملك صلاحية مزامنة أحد عناصر الدفعة.' });
     }
 
