@@ -3094,14 +3094,14 @@ export default function App() {
             onSettleVisa={handleSettleVisa}
             onTransferBank={handleBankTransfer}
             canManageExpenses={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury)}
-            canManageTreasury={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageTreasury)}
+            canManageTreasury={effectiveRole === 'مدير عام' || effectiveRole === 'محاسب مالي' || Boolean(effectivePermissions?.canManageTreasury)}
             canManagePartners={canManageCapital}
             partnerWithdrawals={partnerWithdrawals}
             partnerExitSettlements={partnerExitSettlements}
             partnerSettlementPayments={partnerSettlementPayments}
             partnerCurrentAccountTransactions={partnerCurrentAccountTransactions}
             onRecordPartnerCurrentAccount={(record: PartnerCurrentAccountTransaction) => {
-              if (!canManageCapital || !(currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageTreasury))) {
+              if (!canManageCapital || !(effectiveRole === 'مدير عام' || effectiveRole === 'محاسب مالي' || Boolean(effectivePermissions?.canManageTreasury))) {
                 window.alert('تسجيل جاري الشركاء يتطلب صلاحية إدارة الشركاء والخزينة.');
                 return false;
               }
