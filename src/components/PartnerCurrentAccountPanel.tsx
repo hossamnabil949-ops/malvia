@@ -6,6 +6,7 @@ import type { OpeningBalanceRecord } from '../utils/openingBalanceLogic';
 import {
   getOpenPartnerCurrentAccountOrigins,
   getPartnerCurrentAccountBalance,
+  openingPartnerCurrentAccountBalance,
 } from '../utils/partnerCurrentAccount';
 
 interface Props {
@@ -66,14 +67,27 @@ export const PartnerCurrentAccountPanel: React.FC<Props> = ({
 
   useEffect(() => {
     if (type === 'partner_repayment' && selectedOrigin?.paymentMethod) {
-      setPaymentMethod(selectedOrigin.paymentMethod);
-      setBankAccountId(selectedOrigin.bankAccountId || '');
+      const originalBankAvailable = selectedOrigin.paymentMethod !== 'تحويل بنكي' || activeBankAccounts.some(account => account.id === selectedOrigin.bankAccountId);
+      if (!originalBankAvailable) { setPaymentMethod('نقدي'); setBankAccountId(''); }
+      else { setPaymentMethod(selectedOrigin.paymentMethod); setBankAccountId(selectedOrigin.bankAccountId || ''); }
     }
-  }, [type, selectedOrigin?.id]);
+  }, [type, selectedOrigin?.id, activeBankAccounts]);
 
   const partnerTransactions = useMemo(() => transactions
     .filter(item => item.partnerId === partnerId)
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)), [transactions, partnerId]);
+  const openingBalance = openingPartnerCurrentAccountBalance(partnerId, openingBalances);
+  const openingDate = openingBalances.find(item => item.status === 'approved')?.cutoverDate || '';
+  const displayTransactions = [
+    ...partnerTransactions.map(item => ({
+      id: item.id, title: TYPE_LABELS[item.type], date: item.date, paymentMethod: String(item.paymentMethod),
+      amount: item.amount, isIn: directionLabel(item.type) === 'قبض', reference: item.reference, notes: item.notes,
+    })),
+    ...(Math.abs(openingBalance) > 0.005 ? [{
+      id: `OPENING:${partnerId}`, title: 'رصيد جاري افتتاحي', date: openingDate, paymentMethod: 'رصيد مرحل',
+      amount: Math.abs(openingBalance), isIn: openingBalance < 0, reference: undefined, notes: openingBalance > 0 ? 'مستحق للشريك عند بدء MALVIA' : 'مستحق على الشريك عند بدء MALVIA',
+    }] : []),
+  ];
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -186,7 +200,7 @@ export const PartnerCurrentAccountPanel: React.FC<Props> = ({
             <input type="number" min="0.01" step="0.01" inputMode="decimal" value={amount || ''} onChange={e => setAmount(Number(e.target.value))} className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2.5 text-white font-mono"/>
           </label>
           <label className="block text-xs text-neutral-300">جهة الحركة
-            <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} disabled={type === 'partner_repayment' && Boolean(selectedOrigin?.paymentMethod)} className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2.5 text-white disabled:opacity-60">
+            <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} disabled={type === 'partner_repayment' && Boolean(selectedOrigin?.paymentMethod) && (selectedOrigin.paymentMethod !== 'تحويل بنكي' || activeBankAccounts.some(account => account.id === selectedOrigin.bankAccountId))} className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2.5 text-white disabled:opacity-60">
               <option value="نقدي">درج نقدي</option>
               <option value="تحويل بنكي">حساب بنكي / تحويل</option>
               <option value="محفظة إلكترونية">محفظة إلكترونية</option>
@@ -223,24 +237,24 @@ export const PartnerCurrentAccountPanel: React.FC<Props> = ({
             <span className="text-[10px] text-neutral-400">{partnerTransactions.length} حركة</span>
           </div>
           <div className="space-y-2">
-            {partnerTransactions.map(item => {
-              const isIn = directionLabel(item.type) === 'قبض';
+            {displayTransactions.map(item => {
+              const isIn = item.isIn;
               return <article key={item.id} className="rounded-xl border border-neutral-800 bg-surface-1 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-xs font-bold text-white">{TYPE_LABELS[item.type]}</div>
+                    <div className="text-xs font-bold text-white">{item.title}</div>
                     <div className="mt-1 text-[10px] text-neutral-400">{item.date} · {item.paymentMethod}</div>
                     {item.reference && <div className="mt-1 text-[10px] text-neutral-500">مرجع: {item.reference}</div>}
                     {item.notes && <div className="mt-1 text-[10px] text-neutral-500 break-words">{item.notes}</div>}
                   </div>
                   <div className="shrink-0 text-left">
                     <div className={`font-mono font-black text-sm ${isIn ? 'text-emerald-400' : 'text-rose-400'}`}>{isIn ? '+' : '-'}{money(item.amount)}</div>
-                    <div className="text-[10px] text-neutral-500 mt-1 flex items-center gap-1 justify-end">{isIn ? <ArrowDownLeft className="w-3 h-3"/> : <ArrowUpRight className="w-3 h-3"/>}{directionLabel(item.type)}</div>
+                    <div className="text-[10px] text-neutral-500 mt-1 flex items-center gap-1 justify-end">{isIn ? <ArrowDownLeft className="w-3 h-3"/> : <ArrowUpRight className="w-3 h-3"/>}{item.id.startsWith('OPENING:') ? 'رصيد افتتاحي' : isIn ? 'قبض' : 'صرف'}</div>
                   </div>
                 </div>
               </article>;
             })}
-            {partnerTransactions.length === 0 && <div className="rounded-xl bg-surface-1 p-6 text-center text-xs text-neutral-500">لا توجد حركات مسجلة لهذا الشريك حتى الآن.</div>}
+            {displayTransactions.length === 0 && <div className="rounded-xl bg-surface-1 p-6 text-center text-xs text-neutral-500">لا توجد حركات مسجلة لهذا الشريك حتى الآن.</div>}
           </div>
         </section>
       </div>
