@@ -173,6 +173,7 @@ export default function App() {
   // الصلاحيات تُقرأ من سجل الموظف الحالي (تسري فوراً عند تعديلها) وليس من لقطة وقت الدخول
   const liveEmployee = currentUser ? employees.find(e => e.id === currentUser.employeeId) : undefined;
   const effectiveRole = liveEmployee?.role ?? currentUser?.role;
+  const canManageCapital = currentUser?.role === 'مدير عام' || currentUser?.role === 'محاسب مالي';
   const effectivePermissions = liveEmployee?.permissions ?? currentUser?.permissions;
   const simpleMode = Boolean(currentUser) && isSimpleCashier(effectiveRole, effectivePermissions);
   const canAccessTab = (tab: string): boolean =>
@@ -3032,10 +3033,10 @@ export default function App() {
             cardSettlements={cardSettlements}
             bankLedgerEntries={bankLedgerEntries}
             openingBalances={openingBalances}
-            canManageOpeningBalances={currentUser?.role === 'مدير عام'}
+            canManageOpeningBalances={canManageCapital}
             currentUserName={currentUser?.employeeName || 'المدير العام'}
             onApproveOpeningBalances={(record: OpeningBalanceRecord) => {
-              if (currentUser?.role !== 'مدير عام' || openingBalances.length) return false;
+              if (!canManageCapital || openingBalances.length) return false;
               const nextParts = parts.map(part => {
                 const rows = record.lines.filter(line => line.category === 'inventory' && line.partId === part.id);
                 if (!rows.length) return part;
@@ -3044,7 +3045,7 @@ export default function App() {
                 const nextQty = part.stockQuantity + qty;
                 return { ...part, stockQuantity: nextQty, costPrice: nextQty ? ((part.stockQuantity * part.costPrice) + cost) / nextQty : part.costPrice, updatedAt: record.cutoverDate };
               });
-              const movements: StockMovement[] = record.lines.filter(line => line.category === 'inventory').map((line, i) => {
+              const movements: StockMovement[] = record.lines.filter(line => line.category === 'inventory' && line.partId && line.quantity && line.unitCost !== undefined).map((line, i) => {
                 const part = nextParts.find(item => item.id === line.partId)!;
                 return { id: record.id + ':STOCK:' + i, at: record.approvedAt || new Date().toISOString(), partId: part.id, partNumber: part.partNumber, partName: part.name, type: 'import', qtyDelta: line.quantity || 0, balanceAfter: part.stockQuantity, refId: record.id, refNumber: record.id, userName: currentUser.employeeName };
               });
@@ -3078,8 +3079,9 @@ export default function App() {
             onTransferBank={handleBankTransfer}
             canManageExpenses={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury)}
             canManageTreasury={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageTreasury)}
-            canManagePartners={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManagePartners)}
+            canManagePartners={canManageCapital}
             onAddPartner={(newPartner: Partner, paymentMethod: string, notes: string, bankAccountId?: string) => {
+              if (!canManageCapital) { window.alert('تعديل رأس المال والشركاء متاح للمالك والمحاسب المالي فقط.'); return false; }
               if (partners.some(partner => partner.id === newPartner.id || partner.phone === newPartner.phone)) {
                 window.alert('هذا الشريك مسجل بالفعل أو رقم هاتفه مستخدم لشريك آخر.');
                 return false;
@@ -3094,7 +3096,12 @@ export default function App() {
                 if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً لاستلام رأس المال.'); return false; }
                 capitalBankEntry = posting.entry;
               }
-              const updatedPartners = [newPartner, ...partners];
+              const updatedPartnersRaw = [newPartner, ...partners];
+              const capitalTotal = updatedPartnersRaw.reduce((sum, partner) => sum + (partner.totalCurrentCapital || partner.initialCapital || 0), 0);
+              const updatedPartners = updatedPartnersRaw.map(partner => ({
+                ...partner,
+                sharePercentage: capitalTotal > 0 ? Number((((partner.totalCurrentCapital || partner.initialCapital || 0) / capitalTotal) * 100).toFixed(4)) : 0,
+              }));
               setPartners(updatedPartners);
               persistChanges({ partners: updatedPartners });
               const capitalReceipt: TreasuryTransaction = {
@@ -3125,6 +3132,7 @@ export default function App() {
               return true;
             }}
             onUpdatePartnerShare={(partnerId: string, newSharePercentage: number) => {
+              if (!canManageCapital) { window.alert('تعديل نسب الشركاء متاح للمالك والمحاسب المالي فقط.'); return; }
               if (!Number.isFinite(newSharePercentage) || newSharePercentage < 0 || newSharePercentage > 100) {
                 window.alert('نسبة الشريك يجب أن تكون بين 0 و100%.');
                 return;
@@ -3137,6 +3145,7 @@ export default function App() {
               logAudit('partner.share.update', `تعديل نسبة الشريك ${partnerId} إلى ${newSharePercentage}%`, partnerId, newSharePercentage);
             }}
             onInjectCapital={(partnerId: string, amount: number, paymentMethod: string, notes: string, recalculatePercentages: boolean, bankAccountId?: string) => {
+              if (!canManageCapital) { window.alert('تعديل رأس المال متاح للمالك والمحاسب المالي فقط.'); return; }
               const target = partners.find(partner => partner.id === partnerId);
               if (!target || !Number.isFinite(amount) || amount <= 0) return;
               const capitalTxId = `TX-CAPITAL-${partnerId}-${Date.now()}`;
@@ -3184,6 +3193,7 @@ export default function App() {
               logAudit('partner.capital.add', `ضخ ${amount} ج.م كرأس مال إضافي للشريك ${target.name}`, partnerId, amount);
             }}
             onReinvestProfit={(partnerId: string, amount: number, notes: string) => {
+              if (!canManageCapital) { window.alert('تعديل رأس المال متاح للمالك والمحاسب المالي فقط.'); return; }
               const target = partners.find(partner => partner.id === partnerId);
               if (!target || !Number.isFinite(amount) || amount <= 0) return;
               setPartners(prev => {
