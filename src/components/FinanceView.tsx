@@ -734,6 +734,19 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       {activeFinanceTab === 'equity' && canManagePartners && (
         <div className="space-y-6">
           {canManageOpeningBalances && onApproveOpeningBalances && <OpeningBalancesPanel existing={openingBalances} partners={partners} parts={parts} bankAccounts={bankAccounts} customers={customers} suppliers={suppliers} currentUser={currentUserName} onApprove={onApproveOpeningBalances} />}
+          {canManageTreasury && (
+            <div className="rounded-2xl border border-amber-500/20 bg-surface-2 p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-black text-white">حساب جاري الشركاء</h4>
+                <p className="text-[11px] text-neutral-400 mt-1">رصيد مستقل عن رأس المال والأرباح والمسحوبات الشخصية</p>
+                <div className="flex flex-wrap gap-4 mt-2 text-xs">
+                  <span className="text-emerald-400">مستحق للشركاء: <b className="font-mono">{partners.reduce((sum, p) => sum + Math.max(0, getPartnerCurrentAccountBalance(p.id, partnerCurrentAccountTransactions, openingBalances)), 0).toLocaleString()} ج.م</b></span>
+                  <span className="text-rose-400">مستحق على الشركاء: <b className="font-mono">{partners.reduce((sum, p) => sum + Math.max(0, -getPartnerCurrentAccountBalance(p.id, partnerCurrentAccountTransactions, openingBalances)), 0).toLocaleString()} ج.م</b></span>
+                </div>
+              </div>
+              <button type="button" onClick={() => setActiveFinanceTab('partnerCurrentAccount')} className="rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs px-4 py-3 min-h-[44px]">فتح دفتر جاري الشركاء</button>
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
             <div className="p-4 rounded-3xl bg-surface-2 border border-neutral-800 relative overflow-hidden">
               <div className="flex items-center justify-between text-neutral-400 text-xs">
@@ -1150,6 +1163,15 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       {activeFinanceTab === 'treasury' && canManageTreasury && (
         <div className="space-y-6">
           <TreasuryAccountsReport transactions={treasuryTransactions} shifts={shifts} />
+          {canManagePartners && (
+            <div className="rounded-2xl border border-neutral-800 bg-surface-2 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-bold text-white">جاري الشركاء</h4>
+                <p className="text-[11px] text-neutral-400 mt-1">حركات الإيداع والسحب والرد والسداد، مرتبطة بحسابات القبض والصرف.</p>
+              </div>
+              <button type="button" onClick={() => setActiveFinanceTab('partnerCurrentAccount')} className="rounded-xl border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 font-bold text-xs px-4 py-3 min-h-[44px]">عرض حساب جاري الشركاء</button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
             {paymentBreakdown.map((pb) => {
