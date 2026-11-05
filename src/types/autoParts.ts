@@ -159,7 +159,7 @@ export type AuditAction =
   | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
   | 'stock.adjust' | 'part.restock' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'cheque.create' | 'cheque.action' | 'batch.create' | 'batch.writeoff' | 'serial.register' | 'serial.scrap' | 'stock.transfer' | 'supplier.payment'
   | 'shift.open' | 'shift.close' | 'shift.variance' | 'part.delete'
-  | 'partner.add' | 'partner.share.update' | 'partner.capital.add' | 'partner.profit.reinvest' | 'partner.profile.update' | 'partner.withdrawal' | 'partner.advance' | 'partner.exit' | 'partner.settlement.payment' | 'bank.settlement' | 'bank.transfer' | 'capital.opening.create';
+  | 'partner.add' | 'partner.share.update' | 'partner.capital.add' | 'partner.profit.reinvest' | 'partner.profile.update' | 'partner.withdrawal' | 'partner.advance' | 'partner.exit' | 'partner.settlement.payment' | 'partner.current_account' | 'bank.settlement' | 'bank.transfer' | 'capital.opening.create';
 
 export interface AuditEntry {
   id: string;
@@ -354,6 +354,29 @@ export interface PartnerSettlementPayment {
   receiptNumber: string;
   notes?: string;
   recordedBy: string;
+}
+
+export type PartnerCurrentAccountMovementType =
+  | 'partner_deposit'
+  | 'partner_withdrawal'
+  | 'partner_repayment'
+  | 'company_repayment';
+
+export interface PartnerCurrentAccountTransaction {
+  id: string;
+  partnerId: string;
+  partnerName: string;
+  type: PartnerCurrentAccountMovementType;
+  amount: number;
+  date: string;
+  paymentMethod: PaymentMethod | string;
+  bankAccountId?: string;
+  relatedTransactionId?: string;
+  treasuryTransactionId: string;
+  reference?: string;
+  notes?: string;
+  recordedBy: string;
+  createdAt: string;
 }
 
 export interface ProfitDistributionRecord {
@@ -565,6 +588,10 @@ export interface TreasuryTransaction {
     | 'ضخ رأس مال من شريك'
     | 'مسحوبات شريك'
     | 'سداد مستحقات شريك متخارج'
+    | 'جاري شركاء - إيداع من شريك'
+    | 'جاري شركاء - سحب شريك'
+    | 'جاري شركاء - رد الشريك للمبلغ المسحوب'
+    | 'جاري شركاء - سداد المنشأة للشريك'
     | 'توزيع أرباح'
     | 'إيداع نقدي إضافي'
     | 'سحب نقدي'
