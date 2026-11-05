@@ -13,6 +13,7 @@ import { nextSalesInvoiceNumber } from '../src/utils/invoiceNumber.ts';
 import { uniqueTransactionNumber } from '../src/utils/uniqueTransactionNumber.ts';
 import { validateSale, SaleError, computeTotals, weightedAverageUnitCost } from '../src/utils/saleLogic.ts';
 import { cairoDateKey, salesForDate, netSales, reportDailySales, reportSalesByItem, reportProfitLoss, reportVatSummary, reportSalesReconciliation } from '../src/utils/reportsLogic.ts';
+import { getPartnerCurrentAccountBalance, getOpenPartnerCurrentAccountOrigins, validatePartnerCurrentAccountSync } from '../src/utils/partnerCurrentAccount.ts';
 
 // FIN-1 / AI-4: dashboard sales use Cairo's calendar day and one consistent eligible-invoice set.
 const dashboardInvoices: any[] = [
@@ -478,3 +479,93 @@ assert.equal(validateOpeningBalanceRecord({ ...openingFixture, lines: [...openin
 assert.equal(validateOpeningBalanceRecord(openingFixture, { activeBankAccountIds: [] }), 'BANK_ACCOUNT_REQUIRED');
 assert.equal(validateOpeningBalanceRecord({ ...openingFixture, partners: [{ ...openingFixture.partners[0], ownershipPercentage: 50 }] }, { activeBankAccountIds: ['BANK-1'] }), 'INVALID_SHARE_TOTAL');
 assert.equal(validateOpeningBalanceRecord(openingFixture, { activeBankAccountIds: ['BANK-1'], existingRecord: openingFixture }), 'APPROVED_RECORD_IMMUTABLE');
+
+
+// PARTNER-CURRENT-ACCOUNT: opening balances, four movement directions, source-channel matching and append-only protection.
+const currentAccountOpening: any = {
+  id: 'OB-PCA-1', status: 'approved', cutoverDate: '2026-11-01', originalCapital: 1000,
+  partners: [
+    { partnerId: 'pca-partner', partnerName: 'Partner A', originalContribution: 1000, ownershipPercentage: 100, currentAccountBalance: 200 },
+  ],
+  lines: [{ id: 'OB-PCA-CASH', category: 'cash', label: 'Cash', amount: 1200 }],
+  createdAt: '2026-11-01T00:00:00.000Z', createdBy: 'Test', approvedAt: '2026-11-01T00:00:00.000Z', approvedBy: 'Test',
+};
+const currentAccountOpeningSummary = summarizeOpeningBalances(currentAccountOpening);
+assert.equal(currentAccountOpeningSummary.partnerCurrentAccountPayable, 200);
+assert.equal(currentAccountOpeningSummary.partnerCurrentAccountReceivable, 0);
+assert.equal(currentAccountOpeningSummary.assets, 1200);
+assert.equal(currentAccountOpeningSummary.liabilities, 200);
+assert.equal(currentAccountOpeningSummary.netAssets, 1000);
+assert.equal(currentAccountOpeningSummary.reconciliationDifference, 0);
+assert.equal(getPartnerCurrentAccountBalance('pca-partner', [], [currentAccountOpening]), 200);
+
+const pcaOpeningDebit: any = {
+  ...currentAccountOpening,
+  id: 'OB-PCA-DEBIT',
+  partners: [{ partnerId: 'pca-partner', partnerName: 'Partner A', originalContribution: 1000, ownershipPercentage: 100, currentAccountBalance: -500 }],
+};
+assert.equal(getPartnerCurrentAccountBalance('pca-partner', [], [pcaOpeningDebit]), -500);
+assert.equal(getOpenPartnerCurrentAccountOrigins('pca-partner', 'partner_repayment', [], [pcaOpeningDebit])[0].remainingAmount, 500);
+
+const pcaRepayment: any = {
+  id: 'PCA-REPAY-1', partnerId: 'pca-partner', partnerName: 'Partner A',
+  type: 'partner_repayment', amount: 200, date: '2026-11-04', paymentMethod: 'نقدي',
+  relatedTransactionId: 'OPENING:pca-partner', treasuryTransactionId: 'TX-PCA-REPAY-1',
+  recordedBy: 'Test', createdAt: '2026-11-04T12:00:00.000Z',
+};
+const pcaRepaymentTreasury: any = {
+  id: 'TX-PCA-REPAY-1', referenceId: 'PCA-REPAY-1', type: 'قبض',
+  category: 'جاري شركاء - رد الشريك للمبلغ المسحوب', amount: 200,
+  date: '2026-11-04', paymentMethod: 'نقدي',
+};
+const pcaSyncInput: any = {
+  previous: [], incoming: [pcaRepayment], partners: [{ id: 'pca-partner', name: 'Partner A' }],
+  bankAccounts: [], treasury: [pcaRepaymentTreasury], bankLedgerEntries: [],
+  openingBalances: [pcaOpeningDebit],
+};
+assert.equal(validatePartnerCurrentAccountSync(pcaSyncInput), null);
+assert.equal(getPartnerCurrentAccountBalance('pca-partner', [pcaRepayment], [pcaOpeningDebit]), -300);
+assert.equal(getOpenPartnerCurrentAccountOrigins('pca-partner', 'partner_repayment', [pcaRepayment], [pcaOpeningDebit])[0].remainingAmount, 300);
+
+const pcaOverpayment: any = {
+  ...pcaRepayment, id: 'PCA-REPAY-OVER', amount: 600, treasuryTransactionId: 'TX-PCA-REPAY-OVER',
+};
+assert.equal(validatePartnerCurrentAccountSync({
+  ...pcaSyncInput,
+  incoming: [pcaOverpayment],
+  treasury: [{ ...pcaRepaymentTreasury, id: 'TX-PCA-REPAY-OVER', referenceId: 'PCA-REPAY-OVER', amount: 600 }],
+}), 'PARTNER_CURRENT_ACCOUNT_OVERPAID');
+assert.equal(validatePartnerCurrentAccountSync({
+  ...pcaSyncInput,
+  treasury: [],
+}), 'PARTNER_CURRENT_ACCOUNT_TREASURY_MISMATCH');
+assert.equal(validatePartnerCurrentAccountSync({
+  ...pcaSyncInput,
+  previous: [pcaRepayment],
+  incoming: [],
+}), 'PARTNER_CURRENT_ACCOUNT_HISTORY_MODIFIED');
+
+const pcaBankDeposit: any = {
+  id: 'PCA-BANK-1', partnerId: 'pca-partner', partnerName: 'Partner A',
+  type: 'partner_deposit', amount: 300, date: '2026-11-04', paymentMethod: 'تحويل بنكي',
+  bankAccountId: 'bank-pca-1', treasuryTransactionId: 'TX-PCA-BANK-1',
+  recordedBy: 'Test', createdAt: '2026-11-04T13:00:00.000Z',
+};
+const pcaBankTreasury: any = {
+  id: 'TX-PCA-BANK-1', referenceId: 'PCA-BANK-1', type: 'قبض',
+  category: 'جاري شركاء - إيداع من شريك', amount: 300, date: '2026-11-04',
+  paymentMethod: 'تحويل بنكي', bankAccountId: 'bank-pca-1',
+};
+const pcaBankEntry: any = {
+  id: 'partner-current-account:PCA-BANK-1', batchId: 'PCA-BANK-1', accountKind: 'bank',
+  bankAccountId: 'bank-pca-1', direction: 'in', amount: 300, date: '2026-11-04',
+  reference: 'PCA-BANK-1', description: 'جاري الشركاء — Partner A',
+};
+const pcaBankInput: any = {
+  previous: [], incoming: [pcaBankDeposit], partners: [{ id: 'pca-partner', name: 'Partner A' }],
+  bankAccounts: [{ id: 'bank-pca-1', active: true }], treasury: [pcaBankTreasury],
+  bankLedgerEntries: [pcaBankEntry], openingBalances: [],
+};
+assert.equal(validatePartnerCurrentAccountSync(pcaBankInput), null);
+assert.equal(validatePartnerCurrentAccountSync({ ...pcaBankInput, bankLedgerEntries: [] }), 'PARTNER_CURRENT_ACCOUNT_BANK_MISMATCH');
+
