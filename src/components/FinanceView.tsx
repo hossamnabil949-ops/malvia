@@ -501,6 +501,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       totalCurrentCapital: newPartnerInitialCapital,
       totalWithdrawn: 0,
       joinDate: new Date().toISOString().split('T')[0],
+      status: 'ACTIVE',
     };
 
     if (onAddPartner && onAddPartner(newPartner, newPartnerPaymentMethod, newPartnerNotes, requiresSpecificBankAccount(newPartnerPaymentMethod) ? newPartnerBankAccountId : undefined) === false) return;
