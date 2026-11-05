@@ -786,3 +786,136 @@ select:focus-visible, textarea:focus-visible {
   .malvia-section-copy small { font-size: 10px; }
   .malvia-section-arrow { width: 30px; height: 30px; }
 }
+
+
+/* MALVIA release refinement: preserve the existing dark theme language */
+.malvia-hub-header {
+  color: #f8fafc;
+  border-color: #34445d;
+  background: linear-gradient(125deg, var(--color-nav-bg, #101827), #1c2a40 72%, #202d43);
+  box-shadow: 0 14px 36px rgba(0,0,0,.20);
+}
+.malvia-hub-eyebrow { color: var(--color-amber-400, #fbbf24); }
+.malvia-hub-header h2 { color: #f8fafc; }
+.malvia-hub-header p { color: #aab8ca; }
+.malvia-hub-mark {
+  color: #111827;
+  background: var(--color-amber-400, #fbbf24);
+  box-shadow: 0 10px 24px rgba(0,0,0,.25);
+}
+.malvia-section-card {
+  color: #e5edf7;
+  border-color: #34445b;
+  background: linear-gradient(145deg, #1a2639, #141e2f);
+  box-shadow: 0 8px 24px rgba(0,0,0,.16);
+}
+.malvia-section-card:hover {
+  border-color: #536b8a;
+  box-shadow: 0 16px 34px rgba(0,0,0,.25);
+}
+.malvia-section-copy strong { color: #f1f5f9; }
+.malvia-section-copy > span { color: #c0ccda; }
+.malvia-section-copy small { color: #91a1b6; }
+.malvia-section-arrow { background: #26364d; color: #c3d0df; }
+.malvia-section-card:hover .malvia-section-arrow {
+  background: rgba(59,130,246,.18);
+  color: #bfdbfe;
+}
+.malvia-hub-empty {
+  color: #cbd5e1;
+  border-color: #34445b;
+  background: #172337;
+}
+.malvia-mobile-nav {
+  background: color-mix(in srgb, var(--color-nav-bg, #101827) 94%, transparent) !important;
+  border-top-color: var(--color-nav-line, #34445b) !important;
+  box-shadow: 0 -8px 26px rgba(0,0,0,.28) !important;
+  backdrop-filter: blur(16px);
+}
+.malvia-mobile-nav-item { color: #9aaac0 !important; }
+.malvia-mobile-nav-item.is-active {
+  color: var(--color-amber-400, #fbbf24) !important;
+  background: rgba(245,158,11,.13) !important;
+}
+.malvia-price-control-row {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.malvia-price-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.malvia-price-editor {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+.malvia-price-input {
+  width: 96px;
+  min-width: 82px;
+  min-height: 40px;
+  padding: 7px 8px;
+  touch-action: manipulation;
+}
+.malvia-price-lock-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 7px 11px;
+  border: 1px solid;
+  border-radius: 10px;
+  background: rgba(15,23,42,.45);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+.malvia-price-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.malvia-price-actions button { min-height: 40px; touch-action: manipulation; }
+.malvia-price-total { text-align: end; white-space: nowrap; }
+@media (max-width: 640px) {
+  .malvia-hub-header {
+    background: linear-gradient(125deg, var(--color-nav-bg, #101827), #1c2a40 72%, #202d43);
+  }
+  .malvia-section-card { min-height: 116px; }
+}
+@media (max-width: 480px) {
+  .malvia-price-control-row {
+    grid-template-columns: minmax(0,1fr);
+    gap: 10px;
+    padding: 11px !important;
+  }
+  .malvia-price-main {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .malvia-price-editor { width: 100%; }
+  .malvia-price-input { width: 104px; }
+  .malvia-price-lock-button { min-width: 102px; }
+  .malvia-price-actions { justify-content: flex-start; }
+  .malvia-price-total { text-align: start; padding-top: 7px; border-top: 1px solid rgba(148,163,184,.16); }
+}
+@media (hover: none) and (pointer: coarse) {
+  .malvia-section-card { -webkit-tap-highlight-color: transparent; }
+  .malvia-price-lock-button,
+  .malvia-price-actions button { min-height: 44px; }
+}
