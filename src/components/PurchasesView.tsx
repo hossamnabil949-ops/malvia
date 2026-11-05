@@ -43,6 +43,8 @@ import { DateRangeFilter } from './DateRangeFilter';
 import { BarcodeScanButton, useBarcodeWedge } from './BarcodeScanner';
 import { beep, findPartByBarcode } from '../utils/barcodeLookup';
 import { nextPurchaseInvoiceNumber } from '../utils/invoiceNumber';
+import type { BankAccount } from '../utils/bankLedger';
+import { requiresSpecificBankAccount } from '../utils/paymentMethods';
 import { DateRange, EMPTY_DATE_RANGE, inDateRange } from '../utils/dateRange';
 
 interface PurchasesViewProps {
@@ -62,6 +64,8 @@ interface PurchasesViewProps {
   carBrands?: string[];
   defaultTaxEnabled?: boolean;
   defaultTaxRate?: number;
+  canReceiveOnly?: boolean;
+  bankAccounts?: BankAccount[];
 }
 
 export const PurchasesView: React.FC<PurchasesViewProps> = ({
@@ -81,8 +85,11 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   carBrands = [],
   defaultTaxEnabled = false,
   defaultTaxRate = 14,
+  canReceiveOnly = false,
+  bankAccounts = [],
 }) => {
   const [currentTab, setCurrentTab] = useState<'invoices' | 'returns'>('invoices');
+  useEffect(() => { if (canReceiveOnly) setCurrentTab('invoices'); }, [canReceiveOnly]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [dateRange, setDateRange] = useState<DateRange>(EMPTY_DATE_RANGE);
@@ -113,6 +120,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentStatus, setPaymentStatus] = useState<'مدفوعة نقداً' | 'آجل' | 'مسددة جزئياً'>('مدفوعة نقداً');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | string>('كاش (نقدي)');
+  const [bankAccountId, setBankAccountId] = useState('');
   const [amountPaid, setAmountPaid] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
   const [applyTax, setApplyTax] = useState<boolean>(defaultTaxEnabled);
@@ -321,7 +329,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       });
     if (validItems.length === 0) return;
 
-    const finalAmountPaid = paymentStatus === 'مدفوعة نقداً' ? grandTotal : (paymentStatus === 'آجل' ? 0 : amountPaid);
+    const finalAmountPaid = canReceiveOnly ? 0 : paymentStatus === 'مدفوعة نقداً' ? grandTotal : (paymentStatus === 'آجل' ? 0 : amountPaid);
 
     const newInvoice: PurchaseInvoice = {
       id: `pur-${Date.now()}`,
@@ -338,10 +346,11 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       discount,
       grandTotal,
       originalGrandTotal: grandTotal,
-      paymentStatus,
+      paymentStatus: canReceiveOnly ? 'آجل' : paymentStatus,
       amountPaid: finalAmountPaid,
       remainingBalance: Math.max(0, grandTotal - finalAmountPaid),
-      paymentMethod,
+      paymentMethod: canReceiveOnly ? 'آجل / حساب ورشة' : paymentMethod,
+      bankAccountId: !canReceiveOnly && finalAmountPaid > 0 && requiresSpecificBankAccount(paymentMethod) ? bankAccountId : undefined,
       notes: notes.trim() || undefined,
       receivedBy,
     };
@@ -540,7 +549,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             >
               فواتير المشتريات ({purchaseInvoices.length})
             </button>
-            <button
+            {!canReceiveOnly && <button
               onClick={() => setCurrentTab('returns')}
               className={`px-2 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-bold leading-tight whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 currentTab === 'returns'
@@ -550,7 +559,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>مرتجعات الموردين ({purchaseReturns.length})</span>
-            </button>
+            </button>}
           </div>
 
           <button
@@ -760,14 +769,14 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                         </td>
                         <td className="p-3.5 text-center">
                           <div className="flex items-center justify-center gap-1.5">
-                            <button
+                            {!canReceiveOnly && <button
                               onClick={() => handleOpenReturnModal(inv)}
                               className="px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all flex items-center gap-1"
                               title="إجراء مرتجع مشتريات للمورد وتعديل الفاتورة وإعادة جدولة الدفعات"
                             >
                               <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
                               <span>مرتجع</span>
-                            </button>
+                            </button>}
 
                             <button
                               onClick={() => setSelectedInvoiceForModal(inv)}
@@ -788,7 +797,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         </div>
       )}
 
-      {currentTab === 'returns' && (
+      {currentTab === 'returns' && !canReceiveOnly && (
         <div className="bg-surface-2 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
           <div className="p-4 bg-rose-950/20 border-b border-rose-500/20 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1244,48 +1253,69 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-surface-1 p-4 rounded-2xl border border-neutral-800">
-                <div>
-                  <label className="text-xs font-bold text-neutral-400 block mb-1">حالة سداد الفاتورة للتاجر:</label>
-                  <select
-                    value={paymentStatus}
-                    onChange={(e) => handlePaymentStatusChange(e.target.value as any)}
-                    className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none focus:border-amber-400 font-bold"
-                  >
-                    <option value="مدفوعة نقداً">مدفوعة نقداً (صرف كامل القيمة من الخزنة)</option>
-                    <option value="مسددة جزئياً">مسددة جزئياً (عربون/دفعة والباقي آجل مجدول)</option>
-                    <option value="آجل">آجل بالكامل (إضافة كامل المبلغ لحساب المورد)</option>
-                  </select>
+                {canReceiveOnly ? (
+                <div className="sm:col-span-3 rounded-xl border border-sky-500/30 bg-sky-950/20 p-3 text-xs text-sky-200">
+                  صلاحية الاستلام فقط: سيتم تسجيل الفاتورة كآجل على المورد دون تسجيل أي مدفوعات أو حركة خزينة. يتولى المحاسب أو المسؤول المالي اعتماد السداد لاحقاً.
                 </div>
-
-                {paymentStatus !== 'آجل' && (
+              ) : (
+                <>
                   <div>
-                    <label className="text-xs font-bold text-neutral-400 block mb-1">
-                      المبلغ المسدد نقداً (يخصم من الخزينة):
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max={grandTotal}
-                      value={amountPaid}
-                      onChange={(e) => setAmountPaid(Number(e.target.value))}
-                      className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-emerald-500/50 text-xs text-emerald-300 font-mono font-bold focus:outline-none"
-                    />
+                    <label className="text-xs font-bold text-neutral-400 block mb-1">حالة سداد الفاتورة للتاجر:</label>
+                    <select
+                      value={paymentStatus}
+                      onChange={(e) => handlePaymentStatusChange(e.target.value as any)}
+                      className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none focus:border-amber-400 font-bold"
+                    >
+                      <option value="مدفوعة نقداً">مدفوعة نقداً (صرف كامل القيمة من الخزنة)</option>
+                      <option value="مسددة جزئياً">مسددة جزئياً (عربون/دفعة والباقي آجل مجدول)</option>
+                      <option value="آجل">آجل بالكامل (إضافة كامل المبلغ لحساب المورد)</option>
+                    </select>
                   </div>
-                )}
 
-                <div>
-                  <label className="text-xs font-bold text-neutral-400 block mb-1">طريقة الدفع:</label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none"
-                  >
-                    <option value="كاش (نقدي)">كاش (نقدي من الخزنة)</option>
-                    <option value="إنستاباي / InstaPay">إنستاباي InstaPay</option>
-                    <option value="فودافون كاش ومحافظ إلكترونية">فودافون كاش</option>
-                    <option value="فيزا / بطاقة بنكية">تحويل بنكي / فيزا</option>
-                  </select>
-                </div>
+                  {paymentStatus !== 'آجل' && (
+                    <div>
+                      <label className="text-xs font-bold text-neutral-400 block mb-1">
+                        المبلغ المسدد نقداً (يخصم من الخزينة):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={grandTotal}
+                        value={amountPaid}
+                        onChange={(e) => setAmountPaid(Number(e.target.value))}
+                        className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-emerald-500/50 text-xs text-emerald-300 font-mono font-bold focus:outline-none"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-xs font-bold text-neutral-400 block mb-1">طريقة الدفع:</label>
+                    <select
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-xs text-white focus:outline-none"
+                    >
+                      <option value="كاش (نقدي)">كاش (نقدي من الخزنة)</option>
+                      <option value="InstaPay - حساب بنكي">InstaPay إلى حساب بنكي</option>
+                      <option value="InstaPay - محفظة">InstaPay إلى محفظة</option>
+                      <option value="إنستاباي / InstaPay">InstaPay قديم / غير محدد</option>
+                      <option value="فودافون كاش ومحافظ إلكترونية">فودافون كاش</option>
+                      <option value="تحويل بنكي">تحويل بنكي</option>
+                      <option value="فيزا / بطاقة بنكية">فيزا / بطاقة بنكية</option>
+                    </select>
+                  </div>
+                  {amountPaid > 0 && requiresSpecificBankAccount(paymentMethod) && (
+                    <div className="sm:col-span-3">
+                      <label className="text-xs font-bold text-amber-300 block mb-1">الحساب البنكي الذي خرجت منه الدفعة *</label>
+                      <select required value={bankAccountId} onChange={e => setBankAccountId(e.target.value)} className="w-full h-9 px-3 rounded-xl bg-surface-2 border border-amber-500/50 text-xs text-white">
+                        <option value="">اختر الحساب البنكي</option>
+                        {bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}{account.accountLast4 ? ` ••${account.accountLast4}` : ''}</option>)}
+                      </select>
+                      {!bankAccounts.some(account => account.active) && <p className="text-[10px] text-rose-300 mt-1">أضف حساباً بنكياً نشطاً أولاً من المالية ← دفتر الحسابات البنكية.</p>}
+                    </div>
+                  )}
+                </>
+              )}
               </div>
 
               <div className="p-4 rounded-2xl bg-surface-1 border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
