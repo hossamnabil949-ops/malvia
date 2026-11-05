@@ -49,6 +49,7 @@ import type { OpeningBalanceRecord } from './utils/openingBalanceLogic';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
 import { createBankMovementEntry, createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount, summarizeBankAccount } from './utils/bankLedger';
 import { requiresDirectBankAccount, requiresSpecificBankAccount } from './utils/paymentMethods';
+import { getOpenPartnerCurrentAccountOrigins, partnerCurrentAccountCashDirection, PARTNER_CURRENT_ACCOUNT_CATEGORIES } from './utils/partnerCurrentAccount';
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
 import { DEFAULT_CAR_BRANDS, GENERAL_BRAND, normalizeBrand } from './data/brands';
@@ -3098,6 +3099,104 @@ export default function App() {
             partnerWithdrawals={partnerWithdrawals}
             partnerExitSettlements={partnerExitSettlements}
             partnerSettlementPayments={partnerSettlementPayments}
+            partnerCurrentAccountTransactions={partnerCurrentAccountTransactions}
+            onRecordPartnerCurrentAccount={(record: PartnerCurrentAccountTransaction) => {
+              if (!canManageCapital || !(currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageTreasury))) {
+                window.alert('تسجيل جاري الشركاء يتطلب صلاحية إدارة الشركاء والخزينة.');
+                return false;
+              }
+              const target = partners.find(partner => partner.id === record.partnerId);
+              if (!target || !Number.isFinite(record.amount) || record.amount <= 0
+                || partnerCurrentAccountTransactions.some(item => item.id === record.id)
+                || treasury.some(item => item.id === record.treasuryTransactionId)) return false;
+              if ((target.status || 'ACTIVE') !== 'ACTIVE' &&
+                (record.type === 'partner_deposit' || record.type === 'partner_withdrawal')) {
+                window.alert('لا يمكن تسجيل إيداع أو سحب جديد لشريك متخارج.');
+                return false;
+              }
+              const isSettlement = record.type === 'partner_repayment' || record.type === 'company_repayment';
+              if (isSettlement) {
+                const origins = getOpenPartnerCurrentAccountOrigins(target.id, record.type as 'partner_repayment' | 'company_repayment', partnerCurrentAccountTransactions, openingBalances);
+                const origin = origins.find(item => item.id === record.relatedTransactionId);
+                if (!origin || record.amount > origin.remainingAmount + 0.005) {
+                  window.alert('الحركة الأصلية غير موجودة أو المبلغ أكبر من المتبقي.');
+                  return false;
+                }
+              } else if (record.relatedTransactionId) return false;
+
+              const isBank = requiresDirectBankAccount(record.paymentMethod);
+              const isWallet = record.paymentMethod === 'محفظة إلكترونية';
+              if (!isBank && !isWallet && record.paymentMethod !== 'نقدي') {
+                window.alert('طريقة الحركة يجب أن تكون نقدي أو تحويل بنكي أو محفظة إلكترونية.');
+                return false;
+              }
+              const bankAccount = isBank ? bankAccounts.find(account => account.id === record.bankAccountId && account.active) : undefined;
+              if (isBank && !bankAccount) {
+                window.alert('اختر حساباً بنكياً نشطاً.');
+                return false;
+              }
+              if (!isBank && record.bankAccountId) return false;
+
+              const direction = partnerCurrentAccountCashDirection(record.type);
+              const treasurySummary = summarizeTreasury(treasury);
+              const accountKey = isBank ? 'bank' : isWallet ? 'wallet' : 'cash';
+              const available = isBank
+                ? summarizeBankAccount(bankAccount!, bankLedgerEntries)
+                : (treasurySummary.accounts.find(account => account.key === accountKey)?.balance || 0);
+              if (direction === 'out' && record.amount > available + 0.005) {
+                window.alert(`الرصيد المتاح في ${isBank ? 'الحساب البنكي' : isWallet ? 'المحفظة الإلكترونية' : 'درج الخزينة'} غير كافٍ. المتاح ${available.toLocaleString()} ج.م.`);
+                return false;
+              }
+
+              let bankEntry: BankLedgerEntry | null = null;
+              if (isBank) {
+                const posting = createBankMovementEntry({
+                  id: `partner-current-account:${record.id}`,
+                  batchId: record.id,
+                  bankAccountId: record.bankAccountId || '',
+                  direction,
+                  amount: record.amount,
+                  date: record.date,
+                  reference: record.reference || record.id,
+                  description: `جاري الشركاء — ${target.name}`,
+                }, bankAccounts, bankLedgerEntries);
+                if (posting.error || !posting.entry) {
+                  window.alert('تعذر تسجيل الحركة البنكية. راجع الحساب البنكي وحالة السجل.');
+                  return false;
+                }
+                bankEntry = posting.entry;
+              }
+
+              const tx: TreasuryTransaction = {
+                id: record.treasuryTransactionId,
+                txNumber: uniqueTransactionNumber('TX-PCA'),
+                date: record.date,
+                time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+                type: direction === 'in' ? 'قبض' : 'صرف',
+                category: PARTNER_CURRENT_ACCOUNT_CATEGORIES[record.type],
+                amount: record.amount,
+                paymentMethod: record.paymentMethod as PaymentMethod,
+                bankAccountId: isBank ? record.bankAccountId : undefined,
+                balanceAfter: direction === 'in' ? available + record.amount : available - record.amount,
+                referenceId: record.id,
+                description: `${PARTNER_CURRENT_ACCOUNT_CATEGORIES[record.type]} — ${target.name}`,
+                recordedBy: currentUser?.employeeName || 'المحاسب المالي',
+              };
+              const normalizedRecord = { ...record, partnerName: target.name };
+              const nextCurrentAccount = [normalizedRecord, ...partnerCurrentAccountTransactions];
+              const nextTreasury = [tx, ...treasury];
+              const nextBankEntries = bankEntry ? [bankEntry, ...bankLedgerEntries] : bankLedgerEntries;
+              setPartnerCurrentAccountTransactions(nextCurrentAccount);
+              setTreasury(nextTreasury);
+              if (bankEntry) setBankLedgerEntries(nextBankEntries);
+              persistChanges({
+                partnerCurrentAccountTransactions: nextCurrentAccount,
+                treasuryTransactions: nextTreasury,
+                bankLedgerEntries: nextBankEntries,
+              });
+              logAudit('partner.current_account', `${PARTNER_CURRENT_ACCOUNT_CATEGORIES[record.type]} للشريك ${target.name}: ${record.amount} ج.م عبر ${record.paymentMethod}`, record.id, record.amount);
+              return true;
+            }}
             onUpdatePartnerProfile={(partnerId, profile) => {
               if (!canManageCapital) return false;
               if (!profile.name.trim() || !profile.phone.trim() || partners.some(p => p.id !== partnerId && p.phone === profile.phone.trim())) { window.alert('بيانات الشريك غير صالحة أو رقم الهاتف مستخدم.'); return false; }
