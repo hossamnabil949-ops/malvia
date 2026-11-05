@@ -587,7 +587,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     setPartnerActionAmount(0); setPartnerActionKind('withdrawal'); setPartnerActionMethod('نقدي'); setPartnerActionBankId('');
     setExitDate(new Date().toISOString().slice(0, 10)); setExitCapital(partner.totalCurrentCapital || partner.initialCapital || 0);
     const priorPartnerMovements = partnerWithdrawals.filter(w => w.partnerId === partner.id && w.date <= new Date().toISOString().slice(0,10));
-    setExitProfit(0); setExitOtherEntitlements(0); setExitWithdrawals(priorPartnerMovements.filter(w => w.kind === 'withdrawal').reduce((sum,w) => sum + w.amount, 0)); setExitAdvances(priorPartnerMovements.filter(w => w.kind === 'advance').reduce((sum,w) => sum + w.amount, 0)); setExitDeductions(0); setExitDueDate(''); setExitNotes('');
+    setExitProfit(0); setExitOtherEntitlements(0); setExitWithdrawals(Math.max(partner.totalWithdrawn || 0, priorPartnerMovements.filter(w => w.kind === 'withdrawal').reduce((sum,w) => sum + w.amount, 0))); setExitAdvances(priorPartnerMovements.filter(w => w.kind === 'advance').reduce((sum,w) => sum + w.amount, 0)); setExitDeductions(0); setExitDueDate(''); setExitNotes('');
   };
 
   const submitPartnerAction = (e: React.FormEvent) => {
