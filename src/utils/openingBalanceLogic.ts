@@ -3,7 +3,7 @@
  * Historical partner capital and the cut-over balance sheet are intentionally separate.
  */
 export type OpeningBalanceCategory =
-  | 'inventory' | 'cash' | 'bank' | 'fixed_asset' | 'prepaid'
+  | 'inventory' | 'cash' | 'bank' | 'wallet' | 'fixed_asset' | 'prepaid'
   | 'customer_receivable' | 'other_asset' | 'supplier_payable' | 'loan' | 'other_liability' | 'historical_expense';
 
 export interface OpeningBalanceLine {
@@ -23,6 +23,8 @@ export interface OpeningPartnerCapital {
   partnerName: string;
   originalContribution: number;
   ownershipPercentage: number;
+  /** Positive: amount owed by the business to this partner; negative: amount owed by the partner to the business. */
+  currentAccountBalance?: number;
 }
 
 export interface OpeningBalanceRecord {
@@ -46,19 +48,21 @@ export interface OpeningBalanceSummary {
   historicalExpenses: number;
   netAssets: number;
   partnerCapital: number;
+  partnerCurrentAccountPayable: number;
+  partnerCurrentAccountReceivable: number;
   reconciliationDifference: number;
-  assetBreakdown: Record<'inventory' | 'cash' | 'bank' | 'fixed_asset' | 'prepaid' | 'customer_receivable' | 'other_asset', number>;
+  assetBreakdown: Record<'inventory' | 'cash' | 'bank' | 'wallet' | 'fixed_asset' | 'prepaid' | 'customer_receivable' | 'other_asset', number>;
   liabilityBreakdown: Record<'supplier_payable' | 'loan' | 'other_liability', number>;
 }
 
 const roundMoney = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const ASSET_CATEGORIES = new Set<OpeningBalanceCategory>([
-  'inventory', 'cash', 'bank', 'fixed_asset', 'prepaid', 'customer_receivable', 'other_asset',
+  'inventory', 'cash', 'bank', 'wallet', 'fixed_asset', 'prepaid', 'customer_receivable', 'other_asset',
 ]);
 
 export function summarizeOpeningBalances(record: Pick<OpeningBalanceRecord, 'partners' | 'lines'>): OpeningBalanceSummary {
   const assetBreakdown: OpeningBalanceSummary['assetBreakdown'] = {
-    inventory: 0, cash: 0, bank: 0, fixed_asset: 0, prepaid: 0, customer_receivable: 0, other_asset: 0,
+    inventory: 0, cash: 0, bank: 0, wallet: 0, fixed_asset: 0, prepaid: 0, customer_receivable: 0, other_asset: 0,
   };
   let historicalExpenses = 0;
   const liabilityBreakdown: OpeningBalanceSummary['liabilityBreakdown'] = {
@@ -77,9 +81,12 @@ export function summarizeOpeningBalances(record: Pick<OpeningBalanceRecord, 'par
   const liabilities = roundMoney(Object.values(liabilityBreakdown).reduce((a, b) => a + b, 0));
   const partnerCapital = roundMoney(record.partners.reduce((sum, p) => sum + p.originalContribution, 0));
   const netAssets = roundMoney(assets - liabilities);
+  const partnerCurrentAccountPayable = roundMoney(record.partners.reduce((sum, p) => sum + Math.max(0, Number(p.currentAccountBalance || 0)), 0));
+  const partnerCurrentAccountReceivable = roundMoney(record.partners.reduce((sum, p) => sum + Math.max(0, -Number(p.currentAccountBalance || 0)), 0));
   return {
     assets, liabilities, historicalExpenses: roundMoney(historicalExpenses), netAssets, partnerCapital,
-    reconciliationDifference: roundMoney(netAssets - partnerCapital),
+    partnerCurrentAccountPayable, partnerCurrentAccountReceivable,
+    reconciliationDifference: roundMoney(netAssets - partnerCapital + partnerCurrentAccountReceivable - partnerCurrentAccountPayable),
     assetBreakdown, liabilityBreakdown,
   };
 }
@@ -115,7 +122,8 @@ export function validateOpeningBalanceRecord(
   for (const partner of record.partners) {
     if (!partner.partnerId || !partner.partnerName.trim() ||
         !Number.isFinite(partner.originalContribution) || partner.originalContribution < 0 ||
-        !Number.isFinite(partner.ownershipPercentage) || partner.ownershipPercentage < 0 || partner.ownershipPercentage > 100) return 'INVALID_PARTNER';
+        !Number.isFinite(partner.ownershipPercentage) || partner.ownershipPercentage < 0 || partner.ownershipPercentage > 100 ||
+        (partner.currentAccountBalance !== undefined && !Number.isFinite(partner.currentAccountBalance))) return 'INVALID_PARTNER';
   }
   const shares = record.partners.reduce((sum, p) => sum + p.ownershipPercentage, 0);
   if (record.partners.length && Math.abs(shares - 100) > 0.01) return 'INVALID_SHARE_TOTAL';
