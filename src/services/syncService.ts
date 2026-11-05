@@ -258,6 +258,17 @@ async function pushBatch(tenantId: string, licenseKey: string, resources: string
       window.dispatchEvent(new CustomEvent(SYNC_EVENT));
       continue;
     }
+    if (r.body?.diagnostic && typeof r.body.diagnostic === 'object') {
+      const d = r.body.diagnostic;
+      const safe = [
+        `رقم التتبع: ${String(d.traceId || 'غير متاح').slice(0, 120)}`,
+        `المرحلة: ${String(d.phase || 'غير محددة').slice(0, 60)}`,
+        `المورد: ${String(d.resource || 'غير محدد').slice(0, 120)}`,
+        `نوع الخطأ: ${String(d.errorName || 'غير معروف').slice(0, 60)}`,
+        `كود الخطأ: ${String(d.errorCode || 'غير متاح').slice(0, 80)}`,
+      ];
+      throw new Error(`فشل المزامنة (HTTP ${r.status}) — ${safe.join(' | ')}`);
+    }
     throw new Error(r.body?.error || `فشل إرسال دفعة المزامنة: HTTP ${r.status}`);
   }
   throw new Error('تعذّر إتمام دفعة المزامنة بعد أربع محاولات تعارض؛ البيانات ما زالت محفوظة محلياً.');
