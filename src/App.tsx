@@ -42,11 +42,12 @@ import {
   PartnerWithdrawal,
   PartnerExitSettlement,
   PartnerSettlementPayment,
+  PartnerCurrentAccountTransaction,
   Shift
 } from './types/autoParts';
 import type { OpeningBalanceRecord } from './utils/openingBalanceLogic';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
-import { createBankMovementEntry, createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount } from './utils/bankLedger';
+import { createBankMovementEntry, createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount, summarizeBankAccount } from './utils/bankLedger';
 import { requiresDirectBankAccount, requiresSpecificBankAccount } from './utils/paymentMethods';
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
@@ -148,6 +149,7 @@ export default function App() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [partnerWithdrawals, setPartnerWithdrawals] = useState<PartnerWithdrawal[]>([]);
+  const [partnerCurrentAccountTransactions, setPartnerCurrentAccountTransactions] = useState<PartnerCurrentAccountTransaction[]>([]);
   const [partnerExitSettlements, setPartnerExitSettlements] = useState<PartnerExitSettlement[]>([]);
   const [partnerSettlementPayments, setPartnerSettlementPayments] = useState<PartnerSettlementPayment[]>([]);
   const [carModels, setCarModels] = useState<CarModel[]>([]);
@@ -264,6 +266,7 @@ export default function App() {
     setExpenses(data.expenses);
     setPartners((data.partners || []).map(partner => ({ ...partner, status: partner.status || 'ACTIVE' })));
     setPartnerWithdrawals(data.partnerWithdrawals || []);
+    setPartnerCurrentAccountTransactions(data.partnerCurrentAccountTransactions || []);
     setPartnerExitSettlements(data.partnerExitSettlements || []);
     setPartnerSettlementPayments(data.partnerSettlementPayments || []);
     setCarModels(modelsData);
@@ -3061,6 +3064,8 @@ export default function App() {
               });
               const cash = record.lines.filter(line => line.category === 'cash').reduce((sum, line) => sum + line.amount, 0);
               const cashRows: TreasuryTransaction[] = cash > 0 ? [{ id: record.id + ':CASH', txNumber: uniqueTransactionNumber('TX-OPEN'), date: record.cutoverDate, time: '00:00', type: 'قبض', category: 'إيداع نقدي إضافي', amount: cash, paymentMethod: 'نقدي', balanceAfter: treasuryBalance + cash, referenceId: record.id, description: 'رصيد خزينة افتتاحي عند بدء MALVIA', recordedBy: currentUser.employeeName }] : [];
+              const wallet = record.lines.filter(line => line.category === 'wallet').reduce((sum, line) => sum + line.amount, 0);
+              const walletRows: TreasuryTransaction[] = wallet > 0 ? [{ id: record.id + ':WALLET', txNumber: uniqueTransactionNumber('TX-OPEN-W'), date: record.cutoverDate, time: '00:00', type: 'قبض', category: 'إيداع نقدي إضافي', amount: wallet, paymentMethod: 'محفظة إلكترونية', balanceAfter: (summarizeTreasury(treasury).accounts.find(a => a.key === 'wallet')?.balance || 0) + wallet, referenceId: record.id, description: 'رصيد محفظة افتتاحي عند بدء MALVIA', recordedBy: currentUser.employeeName }] : [];
               const bankTotals = new Map<string, number>();
               record.lines.filter(line => line.category === 'bank' && line.bankAccountId).forEach(line => bankTotals.set(line.bankAccountId!, (bankTotals.get(line.bankAccountId!) || 0) + line.amount));
               const nextBanks = bankAccounts.map(account => bankTotals.has(account.id) ? { ...account, openingBalance: bankTotals.get(account.id)!, openingDate: record.cutoverDate } : account);
@@ -3075,7 +3080,7 @@ export default function App() {
                 const initialCapital = opening.originalContribution;
                 return { ...partner, initialCapital, sharePercentage: opening.ownershipPercentage, totalCurrentCapital: initialCapital + (partner.addedCapital || 0) + (partner.reinvestedProfits || 0) };
               });
-              const nextTreasury = [...cashRows, ...treasury];
+              const nextTreasury = [...cashRows, ...walletRows, ...treasury];
               const nextMovements = [...movements, ...stockMovements];
               const audit: AuditEntry = { id: record.id + ':AUDIT', at: record.approvedAt || new Date().toISOString(), userId: currentUser.employeeId, userName: currentUser.employeeName, userRole: currentUser.role, action: 'capital.opening.create', entityId: record.id, summary: 'اعتماد الأرصدة الافتتاحية بتاريخ ' + record.cutoverDate, amount: record.originalCapital };
               const nextAudit = [audit, ...auditLog];
