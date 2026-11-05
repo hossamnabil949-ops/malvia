@@ -51,8 +51,8 @@ export interface OpeningBalanceSummary {
   partnerCurrentAccountPayable: number;
   partnerCurrentAccountReceivable: number;
   reconciliationDifference: number;
-  assetBreakdown: Record<'inventory' | 'cash' | 'bank' | 'wallet' | 'fixed_asset' | 'prepaid' | 'customer_receivable' | 'other_asset', number>;
-  liabilityBreakdown: Record<'supplier_payable' | 'loan' | 'other_liability', number>;
+  assetBreakdown: Record<'inventory' | 'cash' | 'bank' | 'wallet' | 'fixed_asset' | 'prepaid' | 'customer_receivable' | 'other_asset' | 'partnerCurrentAccountReceivable', number>;
+  liabilityBreakdown: Record<'supplier_payable' | 'loan' | 'other_liability' | 'partnerCurrentAccountPayable', number>;
 }
 
 const roundMoney = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -62,11 +62,11 @@ const ASSET_CATEGORIES = new Set<OpeningBalanceCategory>([
 
 export function summarizeOpeningBalances(record: Pick<OpeningBalanceRecord, 'partners' | 'lines'>): OpeningBalanceSummary {
   const assetBreakdown: OpeningBalanceSummary['assetBreakdown'] = {
-    inventory: 0, cash: 0, bank: 0, wallet: 0, fixed_asset: 0, prepaid: 0, customer_receivable: 0, other_asset: 0,
+    inventory: 0, cash: 0, bank: 0, wallet: 0, fixed_asset: 0, prepaid: 0, customer_receivable: 0, other_asset: 0, partnerCurrentAccountReceivable: 0,
   };
   let historicalExpenses = 0;
   const liabilityBreakdown: OpeningBalanceSummary['liabilityBreakdown'] = {
-    supplier_payable: 0, loan: 0, other_liability: 0,
+    supplier_payable: 0, loan: 0, other_liability: 0, partnerCurrentAccountPayable: 0,
   };
   for (const line of record.lines) {
     if (line.category === 'historical_expense') {
@@ -77,16 +77,18 @@ export function summarizeOpeningBalances(record: Pick<OpeningBalanceRecord, 'par
       liabilityBreakdown[line.category as keyof typeof liabilityBreakdown] += line.amount;
     }
   }
-  const assets = roundMoney(Object.values(assetBreakdown).reduce((a, b) => a + b, 0));
-  const liabilities = roundMoney(Object.values(liabilityBreakdown).reduce((a, b) => a + b, 0));
   const partnerCapital = roundMoney(record.partners.reduce((sum, p) => sum + p.originalContribution, 0));
-  const netAssets = roundMoney(assets - liabilities);
   const partnerCurrentAccountPayable = roundMoney(record.partners.reduce((sum, p) => sum + Math.max(0, Number(p.currentAccountBalance || 0)), 0));
   const partnerCurrentAccountReceivable = roundMoney(record.partners.reduce((sum, p) => sum + Math.max(0, -Number(p.currentAccountBalance || 0)), 0));
+  assetBreakdown.partnerCurrentAccountReceivable = partnerCurrentAccountReceivable;
+  liabilityBreakdown.partnerCurrentAccountPayable = partnerCurrentAccountPayable;
+  const assets = roundMoney(Object.values(assetBreakdown).reduce((a, b) => a + b, 0));
+  const liabilities = roundMoney(Object.values(liabilityBreakdown).reduce((a, b) => a + b, 0));
+  const netAssets = roundMoney(assets - liabilities);
   return {
     assets, liabilities, historicalExpenses: roundMoney(historicalExpenses), netAssets, partnerCapital,
     partnerCurrentAccountPayable, partnerCurrentAccountReceivable,
-    reconciliationDifference: roundMoney(netAssets - partnerCapital + partnerCurrentAccountReceivable - partnerCurrentAccountPayable),
+    reconciliationDifference: roundMoney(netAssets - partnerCapital),
     assetBreakdown, liabilityBreakdown,
   };
 }
