@@ -562,7 +562,7 @@ const pcaBankEntry: any = {
   reference: 'PCA-BANK-1', description: 'جاري الشركاء — Partner A',
 };
 const pcaBankInput: any = {
-  previous: [], incoming: [pcaBankDeposit], partners: [{ id: 'pca-partner', name: 'Partner A' }],
+  previous: [], incoming: [pcaBankDeposit], partners: [{ id: 'pca-partner', name: 'Partner A', role: 'Test', phone: '01000000000', sharePercentage: 100, initialCapital: 1000, addedCapital: 0, reinvestedProfits: 0, totalCurrentCapital: 1000, totalWithdrawn: 0, joinDate: '2026-01-01', status: 'ACTIVE' }],
   bankAccounts: [{ id: 'bank-pca-1', active: true }], treasury: [pcaBankTreasury],
   bankLedgerEntries: [pcaBankEntry], openingBalances: [],
 };
@@ -588,7 +588,7 @@ const pcaCompanyRepaymentTreasury: any = {
   date: '2026-11-04', paymentMethod: 'نقدي',
 };
 assert.equal(validatePartnerCurrentAccountSync({
-  previous: [], incoming: [pcaCompanyRepayment], partners: [{ id: 'pca-partner', name: 'Partner A' }],
+  previous: [], incoming: [pcaCompanyRepayment], partners: [{ id: 'pca-partner', name: 'Partner A', role: 'Test', phone: '01000000000', sharePercentage: 100, initialCapital: 1000, addedCapital: 0, reinvestedProfits: 0, totalCurrentCapital: 1000, totalWithdrawn: 0, joinDate: '2026-01-01', status: 'ACTIVE' }],
   bankAccounts: [], treasury: [pcaCompanyRepaymentTreasury], bankLedgerEntries: [],
   openingBalances: [pcaOpeningCredit],
 }), null);
@@ -606,7 +606,7 @@ const pcaPartnerDepositTreasury: any = {
   date: '2026-11-04', paymentMethod: 'محفظة إلكترونية',
 };
 assert.equal(validatePartnerCurrentAccountSync({
-  previous: [], incoming: [pcaPartnerDeposit], partners: [{ id: 'pca-partner', name: 'Partner A' }],
+  previous: [], incoming: [pcaPartnerDeposit], partners: [{ id: 'pca-partner', name: 'Partner A', role: 'Test', phone: '01000000000', sharePercentage: 100, initialCapital: 1000, addedCapital: 0, reinvestedProfits: 0, totalCurrentCapital: 1000, totalWithdrawn: 0, joinDate: '2026-01-01', status: 'ACTIVE' }],
   bankAccounts: [], treasury: [pcaPartnerDepositTreasury], bankLedgerEntries: [], openingBalances: [],
 }), null);
 assert.equal(getPartnerCurrentAccountBalance('pca-partner', [pcaPartnerDeposit], []), 350);
@@ -622,7 +622,7 @@ const pcaPartnerWithdrawalTreasury: any = {
   date: '2026-11-04', paymentMethod: 'نقدي',
 };
 assert.equal(validatePartnerCurrentAccountSync({
-  previous: [], incoming: [pcaPartnerWithdrawal], partners: [{ id: 'pca-partner', name: 'Partner A' }],
+  previous: [], incoming: [pcaPartnerWithdrawal], partners: [{ id: 'pca-partner', name: 'Partner A', role: 'Test', phone: '01000000000', sharePercentage: 100, initialCapital: 1000, addedCapital: 0, reinvestedProfits: 0, totalCurrentCapital: 1000, totalWithdrawn: 0, joinDate: '2026-01-01', status: 'ACTIVE' }],
   bankAccounts: [], treasury: [pcaPartnerWithdrawalTreasury], bankLedgerEntries: [], openingBalances: [],
 }), null);
 assert.equal(getPartnerCurrentAccountBalance('pca-partner', [pcaPartnerDeposit, pcaPartnerWithdrawal], []), 230);
