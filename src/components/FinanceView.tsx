@@ -201,7 +201,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [newPartnerRole, setNewPartnerRole] = useState('شريك ممول ورأس المال');
   const [newPartnerPhone, setNewPartnerPhone] = useState('');
   const [newPartnerInitialCapital, setNewPartnerInitialCapital] = useState<number>(100000);
-  const [newPartnerSharePercent, setNewPartnerSharePercent] = useState<number>(20);
   const [newPartnerPaymentMethod, setNewPartnerPaymentMethod] = useState<string>('فيزا / بطاقة');
   const [newPartnerBankAccountId, setNewPartnerBankAccountId] = useState('');
   const [newPartnerNotes, setNewPartnerNotes] = useState('حصة تأسيسية جديدة بموجب عقد الشراكة');
@@ -210,31 +209,21 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [injectPaymentMethod, setInjectPaymentMethod] = useState<string>('فيزا / بطاقة');
   const [injectBankAccountId, setInjectBankAccountId] = useState('');
   const [injectNotes, setInjectNotes] = useState('ضخ سيولة لتمويل شراء دفعة قطع غيار أصلية');
-  const [injectAutoRecalculate, setInjectAutoRecalculate] = useState(false);
 
   const [distributionPaymentMethod, setDistributionPaymentMethod] = useState<string>('نقدي');
   const [distributionBankAccountId, setDistributionBankAccountId] = useState('');
   const [reinvestAmount, setReinvestAmount] = useState<number>(5000);
   const [reinvestNotes, setReinvestNotes] = useState('رسملة الأرباح الدورية وإضافتها لحصة رأس المال المستثمر');
 
-  const [editingShares, setEditingShares] = useState<Record<string, number>>(() => {
-    const map: Record<string, number> = {};
-    partners.forEach((p) => {
-      map[p.id] = p.sharePercentage;
-    });
-    return map;
-  });
-
   React.useEffect(() => {
-    const map: Record<string, number> = {};
-    partners.forEach((p) => {
-      map[p.id] = p.sharePercentage;
-    });
-    setEditingShares(map);
-    if (!targetPartnerId && partners.length > 0) {
-      setTargetPartnerId(partners[0].id);
-    }
+    if (!targetPartnerId && partners.length > 0) setTargetPartnerId(partners[0].id);
   }, [partners, targetPartnerId]);
+
+  const currentPartnerCapitalTotal = partners.reduce((sum, partner) =>
+    sum + (partner.totalCurrentCapital || partner.initialCapital + (partner.addedCapital || 0) + (partner.reinvestedProfits || 0)), 0);
+  const newPartnerSharePercent = currentPartnerCapitalTotal + newPartnerInitialCapital > 0
+    ? Number(((newPartnerInitialCapital / (currentPartnerCapitalTotal + newPartnerInitialCapital)) * 100).toFixed(4))
+    : 0;
 
   // تكلفة البضاعة المباعة من تكلفة كل صنف مباع فعلياً:
   // 1) تكلفة الوحدة المسجلة في الفاتورة وقت البيع، وإلا
@@ -464,12 +453,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
   const handleSubmitAddPartner = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPartnerName.trim() || newPartnerInitialCapital <= 0 || newPartnerSharePercent <= 0 || newPartnerSharePercent > 100) return;
-    const committedShare = partners.reduce((sum, partner) => sum + (Number(partner.sharePercentage) || 0), 0);
-    if (committedShare + newPartnerSharePercent > 100.0001) {
-      window.alert(`إجمالي نسب الشركاء سيصبح ${(committedShare + newPartnerSharePercent).toFixed(2)}%، ولا يجوز أن يتجاوز 100%.`);
-      return;
-    }
+    if (!newPartnerName.trim() || newPartnerInitialCapital <= 0 || newPartnerSharePercent <= 0) return;
 
     const newPartner: Partner = {
       id: `part-${Date.now()}`,
@@ -506,7 +490,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         injectAmount,
         injectPaymentMethod,
         injectNotes,
-        injectAutoRecalculate,
+        true,
         requiresSpecificBankAccount(injectPaymentMethod) ? injectBankAccountId : undefined
       );
     }
@@ -754,13 +738,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <span>رسملة الأرباح (إدخالها برأس المال)</span>
               </button>
 
-              <button
-                onClick={() => setShowAdjustSharesModal(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-surface-3 hover:bg-surface-4 text-neutral-300 border border-neutral-700 font-bold text-xs transition-all shadow-sm active:scale-95"
-              >
-                <Percent className="w-4 h-4 text-amber-400" />
-                <span>تعديل نسب الحصص</span>
-              </button>
+              <span className="text-[11px] text-neutral-500 self-center">النسب محسوبة تلقائيًا من مساهمات رأس المال</span>
 
               <button
                 onClick={() => setShowDistributeModal(true)}
@@ -1252,17 +1230,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   />
                 </div>
 
-                <div>
-                  <label className="text-neutral-300 font-bold block mb-1">نسبة حصة الأرباح التعاقدية (%) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    max="100"
-                    value={newPartnerSharePercent || ''}
-                    onChange={(e) => setNewPartnerSharePercent(Number(e.target.value))}
-                    className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono text-amber-400 font-bold"
-                  />
+                <div className="rounded-xl bg-surface-1 border border-neutral-800 p-3 flex flex-col justify-center">
+                  <span className="text-neutral-400">نسبة الشريك المحسوبة تلقائيًا</span>
+                  <strong className="text-amber-400 text-lg font-mono">%{newPartnerSharePercent.toFixed(2)}</strong>
+                  <span className="text-[10px] text-neutral-500">بناءً على إجمالي رأس المال بعد الإضافة</span>
                 </div>
               </div>
 
