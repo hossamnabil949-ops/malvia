@@ -1,10 +1,4 @@
 // FIN-18: atomic multi-resource sync. Every resource is validated and committed in one PostgreSQL transaction.
-import { commitSyncBatch, getAuthenticatedEmployee, getOne } from './_db.js';
-import { validateChequeAuditSync, validateChequeAuxiliarySync, validateChequeCollectionSync, validateExpenseOnlySync, validatePurchaseAuditSync } from '../src/utils/chequeSyncPolicy';
-import { validateBankLedgerSync } from '../src/utils/bankLedgerSyncPolicy';
-import { validatePartnerCurrentAccountSync } from '../src/utils/partnerCurrentAccount';
-import { createHash } from 'node:crypto';
-import { ApiError, clientIp, findLicense, rateLimit, sendError } from './_security.js';
 
 const policy: Record<string, string[]> = {
   employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'], partnerWithdrawals: ['canManagePartners'], partnerCurrentAccountTransactions: ['canManagePartners','canManageTreasury'], partnerExitSettlements: ['canManagePartners'], partnerSettlementPayments: ['canManagePartners'], openingBalances: [],
@@ -23,21 +17,58 @@ const policy: Record<string, string[]> = {
 };
 
 export default async function handler(req: any, res: any) {
+  let phase = 'start';
+  let resource = '';
+  let operationResources: string[] = [];
+  let ApiErrorClass: any = null;
+  let sendErrorFn: any = null;
+  const traceId = String(req.headers['x-vercel-id'] || req.headers['x-request-id'] || 'unavailable').slice(0, 160);
   try {
-    if (req.method !== 'POST') throw new ApiError('METHOD_NOT_ALLOWED');
+    // Keep the function entrypoint dependency-light. If a server-only module fails
+    // during initialization, catch it here and return a safe JSON diagnostic.
+    phase = 'request_validation';
+    if (req.method !== 'POST') {
+      return res.status(405).json({ code: 'METHOD_NOT_ALLOWED', error: 'method not allowed' });
+    }
+
+    phase = 'module_loading';
+    const [db, security, crypto, chequePolicy, bankPolicy, partnerPolicy] = await Promise.all([
+      import('./_db.js'),
+      import('./_security.js'),
+      import('node:crypto'),
+      import('../src/utils/chequeSyncPolicy.js'),
+      import('../src/utils/bankLedgerSyncPolicy.js'),
+      import('../src/utils/partnerCurrentAccount.js'),
+    ]);
+    ApiErrorClass = security.ApiError;
+    sendErrorFn = security.sendError;
+    const { commitSyncBatch, getAuthenticatedEmployee, getOne } = db;
+    const { clientIp, findLicense, rateLimit } = security;
+    const { createHash } = crypto;
+    const {
+      validateChequeAuditSync, validateChequeAuxiliarySync,
+      validateChequeCollectionSync, validateExpenseOnlySync, validatePurchaseAuditSync,
+    } = chequePolicy;
+    const { validateBankLedgerSync } = bankPolicy;
+    const { validatePartnerCurrentAccountSync } = partnerPolicy;
+
+    phase = 'request_validation';
     const key = String(req.headers['x-license-key'] || '').trim();
-    if (!key) throw new ApiError('LICENSE_REQUIRED');
+    if (!key) throw new ApiErrorClass('LICENSE_REQUIRED');
     const ip = clientIp(req);
     rateLimit(`sync-batch:${ip}`, 120, 60_000);
+    phase = 'license_lookup';
     const lic = await findLicense(key);
-    if (!lic) { rateLimit(`bad-key:${ip}`, 10, 10 * 60_000); throw new ApiError('LICENSE_INVALID'); }
-    if (lic.status === 'معلق مؤقتاً') throw new ApiError('LICENSE_SUSPENDED');
+    if (!lic) { rateLimit(`bad-key:${ip}`, 10, 10 * 60_000); throw new ApiErrorClass('LICENSE_INVALID'); }
+    if (lic.status === 'معلق مؤقتاً') throw new ApiErrorClass('LICENSE_SUSPENDED');
     const bearer = String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1] || '';
     if (!bearer) return res.status(401).json({ code: 'EMPLOYEE_SESSION_REQUIRED', error: 'يلزم تسجيل دخول موظف موثق قبل المزامنة.' });
     const tokenHash = createHash('sha256').update(bearer).digest('hex');
     const tenant = String(lic.tenantId);
+    phase = 'employee_authentication';
     const employee = await getAuthenticatedEmployee(tenant, tokenHash);
     if (!employee) return res.status(401).json({ code: 'EMPLOYEE_SESSION_INVALID', error: 'جلسة الموظف غير صالحة أو انتهت.' });
+    phase = 'payload_validation';
     const operations = req.body?.operations;
     const idempotencyKey = String(req.body?.idempotencyKey || '').trim();
     if (!Array.isArray(operations) || operations.length < 1 || operations.length > 40 ||
@@ -48,9 +79,11 @@ export default async function handler(req: any, res: any) {
           !Object.prototype.hasOwnProperty.call(op, 'data'))) {
       return res.status(400).json({ code: 'SYNC_BATCH_INVALID', error: 'بيانات دفعة المزامنة غير صالحة.' });
     }
+    operationResources = operations.map((op: any) => String(op.resource));
     if (new Set(operations.map((op: any) => op.resource)).size !== operations.length) {
       return res.status(400).json({ code: 'SYNC_BATCH_DUPLICATE_RESOURCE', error: 'لا يمكن تكرار المورد داخل دفعة واحدة.' });
     }
+    phase = 'permission_validation';
     const role = String(employee.role || '');
     const permissions = employee.permissions || {};
     const owner = role === 'مدير عام';
@@ -63,6 +96,7 @@ export default async function handler(req: any, res: any) {
       return res.status(403).json({ code: 'PARTNER_CURRENT_ACCOUNT_PERMISSION_DENIED', resource: 'partnerCurrentAccountTransactions', error: 'حساب جاري الشركاء يتطلب صلاحية إدارة الشركاء والخزينة معاً.' });
     }
 
+    phase = 'bank_ledger_validation';
     if (!owner && operations.some((op: any) => op.resource === 'bankLedgerEntries')) {
       const operationMap = new Map(operations.map((op: any) => [op.resource, op]));
       const loadArray = async (resource: string): Promise<any[]> => {
@@ -95,6 +129,7 @@ export default async function handler(req: any, res: any) {
       if (bankError) return res.status(403).json({ code: bankError, resource: 'bankLedgerEntries', error: 'حركة دفتر البنك غير مطابقة للمستند المالي أو تحاول تعديل سجل سابق.' });
     }
 
+    phase = 'partner_current_account_validation';
     const partnerCurrentAccountOperation: any = operations.find((op: any) => op.resource === 'partnerCurrentAccountTransactions');
     if (partnerCurrentAccountOperation) {
       const previousRow = await getOne(tenant, 'partnerCurrentAccountTransactions');
@@ -124,6 +159,7 @@ export default async function handler(req: any, res: any) {
       });
     }
 
+    phase = 'opening_balance_validation';
     const openingOperation: any = operations.find((op: any) => op.resource === 'openingBalances');
     if (openingOperation) {
       if (!owner) return res.status(403).json({ code: 'OPENING_BALANCE_OWNER_ONLY', resource: 'openingBalances', error: 'تهيئة الأرصدة الافتتاحية متاحة للمالك فقط.' });
@@ -147,6 +183,7 @@ export default async function handler(req: any, res: any) {
         if (record.partners.some((p: any) => !p.partnerId || !String(p.partnerName || '').trim() || !Number.isFinite(p.originalContribution) || p.originalContribution < 0 || !Number.isFinite(p.ownershipPercentage) || p.ownershipPercentage < 0 || p.ownershipPercentage > 100 || (p.currentAccountBalance !== undefined && !Number.isFinite(p.currentAccountBalance))) || (record.partners.length > 0 && Math.abs(shares - 100) > 0.01)) return res.status(400).json({ code: 'OPENING_BALANCE_PARTNERS_INVALID', resource: 'openingBalances', error: 'بيانات الشركاء أو مجموع نسب الملكية غير صالحة.' });
       }
     }
+    phase = 'finance_policy_validation';
     if (!owner && operations.some((op: any) => ['cheques', 'treasury', 'bankLedgerEntries', 'expenses', 'auditLog'].includes(op.resource)) &&
         permissions.canManageTreasury !== true) {
       const operationMap = new Map(operations.map((op: any) => [op.resource, op]));
@@ -236,13 +273,43 @@ export default async function handler(req: any, res: any) {
         if (error) return res.status(403).json({ code: error, resource, error: 'حركة الشيك البنكية غير مطابقة أو غير مسموح بها.' });
       }
     }
+    phase = 'batch_size_and_hash';
     const serialized = JSON.stringify(operations);
     if (serialized.length > 5_000_000) return res.status(413).json({ code: 'SYNC_BATCH_TOO_LARGE', error: 'حجم دفعة المزامنة أكبر من الحد المسموح.' });
     const requestHash = createHash('sha256').update(serialized).digest('hex');
+    phase = 'database_commit';
+    resource = operationResources.join(',');
     const result = await commitSyncBatch(tenant, idempotencyKey, requestHash, operations);
     if (result?.conflict) return res.status(409).json(result);
     return res.status(200).json(result);
-  } catch (error) {
-    return sendError(res, error);
+  } catch (error: any) {
+    const errorName = error instanceof Error ? error.name : typeof error;
+    const errorCode = typeof error?.code === 'string' || typeof error?.code === 'number' ? String(error.code).slice(0, 80) : undefined;
+    // Never log request bodies, employee records, credentials, session tokens, or database values.
+    console.error('[MALVIA_SYNC_BATCH_DIAGNOSTIC]', {
+      traceId,
+      phase,
+      resource: resource || operationResources.join(',') || undefined,
+      operationCount: operationResources.length,
+      method: String(req.method || '').slice(0, 12),
+      errorName,
+      errorCode,
+    });
+    res.setHeader?.('x-malvia-trace-id', traceId);
+    if (ApiErrorClass && error instanceof ApiErrorClass && sendErrorFn) {
+      return sendErrorFn(res, error);
+    }
+    return res.status(500).json({
+      error: 'خطأ داخلي في الخادم',
+      code: 'INTERNAL',
+      diagnostic: {
+        traceId,
+        phase,
+        resource: resource || operationResources.join(',') || 'unknown',
+        operationCount: operationResources.length,
+        errorName,
+        errorCode: errorCode || 'NO_CODE',
+      },
+    });
   }
 }

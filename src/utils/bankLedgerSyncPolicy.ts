@@ -1,7 +1,7 @@
-import { paymentAccountOf } from './paymentMethods';
+import { paymentAccountOf } from './paymentMethods.js';
 import type { BankAccount, BankLedgerEntry } from './bankLedger';
 import type { PartnerCurrentAccountTransaction } from '../types/autoParts';
-import { partnerCurrentAccountCashDirection } from './partnerCurrentAccount';
+import { partnerCurrentAccountCashDirection } from './partnerCurrentAccount.js';
 
 export type BankLedgerSyncError =
   | 'BANK_LEDGER_NOT_ARRAY'

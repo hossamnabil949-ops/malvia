@@ -160,8 +160,14 @@ async function api(path: string, init: RequestInit & { headers?: Record<string, 
   } catch { /* no server session: protected writes will be rejected */ }
   const r = await fetch(path, { ...init, headers });
   let body: any = null;
-  try { body = await r.json(); } catch { /* ignore */ }
-  return { status: r.status, ok: r.ok, body };
+  try { body = await r.clone().json(); } catch { /* ignore non-JSON gateway responses */ }
+  return {
+    status: r.status,
+    ok: r.ok,
+    body,
+    traceId: r.headers.get('x-malvia-trace-id') || r.headers.get('x-vercel-id') || r.headers.get('x-request-id') || '',
+    contentType: r.headers.get('content-type') || 'unknown',
+  };
 }
 
 async function pushResource(tenantId: string, licenseKey: string, res: string): Promise<boolean> {
@@ -258,7 +264,25 @@ async function pushBatch(tenantId: string, licenseKey: string, resources: string
       window.dispatchEvent(new CustomEvent(SYNC_EVENT));
       continue;
     }
-    throw new Error(r.body?.error || `فشل إرسال دفعة المزامنة: HTTP ${r.status}`);
+    if (r.body?.diagnostic && typeof r.body.diagnostic === 'object') {
+      const d = r.body.diagnostic;
+      const safe = [
+        `رقم التتبع: ${String(d.traceId || 'غير متاح').slice(0, 120)}`,
+        `المرحلة: ${String(d.phase || 'غير محددة').slice(0, 60)}`,
+        `المورد: ${String(d.resource || 'غير محدد').slice(0, 120)}`,
+        `نوع الخطأ: ${String(d.errorName || 'غير معروف').slice(0, 60)}`,
+        `كود الخطأ: ${String(d.errorCode || 'غير متاح').slice(0, 80)}`,
+      ];
+      throw new Error(`فشل المزامنة (HTTP ${r.status}) — ${safe.join(' | ')}`);
+    }
+    const fallbackDiagnostic = [
+      `رقم التتبع: ${String(r.traceId || 'غير متاح').slice(0, 160)}`,
+      'المرحلة: لم يصل تشخيص من داخل الخادم',
+      'المورد: غير محدد',
+      `نوع الخطأ: HTTP_${r.status}`,
+      `كود الخطأ: ${String(r.contentType || 'unknown').slice(0, 100)}`,
+    ];
+    throw new Error(`فشل المزامنة (HTTP ${r.status}) — ${fallbackDiagnostic.join(' | ')}`);
   }
   throw new Error('تعذّر إتمام دفعة المزامنة بعد أربع محاولات تعارض؛ البيانات ما زالت محفوظة محلياً.');
 }
