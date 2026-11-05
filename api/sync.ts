@@ -43,7 +43,7 @@ export default async function handler(req: any, res: any) {
       const role = String(employee.role || '');
       const p = employee.permissions || {};
       const owner = role === 'مدير عام';
-      const allowed = (keys: string[]) => owner || keys.some((key) => p[key] === true);
+      const allowed = (keys: string[]) => owner || (role === 'محاسب مالي' && keys.includes('canManagePartners')) || keys.some((key) => p[key] === true);
       const policy: Record<string, string[]> = {
         employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'], partnerWithdrawals: ['canManagePartners'], partnerExitSettlements: ['canManagePartners'], partnerSettlementPayments: ['canManagePartners'],
         parts: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], stockLevels: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
@@ -52,10 +52,10 @@ export default async function handler(req: any, res: any) {
         invoices: ['canSellPos'], salesReturns: ['canSellPos'], loyaltyLedger: ['canSellPos'], customers: ['canSellPos','canManageTreasury'],
         suppliers: ['canManagePurchases','canReceivePurchases','canManageTreasury'], supplierPayments: ['canManagePurchases','canManageTreasury'], supplierPaymentSchedules: ['canManagePurchases','canManageTreasury'],
         purchaseInvoices: ['canManagePurchases','canReceivePurchases'], purchaseReturns: ['canManagePurchases'],
-        expenses: ['canManageExpenses','canManageTreasury'], treasury: ['canManageTreasury','canSellPos','canManagePurchases'],
-        bankAccounts: ['canManageTreasury'], cardSettlements: ['canManageTreasury'], bankLedgerEntries: ['canManageTreasury'],
+        expenses: ['canManageExpenses','canManageTreasury'], treasury: ['canManageTreasury','canSellPos','canManagePurchases','canManagePartners'],
+        bankAccounts: ['canManageTreasury'], cardSettlements: ['canManageTreasury'], bankLedgerEntries: ['canManageTreasury','canManagePartners'],
         shifts: ['canSellPos','canManageTreasury'], stockMovements: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
-        auditLog: ['canSellPos','canManageInventory','canManagePurchases','canManageTreasury','canManageSettings'],
+        auditLog: ['canSellPos','canManageInventory','canManagePurchases','canManageTreasury','canManageSettings','canManagePartners'],
         carModels: ['canManageInventory'], reservations: ['canSellPos'], cheques: ['canManageTreasury'],
       };
       const keys = policy[resource] || ['canManageSettings'];
