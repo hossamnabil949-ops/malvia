@@ -1,10 +1,4 @@
 // FIN-18: atomic multi-resource sync. Every resource is validated and committed in one PostgreSQL transaction.
-import { commitSyncBatch, getAuthenticatedEmployee, getOne } from './_db.js';
-import { validateChequeAuditSync, validateChequeAuxiliarySync, validateChequeCollectionSync, validateExpenseOnlySync, validatePurchaseAuditSync } from '../src/utils/chequeSyncPolicy';
-import { validateBankLedgerSync } from '../src/utils/bankLedgerSyncPolicy';
-import { validatePartnerCurrentAccountSync } from '../src/utils/partnerCurrentAccount';
-import { createHash } from 'node:crypto';
-import { ApiError, clientIp, findLicense, rateLimit, sendError } from './_security.js';
 
 const policy: Record<string, string[]> = {
   employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'], partnerWithdrawals: ['canManagePartners'], partnerCurrentAccountTransactions: ['canManagePartners','canManageTreasury'], partnerExitSettlements: ['canManagePartners'], partnerSettlementPayments: ['canManagePartners'], openingBalances: [],
@@ -26,10 +20,39 @@ export default async function handler(req: any, res: any) {
   let phase = 'start';
   let resource = '';
   let operationResources: string[] = [];
+  let ApiErrorClass: any = null;
+  let sendErrorFn: any = null;
   const traceId = String(req.headers['x-vercel-id'] || req.headers['x-request-id'] || 'unavailable').slice(0, 160);
   try {
+    // Keep the function entrypoint dependency-light. If a server-only module fails
+    // during initialization, catch it here and return a safe JSON diagnostic.
     phase = 'request_validation';
-    if (req.method !== 'POST') throw new ApiError('METHOD_NOT_ALLOWED');
+    if (req.method !== 'POST') {
+      return res.status(405).json({ code: 'METHOD_NOT_ALLOWED', error: 'method not allowed' });
+    }
+
+    phase = 'module_loading';
+    const [db, security, crypto, chequePolicy, bankPolicy, partnerPolicy] = await Promise.all([
+      import('./_db.js'),
+      import('./_security.js'),
+      import('node:crypto'),
+      import('../src/utils/chequeSyncPolicy.js'),
+      import('../src/utils/bankLedgerSyncPolicy.js'),
+      import('../src/utils/partnerCurrentAccount.js'),
+    ]);
+    ApiErrorClass = security.ApiError;
+    sendErrorFn = security.sendError;
+    const { commitSyncBatch, getAuthenticatedEmployee, getOne } = db;
+    const { clientIp, findLicense, rateLimit } = security;
+    const { createHash } = crypto;
+    const {
+      validateChequeAuditSync, validateChequeAuxiliarySync,
+      validateChequeCollectionSync, validateExpenseOnlySync, validatePurchaseAuditSync,
+    } = chequePolicy;
+    const { validateBankLedgerSync } = bankPolicy;
+    const { validatePartnerCurrentAccountSync } = partnerPolicy;
+
+    phase = 'request_validation';
     const key = String(req.headers['x-license-key'] || '').trim();
     if (!key) throw new ApiError('LICENSE_REQUIRED');
     const ip = clientIp(req);
@@ -273,20 +296,20 @@ export default async function handler(req: any, res: any) {
       errorCode,
     });
     res.setHeader?.('x-malvia-trace-id', traceId);
-    if (!(error instanceof ApiError)) {
-      return res.status(500).json({
-        error: 'خطأ داخلي في الخادم',
-        code: 'INTERNAL',
-        diagnostic: {
-          traceId,
-          phase,
-          resource: resource || operationResources.join(',') || 'unknown',
-          operationCount: operationResources.length,
-          errorName,
-          errorCode: errorCode || 'NO_CODE',
-        },
-      });
+    if (ApiErrorClass && error instanceof ApiErrorClass && sendErrorFn) {
+      return sendErrorFn(res, error);
     }
-    return sendError(res, error);
+    return res.status(500).json({
+      error: 'خطأ داخلي في الخادم',
+      code: 'INTERNAL',
+      diagnostic: {
+        traceId,
+        phase,
+        resource: resource || operationResources.join(',') || 'unknown',
+        operationCount: operationResources.length,
+        errorName,
+        errorCode: errorCode || 'NO_CODE',
+      },
+    });
   }
 }
