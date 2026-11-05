@@ -200,7 +200,7 @@ export const PartnerCurrentAccountPanel: React.FC<Props> = ({
             <input type="number" min="0.01" step="0.01" inputMode="decimal" value={amount || ''} onChange={e => setAmount(Number(e.target.value))} className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2.5 text-white font-mono"/>
           </label>
           <label className="block text-xs text-neutral-300">جهة الحركة
-            <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} disabled={type === 'partner_repayment' && Boolean(selectedOrigin?.paymentMethod) && (selectedOrigin.paymentMethod !== 'تحويل بنكي' || activeBankAccounts.some(account => account.id === selectedOrigin.bankAccountId))} className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2.5 text-white disabled:opacity-60">
+            <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} disabled={type === 'partner_repayment' && Boolean(selectedOrigin && selectedOrigin.paymentMethod) && (selectedOrigin!.paymentMethod !== 'تحويل بنكي' || activeBankAccounts.some(account => account.id === selectedOrigin!.bankAccountId))} className="mt-1 w-full rounded-lg bg-surface-1 border border-neutral-700 p-2.5 text-white disabled:opacity-60">
               <option value="نقدي">درج نقدي</option>
               <option value="تحويل بنكي">حساب بنكي / تحويل</option>
               <option value="محفظة إلكترونية">محفظة إلكترونية</option>
