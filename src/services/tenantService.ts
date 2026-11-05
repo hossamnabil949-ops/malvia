@@ -224,6 +224,9 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     purchaseReturns: loadResource<PurchaseReturn[]>('purchaseReturns', INITIAL_PURCHASE_RETURNS),
     expenses: loadResource<Expense[]>('expenses', INITIAL_EXPENSES),
     partners: loadResource<Partner[]>('partners', INITIAL_PARTNERS),
+    partnerWithdrawals: loadResource<PartnerWithdrawal[]>('partnerWithdrawals', []),
+    partnerExitSettlements: loadResource<PartnerExitSettlement[]>('partnerExitSettlements', []),
+    partnerSettlementPayments: loadResource<PartnerSettlementPayment[]>('partnerSettlementPayments', []),
     carModels: loadResource<CarModel[]>('carModels', INITIAL_CAR_MODELS),
     reservations: loadResource<PartReservation[]>('reservations', INITIAL_RESERVATIONS),
     inventoryErrors: loadResource<InventoryDiscrepancyError[]>('inventoryErrors', INITIAL_INVENTORY_ERRORS),
@@ -261,6 +264,9 @@ export function saveTenantStoreData(
     purchaseReturns?: PurchaseReturn[];
     expenses?: Expense[];
     partners?: Partner[];
+    partnerWithdrawals?: PartnerWithdrawal[];
+    partnerExitSettlements?: PartnerExitSettlement[];
+    partnerSettlementPayments?: PartnerSettlementPayment[];
     carModels?: CarModel[];
     reservations?: PartReservation[];
     inventoryErrors?: InventoryDiscrepancyError[];
@@ -307,6 +313,9 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     localStorage.setItem(getTenantKey(tenantId, 'purchaseReturns'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'expenses'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'partners'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'partnerWithdrawals'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'partnerExitSettlements'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'partnerSettlementPayments'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'reservations'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'inventoryErrors'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'auditLog'), emptyArrayJson);
@@ -330,7 +339,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     const ownerAccount = empsList.find(e => e.role === 'مدير عام' || e.username === 'admin') || INITIAL_EMPLOYEES[0];
     const cleanedStaff = [ownerAccount];
     localStorage.setItem(getTenantKey(tenantId, 'employees'), JSON.stringify(cleanedStaff));
-    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','supplierPaymentSchedules','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers','loyaltyLedger','cheques','stockBatches','serialUnits','bankAccounts','cardSettlements','bankLedgerEntries','openingBalances']);
+    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','supplierPaymentSchedules','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','partnerWithdrawals','partnerExitSettlements','partnerSettlementPayments','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers','loyaltyLedger','cheques','stockBatches','serialUnits','bankAccounts','cardSettlements','bankLedgerEntries','openingBalances']);
 
     return cleanedStaff;
   } catch (err) {
