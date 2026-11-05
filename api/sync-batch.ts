@@ -80,6 +80,9 @@ export default async function handler(req: any, res: any) {
         expenses: await currentArray('expenses'),
         treasury: await currentArray('treasury'),
         partners: await currentArray('partners'),
+        partnerWithdrawals: await currentArray('partnerWithdrawals'),
+        partnerSettlementPayments: await currentArray('partnerSettlementPayments'),
+        partnerExitSettlements: await currentArray('partnerExitSettlements'),
         cardSettlements: await currentArray('cardSettlements'),
         cheques: await currentArray('cheques'),
       });
