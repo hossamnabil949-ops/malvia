@@ -153,7 +153,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
       {/* 2. Key Performance Indicators (KPIs) */}
       <div className="malvia-dashboard-kpis grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 shadow-sm flex flex-col justify-between">
+        <div className="malvia-kpi-card p-4 rounded-2xl bg-surface-2 border border-neutral-800 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-neutral-400 text-xs">
             <span>مبيعات اليوم</span>
             <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
@@ -209,7 +209,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
         <div 
           onClick={onOpenNotifications}
-          className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 hover:border-rose-500/50 hover:bg-surface-2 transition-all cursor-pointer shadow-sm flex flex-col justify-between group"
+          className="malvia-kpi-card p-4 rounded-2xl bg-surface-2 border border-neutral-800 hover:border-rose-500/50 hover:bg-surface-2 transition-all cursor-pointer shadow-sm flex flex-col justify-between group"
           title="اضغط لفتح مركز إشعارات الأصناف المستنفدة"
         >
           <div className="flex items-center justify-between text-neutral-400 text-xs">
@@ -246,7 +246,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       )}
 
       {/* 4. Fast Part & OEM Search Bar */}
-      <div className="p-5 rounded-2xl bg-surface-2 border border-neutral-800 space-y-3">
+      <div className="malvia-dashboard-panel p-5 rounded-2xl bg-surface-2 border border-neutral-800 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Search className="w-4 h-4 text-amber-400" />
@@ -328,7 +328,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
       {/* 5. Two Columns: Low Stock Alerts & Recent Invoices */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="p-5 rounded-2xl bg-surface-2 border border-neutral-800 space-y-4">
+        <div className="malvia-dashboard-panel p-5 rounded-2xl bg-surface-2 border border-neutral-800 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-400" />
