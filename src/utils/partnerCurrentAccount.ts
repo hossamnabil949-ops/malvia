@@ -137,9 +137,10 @@ export function validatePartnerCurrentAccountSync(input: {
   }
 
   const activeBankIds = new Set(bankAccounts.filter(item => item.active).map(item => item.id));
+  const validTypes = new Set<PartnerCurrentAccountMovementType>(['partner_deposit', 'partner_withdrawal', 'partner_repayment', 'company_repayment']);
   const added = incoming.filter(item => !previousById.has(item.id));
   for (const item of added) {
-    if (!item.id || !item.partnerId || !item.partnerName?.trim() || !item.treasuryTransactionId
+    if (!validTypes.has(item.type) || !item.id || !item.partnerId || !item.partnerName?.trim() || !item.treasuryTransactionId
       || !Number.isFinite(item.amount) || item.amount <= 0 || !validDate(item.date)
       || !item.recordedBy?.trim() || !validDate(item.createdAt?.slice(0, 10))) return 'PARTNER_CURRENT_ACCOUNT_ENTRY_INVALID';
     if (!partners.some(partner => partner.id === item.partnerId)) return 'PARTNER_CURRENT_ACCOUNT_PARTNER_INVALID';
@@ -192,6 +193,14 @@ export function validatePartnerCurrentAccountSync(input: {
     const settled = incoming.filter(candidate => candidate.relatedTransactionId === item.relatedTransactionId)
       .reduce((sum, candidate) => sum + candidate.amount, 0);
     if (settled > originAmount + 0.005) return 'PARTNER_CURRENT_ACCOUNT_OVERPAID';
+
+    const opening = openingPartnerCurrentAccountBalance(item.partnerId, openingBalances);
+    const before = opening + incoming
+      .filter(candidate => candidate.partnerId === item.partnerId && candidate.id !== item.id
+        && (candidate.createdAt || '') <= item.createdAt)
+      .reduce((sum, candidate) => sum + candidate.amount * partnerCurrentAccountBalanceEffect(candidate.type), 0);
+    if (isPartnerRepayment && (before >= -0.005 || item.amount > Math.abs(before) + 0.005)) return 'PARTNER_CURRENT_ACCOUNT_OVERPAID';
+    if (!isPartnerRepayment && (before <= 0.005 || item.amount > before + 0.005)) return 'PARTNER_CURRENT_ACCOUNT_OVERPAID';
   }
   return null;
 }
