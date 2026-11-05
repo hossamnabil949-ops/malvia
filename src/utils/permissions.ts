@@ -8,17 +8,17 @@ export const OWNER_ROLE: Employee['role'] = 'مدير عام';
 export const TAB_ACCESS: Record<string, PermKey[]> = {
   dashboard: [],
   pos: ['canSellPos'],
-  shifts: ['canSellPos', 'canManageTreasury'],
+  shifts: ['canSellPos', 'canManageTreasury', 'canViewCashBalances'],
   inventory: ['canManageInventory'],
   lowstock: ['canManageInventory'],
   warehouses: ['canManageInventory'],
   tracking: ['canManageInventory'],
   invoices: ['canSellPos', 'canViewReports'],
-  purchases: ['canManagePurchases'],
+  purchases: ['canManagePurchases', 'canReceivePurchases'],
   suppliers: ['canManagePurchases', 'canManageTreasury'],
   customers: ['canSellPos', 'canManageTreasury'],
-  finance: ['canManageTreasury', 'canManagePartners'],
-  cheques: ['canManageTreasury'],
+  finance: ['canManageTreasury', 'canManagePartners', 'canManageExpenses'],
+  cheques: ['canManageTreasury', 'canRegisterCheques', 'canManageChequeLifecycle'],
   reports: ['canViewReports'],
   settings: ['canManageSettings'],
 };
@@ -29,7 +29,7 @@ export function isSimpleCashier(role: string | undefined, permissions: Partial<E
 }
 
 /** الشاشات المتاحة في الوضع المبسط (بشرط أن تسمح بها الصلاحيات أصلاً). */
-export const SIMPLE_MODE_TABS = ['pos', 'shifts', 'invoices', 'customers'];
+export const SIMPLE_MODE_TABS = ['pos', 'shifts', 'invoices', 'customers', 'cheques'];
 
 /** ترتيب اختيار أول شاشة مسموحة عند التحويل من شاشة ممنوعة. */
 export const TAB_ORDER = ['dashboard', 'pos', 'shifts', 'invoices', 'customers', 'inventory', 'lowstock', 'warehouses', 'tracking', 'purchases', 'suppliers', 'finance', 'cheques', 'reports', 'settings'];
@@ -49,15 +49,17 @@ export function firstAllowedTab(role: string | undefined, permissions: Partial<E
 const P = (over: Partial<EmployeePermissions>): EmployeePermissions => ({
   canSellPos: false, canManageInventory: false, canManagePurchases: false,
   canManageTreasury: false, canViewReports: false, canManageSettings: false, canManagePartners: false,
+  canViewCashBalances: false, canRegisterCheques: false, canManageChequeLifecycle: false,
+  canManageExpenses: false, canReceivePurchases: false,
   ...over,
 });
 
 /** صلاحيات مقترحة لكل وظيفة (يمكن تعديلها يدوياً بعد التطبيق). */
 export const ROLE_PRESETS: Record<Employee['role'], EmployeePermissions> = {
   'مدير عام': P({ canSellPos: true, canManageInventory: true, canManagePurchases: true, canManageTreasury: true, canViewReports: true, canManageSettings: true, canManagePartners: true }),
-  'كاشير مبيعات': P({ canSellPos: true, simpleCashierMode: true }),
+  'كاشير مبيعات': P({ canSellPos: true, canViewCashBalances: true, canRegisterCheques: true, simpleCashierMode: true }),
   'أمين مستودع': P({ canManageInventory: true }),
   'محاسب مالي': P({ canManageTreasury: true, canViewReports: true }),
-  'مسؤول مشتريات': P({ canManagePurchases: true }),
+  'مسؤول مشتريات': P({ canManagePurchases: true, canReceivePurchases: true }),
   'مشرف ورشة': P({ canSellPos: true }),
 };
