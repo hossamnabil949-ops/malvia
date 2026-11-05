@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { ApiError, clientIp, findLicense, rateLimit, sendError } from './_security.js';
 
 const policy: Record<string, string[]> = {
-  employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'], openingBalances: [],
+  employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'], partnerWithdrawals: ['canManagePartners'], partnerExitSettlements: ['canManagePartners'], partnerSettlementPayments: ['canManagePartners'], openingBalances: [],
   parts: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], stockLevels: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
   stockBatches: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], serialUnits: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
   inventoryErrors: ['canManageInventory'], stockTransfers: ['canManageInventory'], warehouses: ['canManageInventory'],
