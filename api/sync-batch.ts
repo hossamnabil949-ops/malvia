@@ -2,11 +2,12 @@
 import { commitSyncBatch, getAuthenticatedEmployee, getOne } from './_db.js';
 import { validateChequeAuditSync, validateChequeAuxiliarySync, validateChequeCollectionSync, validateExpenseOnlySync, validatePurchaseAuditSync } from '../src/utils/chequeSyncPolicy';
 import { validateBankLedgerSync } from '../src/utils/bankLedgerSyncPolicy';
+import { validatePartnerCurrentAccountSync } from '../src/utils/partnerCurrentAccount';
 import { createHash } from 'node:crypto';
 import { ApiError, clientIp, findLicense, rateLimit, sendError } from './_security.js';
 
 const policy: Record<string, string[]> = {
-  employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'], partnerWithdrawals: ['canManagePartners'], partnerExitSettlements: ['canManagePartners'], partnerSettlementPayments: ['canManagePartners'], openingBalances: [],
+  employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'], partnerWithdrawals: ['canManagePartners'], partnerCurrentAccountTransactions: ['canManagePartners','canManageTreasury'], partnerExitSettlements: ['canManagePartners'], partnerSettlementPayments: ['canManagePartners'], openingBalances: [],
   parts: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], stockLevels: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
   stockBatches: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], serialUnits: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
   inventoryErrors: ['canManageInventory'], stockTransfers: ['canManageInventory'], warehouses: ['canManageInventory'],
@@ -57,6 +58,10 @@ export default async function handler(req: any, res: any) {
       const allowed = owner || (role === 'محاسب مالي' && policy[op.resource].includes('canManagePartners')) || policy[op.resource].some((permission) => permissions[permission] === true);
       if (!allowed) return res.status(403).json({ code: 'EMPLOYEE_PERMISSION_DENIED', resource: op.resource, error: 'لا تملك صلاحية مزامنة أحد عناصر الدفعة.' });
     }
+    if (!owner && operations.some((op: any) => op.resource === 'partnerCurrentAccountTransactions')
+      && !(role === 'محاسب مالي' || (permissions.canManagePartners === true && permissions.canManageTreasury === true))) {
+      return res.status(403).json({ code: 'PARTNER_CURRENT_ACCOUNT_PERMISSION_DENIED', resource: 'partnerCurrentAccountTransactions', error: 'حساب جاري الشركاء يتطلب صلاحية إدارة الشركاء والخزينة معاً.' });
+    }
 
     if (!owner && operations.some((op: any) => op.resource === 'bankLedgerEntries')) {
       const operationMap = new Map(operations.map((op: any) => [op.resource, op]));
@@ -81,12 +86,42 @@ export default async function handler(req: any, res: any) {
         treasury: await currentArray('treasury'),
         partners: await currentArray('partners'),
         partnerWithdrawals: await currentArray('partnerWithdrawals'),
+        partnerCurrentAccountTransactions: await currentArray('partnerCurrentAccountTransactions'),
         partnerSettlementPayments: await currentArray('partnerSettlementPayments'),
         partnerExitSettlements: await currentArray('partnerExitSettlements'),
         cardSettlements: await currentArray('cardSettlements'),
         cheques: await currentArray('cheques'),
       });
       if (bankError) return res.status(403).json({ code: bankError, resource: 'bankLedgerEntries', error: 'حركة دفتر البنك غير مطابقة للمستند المالي أو تحاول تعديل سجل سابق.' });
+    }
+
+    const partnerCurrentAccountOperation: any = operations.find((op: any) => op.resource === 'partnerCurrentAccountTransactions');
+    if (partnerCurrentAccountOperation) {
+      const previousRow = await getOne(tenant, 'partnerCurrentAccountTransactions');
+      const previous = Array.isArray(previousRow?.data) ? previousRow.data as any[] : [];
+      const operationMap = new Map(operations.map((op: any) => [op.resource, op]));
+      const loadArray = async (resource: string): Promise<any[]> => {
+        const row = await getOne(tenant, resource);
+        return Array.isArray(row?.data) ? row.data as any[] : [];
+      };
+      const currentArray = async (resource: string): Promise<any[]> => {
+        const operation: any = operationMap.get(resource);
+        return operation ? operation.data : loadArray(resource);
+      };
+      const currentAccountError = validatePartnerCurrentAccountSync({
+        previous,
+        incoming: partnerCurrentAccountOperation.data,
+        partners: await currentArray('partners') as any[],
+        bankAccounts: await currentArray('bankAccounts') as any[],
+        treasury: await currentArray('treasury') as any[],
+        bankLedgerEntries: await currentArray('bankLedgerEntries') as any[],
+        openingBalances: await currentArray('openingBalances') as any[],
+      });
+      if (currentAccountError) return res.status(403).json({
+        code: currentAccountError,
+        resource: 'partnerCurrentAccountTransactions',
+        error: 'حركة جاري الشركاء غير مطابقة لحركة الخزينة أو البنك، أو تحاول تعديل سجل سابق.',
+      });
     }
 
     const openingOperation: any = operations.find((op: any) => op.resource === 'openingBalances');
