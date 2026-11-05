@@ -139,6 +139,9 @@ export const PartnerCurrentAccountPanel: React.FC<Props> = ({
         <p className="mt-1 text-xs leading-6 text-neutral-400">
           حساب مستقل للسلف والإيداعات والردود بين الشريك والمنشأة؛ لا يغيّر رأس المال أو نسب الملكية أو الأرباح أو المصروفات.
         </p>
+        <p className="mt-2 text-[11px] leading-5 text-amber-300/90">
+          المسحوبات الشخصية القديمة تظل في سجلها المستقل. لا تُكرر السلف القديمة المسجلة هناك داخل الرصيد الافتتاحي؛ أدخل فقط أي رصيد جاري غير مسجل سابقًا.
+        </p>
       </header>
 
       <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
