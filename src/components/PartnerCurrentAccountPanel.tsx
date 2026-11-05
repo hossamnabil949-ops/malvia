@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowDownLeft, ArrowUpRight, Landmark, Wallet, PlusCircle, RotateCcw } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, PlusCircle, RotateCcw } from 'lucide-react';
 import type { Partner, PartnerCurrentAccountMovementType, PartnerCurrentAccountTransaction } from '../types/autoParts';
 import type { BankAccount } from '../utils/bankLedger';
 import type { OpeningBalanceRecord } from '../utils/openingBalanceLogic';
@@ -81,6 +81,14 @@ export const PartnerCurrentAccountPanel: React.FC<Props> = ({
     if ((type === 'partner_repayment' || type === 'company_repayment') &&
       (!selectedOrigin || amount > selectedOrigin.remainingAmount + 0.005)) {
       window.alert('المبلغ أكبر من الرصيد المتبقي للحركة الأصلية.');
+      return;
+    }
+    if (type === 'partner_repayment' && (balance >= -0.005 || amount > Math.abs(balance) + 0.005)) {
+      window.alert('لا يمكن رد مبلغ أكبر من صافي المبلغ المستحق على الشريك.');
+      return;
+    }
+    if (type === 'company_repayment' && (balance <= 0.005 || amount > balance + 0.005)) {
+      window.alert('لا يمكن سداد مبلغ أكبر من صافي المبلغ المستحق للشريك.');
       return;
     }
     if (paymentMethod === 'تحويل بنكي' && !activeBankAccounts.some(account => account.id === bankAccountId)) {
