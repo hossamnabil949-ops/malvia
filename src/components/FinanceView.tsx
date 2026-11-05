@@ -63,6 +63,7 @@ import {
   PartnerWithdrawal,
   PartnerExitSettlement,
   PartnerSettlementPayment,
+  PartnerCurrentAccountTransaction,
   TreasuryTransaction,
   AutoPart,
   SalesReturn,
@@ -73,6 +74,8 @@ import { TreasuryAccountsReport } from './TreasuryAccountsReport';
 import { AuditLogPanel } from './AuditLogPanel';
 import { BankLedgerView } from './BankLedgerView';
 import { OpeningBalancesPanel } from './OpeningBalancesPanel';
+import { PartnerCurrentAccountPanel } from './PartnerCurrentAccountPanel';
+import { getPartnerCurrentAccountBalance } from '../utils/partnerCurrentAccount';
 import type { OpeningBalanceRecord } from '../utils/openingBalanceLogic';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from '../utils/bankLedger';
 import { requiresSpecificBankAccount } from '../utils/paymentMethods';
@@ -108,6 +111,8 @@ interface FinanceViewProps {
   partnerWithdrawals?: PartnerWithdrawal[];
   partnerExitSettlements?: PartnerExitSettlement[];
   partnerSettlementPayments?: PartnerSettlementPayment[];
+  partnerCurrentAccountTransactions?: PartnerCurrentAccountTransaction[];
+  onRecordPartnerCurrentAccount?: (record: PartnerCurrentAccountTransaction) => boolean | void;
   onUpdatePartnerProfile?: (partnerId: string, profile: { name: string; role: string; phone: string }) => boolean | void;
   onRecordPartnerWithdrawal?: (withdrawal: PartnerWithdrawal) => boolean | void;
   onCreatePartnerExitSettlement?: (settlement: PartnerExitSettlement) => boolean | void;
@@ -163,13 +168,15 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   onAddBankAccount, onSettleVisa, onTransferBank,
   canManageExpenses = true, canManageTreasury = true, canManagePartners = true,
   partnerWithdrawals = [], partnerExitSettlements = [], partnerSettlementPayments = [],
+  partnerCurrentAccountTransactions = [], onRecordPartnerCurrentAccount,
   onUpdatePartnerProfile, onRecordPartnerWithdrawal, onCreatePartnerExitSettlement, onApprovePartnerExitSettlement, onRecordPartnerSettlementPayment,
   openingBalances = [], onApproveOpeningBalances, canManageOpeningBalances = false, currentUserName = 'المدير العام',
 }) => {
-  type FinanceTab = 'income' | 'equity' | 'treasury' | 'expenses' | 'audit' | 'bankLedger';
+  type FinanceTab = 'income' | 'equity' | 'treasury' | 'expenses' | 'audit' | 'bankLedger' | 'partnerCurrentAccount';
   const [activeFinanceTab, setActiveFinanceTab] = useState<FinanceTab>(canManagePartners ? 'equity' : canManageTreasury ? 'treasury' : 'expenses');
   const availableFinanceTabs: FinanceTab[] = [
     ...(canManagePartners ? ['equity' as FinanceTab] : []),
+    ...(canManagePartners && canManageTreasury ? ['partnerCurrentAccount' as FinanceTab] : []),
     ...(canManageTreasury ? ['income', 'treasury', 'bankLedger', 'audit'] as FinanceTab[] : []),
     ...(canManageExpenses ? ['expenses' as FinanceTab] : []),
   ];
@@ -673,6 +680,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       {availableFinanceTabs.length > 1 && <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 border-b border-neutral-800 pb-3">
         {[
           ...(canManagePartners ? [{ id: 'equity', label: 'رأس المال والشركاء وحصص الملكية', icon: Users, badge: `${partners.length} شركاء` }] : []),
+          ...(canManagePartners && canManageTreasury ? [{ id: 'partnerCurrentAccount', label: 'جاري الشركاء', icon: ArrowRightLeft }] : []),
           ...(canManageTreasury ? [
             { id: 'income', label: 'قائمة الدخل والأرباح (P&L)', icon: TrendingUp },
             { id: 'treasury', label: 'أنظمة الدفع والخزينة', icon: Banknote },
@@ -706,6 +714,18 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           );
         })}
       </div>}
+
+      {activeFinanceTab === 'partnerCurrentAccount' && canManagePartners && canManageTreasury && onRecordPartnerCurrentAccount && (
+        <PartnerCurrentAccountPanel
+          partners={partners}
+          transactions={partnerCurrentAccountTransactions}
+          openingBalances={openingBalances}
+          bankAccounts={bankAccounts}
+          canManage={canManagePartners && canManageTreasury}
+          currentUserName={currentUserName}
+          onRecord={onRecordPartnerCurrentAccount}
+        />
+      )}
 
       {activeFinanceTab === 'bankLedger' && canManageTreasury && onAddBankAccount && onSettleVisa && (
         <BankLedgerView accounts={bankAccounts} settlements={cardSettlements} entries={bankLedgerEntries} outstandingVisaBalance={outstandingVisaBalance} onAddBankAccount={onAddBankAccount} onSettleVisa={onSettleVisa} onTransferBank={onTransferBank} />
