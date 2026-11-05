@@ -115,7 +115,7 @@ const NAV_GROUPS: NavGroup[] = [
   ]},
 ];
 
-const ALL_ITEMS: NavItem[] = NAV_GROUPS.flatMap(g => g.items);
+const ALL_ITEMS: NavItem[] = [{ id: 'dashboard', label: 'الرئيسية', icon: Home }, ...NAV_GROUPS.flatMap(g => g.items)];
 
 const COLLAPSE_KEY = 'malvia.sidebar.collapsed';
 
