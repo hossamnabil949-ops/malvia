@@ -45,7 +45,7 @@ export default async function handler(req: any, res: any) {
       const owner = role === 'مدير عام';
       const allowed = (keys: string[]) => owner || keys.some((key) => p[key] === true);
       const policy: Record<string, string[]> = {
-        employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'],
+        employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'], partnerWithdrawals: ['canManagePartners'], partnerExitSettlements: ['canManagePartners'], partnerSettlementPayments: ['canManagePartners'],
         parts: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], stockLevels: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
         stockBatches: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], serialUnits: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
         inventoryErrors: ['canManageInventory'], stockTransfers: ['canManageInventory'], warehouses: ['canManageInventory'],
