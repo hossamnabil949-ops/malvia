@@ -4,11 +4,13 @@ import type { Shift, TreasuryTransaction } from '../types/autoParts';
 import {
   DENOMINATIONS, countTotal, summarizeShift, varianceOf, varianceKind, findOpenShift, lastClosedShift, fmtMoney, round2,
 } from '../utils/shiftLogic';
+import { summarizeTreasury } from '../utils/treasuryAccounts';
 
 interface ShiftsViewProps {
   shifts: Shift[];
   treasury: TreasuryTransaction[];
   isManager: boolean;
+  canViewCashBalances?: boolean;
   currentUserName: string;
   requireShiftForSales: boolean;
   openShiftsCount: number;
@@ -102,7 +104,7 @@ ${s.nonCash ? `<hr><table>${row('إنستاباي', fmtMoney(s.nonCash.instapay)
 };
 
 export const ShiftsView: React.FC<ShiftsViewProps> = ({
-  shifts, treasury, isManager, currentUserName, requireShiftForSales, openShiftsCount, onOpenShift, onCloseShift, onToggleRequireShift,
+  shifts, treasury, isManager, canViewCashBalances = false, currentUserName, requireShiftForSales, openShiftsCount, onOpenShift, onCloseShift, onToggleRequireShift,
 }) => {
   const openShift = useMemo(() => findOpenShift(shifts), [shifts]);
   const lastClosed = useMemo(() => lastClosedShift(shifts), [shifts]);
@@ -141,9 +143,11 @@ export const ShiftsView: React.FC<ShiftsViewProps> = ({
   const [justClosed, setJustClosed] = useState<Shift | null>(null);
 
   const summary = useMemo(() => (openShift ? summarizeShift(openShift, treasury) : null), [openShift, treasury]);
+  const accountBalances = useMemo(() => summarizeTreasury(treasury).accounts, [treasury]);
+  const accountBalance = (key: string) => accountBalances.find(account => account.key === key)?.balance ?? 0;
   const counted = closeMode === 'denoms' ? countTotal(toDenoms(closeDenoms)) : round2(Number(closeDirect) || 0);
   const hasCount = closeMode === 'denoms' ? Object.keys(toDenoms(closeDenoms)).length > 0 : closeDirect !== '';
-  const showExpected = isManager || revealed; // العدّ الأعمى: الكاشير لا يرى المتوقع قبل أن يعدّ
+  const showExpected = isManager || canViewCashBalances || revealed; // الاطلاع على رصيد الدرج مستقل عن إدارة الخزنة
   const variance = summary ? varianceOf(counted, summary.expectedCash) : 0;
   const canConfirm = hasCount && (isManager || revealed);
 
@@ -291,6 +295,19 @@ export const ShiftsView: React.FC<ShiftsViewProps> = ({
               <div className="font-black text-white tabular-nums">{showExpected ? fmtMoney(summary.expectedCash) : '••••'}</div>
             </div>
           </div>
+
+          {canViewCashBalances && (
+            <div className="space-y-2 border-t border-neutral-800 pt-3">
+              <div className="text-xs font-black text-neutral-200">ملخص الأرصدة التشغيلية — عرض فقط</div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                <div className="bg-surface-1 rounded-xl p-3"><div className="text-[11px] text-neutral-400">InstaPay (قديم)</div><div className="font-black text-white tabular-nums">{fmtMoney(accountBalance('instapay'))} ج.م</div></div>
+                <div className="bg-surface-1 rounded-xl p-3"><div className="text-[11px] text-neutral-400">InstaPay / المحافظ</div><div className="font-black text-white tabular-nums">{fmtMoney(accountBalance('wallet'))} ج.م</div></div>
+                <div className="bg-surface-1 rounded-xl p-3"><div className="text-[11px] text-neutral-400">مستحقات الفيزا</div><div className="font-black text-white tabular-nums">{fmtMoney(accountBalance('visa'))} ج.م</div></div>
+                <div className="bg-surface-1 rounded-xl p-3"><div className="text-[11px] text-neutral-400">حساب البنك</div><div className="font-black text-white tabular-nums">{fmtMoney(accountBalance('bank'))} ج.م</div></div>
+              </div>
+              <div className="text-[10px] text-neutral-500">أرصدة مجمعة من الحركات المسجلة. الفيزا معروضة كمستحقات تحصيل منفصلة، ولا تُضاف للبنك قبل تسجيل التسوية.</div>
+            </div>
+          )}
 
           {closing && (
             <div className="space-y-4 border-t border-neutral-800 pt-4">
