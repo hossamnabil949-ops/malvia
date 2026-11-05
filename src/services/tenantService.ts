@@ -14,6 +14,7 @@ import {
   PurchaseReturn, 
   Expense, 
   Partner, 
+  PartnerCurrentAccountTransaction,
   UserSession,
   CarModel,
   PartReservation,
@@ -225,6 +226,7 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     expenses: loadResource<Expense[]>('expenses', INITIAL_EXPENSES),
     partners: loadResource<Partner[]>('partners', INITIAL_PARTNERS),
     partnerWithdrawals: loadResource<PartnerWithdrawal[]>('partnerWithdrawals', []),
+    partnerCurrentAccountTransactions: loadResource<PartnerCurrentAccountTransaction[]>('partnerCurrentAccountTransactions', []),
     partnerExitSettlements: loadResource<PartnerExitSettlement[]>('partnerExitSettlements', []),
     partnerSettlementPayments: loadResource<PartnerSettlementPayment[]>('partnerSettlementPayments', []),
     carModels: loadResource<CarModel[]>('carModels', INITIAL_CAR_MODELS),
@@ -265,6 +267,7 @@ export function saveTenantStoreData(
     expenses?: Expense[];
     partners?: Partner[];
     partnerWithdrawals?: PartnerWithdrawal[];
+    partnerCurrentAccountTransactions?: PartnerCurrentAccountTransaction[];
     partnerExitSettlements?: PartnerExitSettlement[];
     partnerSettlementPayments?: PartnerSettlementPayment[];
     carModels?: CarModel[];
@@ -314,6 +317,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     localStorage.setItem(getTenantKey(tenantId, 'expenses'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'partners'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'partnerWithdrawals'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'partnerCurrentAccountTransactions'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'partnerExitSettlements'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'partnerSettlementPayments'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'reservations'), emptyArrayJson);
@@ -339,7 +343,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     const ownerAccount = empsList.find(e => e.role === 'مدير عام' || e.username === 'admin') || INITIAL_EMPLOYEES[0];
     const cleanedStaff = [ownerAccount];
     localStorage.setItem(getTenantKey(tenantId, 'employees'), JSON.stringify(cleanedStaff));
-    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','supplierPaymentSchedules','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','partnerWithdrawals','partnerExitSettlements','partnerSettlementPayments','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers','loyaltyLedger','cheques','stockBatches','serialUnits','bankAccounts','cardSettlements','bankLedgerEntries','openingBalances']);
+    markDirty(tenantId, ['parts','invoices','customers','suppliers','supplierPayments','supplierPaymentSchedules','treasury','salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','partnerWithdrawals','partnerCurrentAccountTransactions','partnerExitSettlements','partnerSettlementPayments','reservations','inventoryErrors','employees','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers','loyaltyLedger','cheques','stockBatches','serialUnits','bankAccounts','cardSettlements','bankLedgerEntries','openingBalances']);
 
     return cleanedStaff;
   } catch (err) {
