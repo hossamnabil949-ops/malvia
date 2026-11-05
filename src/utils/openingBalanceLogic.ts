@@ -104,9 +104,10 @@ export function validateOpeningBalanceRecord(
     ids.add(line.id);
     if (!line.label.trim() || !Number.isFinite(line.amount) || line.amount < 0) return 'INVALID_LINE';
     if (line.category === 'inventory') {
-      if (!line.partId || !Number.isFinite(line.quantity) || (line.quantity || 0) <= 0 ||
+      const hasItemDetail = Boolean(line.partId || line.quantity !== undefined || line.unitCost !== undefined);
+      if (hasItemDetail && (!line.partId || !Number.isFinite(line.quantity) || (line.quantity || 0) <= 0 ||
           !Number.isFinite(line.unitCost) || (line.unitCost || 0) < 0 ||
-          roundMoney((line.quantity || 0) * (line.unitCost || 0)) !== roundMoney(line.amount)) return 'INVENTORY_LINE_INVALID';
+          roundMoney((line.quantity || 0) * (line.unitCost || 0)) !== roundMoney(line.amount))) return 'INVENTORY_LINE_INVALID';
     }
     if (line.category === 'bank' &&
         (!line.bankAccountId || !options.activeBankAccountIds?.includes(line.bankAccountId))) return 'BANK_ACCOUNT_REQUIRED';
