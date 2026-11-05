@@ -2650,6 +2650,7 @@ export default function App() {
             onOpenTreasuryReports={() => setCurrentTab('finance')}
             currentSession={currentUser && effectiveRole && effectivePermissions ? { ...currentUser, role: effectiveRole, permissions: effectivePermissions } : currentUser}
             onChangeTab={setCurrentTab}
+            canAccessTab={canAccessTab}
             onOpenInvoiceModal={(inv) => setSelectedInvoiceForDetail(inv)}
             onAddNewPart={() => setCurrentTab('inventory')}
             onQuickSalePart={(part) => {
