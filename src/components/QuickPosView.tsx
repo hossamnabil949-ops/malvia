@@ -391,7 +391,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
     const netBeforeTax = subtotal - discountAll;
     const totalCost = cart.reduce((sum, item) => sum + item.part.costPrice * item.quantity, 0);
     const belowCostInvoice = belowCostItems.length > 0 || netBeforeTax < totalCost;
-    if (priceUnlocked && belowCostInvoice && !lossConfirmed) {
+    if (belowCostInvoice && !lossConfirmed) {
       setShowLossWarning(true);
       return;
     }
@@ -423,7 +423,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         totals,
         payments,
         {
-          allowBelowCost: priceUnlocked, // تجاوز المدير بعد التحذير والتأكيد
+          allowBelowCost: lossConfirmed, // لا يُسمح بأقل من التكلفة إلا بعد موافقة المدير الصريحة
           customerId: hasCredit ? (selectedCustomerId !== 'cash' ? selectedCustomerId : hasNewName ? 'new' : undefined) : undefined,
           customerBalance: (selectedCustomer?.balance ?? 0) + (selectedCustomer?.chequesPending ?? 0),
           customerCreditLimit: selectedCustomer?.creditLimit ?? 0,
@@ -1321,7 +1321,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
             <p className="text-sm text-neutral-200">يوجد صنف أو أكثر بسعر بيع أقل من تكلفة الشراء، أو أن صافي الفاتورة أقل من إجمالي التكلفة. هل تؤكد إتمام البيع بهذه الخسارة؟</p>
             <div className="flex gap-2">
               <button type="button" onClick={() => { setShowLossWarning(false); handleCompleteSale(true); }} className="flex-1 h-10 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black">تأكيد البيع رغم الخسارة</button>
-              <button type="button" onClick={() => setShowLossWarning(false)} className="px-4 h-10 rounded-xl bg-neutral-800 text-neutral-200 text-xs font-bold">مراجعة الأسعار</button>
+              <button type="button" onClick={() => setShowLossWarning(false)} className="px-4 h-10 rounded-xl bg-neutral-800 text-neutral-200 text-xs font-bold">رفض ومراجعة السعر</button>
             </div>
           </div>
         </div>
