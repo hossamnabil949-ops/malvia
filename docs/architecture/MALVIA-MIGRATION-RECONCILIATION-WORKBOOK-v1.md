@@ -162,3 +162,9 @@ A successful technical import alone is not acceptance. Cutover requires all requ
 
 ## 10. Financial ownership and consolidation review gates
 Use MALVIA-FINANCIAL-OWNERSHIP-SUBLEDGER-CONSOLIDATION-v1.md when completing the tenant/branch reconciliation. Specifically verify originating-branch sales versus collection-branch cash, central supplier payment allocations, tenant-central bank accounts, direct versus allocated central expenses, cashbox transfers, partner capital versus current accounts, and opening differences. Do not count management allocations twice or use account balance snapshots as ledger movements. These are proposed controls pending accountant approval.
+
+
+## Physical database and JSONB migration companions
+
+- [MALVIA-PHYSICAL-DATABASE-POSTGRESQL-DESIGN-v1.md](MALVIA-PHYSICAL-DATABASE-POSTGRESQL-DESIGN-v1.md) — proposed PostgreSQL schemas, relational table catalog, tenant-safe keys/FKs, ownership dimensions, constraints, indexes and isolation. Design only; no SQL or runtime schema is deployed.
+- [MALVIA-DATA-MIGRATION-JSONB-TO-RELATIONAL-v1.md](MALVIA-DATA-MIGRATION-JSONB-TO-RELATIONAL-v1.md) — staged preservation-first migration from JSONB documents and local sync state, including ID mapping, effect receipts, reconciliation, offline outbox/journal protection, cutover and rollback.
