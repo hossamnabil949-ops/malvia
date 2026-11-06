@@ -200,3 +200,8 @@ The proposed financial ownership, subledger and consolidation model is documente
 - [Logical chart of accounts and posting template catalog](MALVIA-CHART-OF-ACCOUNTS-AND-POSTING-TEMPLATES-v1.md) — proposed account taxonomy, source-event posting questions, industry event extensions and posting receipt/idempotency controls. All posting directions remain pending accountant approval.
 - [Accounting period close and controls](MALVIA-ACCOUNTING-PERIOD-CLOSE-AND-CONTROLS-v1.md) — period state machine, close/reopen approvals, late offline event policy and close evidence.
 - [Subledger reconciliation and financial reporting](MALVIA-SUBLEDGER-RECONCILIATION-AND-FINANCIAL-REPORTING-v1.md) — GL/subledger reconciliation, branch consolidation, report consistency and exception workflow.
+
+
+## Related accounting engine design
+
+- [Accounting engine and posting orchestration](MALVIA-ACCOUNTING-ENGINE-AND-POSTING-ORCHESTRATION-v1.md) — canonical source events, server-side command pipeline, atomic source/journal/receipt/outbox commit, idempotency, template versioning, reversals, offline late-event handling and migration gates. Target architecture only; no runtime implementation is implied.
