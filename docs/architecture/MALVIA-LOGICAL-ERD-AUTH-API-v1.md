@@ -236,3 +236,20 @@ The example is conceptual. The existing resource snapshot sync remains compatibl
 - Define data export, tenant deletion, legal hold and backup restore controls.
 
 **No SQL is included by design.** This package must be reviewed and approved before schema creation, runtime implementation, tenant migration, or production deployment.
+
+
+## 9. Detailed branch/register/account and industry model addenda
+
+The detailed ownership, lifecycle and acceptance rules are maintained in:
+- `MALVIA-BRANCH-REGISTER-ACCOUNT-MODEL-v1.md`: distinct Branch, Warehouse, POS Register, Cashbox, Bank Account and Stock Allocation identities; user multi-branch assignments; central warehouse ownership; transfer lifecycle; POS closeout; consolidated reporting; unresolved accounting choices.
+- `MALVIA-INDUSTRY-PACKS-AND-COMMON-MODULES-v1.md`: shared platform contracts and industry pack boundaries for restaurants, auto parts/service, supermarket/retail, clothing and pharmacy.
+
+Logical ERD clarifications:
+- Add `cashboxes` as explicit branch-owned cash custody accounts; do not overload `treasury_accounts` without a future approved mapping.
+- Add `register_cashbox_assignments` with effective interval and audit actor; do not hard-code one cashbox per branch/register.
+- Add `stock_allocations` with source warehouse, demand reference, quantity, status and expiry; allocations reserve availability but do not post physical movement.
+- Add transfer event/line tables for dispatch, transit, partial receipt, shortage, damage and cancellation; legacy immediate transfers map to completed history.
+- Add `subscription_seat_ledger` / membership seat assignments and versioned entitlement grants as append-only commercial records; the current `maxEmployees` field is not itself a seat ledger.
+- Industry pack entities are additive extensions over shared contracts; no industry-specific cash, user, tenant or accounting ledger is permitted.
+
+The above is a logical extension only. Exact physical table/column names and accounting treatment remain subject to design approval.
