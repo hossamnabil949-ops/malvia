@@ -16,7 +16,7 @@ Audit baseline: `docs/malvia-platform-design-package-v1`, current application mo
 
 ## 2. Current resource inventory and field mapping
 
-The current sync contract contains 37 resources. The list below is the observed `SYNC_RESOURCES` / server validation inventory, not a claim that every resource has already been normalized in the database.
+The current sync contract contains 35 resources. The list below is the observed `SYNC_RESOURCES` / server validation inventory, not a claim that every resource has already been normalized in the database.
 
 | Current resource | Current shape | Proposed logical target | Branch scope / migration rule |
 |---|---|---|---|
