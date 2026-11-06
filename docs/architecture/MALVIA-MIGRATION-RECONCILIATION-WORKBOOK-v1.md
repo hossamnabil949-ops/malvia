@@ -159,3 +159,6 @@ Rollback means restore the pre-cutover snapshot and resume the prior application
 | Engineering | Idempotency, offline replay, API compatibility, restore test |  |
 
 A successful technical import alone is not acceptance. Cutover requires all required business, accounting, security and operational sign-offs.
+
+## 10. Financial ownership and consolidation review gates
+Use MALVIA-FINANCIAL-OWNERSHIP-SUBLEDGER-CONSOLIDATION-v1.md when completing the tenant/branch reconciliation. Specifically verify originating-branch sales versus collection-branch cash, central supplier payment allocations, tenant-central bank accounts, direct versus allocated central expenses, cashbox transfers, partner capital versus current accounts, and opening differences. Do not count management allocations twice or use account balance snapshots as ledger movements. These are proposed controls pending accountant approval.
