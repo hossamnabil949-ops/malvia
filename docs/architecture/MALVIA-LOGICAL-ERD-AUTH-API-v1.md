@@ -256,3 +256,8 @@ The above is a logical extension only. Exact physical table/column names and acc
 
 ## 10. Financial ownership and consolidation companion
 See MALVIA-FINANCIAL-OWNERSHIP-SUBLEDGER-CONSOLIDATION-v1.md for the proposed tenant-wide AR/AP subledgers with branch dimensions, branch-owned cashboxes, central/branch bank-account scopes, expense allocations, consolidated reporting, opening-balance controls and the target balanced journal architecture. This is a proposed policy model; chart of accounts, posting templates and statutory treatment require owner/accountant approval.
+
+
+## Related backend API and service contract
+
+- [Backend API, domain services and command contracts](MALVIA-BACKEND-API-SERVICES-AND-COMMAND-CONTRACT-v1.md) — shared server request pipeline, domain boundaries, versioned read/command/sync APIs, authorization, idempotency, atomic transaction boundaries, safe responses, legacy compatibility and acceptance tests. Design only; no endpoint implementation is authorized.
