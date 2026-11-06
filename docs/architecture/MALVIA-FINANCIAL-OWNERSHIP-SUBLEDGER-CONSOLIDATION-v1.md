@@ -149,3 +149,10 @@ All tenant, branch, account and nested references are validated server-side. Bra
 12. Journal entries balance and AR/AP/inventory/cash/bank subledgers reconcile to control accounts.
 
 **Gate:** Proposed model only. Owner/accountant approval is required for legal-entity boundaries, allocation rules, chart of accounts, posting templates, tax treatment and opening-balance policy before physical schema, SQL or runtime implementation.
+
+
+## Related accounting design documents
+
+- [Logical chart of accounts and posting template catalog](MALVIA-CHART-OF-ACCOUNTS-AND-POSTING-TEMPLATES-v1.md) — proposed account taxonomy, source-event posting questions, industry event extensions and posting receipt/idempotency controls. All posting directions remain pending accountant approval.
+- [Accounting period close and controls](MALVIA-ACCOUNTING-PERIOD-CLOSE-AND-CONTROLS-v1.md) — period state machine, close/reopen approvals, late offline event policy and close evidence.
+- [Subledger reconciliation and financial reporting](MALVIA-SUBLEDGER-RECONCILIATION-AND-FINANCIAL-REPORTING-v1.md) — GL/subledger reconciliation, branch consolidation, report consistency and exception workflow.
