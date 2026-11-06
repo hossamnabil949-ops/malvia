@@ -273,3 +273,9 @@ Diagnostics visible to customers contain safe error code, stage, trace ID and ne
 - Final physical relational schema, indexes, isolation/locking strategy and disaster recovery objectives.
 
 **Implementation gate:** This is a design-only contract. Do not deploy endpoints, alter legacy routes, change live tenant data, clear client storage, create SQL migrations or publish API credentials until the relevant contracts, security tests, accounting policies and rollback plan are approved.
+
+
+## Physical database and JSONB migration companions
+
+- [MALVIA-PHYSICAL-DATABASE-POSTGRESQL-DESIGN-v1.md](MALVIA-PHYSICAL-DATABASE-POSTGRESQL-DESIGN-v1.md) — proposed PostgreSQL schemas, relational table catalog, tenant-safe keys/FKs, ownership dimensions, constraints, indexes and isolation. Design only; no SQL or runtime schema is deployed.
+- [MALVIA-DATA-MIGRATION-JSONB-TO-RELATIONAL-v1.md](MALVIA-DATA-MIGRATION-JSONB-TO-RELATIONAL-v1.md) — staged preservation-first migration from JSONB documents and local sync state, including ID mapping, effect receipts, reconciliation, offline outbox/journal protection, cutover and rollback.
