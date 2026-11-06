@@ -193,3 +193,10 @@ These choices must be reviewed with an accountant and owner before physical sche
 
 ## 6. Financial ownership and consolidation companion
 The proposed financial ownership, subledger and consolidation model is documented in MALVIA-FINANCIAL-OWNERSHIP-SUBLEDGER-CONSOLIDATION-v1.md. It separates legal balance ownership from operational branch attribution and defines the target journal/subledger reconciliation model. It does not establish approved debit/credit postings or a final chart of accounts.
+
+
+## Related accounting design documents
+
+- [Logical chart of accounts and posting template catalog](MALVIA-CHART-OF-ACCOUNTS-AND-POSTING-TEMPLATES-v1.md) — proposed account taxonomy, source-event posting questions, industry event extensions and posting receipt/idempotency controls. All posting directions remain pending accountant approval.
+- [Accounting period close and controls](MALVIA-ACCOUNTING-PERIOD-CLOSE-AND-CONTROLS-v1.md) — period state machine, close/reopen approvals, late offline event policy and close evidence.
+- [Subledger reconciliation and financial reporting](MALVIA-SUBLEDGER-RECONCILIATION-AND-FINANCIAL-REPORTING-v1.md) — GL/subledger reconciliation, branch consolidation, report consistency and exception workflow.
