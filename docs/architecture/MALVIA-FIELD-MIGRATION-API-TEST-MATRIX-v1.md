@@ -248,3 +248,36 @@ Branch-aware report contract:
 6. Report and Excel surfaces are separate code paths. Both need the same branch scope and calculation definitions to avoid different totals between dashboard, report hub and exported workbook.
 7. The current 14-day trial and modular entitlement model is not implemented by these observed license fields; trial lifecycle must be server-owned and timestamped.
 
+
+
+## 11. Detailed branch, industry, subscription and cutover specifications
+
+Companion specifications added to this package:
+- `MALVIA-BRANCH-REGISTER-ACCOUNT-MODEL-v1.md`
+- `MALVIA-INDUSTRY-PACKS-AND-COMMON-MODULES-v1.md`
+- `MALVIA-SUBSCRIPTIONS-ENTITLEMENTS-SEATS-v1.md`
+- `MALVIA-MIGRATION-CUTOVER-ROLLBACK-PLAN-v1.md`
+
+### 11.1 Exact scope identifiers
+
+Keep the following independent in every mapping/API contract: `tenantId`, `branchId`, `warehouseId`, `registerId`, `cashboxId`, `bankAccountId`, `stockAllocationId`, `userId`, `membershipId`, and `operationId`. Do not alias a legacy warehouse to a branch. Every warehouse maps to exactly one branch in the target; central warehouse belongs to a designated central branch. Register and cashbox are separate identities and can have multiple records per branch.
+
+### 11.2 Additional migration entities
+
+| Target concept | Required mapping/evidence | Safety rule |
+|---|---|---|
+| Branch | Tenant-approved branch mapping | No inferred default for ambiguous legacy transactions |
+| Register | Device/register evidence and invoice sequence history | Preserve invoice numbers and prevent collisions |
+| Cashbox | Treasury account/cash custody evidence | Do not merge bank accounts or cashboxes based on display name |
+| Bank account scope | Existing bank account identity + owner approval | Preserve bank ledger and opening balance |
+| Stock allocation | Explicit reservation/order/demand evidence | Do not convert ordinary on-hand stock into a reservation |
+| Industry pack extension | Domain-specific source fields and pack version | Preserve unknown fields in versioned legacy payload/quarantine |
+| Seat assignment | Existing employee/user membership and approved commercial policy | Do not infer purchased seats from `maxEmployees` without a policy decision |
+
+### 11.3 Transfer migration
+
+Existing immediate warehouse transfers are imported as completed historical transfers with the original source/destination and timestamps where available. The new request/dispatch/in-transit/partial-receipt/shortage/damage/cancel lifecycle applies only to newly created transfers after the relevant feature is approved. No historical in-transit quantity is fabricated.
+
+### 11.4 Cutover blocking controls
+
+Before any tenant cutover, require snapshot checksums, outbox/journal reconciliation, source-to-target ID map, branch exception approvals, exact financial and stock reconciliation, restore rehearsal, tenant owner approval and finance approval. If writes have reopened on the target, rollback must preserve and replay accepted post-cutover operations or use forward repair; never discard them.
