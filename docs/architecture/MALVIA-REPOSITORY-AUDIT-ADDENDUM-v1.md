@@ -243,3 +243,52 @@ Migration requirement: preserve both the approved source record and every genera
 5. **Opening replay protection:** opening approval mutates many resources; migration needs a posting receipt and must not invoke the approval handler.
 6. **Account mapping:** bank-paid expenses currently create both treasury transaction and bank ledger entry. Decide whether treasury is a unified movement log or a cash-account ledger before defining consolidated cash balances.
 7. **Server authorization:** client handler checks are not a substitute for server session, tenant, module and branch enforcement.
+
+
+## 13. Server route behavior — deeper handler verification
+
+This section records handler-level behavior from the current `malvia-web` source, not assumptions based on route names.
+
+| Route | Handler behavior verified | Target gate |
+|---|---|---|
+| `POST /api/auth/bootstrap` | Reads license key from header/body and returns license as tenant bootstrap data. | Return a minimal safe tenant bootstrap DTO; do not treat possession of a license key as employee authorization. |
+| `POST /api/auth/login` | Reads tenant employees resource, validates username/password, creates server employee session and returns employee identity/permissions. Checks license expiry date. | Enforce tenant status/trial/seat entitlement; do not return internal license secrets or employee credential fields; bind branch assignments to session context. |
+| `GET /api/sync` | Requires license key and bearer employee session, then returns `getAll(tenant)` for the tenant. | Branch filtering is not present in this handler; implement server-side row/document scope before multi-branch activation. |
+| `POST /api/sync` | Requires employee session, checks resource permission and optimistic version, then writes one resource. Explicitly rejects partnerCurrentAccountTransactions and requires batch route. | Retain compatibility only for safe legacy resource updates; sensitive multi-resource commands must use atomic command endpoints. |
+| `POST /api/sync-batch` | Requires license + employee session + idempotency key; rejects duplicate resource names in one batch; validates employee resource permissions; applies specialized bank ledger, partner current account, opening balance, cheque, purchase, expense and audit checks; commits via `commitSyncBatch`. | Strong existing foundation. Add module entitlement, branch authorization, nested branch-reference validation and operation-level receipts. |
+| `POST /api/agent/execute` | Requires license + bearer session + idempotency key; DB execution validates active employee session, employee status and resource permission. | Add branch and module context to each agent operation; ensure no cross-branch reads through tool payloads. |
+| `POST /api/ai/command` | Method guard and license/rate limit are present; inspected handler does not validate employee bearer session before invoking AI command processing. | Keep as intent interpretation only; require a separate authenticated endpoint for every data read or write. |
+| `GET /api/backup?action=export` | Requires license key and exports all tenant docs; no employee session/export permission was observed in this path. | Require active owner/admin session, export permission, branch scope where applicable, audit, and export throttling per tenant. |
+| `GET/POST /api/registry` | Protected by platform ADMIN_TOKEN; GET reads tenant registry and POST updates it using version check. | Platform operator-only; audit every mutation and avoid customer-facing exposure. |
+| `GET/POST /api/backup` owner operations | Protected by platform ADMIN_TOKEN for backup list/detail/create/restore. | Require platform operator audit, tenant-scoped approval and restore rehearsal; never expose to tenant users. |
+| Scheduled `/api/cron-backup` | Checks CRON_SECRET bearer then runs backupAllChanged; no HTTP method guard observed. | Add GET/POST method restriction, per-tenant outcome audit, retention policy and failure alerting. |
+
+### API security interpretation
+
+- A valid license identifies a tenant; it is not a substitute for an authenticated employee session.
+- A valid employee session identifies an employee in a tenant; it does not prove access to every branch in that tenant.
+- Resource permission does not prove the user may act on a particular nested branch, warehouse, register, bank account, customer, supplier or document.
+- The atomic sync batch already protects important linked resource sets and has specialized validations. Extend it rather than bypassing it with client-only resource writes.
+- Backup/export, AI interpretation, platform registry and agent execution are distinct trust boundaries and require separate authorization policies.
+
+## 14. Suggested route contract test inventory
+
+| Test ID | Route / command | Positive case | Negative case |
+|---|---|---|---|
+| API-AUTH-01 | bootstrap | active tenant license returns safe bootstrap fields | invalid, suspended or expired tenant rejected |
+| API-AUTH-02 | login | active employee receives session | wrong password, inactive employee, expired trial, seat overage rejected |
+| API-SYNC-01 | sync GET | authorized branch data returned | employee cannot download another branch's records |
+| API-SYNC-02 | sync POST | permitted safe resource version update | unauthorized resource, stale version and branch mismatch rejected |
+| API-BATCH-01 | sync-batch | all resources commit once | injected failure rolls back every resource |
+| API-BATCH-02 | sync-batch | same idempotency key returns original receipt | changed payload with reused key rejected |
+| API-BATCH-03 | sync-batch | partner current account + treasury + bank commit together | missing linked resource, overpayment or unauthorized account rejected |
+| API-BATCH-04 | sync-batch | approved opening batch imported once | second different opening batch or replay rejected |
+| API-BRANCH-01 | all tenant routes | branch assignment permits allowed branch | forged branchId and nested branch mismatch rejected |
+| API-MODULE-01 | all module commands | subscribed module command succeeds | inactive/unsubscribed module command rejected |
+| API-AGENT-01 | agent execute | authorized operation executes once | invalid session, permission, branch, module or duplicate operation rejected |
+| API-AI-01 | ai command | AI returns intent/structured proposal | no direct tenant data access or mutation without authenticated command API |
+| API-EXPORT-01 | backup export | owner/admin export for authorized scope | license-only request and employee without export permission rejected |
+| API-PLATFORM-01 | registry/backup owner | platform operator action audited | tenant user and invalid admin token rejected |
+| API-CRON-01 | cron backup | secret + allowed method executes | wrong secret or unsupported HTTP method rejected |
+
+Do not claim the current API passes these future branch/module tests; this table is a required target acceptance suite.
