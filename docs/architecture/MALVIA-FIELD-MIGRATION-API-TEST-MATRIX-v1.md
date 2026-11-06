@@ -101,7 +101,7 @@ The current sync contract contains 35 resources. The list below is the observed 
 | /api/sync | POST | License key + bearer server session + resource permission | Tenant | None | Validate every row's branchId and nested branch references server-side. |
 | /api/sync-batch | POST | License key + bearer server session + idempotency key + per-resource permissions | Tenant; atomic batch | None | Branch authorization per operation and per nested record; atomic cross-resource validation remains mandatory. |
 | /api/agent/execute | POST | License key + bearer token + idempotency key | Tenant | None | Resolve authenticated employee session (not token-shape only), action permission, branch assignment, branch stock/account context. |
-| /api/ai/command | POST | Route-specific checks must be verified in complete file | Must be confirmed | None confirmed | AI may propose actions; execution must pass same authenticated employee/branch/entitlement rules as UI. |
+| /api/ai/command | POST | License key + tenant rate limit; no employee server-session validation observed in handler | License → tenant | None | Treat as AI interpretation only; require authenticated employee context and re-check permissions/branch scope before any consequential action is executed. |
 | /api/backup?action=export | GET | License key | Tenant | Entire tenant export currently | Tenant owner/admin policy; branch-filtered export only when explicitly requested and authorized. |
 | /api/backup | GET/POST | ADMIN_TOKEN | Platform admin | N/A | Internal operations only; audit all restore/export actions. |
 | /api/registry | GET/POST | ADMIN_TOKEN | Platform registry | N/A | Platform-only; separate internal operator identity and audit trail. |
@@ -190,3 +190,61 @@ Still required before calling the audit complete:
 - run code-level tests against each branch-aware invariant after implementation design is approved.
 
 This document is a field-level migration map for the observed model, not a final physical ERD and not an authorization to change production data.
+
+
+## 10. Expanded code audit — local persistence, AI, reports and exports
+
+### 10.1 Browser persistence inventory (observed keys)
+
+| Key / pattern | Purpose | Migration and safety requirement |
+|---|---|---|
+| `malvia_<tenantId>_<resource>` | Local tenant resource documents | Preserve offline data; migration must be versioned and tenant-isolated. |
+| `malvia_sync_meta_v1_<tenantId>` | Resource versions and merge base hashes | Preserve or safely rebuild only after successful server reconciliation. |
+| `malvia_sync_pending_v1_<tenantId>` | Durable pending-resource outbox | Must survive restart, retry and upgrade; do not clear on branch switch. |
+| `malvia_<tenantId>___transaction_journal` (resource suffix) | Recoverable multi-resource local commit journal | Keep crash recovery semantics during storage redesign. |
+| `malvia_user_session_v1` | Employee session including server token | Sensitive credential; migrate to secure session storage strategy, revoke on logout/device policy. |
+| `malvia_pending_server_session_v1` | Pending server session token | Treat as credential; preserve only through controlled login recovery. |
+| `malvia_tenant_licenses_v1` | Device-cached tenant licenses | Replace as authoritative entitlement with server-side subscription state; cache only safe claims. |
+| `malvia_active_tenant_id_v1` | Current tenant selector | Never treat client value as authorization; server derives tenant from session. |
+| `malvia_device_saved_license_key_v1` | Saved license key | Sensitive credential; avoid broad exposure and define rotation/revocation. |
+| `malvia_app_theme_v1` | UI theme | Non-sensitive preference; migrate as user/device preference. |
+| `malvia_master_owner_pin_v1` | Locally stored master PIN | Security gap: a locally stored owner PIN is not a server-side authentication boundary; replace with server-authenticated owner identity and MFA/step-up policy. |
+| `malvia_invoice_device_code_v1` | Device-specific invoice numbering code | Preserve device identity and invoice-number history; do not regenerate on app reinstall without collision-safe server registration. |
+| `malvia.pos.warehouse` | POS selected warehouse | Replace/validate against authorized branch + warehouse assignment on each session; UI preference alone is not permission. |
+| Navigation collapse key | Sidebar preference | Non-sensitive UI preference. |
+
+The resource store is localStorage-based and tenant-prefixed. The sync engine keeps a durable resource-level outbox, version/base metadata and a recovery journal. These are essential product behavior, not disposable cache. No migration or logout flow may clear them without an explicit, recoverable policy and user-visible backup/reconciliation.
+
+### 10.2 AI command and execution trust boundaries
+
+- `/api/ai/command` currently checks POST, license validity/status and rate limits, then sends command/context to the model. The inspected handler does not validate an employee server session or branch assignment.
+- `/api/agent/execute` accepts only an allow-listed action, license key, bearer token hash and idempotency key. Its database function validates the live employee session, employee status and resource permission, and persists an idempotent result.
+- The execution path is stronger than the interpretation path, but neither inspected execution function nor payload has branch authorization today.
+- Required future design: AI command may interpret and propose; any read of branch data and every write must be bound to a server-authenticated employee, selected authorized branch, active module entitlement and the same domain services used by the normal UI. AI must never grant itself a branch or bypass confirmation/approval rules.
+- Extend the idempotency scope to include tenant + actor + action + logical operation key as appropriate; do not create a new key on retry of the same operation.
+
+### 10.3 Reports and export dependencies
+
+Observed report registry: 20 report definitions across sales, finance, inventory and receivables/payables. Existing report utilities include daily sales, sales by item/customer/cashier/payment, sales reconciliation, returns, profit/loss, VAT, expenses, treasury, purchases by supplier, inventory valuation, low stock, slow-moving, expiry, customer aging, supplier payables, cheques and loyalty.
+
+There are also separate Excel export flows for sales, purchases, returns, treasury, inventory, accounts and a master accounting workbook, plus full inventory/car-model import/export.
+
+Branch-aware report contract:
+- Every report accepts an explicit authorized branch scope (one branch, selected set, or all branches for an authorized owner).
+- Each row retains branch identity and source document IDs; consolidated totals must be reproducible from branch rows.
+- Transfers between branches are internal movements and must not inflate group sales, purchases, income or expenses.
+- Customer/supplier balances require allocation-aware reporting; never attribute a tenant-wide balance to the currently selected branch by UI context alone.
+- Cash/bank reports follow the owning account and originating transaction dimensions; cross-branch settlement must be shown without double counting.
+- Exports enforce the same server authorization as on-screen reports; client-side filtering is not a data security boundary.
+- CSV/XLSX export metadata should include report scope, selected branch IDs, period, generation timestamp and schema version.
+
+### 10.4 Further gaps and implementation constraints
+
+1. Bootstrap returns the license-derived tenant object; the future customer portal must not treat a device-cached license object as authoritative subscription state.
+2. Tenant backup export currently retrieves all tenant documents using license key in the inspected route. It needs explicit owner/admin authentication and auditable export authorization.
+3. Owner PIN is currently persisted in browser localStorage; it must not remain the security boundary for platform operations.
+4. POS warehouse choice is a browser preference. It must be reconciled against server-authorized branch and warehouse assignment.
+5. Invoice device code is local and participates in invoice numbering; migration must retain device code/sequence collision safety across multiple devices and branches.
+6. Report and Excel surfaces are separate code paths. Both need the same branch scope and calculation definitions to avoid different totals between dashboard, report hub and exported workbook.
+7. The current 14-day trial and modular entitlement model is not implemented by these observed license fields; trial lifecycle must be server-owned and timestamped.
+
