@@ -99,3 +99,8 @@ For a simple cash sale of 100 currency units with no tax, discount, return, inve
 Legal entities/books; reporting currency and accounting basis; account codes and normal balances; VAT/tax point and recoverability; costing method; revenue recognition for services/deposits/tips/aggregators; discounts, loyalty, warranty and partner treatment; shortage/overage and card/bank fees; opening difference; period controls.
 
 **Gate:** Do not generate physical account codes, final debit/credit templates, SQL, migration scripts or live postings from this draft. Obtain signed owner/accountant approval.
+
+
+## Related accounting engine design
+
+- [Accounting engine and posting orchestration](MALVIA-ACCOUNTING-ENGINE-AND-POSTING-ORCHESTRATION-v1.md) — canonical source events, server-side command pipeline, atomic source/journal/receipt/outbox commit, idempotency, template versioning, reversals, offline late-event handling and migration gates. Target architecture only; no runtime implementation is implied.
