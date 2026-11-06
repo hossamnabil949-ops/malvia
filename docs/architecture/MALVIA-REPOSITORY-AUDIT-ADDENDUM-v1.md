@@ -123,3 +123,123 @@ Destructive local reset path found:
 3. Replace generic local-wins conflict handling for posted business documents with operation-level conflict resolution and immutable receipts.
 4. Keep local reset/demo cleanup out of all production lifecycle and migration code paths.
 5. Add export reconciliation tests for cancelled invoices, returns, discounts, VAT, supplier credits, inventory across warehouses and group cash/bank totals.
+
+
+## 10. App-level transaction orchestration — verified call-site trace
+
+The main application coordinator is `src/App.tsx`. The UI components pass domain objects into handlers; the handlers mutate several resource arrays and call `persistChanges` per resource. This confirms that the current operational transaction boundary is a **client-side multi-resource sequence**, not one server-side atomic transaction.
+
+### 10.1 Sales posting and void
+
+Observed in `handleCreateInvoice`:
+1. Normalize split payments (legacy invoice without payments becomes one payment line).
+2. Validate direct-bank payment lines by creating bank ledger entries; reject missing/inactive bank account.
+3. Validate credit portion has a registered customer; reject duplicate invoice number.
+4. Optionally require an open shift.
+5. Recheck stock at invoice.warehouseId, deduct aggregate part stock, allocate FEFO batches or serial units, and calculate loyalty earned/redeemed.
+6. Save invoice, loyalty ledger, batch/serial state, parts, warehouse stock levels, stock movements, customer balance for credit, treasury receipt lines and bank ledger entries in separate resource updates.
+7. Log audit event and clear cart.
+
+Observed in `handleVoidInvoice`:
+- Uses `computeVoidPlan` to refund only the remaining portion after prior returns, restores remaining stock/tracking, marks invoice cancelled with reason and approver, reduces credit balance, creates treasury refunds and reverses loyalty.
+- It preserves the invoice instead of deleting it, which is the safer pattern to retain.
+
+Target requirement: one server command must atomically persist invoice + inventory + batch/serial + customer ledger + treasury/bank + loyalty + audit. The existing client validations are useful but cannot protect concurrent devices or server-side branch scope by themselves.
+
+### 10.2 Sales return posting
+
+Observed in `handleAddSalesReturn`:
+- Rejects returns for cancelled invoices.
+- Resolves original invoice line by lineId, then partId/price, then part number/name/price fallback.
+- Stores return, increments invoice item returnedQuantity and header returnedAmount, updates full/partial return status, restores part stock and original warehouse level, updates batch/serial tracking and loyalty, and may update customer credit or treasury depending on refund method.
+- Several resources are persisted independently.
+
+Important migration risks:
+- The UI proposes a quantity, but the coordinator must enforce cumulative quantity and unique serial constraints against current server state. Do not trust client-side proposed quantities.
+- A legacy return item that cannot be resolved to an original invoice line must be held for review; never silently attach it to a similar line.
+- The current implementation adds returned quantities back to general stock; it does not expose an explicit disposition for saleable vs damaged/quarantine goods.
+- The current return path uses the original invoice warehouse, which is useful provenance but still not a branch identity.
+
+### 10.3 Purchase invoice and supplier settlement
+
+Observed in `handleAddPurchaseInvoice`:
+- Validates supplier and invoice rows, updates parts/cost/stock and warehouse quantities, creates stock movement records, purchase invoice and supplier payable/payment snapshots, and creates treasury/bank movements for payment portions.
+- Purchase tracking creates stock batches and serial units tied to purchase invoice ID/number.
+- Supplier payment schedules are a separate resource and require source allocation to the purchase/supplier balance.
+
+Target requirement: model purchase document, accepted receipt(s), supplier payable, payment allocation(s), cash/bank events and batch/serial receipts as one atomic server operation. Preserve partial receipt and payment as separate dimensions; do not infer receipt from payment status.
+
+### 10.4 Purchase return / legacy settlement / deletion
+
+Observed in `handleAddPurchaseReturn`:
+- Splits return value into cashRefund, reduction against supplier deferred debt, and remaining supplier store credit.
+- Updates supplier snapshots and purchase invoice returned amount, grand total, amountPaid and remainingBalance; decreases stock and creates treasury cash-in for cash refunds.
+- A legacy `handleSettlePurchaseReturn` can apply supplier and invoice balance effects without touching stock/treasury.
+- `handleDeletePurchaseReturn` physically removes the return, reverses supplier/invoice/stock snapshots and, if a cash refund existed, adds a new treasury reversal movement.
+
+Target requirement: posted purchase returns must be immutable. Replace physical deletion with a linked reversal/correction event. The legacy settlement path must be imported with an explicit `legacySettlementApplied` marker so migration cannot apply its financial effects twice.
+
+### 10.5 Warehouse transfer
+
+Observed in `handleCreateTransfer`:
+- Validates from/to warehouse IDs, positive integer quantities and available source stock.
+- Immediately applies the transfer to stockLevels and then creates a StockTransfer record with source/destination warehouse IDs, items, date/time, note and creator.
+- No explicit dispatched, in-transit, partially received, shortage, damaged or received event exists in the inspected type/handler.
+
+Target requirement: distinguish request, dispatch, transit, receipt, discrepancy and cancellation. Existing legacy transfer is a completed immediate balance move only if the paired stock-level update can be reconstructed; do not create fictional in-transit steps.
+
+### 10.6 Expenses and bank movements
+
+Observed in `handleAddExpense`:
+- Validates permissions and positive amount.
+- Validates required bank account for direct-bank payment, saves expense and a treasury transaction, then saves a bank ledger entry for bank payment.
+- The expense, treasury and bank resources are persisted separately. Bank posting IDs are deterministic from expense ID, allowing duplicate detection in bank ledger helper.
+- Branch identity is not present in the Expense contract reviewed.
+
+Target requirement: server-side permission + branch/account scope; atomically link expense, payment, bank/cash movement and audit. Confirm whether a bank-paid expense should create a treasury row in the shared account model or whether the treasury row is a payment-method projection; avoid double counting in cash reports.
+
+### 10.7 Partner current account and withdrawals
+
+Observed in App-level partner handlers:
+- Current-account transactions validate partner status, amount, allowed payment methods, linked origin for repayments, and prevent overpayment of an origin.
+- They create linked treasury or bank entries and persist current-account transaction separately.
+- Partner withdrawals distinguish `withdrawal` and `advance`; only withdrawal increments partner.totalWithdrawn. Cash withdrawals create treasury outflow; bank withdrawals create bank ledger outflow.
+- Partner exit settlement has draft → approved → partially_paid/paid flow; payments are limited to outstanding net payable and create cash/bank movements.
+- These handlers are richer than a single partner balance snapshot and must be retained as first-class source events.
+
+Target requirement: one atomic event per partner action; keep capital, current account, ordinary withdrawal, advance, exit liability and exit payment as distinct event classes. Branch attribution for partner events remains a design decision, not a current source field.
+
+### 10.8 Opening balance approval
+
+Observed in the FinanceView callback:
+- Approval is blocked if the user lacks capital permission or an opening balance already exists.
+- Inventory lines increase part stock and weighted-average cost; cash/wallet lines create treasury opening receipts; bank lines update bank account openingBalance; receivable/payable lines increase customer/supplier snapshots; partner lines set original capital and ownership; stock movement and audit records are created.
+- The record is stored as one approved openingBalances resource, while its effects are written across multiple resources.
+
+Migration requirement: preserve both the approved source record and every generated effect/source ID. Do not re-run approval during import. Opening balances need a one-time posting receipt or migration marker so a replay cannot apply them again.
+
+## 11. Cross-resource write matrix (current coordinator)
+
+| Business command | Primary resource | Other resources mutated by current App handler | Main concurrency/idempotency risk |
+|---|---|---|---|
+| Create sale | invoices | parts, stockLevels, stockMovements, stockBatches, serialUnits, customers, treasuryTransactions, bankLedgerEntries, loyaltyLedger, auditLog | Duplicate invoice/stock/payment/loyalty on retry; competing sales |
+| Void sale | invoices | parts, stockLevels, stockMovements, stockBatches, serialUnits, customers, treasuryTransactions, loyaltyLedger, auditLog | Duplicate refund or stock restoration |
+| Sales return | salesReturns | invoices, parts, stockLevels, stockMovements, stockBatches, serialUnits, customers, treasuryTransactions, loyaltyLedger, auditLog | Over-return and double refund/restock |
+| Purchase | purchaseInvoices | parts, stockLevels, stockMovements, stockBatches, serialUnits, suppliers, supplierPayments, treasuryTransactions, bankLedgerEntries, auditLog | Duplicate receipt/payment/cost update |
+| Purchase return | purchaseReturns | purchaseInvoices, parts, stockLevels, stockMovements, suppliers, treasuryTransactions, auditLog | Duplicate debt reduction/credit/refund; delete reversal |
+| Warehouse transfer | stockTransfers | stockLevels | Stock changed without transfer record if interruption occurs |
+| Expense | expenses | treasuryTransactions, bankLedgerEntries | Expense/cash/bank posting partial persistence |
+| Partner current account | partnerCurrentAccountTransactions | treasuryTransactions, bankLedgerEntries, auditLog | Origin repayment and cash/bank mismatch |
+| Partner withdrawal | partnerWithdrawals | partners, treasuryTransactions, bankLedgerEntries, auditLog | Partner snapshot and payout diverge |
+| Partner exit payment | partnerSettlementPayments | partnerExitSettlements, treasuryTransactions, bankLedgerEntries, auditLog | Paid amount and cash/bank posting diverge |
+| Opening balance approval | openingBalances | parts, stockMovements, treasuryTransactions, bankAccounts, customers, suppliers, partners, auditLog | Replay duplicates opening balances |
+
+## 12. Newly confirmed design blockers before physical schema
+
+1. **Atomicity:** the client coordinator currently saves each resource separately. The target API must own the whole command and commit all effects in one database transaction.
+2. **Deletion semantics:** purchase returns can be physically deleted with compensating mutations. Posted financial/stock events need immutable reversal workflows.
+3. **Transfer lifecycle:** current transfer is immediate; target in-transit lifecycle is new behavior and must not be backfilled as if it existed historically.
+4. **Return disposition:** no explicit damaged/quarantine disposition was found in the sales return coordinator.
+5. **Opening replay protection:** opening approval mutates many resources; migration needs a posting receipt and must not invoke the approval handler.
+6. **Account mapping:** bank-paid expenses currently create both treasury transaction and bank ledger entry. Decide whether treasury is a unified movement log or a cash-account ledger before defining consolidated cash balances.
+7. **Server authorization:** client handler checks are not a substitute for server session, tenant, module and branch enforcement.
