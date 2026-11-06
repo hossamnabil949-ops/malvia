@@ -267,3 +267,8 @@ These decisions are intentionally not silently finalized:
 10. Exact branch allocation policy for company-wide expenses and central procurement.
 
 **Implementation gate:** This document is a design package for review. It does not authorize SQL execution, production data changes, deployment, publication of download links, or a trial launch. Those follow only after the remaining policy choices and executable design are approved.
+
+
+## Related backend API and service contract
+
+- [Backend API, domain services and command contracts](MALVIA-BACKEND-API-SERVICES-AND-COMMAND-CONTRACT-v1.md) — shared server request pipeline, domain boundaries, versioned read/command/sync APIs, authorization, idempotency, atomic transaction boundaries, safe responses, legacy compatibility and acceptance tests. Design only; no endpoint implementation is authorized.
