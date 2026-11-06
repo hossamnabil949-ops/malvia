@@ -199,3 +199,8 @@ Before implementation, obtain documented owner/accountant decisions for:
 - retention, audit and migration evidence requirements.
 
 **Implementation gate:** This document authorizes design discussion only. Do not generate SQL, activate posting templates, create account codes, migrate live balances or change production behavior until the owner and qualified accountant approve the policy and the design passes review.
+
+
+## Related backend API and service contract
+
+- [Backend API, domain services and command contracts](MALVIA-BACKEND-API-SERVICES-AND-COMMAND-CONTRACT-v1.md) — shared server request pipeline, domain boundaries, versioned read/command/sync APIs, authorization, idempotency, atomic transaction boundaries, safe responses, legacy compatibility and acceptance tests. Design only; no endpoint implementation is authorized.
