@@ -281,3 +281,8 @@ Existing immediate warehouse transfers are imported as completed historical tran
 ### 11.4 Cutover blocking controls
 
 Before any tenant cutover, require snapshot checksums, outbox/journal reconciliation, source-to-target ID map, branch exception approvals, exact financial and stock reconciliation, restore rehearsal, tenant owner approval and finance approval. If writes have reopened on the target, rollback must preserve and replay accepted post-cutover operations or use forward repair; never discard them.
+
+
+## Related backend API and service contract
+
+- [Backend API, domain services and command contracts](MALVIA-BACKEND-API-SERVICES-AND-COMMAND-CONTRACT-v1.md) — shared server request pipeline, domain boundaries, versioned read/command/sync APIs, authorization, idempotency, atomic transaction boundaries, safe responses, legacy compatibility and acceptance tests. Design only; no endpoint implementation is authorized.
