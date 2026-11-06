@@ -1314,6 +1314,18 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         </div>
       </div></div>
       {mobileCartOpen && <button type="button" aria-label="إغلاق الفاتورة" onClick={() => setMobileCartOpen(false)} className="lg:hidden fixed inset-0 z-50 bg-black/60" />}<div className="lg:hidden fixed bottom-[4.5rem] inset-x-0 z-40 p-2.5 bg-surface-1/95 backdrop-blur border-t border-neutral-700 shadow-2xl"><button type="button" onClick={() => setMobileCartOpen(true)} className="w-full min-h-14 rounded-2xl bg-amber-500 text-neutral-950 px-4 flex items-center justify-between shadow-xl"><span className="flex items-center gap-2 font-black"><Receipt className="w-5 h-5" /> الفاتورة · {cart.reduce((sum, item) => sum + item.quantity, 0)} قطعة</span><span className="font-black">{grandTotal.toLocaleString()} ج.م · عرض وإتمام</span></button></div>
+      {showLossWarning && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4" dir="rtl">
+          <div role="alertdialog" aria-modal="true" className="w-full max-w-md rounded-2xl bg-surface-1 border border-rose-500/50 p-5 space-y-4">
+            <div className="flex items-center gap-2 text-rose-400 font-black"><ShieldCheck className="w-5 h-5" /> تحذير: البيع بأقل من التكلفة</div>
+            <p className="text-sm text-neutral-200">يوجد صنف أو أكثر بسعر بيع أقل من تكلفة الشراء، أو أن صافي الفاتورة أقل من إجمالي التكلفة. هل تؤكد إتمام البيع بهذه الخسارة؟</p>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => { setShowLossWarning(false); handleCompleteSale(true); }} className="flex-1 h-10 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black">تأكيد البيع رغم الخسارة</button>
+              <button type="button" onClick={() => setShowLossWarning(false)} className="px-4 h-10 rounded-xl bg-neutral-800 text-neutral-200 text-xs font-bold">مراجعة الأسعار</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showUnlockModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={closeUnlockModal}>
           <div
