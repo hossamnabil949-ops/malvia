@@ -253,3 +253,6 @@ Logical ERD clarifications:
 - Industry pack entities are additive extensions over shared contracts; no industry-specific cash, user, tenant or accounting ledger is permitted.
 
 The above is a logical extension only. Exact physical table/column names and accounting treatment remain subject to design approval.
+
+## 10. Financial ownership and consolidation companion
+See MALVIA-FINANCIAL-OWNERSHIP-SUBLEDGER-CONSOLIDATION-v1.md for the proposed tenant-wide AR/AP subledgers with branch dimensions, branch-owned cashboxes, central/branch bank-account scopes, expense allocations, consolidated reporting, opening-balance controls and the target balanced journal architecture. This is a proposed policy model; chart of accounts, posting templates and statutory treatment require owner/accountant approval.
