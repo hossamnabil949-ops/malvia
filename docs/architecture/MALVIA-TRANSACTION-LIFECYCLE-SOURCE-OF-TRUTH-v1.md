@@ -190,3 +190,6 @@ Offline conflict classes:
 8. Whether negative stock is ever permitted and under what role/approval policy.
 
 These choices must be reviewed with an accountant and owner before physical schema or posting code is finalized.
+
+## 6. Financial ownership and consolidation companion
+The proposed financial ownership, subledger and consolidation model is documented in MALVIA-FINANCIAL-OWNERSHIP-SUBLEDGER-CONSOLIDATION-v1.md. It separates legal balance ownership from operational branch attribution and defines the target journal/subledger reconciliation model. It does not establish approved debit/credit postings or a final chart of accounts.
