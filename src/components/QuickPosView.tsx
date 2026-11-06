@@ -247,6 +247,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
   const [ownerPass, setOwnerPass] = useState('');
   const [unlockError, setUnlockError] = useState('');
   const [unlockBusy, setUnlockBusy] = useState(false);
+  const [showLossWarning, setShowLossWarning] = useState(false);
 
   useEffect(() => {
     if (cart.length === 0) setPriceUnlocked(false);
@@ -271,7 +272,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
     }
   };
 
-  // أقل سعر مسموح للقطعة: لا يقل عن التكلفة ولا عن (100 - الحد الأقصى للخصم)% من سعرها الأصلي
+  // الحد الأدنى للمستخدم العادي فقط؛ المدير يتجاوز النسبة بعد التحقق من كلمة المرور.
   const minAllowedPrice = (part: AutoPart): number =>
     Math.max(part.costPrice, Math.ceil(part.salePrice * (100 - maxDiscountPercent)) / 100);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('كاش (نقدي)');
@@ -361,7 +362,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
     ? Number(cashGiven) - primaryValue
     : 0;
 
-  const handleCompleteSale = () => {
+  const handleCompleteSale = (lossConfirmed = false) => {
     if (cart.length === 0) return;
     setSaleError('');
 
@@ -383,6 +384,18 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
     }
     const payments = rawPayments.map(({ method, amount, bankAccountId }) => ({ method, amount, ...(requiresDirectBankAccount(method) ? { bankAccountId } : {}) }));
 
+    // تحذير المدير عند وجود بيع بأقل من التكلفة، ولا يظهر إلا بعد تأكيده.
+    const belowCostItems = cart.filter(item =>
+      (item.customPrice !== undefined ? item.customPrice : item.part.salePrice) < item.part.costPrice
+    );
+    const netBeforeTax = subtotal - discountAll;
+    const totalCost = cart.reduce((sum, item) => sum + item.part.costPrice * item.quantity, 0);
+    const belowCostInvoice = belowCostItems.length > 0 || netBeforeTax < totalCost;
+    if (priceUnlocked && belowCostInvoice && !lossConfirmed) {
+      setShowLossWarning(true);
+      return;
+    }
+
     // تحقق قبل أي تأثير: رصيد، أسعار، خصم، دفع، آجل
     try {
       const lines = cart.map((item) => ({
@@ -391,7 +404,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         unitPrice: item.customPrice !== undefined ? item.customPrice : item.part.salePrice,
         unitCost: item.part.costPrice,
       }));
-      validateDiscountPolicy(
+      if (!priceUnlocked) validateDiscountPolicy(
         cart.map((item) => ({
           qty: item.quantity,
           listPrice: item.part.salePrice,
@@ -410,7 +423,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         totals,
         payments,
         {
-          allowBelowCost: false, // سياسة المحل: لا بيع بأقل من التكلفة لأي مستخدم
+          allowBelowCost: priceUnlocked, // تجاوز المدير بعد التحذير والتأكيد
           customerId: hasCredit ? (selectedCustomerId !== 'cash' ? selectedCustomerId : hasNewName ? 'new' : undefined) : undefined,
           customerBalance: (selectedCustomer?.balance ?? 0) + (selectedCustomer?.chequesPending ?? 0),
           customerCreditLimit: selectedCustomer?.creditLimit ?? 0,
@@ -969,15 +982,14 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                               onUpdateCartPrice(item.part.id, isNaN(val) ? 0 : val);
                             }}
                             onBlur={() => {
-                              const floor = minAllowedPrice(item.part);
-                              if (priceUnlocked && effectivePrice < floor) onUpdateCartPrice(item.part.id, floor);
+                              // المدير يملك صلاحية إدخال أي سعر؛ التحذير عند إتمام البيع إذا كان أقل من التكلفة.
                             }}
                             className={`malvia-price-input text-center text-xs font-mono font-bold rounded focus:outline-none ${
                               priceUnlocked
                                 ? 'text-amber-300 bg-surface-2 border border-amber-500/50 focus:border-amber-400 focus:bg-surface-3'
                                 : 'text-neutral-300 bg-surface-1 border border-neutral-700 cursor-not-allowed'
                             }`}
-                            title={priceUnlocked ? 'تعديل سعر البيع (لا يقل عن الحد الأدنى المسموح)' : 'السعر مقفول — يحتاج باسورد المالك'}
+                            title={priceUnlocked ? 'تعديل سعر البيع بحرية بصلاحية المدير' : 'السعر مقفول — يحتاج باسورد المدير'}
                           />
                           <span className="text-[10px] text-neutral-400 font-bold">ج.م</span>
                           {priceUnlocked ? (
