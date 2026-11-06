@@ -99,3 +99,8 @@ All require session, tenant, legal entity, module, branch, period and export aut
 12. Differences have immutable runs and traceable resolution/waiver.
 
 **Gate:** No financial report or reconciliation service is authoritative until GL, subledgers, accounting policy, valuation and access controls are implemented and independently tested.
+
+
+## Related accounting engine design
+
+- [Accounting engine and posting orchestration](MALVIA-ACCOUNTING-ENGINE-AND-POSTING-ORCHESTRATION-v1.md) — canonical source events, server-side command pipeline, atomic source/journal/receipt/outbox commit, idempotency, template versioning, reversals, offline late-event handling and migration gates. Target architecture only; no runtime implementation is implied.
