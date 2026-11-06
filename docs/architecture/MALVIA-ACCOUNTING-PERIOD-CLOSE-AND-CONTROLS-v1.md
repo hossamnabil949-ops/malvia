@@ -87,3 +87,8 @@ Every posting API atomically checks actor/session, tenant membership, module/act
 12. Branch and group reports reconcile to same legal-entity trial balance.
 
 **Gate:** No close/lock/reopen behavior is authorized until roles, fiscal calendar, statutory policy, materiality and exception tolerances are approved.
+
+
+## Related accounting engine design
+
+- [Accounting engine and posting orchestration](MALVIA-ACCOUNTING-ENGINE-AND-POSTING-ORCHESTRATION-v1.md) — canonical source events, server-side command pipeline, atomic source/journal/receipt/outbox commit, idempotency, template versioning, reversals, offline late-event handling and migration gates. Target architecture only; no runtime implementation is implied.
