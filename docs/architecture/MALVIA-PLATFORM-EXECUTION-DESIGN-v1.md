@@ -121,13 +121,15 @@ Arabic and English are first-class languages with RTL/LTR layouts. Mobile-first 
 1. Visitor selects an industry solution and reviews included capabilities.
 2. Visitor selects **Start 14-day free trial**.
 3. Registration collects minimum necessary account-owner and company information, verifies email or phone, and accepts terms/privacy notice.
-4. Server creates a tenant, tenant owner membership, trial subscription and industry/module entitlements in one idempotent provisioning workflow.
-5. User opens the cloud workspace immediately; installation/download is optional, not a prerequisite.
-6. User can invite/add users only within the trial seat allowance. Branch count is not capped by a hidden fixed limit; trial commercial limits must be explicit.
-7. Trial banner shows exact start and expiry dates, remaining days and enabled modules.
-8. Before expiry, notify account owner at configured intervals and show upgrade path.
-9. On paid conversion, attach a paid subscription to the same tenant and preserve data, users, branches, IDs and history. Never create a second tenant just to convert.
-10. If trial expires without conversion, block new writes according to the approved grace policy while retaining customer data for the approved retention window and providing a clear export/contact path.
+4. Server creates the tenant and owner membership in an idempotent PENDING_SETUP state; trial time has not started.
+5. User completes the required setup gate: company profile/timezone, first branch, selected industry pack and trial module bundle.
+6. Server atomically activates the 14-day trial and records immutable start/expiry timestamps, policy version and entitlements.
+7. User opens the active trial workspace; installation/download is optional, not a prerequisite.
+8. User can invite/add users only within the approved trial seat allowance. Branch count is not capped by a hidden fixed limit.
+9. Trial banner shows exact start and expiry dates, remaining time and enabled modules using the single server expiry rule.
+10. Before expiry, notify the account owner at configured intervals and show the upgrade path.
+11. On paid conversion, attach a paid subscription to the same tenant and preserve data, users, branches, IDs and history. Never create a second tenant just to convert.
+12. If trial expires without conversion, apply the approved grace/read-only/export policy while retaining customer data for the approved retention window; no automatic deletion.
 
 ## 4. Fourteen-day trial model
 
