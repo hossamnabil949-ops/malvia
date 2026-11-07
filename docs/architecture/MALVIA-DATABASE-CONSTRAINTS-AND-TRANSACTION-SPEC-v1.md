@@ -42,7 +42,7 @@ The following is a logical constraint matrix. Names are illustrative; final SQL 
 | Sessions/devices | tenant/user/device FKs | token hash unique; device key hash unique per tenant | expiry > issue; revoked session cannot authorize; one active session policy OPEN |
 | Legal entities/branches | composite tenant FKs | legal entity code per tenant; branch code per legal entity | branch belongs to exactly one legal entity; branch scope explicit |
 | Registers/cashboxes | tenant + branch/account FKs | register code per branch; valid assignment uniqueness | at most one active cashbox assignment per register/time interval; no overlapping validity intervals |
-| Document sequences | tenant/legal entity plus optional branch/register FKs | unique approved numbering-scope tuple + document type/series | next value positive; scope policy may be entity-, branch- or register-based; increment and document insert atomic; committed number never reused |
+| Document sequences | tenant/legal entity plus optional branch/register FKs | unique approved numbering-scope tuple + document type/series, implemented with separate partial unique indexes for nullable entity/branch/register scope | next value positive; register scope requires branch; increment and document insert atomic; committed number never reused; plain UNIQUE with nullable scope columns is not sufficient where NULLs are distinct |
 | Catalog items/units | tenant-safe item/unit FKs | item code per tenant; unit code per item; barcode policy OPEN | conversion factor > 0; exactly one typed attribute value matches declared type |
 | Prices/tax | item/list/tax FKs | uniqueness by item/list/currency/effective version | valid_from < valid_to; overlapping active price intervals prohibited for same key unless priority policy exists |
 | Warehouses/locations | warehouse branch FK; location warehouse FK | warehouse code per branch; location code per warehouse | warehouse branch immutable after posting or changed only by controlled migration |
@@ -91,7 +91,7 @@ A record may carry multiple dimensions for different meanings. Each FK must be t
 
 ### 4.1 Document numbering
 
-Invoice/return/purchase/receipt/transfer/shift numbers use a server-owned sequence row scoped to the approved numbering domain. The domain may be legal-entity, branch, register or a configured combination with document type and series; do not assume branch-only scope. Increment and document insert occur in one transaction while holding a row lock on the sequence. A committed number is never reused, including after later void/reversal. Gaps are acceptable unless a jurisdiction-specific policy requires otherwise; that policy is OPEN.
+Invoice/return/purchase/receipt/transfer/shift numbers use a server-owned sequence row scoped to the approved numbering domain. The domain may be legal-entity, branch, register or a configured combination with document type and series; do not assume branch-only scope. Because branch/register scope columns may be NULL, implement separate partial unique indexes (or an explicitly reviewed NULLS NOT DISTINCT strategy supported by the deployed PostgreSQL version); a plain nullable composite UNIQUE can admit duplicates. Increment and document insert occur in one transaction while holding a row lock on the sequence. A committed number is never reused, including after later void/reversal. Gaps are acceptable unless a jurisdiction-specific policy requires otherwise; that policy is OPEN.
 
 Do not use MAX(number)+1, client timestamps, localStorage counters or an unlocked read-modify-write. If multiple numbering series exist, include the series in the unique key. Offline provisional numbers require a separately approved namespace and collision reconciliation; do not silently merge them into the online sequence.
 
@@ -308,3 +308,8 @@ Atomicity has two mutually exclusive, explicitly selected modes per command fami
 2. **Approved pending-posting mode:** source and required operational effects commit atomically with a visible pending-posting case, command receipt, audit and outbox. The later posting attempt is a separate transaction that atomically commits the balanced journal and posting receipt, or records a retryable/rejected exception. A pending source is never represented as posted.
 
 The default mode for each event family remains OPEN until the owner and accountant approve it. This removes any implication that all source events and journals are always committed together when pending posting is permitted.
+
+
+## Typed relationship and optional-scope constraint notes
+
+Polymorphic `type + id` fields are provenance references unless a typed FK is explicitly defined. For opening-balance lines, payment-instrument counterparties and receipt serials, use typed nullable foreign keys with category CHECK constraints or dedicated association tables. Do not claim generic polymorphic FK enforcement. For multi-tender customer/supplier receipts, enforce tender-line sums against the receipt header and exactly one valid custody destination per tender line.
