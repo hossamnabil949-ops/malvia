@@ -370,7 +370,17 @@ function schedule(ms = 1500) {
 
 /** تُستدعى من saveTenantStoreData بعد كل حفظ محلي. */
 export function markDirty(tenantId: string, resources: string[]) {
-  if (!active || active.tenantId !== tenantId) return;
+  if (active && active.tenantId !== tenantId) return;
+  if (!active) {
+    // Preserve pre-login/load-time migrations durably; startSync will pick them up.
+    const pending = new Set(readPending(tenantId));
+    for (const resource of resources) {
+      if ((SYNC_RESOURCES as readonly string[]).includes(resource)) pending.add(resource);
+    }
+    try { localStorage.setItem(pendingKey(tenantId), JSON.stringify([...pending])); }
+    catch { emitStatus('error', 'تعذّر حفظ قائمة المزامنة المعلقة على الجهاز'); }
+    return;
+  }
   for (const r of resources) queueResource(tenantId, r);
   if (dirty.size) schedule();
 }
