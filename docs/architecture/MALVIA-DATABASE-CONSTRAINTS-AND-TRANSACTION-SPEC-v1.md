@@ -61,7 +61,7 @@ The following is a logical constraint matrix. Names are illustrative; final SQL 
 | Bank ledger | bank account/source FKs | source effect key unique | amount > 0; direction explicit; bank and cash custody are distinct ledgers |
 | Partners | partner/source/cashbox/bank FKs | source event unique | capital, current-account advance/repayment, withdrawal and exit settlement remain distinct event types |
 | Customer/supplier allocations | party/document/payment FKs | allocation source identity unique | allocations > 0; cumulative allocation <= eligible payment/document amount |
-| Journals | legal entity/period/account FKs | journal number unique per legal entity/period; source posting unique | debit/credit nonnegative; each posted journal balances per legal entity + currency; period open; posted lines immutable |
+| Journals | legal entity/period/account FKs | journal number unique per legal entity/period; one source posting effect per tenant/legal entity/book/source/purpose; template version is evidence, not a duplicate-posting escape hatch | debit/credit nonnegative; each posted journal balances per legal entity + currency; period open; posted lines immutable |
 | Reversals | original event/journal FKs | one full reversal per original unless partial-reversal model explicitly supported | reversal cannot exceed unreversed original; correction preserves source chain |
 | Workflow | tenant/definition/version/step FKs | step code/order unique within version | active workflow version immutable; valid transitions; approval actor authorized |
 | Sync/commands | tenant/actor/command FKs | idempotency key unique in defined scope; event sequence unique | same key + same hash returns receipt; same key + different hash conflicts |
@@ -186,7 +186,7 @@ The detailed per-command contracts, exact reads/writes and lock keys are in [Com
 
 1. A posted journal balances independently for each legal entity and currency; debit total equals credit total at approved precision.
 2. A journal cannot post to a closed period. The server determines the applicable period using approved business-date/timezone rules.
-3. Source event, posting receipt and journal source identity are unique; duplicate posting returns the original receipt.
+3. Source event + posting purpose + accounting book has one posting identity; template version is recorded as evidence, not part of the key that permits reposting. Duplicate posting returns the original receipt.
 4. Posted journals and ledger events are immutable. Reversal journals link to the original journal and preserve the audit chain.
 5. Cashbox, bank, card-clearing and partner ledgers are separate custody/subledger dimensions. Do not derive cash balance by summing bank rows or vice versa.
 6. Cashbox/bank transfers create linked source and destination events, not income or expense. The two sides reconcile in amount/currency and transfer identity.
@@ -313,3 +313,8 @@ The default mode for each event family remains OPEN until the owner and accounta
 ## Typed relationship and optional-scope constraint notes
 
 Polymorphic `type + id` fields are provenance references unless a typed FK is explicitly defined. For opening-balance lines, payment-instrument counterparties and receipt serials, use typed nullable foreign keys with category CHECK constraints or dedicated association tables. Do not claim generic polymorphic FK enforcement. For multi-tender customer/supplier receipts, enforce tender-line sums against the receipt header and exactly one valid custody destination per tender line.
+
+
+## Posting uniqueness rule
+
+The canonical posting uniqueness key is tenant + legal entity + accounting book + source event + posting purpose. The selected template version is stored on the receipt/journal for audit but cannot be used to create a second posting for the same source purpose after a template update. Additional postings require a distinct approved purpose or a reversal/replacement flow.
