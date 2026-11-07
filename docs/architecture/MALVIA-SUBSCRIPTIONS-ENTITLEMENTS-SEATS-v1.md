@@ -8,7 +8,7 @@
 - Licensing is user-seat based. No fixed branch ceiling is assumed.
 - Purchased industry packs, shared modules and optional features are explicit entitlements.
 - Server state is authoritative. Client cache is a convenience only.
-- Trial duration is 14 calendar days, measured by server timestamps and tied to the tenant.
+- Trial duration is 14 days, measured by server timestamps and tied to the tenant. **OPEN boundary rule:** approve 14 calendar days in the tenant timezone versus exactly 336 elapsed hours; all product surfaces must use the same approved rule.
 - Trial-to-paid conversion preserves the same tenant, users, IDs, records and history.
 
 ## 2. Seat model
@@ -49,7 +49,7 @@ State transitions must be server-owned, timestamped and auditable. Subscription 
 
 ## 5. 14-day trial
 
-- Trial starts only after tenant creation and required verification/activation, not on installer download or first device launch.
+- The tenant may exist in a pending setup state; the trial starts only when the server atomically activates it after required identity verification and the defined first-use setup gate. Download/installer/first device launch never starts or resets the clock.
 - Store `trialStartedAt`, `trialEndsAt`, activation source and verification evidence/status server-side.
 - Reinstalling, changing device, clearing browser cache or creating another user cannot reset the same tenant's trial.
 - Duplicate tenant abuse controls and identity verification are policy/provider decisions.
@@ -111,3 +111,8 @@ Existing `maxEmployees` is not automatically reinterpreted as a purchased seat l
 9. Whether any future plan limits branches or registers (current design assumes no fixed branch cap).
 
 **Gate:** No billing, license migration or enforcement changes until commercial/legal decisions are approved.
+
+
+## Trial activation and expiry boundary alignment
+
+The platform execution design, website UX and subscription model use one activation event and one server-owned expiry rule. Pending tenant provisioning does not consume trial time. The precise 14-day boundary (tenant-local calendar days versus 336 elapsed hours) remains OPEN and must be selected once for all clients, APIs, notifications and billing displays.
