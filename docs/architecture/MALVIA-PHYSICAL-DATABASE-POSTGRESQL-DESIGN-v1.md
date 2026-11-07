@@ -164,7 +164,7 @@ Capital, current account, withdrawal, advance and exit liability remain separate
 - `accounting.fiscal_periods`: legal entity + book, date range and state; prevent overlapping open periods per book/calendar.
 - `accounting.journals`, `journal_lines`: source event, legal entity/book, branch, template version, posted timestamp, account, debit/credit, currency/dimensions.
 - `accounting.posting_templates`: event type, immutable version, effective dates, approval state.
-- `accounting.posting_receipts`: source event, command, legal entity/book, posting purpose/template generation, journal and outcome; scoped unique source effect.
+- `accounting.posting_receipts`: source event, command, legal entity/book, posting purpose and template generation evidence; unique source effect per tenant/legal entity/book/source/purpose, so template changes cannot auto-repost history.
 - `accounting.journal_reversals`: original/reversal journal and reason.
 - `accounting.subledger_control_accounts`, `period_close_runs`.
 
@@ -199,7 +199,7 @@ Initial index candidates (confirm with query plans):
 - tenant + branch + occurred/issue date;
 - tenant + status + updated_at;
 - tenant + parent_id on FK columns;
-- unique tenant + legal entity + approved numbering scope + document type/series + number;
+- unique tenant + legal entity + resolved configured scope identity + document type/series + number;
 - partial active-session index by tenant/user/expiry;
 - partial pending-outbox index by tenant/status/created_at;
 - unique tenant + idempotency key + command type;
@@ -319,3 +319,8 @@ These are review artifacts only. They do not authorize DDL, migrations or data c
 PostgreSQL UNIQUE constraints treat NULL values as distinct unless a supported NULLS NOT DISTINCT form is explicitly selected. For `org.document_sequences`, use separate partial unique indexes for legal-entity, branch and register scopes (or a version-supported equivalent) so duplicate NULL-scoped sequences cannot be created. The document-number unique constraint must match the sequence scope exactly. Register-scoped rows require a branch and tenant-safe register-to-branch ownership.
 
 Polymorphic provenance (source_type/source_id) is not a relational FK. For business relationships that require database enforcement, use typed nullable FKs and CHECK constraints or dedicated association tables. Multi-tender receipts use header + tender lines + allocation lines; tender totals and allocations are independently reconciled.
+
+
+## Posting identity protection
+
+A posting receipt's uniqueness is tenant + legal entity + accounting book + source event + posting purpose. The template version/generation is recorded for audit and reproducibility but is not part of the uniqueness key. Template upgrades therefore cannot generate a second journal for the same source purpose. Separate journals require an explicitly distinct approved purpose or a reversal/replacement command.
