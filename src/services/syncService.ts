@@ -349,6 +349,9 @@ async function flush() {
     const list = [...dirty];
     if (!active || active.tenantId !== tenantId) return;
     const batchResult = await pushBatch(tenantId, licenseKey, list);
+    if (batchResult.warnings.length) {
+      window.dispatchEvent(new CustomEvent('malvia-sync-warning', { detail: { warnings: batchResult.warnings } }));
+    }
     for (const res of list) {
       const latest = readLocal(tenantId, res);
       const latestMeta = readMeta(tenantId);
@@ -371,9 +374,6 @@ async function flush() {
           : '')
       ).join(' ');
       emitStatus('synced', warningText || 'تم رفع جميع التغييرات المحلية');
-      if (batchResult.warnings.length) {
-        window.dispatchEvent(new CustomEvent('malvia-sync-warning', { detail: { warnings: batchResult.warnings } }));
-      }
     }
   } catch (e: any) {
     emitStatus(navigator.onLine ? 'error' : 'offline', String(e?.message || e));
