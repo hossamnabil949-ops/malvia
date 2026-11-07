@@ -77,11 +77,11 @@ export default async function handler(req: any, res: any) {
           !Object.prototype.hasOwnProperty.call(policy, op.resource) ||
           !Number.isSafeInteger(op.baseVersion) || op.baseVersion < 0 ||
           !Object.prototype.hasOwnProperty.call(op, 'data'))) {
-      return res.status(400).json({ code: 'SYNC_BATCH_INVALID', error: 'بيانات دفعة المزامنة غير صالحة.' });
+      return res.status(400).json({ code: 'SYNC_BATCH_INVALID', error: 'بيانات دفعة المزامنة غير صالحة.', diagnostic: { traceId, phase, resource: 'unknown', operationCount: Array.isArray(operations) ? operations.length : 0, errorName: 'SyncValidationError', errorCode: 'SYNC_BATCH_INVALID' } });
     }
     operationResources = operations.map((op: any) => String(op.resource));
     if (new Set(operations.map((op: any) => op.resource)).size !== operations.length) {
-      return res.status(400).json({ code: 'SYNC_BATCH_DUPLICATE_RESOURCE', error: 'لا يمكن تكرار المورد داخل دفعة واحدة.' });
+      return res.status(400).json({ code: 'SYNC_BATCH_DUPLICATE_RESOURCE', error: 'لا يمكن تكرار المورد داخل دفعة واحدة.', diagnostic: { traceId, phase, resource: operationResources.join(','), operationCount: operationResources.length, errorName: 'SyncValidationError', errorCode: 'SYNC_BATCH_DUPLICATE_RESOURCE' } });
     }
     phase = 'permission_validation';
     const role = String(employee.role || '');
