@@ -202,3 +202,11 @@ Append-only event/ledger rows use `occurred_at`, `recorded_at`, actor, source ty
 ## 12. Explicitly not finalized
 
 UUID/text identity, numeric precision and rounding, tax and currency/FX, nullable semantics, exact enum/lookup catalogs, FK delete actions, legal entity and branch mapping, inventory costing, serial uniqueness, customer/supplier balance model, journal posting timing, partitioning, RLS policy and retention require approvals. This dictionary is a review baseline, not executable DDL.
+
+
+## Database constraints and command transaction companions
+
+- [MALVIA-DATABASE-CONSTRAINTS-AND-TRANSACTION-SPEC-v1.md](MALVIA-DATABASE-CONSTRAINTS-AND-TRANSACTION-SPEC-v1.md) — tenant-safe keys, domain constraints, uniqueness/idempotency, locking/isolation, atomicity, ledger immutability, RLS safeguards and concurrency acceptance tests.
+- [MALVIA-COMMAND-TRANSACTION-CATALOG-v1.md](MALVIA-COMMAND-TRANSACTION-CATALOG-v1.md) — command-by-command preconditions, read/write sets, locks, idempotency, receipts, reversals and rollback semantics.
+
+Both are design-only review documents; they do not authorize SQL, migrations, API implementation or production changes.
