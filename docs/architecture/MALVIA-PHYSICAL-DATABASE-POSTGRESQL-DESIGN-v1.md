@@ -124,8 +124,8 @@ Sales tables:
 Procurement tables:
 - `procurement.suppliers`.
 - `procurement.purchase_invoices`, `purchase_invoice_lines`: supplier invoice facts and invoiced quantities, separate from physical receipt.
-- `procurement.purchase_receipts`, `purchase_receipt_lines`, `purchase_invoice_receipt_allocations`: accepted/rejected quantities, receiving branch/warehouse, batch/serial evidence and partial receipt allocation. Only accepted receipt lines create stock movements.
-- `procurement.supplier_payments`, `supplier_payment_tenders`, `supplier_payment_allocations`, `supplier_ledger_events`.
+- `procurement.purchase_receipts`, `purchase_receipt_lines`, `purchase_receipt_line_serials`, `purchase_invoice_receipt_allocations`: accepted/rejected quantities, receiving branch/warehouse, batch/serial evidence and partial receipt allocation. Only accepted receipt lines create stock movements.
+- `procurement.supplier_payments`, `supplier_payment_tenders`, `supplier_payment_allocations`, `supplier_payment_schedules`, `supplier_ledger_events`.
 - `procurement.purchase_returns`, `purchase_return_lines`, `purchase_return_settlements`: return lines reference accepted receipt lines; physical stock return is separated from debt reduction, cash refund and supplier credit.
 
 Unique invoice/receipt keys use the configured numbering scope, not an assumed branch-only scope. Return cumulative quantity is validated inside a locked server transaction. Customer/supplier balances are derived from subledger events and explicit allocations, not editable snapshots.
