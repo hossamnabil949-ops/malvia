@@ -207,6 +207,7 @@ export default function App() {
   const [showDeploymentGuide, setShowDeploymentGuide] = useState<boolean>(false);
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
   const [syncWarningMessage, setSyncWarningMessage] = useState<string | null>(null);
+  const [syncRejectionNotifications, setSyncRejectionNotifications] = useState<syncSvc.SyncRejectionNotification[]>([]);
   const [showVoiceAssistant, setShowVoiceAssistant] = useState<boolean>(false);
   const [showInventoryAudit, setShowInventoryAudit] = useState<boolean>(false);
   const [showBarcodeStocktake, setShowBarcodeStocktake] = useState<boolean>(false);
@@ -323,6 +324,25 @@ export default function App() {
     window.addEventListener('malvia-sync-warning', onSyncWarning);
     return () => window.removeEventListener('malvia-sync-warning', onSyncWarning);
   }, []);
+
+  // إشعارات الرفض محفوظة على الخادم وتُحمّل للمدير العام حتى بعد إعادة تسجيل الدخول.
+  useEffect(() => {
+    const role = String(effectiveRole || '').trim().toUpperCase();
+    const canView = ['مدير عام', 'ADMIN', 'OWNER', 'SUPER_ADMIN'].includes(role)
+      || String(currentUser?.username || '').trim().toLowerCase() === 'admin';
+    if (!canView || !activeTenant?.licenseKey) {
+      setSyncRejectionNotifications([]);
+      return;
+    }
+    let alive = true;
+    const load = async () => {
+      const result = await syncSvc.fetchSyncRejectionNotifications(activeTenant.licenseKey);
+      if (alive && result.ok) setSyncRejectionNotifications(result.notifications);
+    };
+    void load();
+    const timer = window.setInterval(() => { void load(); }, 45_000);
+    return () => { alive = false; window.clearInterval(timer); };
+  }, [effectiveRole, currentUser?.username, activeTenant?.licenseKey]);
 
   // لوحة المالك: اقرأ سجل المحلات من السحابة (يتطلب رمز الإدارة)
   useEffect(() => {
@@ -2637,6 +2657,25 @@ export default function App() {
           </div>
           <p className="whitespace-pre-wrap text-xs leading-6 text-slate-200">{syncWarningMessage}</p>
         </div>
+      )}
+      {syncRejectionNotifications.length > 0 && (
+        <section aria-label="إشعارات رفض المزامنة" className="fixed top-4 inset-x-3 z-[95] mx-auto max-w-2xl rounded-2xl border border-amber-500/50 bg-slate-900 p-4 text-white shadow-2xl">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <strong className="text-sm text-amber-300">سجل رفض حركات المزامنة — محفوظ سحابياً</strong>
+            <span className="text-xs text-slate-400">{syncRejectionNotifications.length} إشعار</span>
+          </div>
+          <div className="max-h-64 space-y-3 overflow-y-auto">
+            {syncRejectionNotifications.slice(0, 5).map(item => (
+              <article key={item.id} className="border-t border-slate-700 pt-2 text-xs leading-6">
+                <p className="font-bold text-white">{item.message}</p>
+                <p className="text-slate-300">الموظف: {item.actor.employeeName || item.actor.username || 'غير محدد'} — المورد: {item.resource}</p>
+                {item.recordIds?.length > 0 && <p className="text-slate-300">الحركات: {item.recordIds.join('، ')}</p>}
+                <p className="text-slate-400">الكود: {item.code} — التتبع: {item.traceId}</p>
+                <p className="text-slate-500">{new Date(item.createdAt).toLocaleString('ar-EG')}</p>
+              </article>
+            ))}
+          </div>
+        </section>
       )}
       {exitHint && (
         <div className="fixed bottom-24 lg:bottom-8 inset-x-0 z-[70] flex justify-center pointer-events-none">
