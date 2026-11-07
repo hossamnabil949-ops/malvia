@@ -74,7 +74,7 @@ Append-only event/ledger rows use `occurred_at`, `recorded_at`, actor, source ty
 | `org.locations` | tenant_id, id, branch_id, code, name, location_type, status_code | FK branch; unique tenant/branch/code |
 | `org.registers` | tenant_id, id, branch_id, code, name, device_policy, status_code | FK branch; unique tenant/branch/code |
 | `org.register_cashbox_assignments` | tenant_id, id, register_id, cashbox_id, valid_from, valid_to, assigned_by | FKs; non-overlap rule enforced transactionally |
-| `org.document_sequences` | tenant_id, id, legal_entity_id, branch_id nullable, register_id nullable, scope_type, document_type, series_code, prefix, next_value, version | typed scope FKs; register requires its branch; use separate partial unique indexes for entity-, branch- and register-level scope to handle NULL uniqueness correctly; allocate and insert atomically |
+| `org.document_sequences` | tenant_id, id, legal_entity_id, branch_id nullable, register_id nullable, scope_type, document_type, series_code, prefix, next_value, version | typed scope FKs; CHECK enforces LEGAL_ENTITY (branch/register NULL), BRANCH (branch set/register NULL) or REGISTER (both set); register requires its branch; separate partial unique indexes per scope handle NULL uniqueness correctly; allocate and insert atomically |
 | `org.branch_membership_events` | tenant_id, id, user_id, branch_id, event_code, occurred_at, actor_id | append-only assignment evidence |
 
 ## 5. Catalog schema
@@ -116,12 +116,12 @@ Append-only event/ledger rows use `occurred_at`, `recorded_at`, actor, source ty
 |---|---|---|
 | `sales.customers` | tenant_id, id, customer_code, name, phone, status_code | unique tenant/customer_code |
 | `sales.customer_addresses` | tenant_id, id, customer_id, address_type, address_text, city, country_code | customer FK |
-| `sales.sales_orders` | tenant_id, id, branch_id, customer_id, order_number, status_code, ordered_at | unique tenant/branch/order no |
+| `sales.sales_orders` | tenant_id, id, branch_id, customer_id, order_number, status_code, ordered_at | unique configured numbering scope + document type/series/number |
 | `sales.sales_order_lines` | tenant_id, id, order_id, item_id, quantity, unit_price, discount_amount, tax_amount | order/item FKs |
-| `sales.invoices` | tenant_id, id, legal_entity_id, branch_id, register_id, customer_id, series_code, document_number, issued_at, business_date, status_code, currency_code, subtotal, discount_total, tax_total, grand_total, returned_total, source_command_id | unique tenant/legal entity/series/number; immutable posted snapshot |
+| `sales.invoices` | tenant_id, id, legal_entity_id, branch_id, register_id, customer_id, series_code, document_number, issued_at, business_date, status_code, currency_code, subtotal, discount_total, tax_total, grand_total, returned_total, source_command_id | unique approved numbering scope + document type/series/number; immutable posted snapshot |
 | `sales.invoice_lines` | tenant_id, id, invoice_id, line_number, item_id, description_snapshot, quantity, returned_qty, unit_price, discount_amount, tax_amount, cost_snapshot, line_total | unique tenant/invoice/line number; return quantity bounded |
 | `sales.invoice_payments` | tenant_id, id, invoice_id, collection_branch_id, tender_type, cashbox_id, bank_account_id, amount, currency_code, paid_at, external_ref | exactly one applicable custody destination per tender type |
-| `sales.sales_returns` | tenant_id, id, original_invoice_id, branch_id, return_number, status_code, reason_code, returned_at, approved_by | unique tenant/branch/return no |
+| `sales.sales_returns` | tenant_id, id, original_invoice_id, branch_id, return_number, status_code, reason_code, returned_at, approved_by | unique approved numbering scope + document type/series/number |
 | `sales.sales_return_lines` | tenant_id, id, sales_return_id, original_invoice_line_id, item_id, quantity, disposition_code, refund_amount | original line FK; server validates cumulative returned quantity |
 | `sales.sales_return_tenders` | tenant_id, id, sales_return_id, tender_type, cashbox_id, bank_account_id, amount, settled_at | linked refund/credit effect receipt |
 | `sales.shifts` | tenant_id, id, branch_id, register_id, cashbox_id, opened_by, opened_at, closed_at, status_code | one active shift per register/cashbox policy |
@@ -140,9 +140,9 @@ Append-only event/ledger rows use `occurred_at`, `recorded_at`, actor, source ty
 | Table | Required fields | Constraints / relationships |
 |---|---|---|
 | `procurement.suppliers` | tenant_id, id, supplier_code, name, phone, status_code | unique tenant/supplier_code |
-| `procurement.purchase_invoices` | tenant_id, id, legal_entity_id, branch_id, supplier_id, supplier_document_no, internal_document_no, invoice_date, status_code, currency_code, subtotal, tax_total, grand_total, amount_paid | commercial supplier invoice/document; unique internal number; external supplier number duplicate policy explicit; physical receipt is separate |
+| `procurement.purchase_invoices` | tenant_id, id, legal_entity_id, branch_id, supplier_id, supplier_document_no, internal_document_no, invoice_date, status_code, currency_code, subtotal, tax_total, grand_total, amount_paid | commercial supplier invoice/document; unique approved numbering scope + document type/series/number; external supplier number duplicate policy explicit; physical receipt is separate |
 | `procurement.purchase_invoice_lines` | tenant_id, id, purchase_invoice_id, line_number, item_id, invoiced_qty, unit_cost, discount_amount, tax_amount, line_total | unique invoice/line; do not treat invoiced quantity as received stock |
-| `procurement.purchase_receipts` | tenant_id, id, legal_entity_id, branch_id, warehouse_id, supplier_id, purchase_invoice_id nullable, receipt_number, received_at, status_code | unique receipt number in approved scope; receipt may be partial; stock posts only on accepted receipt |
+| `procurement.purchase_receipts` | tenant_id, id, legal_entity_id, branch_id, warehouse_id, supplier_id, purchase_invoice_id nullable, receipt_number, received_at, status_code | unique approved numbering scope + document type/series/number; receipt may be partial; stock posts only on accepted receipt |
 | `procurement.purchase_receipt_lines` | tenant_id, id, receipt_id, purchase_invoice_line_id nullable, item_id, accepted_qty, rejected_qty, unit_cost_snapshot, batch_id, disposition_code | accepted/rejected quantities validated; batch and warehouse custody recorded |
 | `procurement.purchase_receipt_line_serials` | tenant_id, id, receipt_line_id, serial_unit_id | unique serial receipt assignment; serial custody validated transactionally |
 | `procurement.purchase_invoice_receipt_allocations` | tenant_id, id, purchase_invoice_line_id, purchase_receipt_line_id, allocated_qty | allocation cannot exceed invoiced or accepted quantities; supports multiple partial receipts |
@@ -187,7 +187,7 @@ Append-only event/ledger rows use `occurred_at`, `recorded_at`, actor, source ty
 | `accounting.journals` | tenant_id, id, legal_entity_id, book_id, journal_number, source_type, source_id, template_version_id, currency_code, posting_date, status_code, posted_at, reversal_of_id | unique scoped journal no; posted immutable; balance independently by book/currency |
 | `accounting.journal_lines` | tenant_id, id, journal_id, line_number, account_id, branch_id, debit, credit, currency_code, memo | exactly one debit/credit positive; journal balance validated transactionally |
 | `accounting.posting_templates` | tenant_id, id, event_code, version, effective_from, effective_to, approval_status, definition | unique tenant/event/version; immutable once effective |
-| `accounting.posting_receipts` | tenant_id, id, legal_entity_id, book_id, source_type, source_id, posting_purpose, template_generation, journal_id, command_id, outcome, created_at | unique tenant/legal entity/book/source/purpose/template generation; exact uniqueness policy documented for multi-book/multi-purpose posting |
+| `accounting.posting_receipts` | tenant_id, id, legal_entity_id, book_id, source_type, source_id, posting_purpose, template_generation, journal_id, command_id, outcome, created_at | unique tenant/legal entity/book/source/purpose; template generation is stored as evidence, not a key that permits automatic reposting |
 | `accounting.journal_reversals` | tenant_id, id, original_journal_id, reversal_journal_id, reason, approved_by, occurred_at | one approved reversal per policy |
 | `accounting.period_close_runs` | tenant_id, id, fiscal_period_id, started_at, completed_at, status_code, evidence_ref | period FK; immutable close evidence |
 
@@ -250,3 +250,10 @@ The following entities were absent or under-specified in the initial table list 
 - Register-scoped sequences require a non-null branch and a register belonging to that branch/legal entity. Document uniqueness must use exactly the same configured scope as the sequence allocator.
 - Polymorphic source provenance fields are not foreign keys. Where a real relationship must be enforced, use typed nullable FKs plus category CHECK constraints or dedicated association tables. This applies to opening-balance targets, instrument counterparties and serial receipt assignments.
 - Customer and supplier receipt headers support multiple tender lines; each tender line identifies its actual cashbox/bank destination and reconciles to the header total.
+
+
+## Document-number and posting-receipt uniqueness alignment
+
+All business document numbers (sales invoices/orders/returns, purchase invoices/receipts/returns, transfers and shifts where numbered) use the same configured numbering-scope definition as `org.document_sequences`. The document unique constraint must include the resolved scope identity, document type, series and number. The scope can be legal entity, branch or register according to the approved numbering policy; no document table may silently use a different scope.
+
+For GL posting, the unique effect key is tenant + legal entity + accounting book + source event + posting purpose. Template version/generation is immutable evidence on the receipt, not a key that allows the same source purpose to be posted again after a template change. Any legitimate additional posting needs a distinct approved posting purpose or an explicit reversal/replacement workflow.
