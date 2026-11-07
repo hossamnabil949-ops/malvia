@@ -12,7 +12,7 @@
 - No account numbers are assigned here. Codes, statutory presentation, tax accounts and local requirements need accountant approval.
 
 ## 2. Logical chart-of-accounts taxonomy
-This is a classification tree, not a finalized numbering scheme. Each leaf account must define normal balance, reconciliation control, allowed dimensions, currency policy, posting restrictions and financial-statement mapping.
+This is a classification tree, not a finalized numbering scheme. Each leaf account must define normal balance, reconciliation control, allowed dimensions, currency policy, posting restrictions and financial-statement mapping. The tenant chart is assigned to each legal-entity book through an effective book-account mapping; not every account is automatically available in every book.
 
 | Class | Logical groups | Typical purpose / controls |
 |---|---|---|
@@ -34,7 +34,7 @@ Every journal line resolves tenant, legal entity/book, account, currency, accoun
 ## 4. Posting template lifecycle
 States: DRAFT → REVIEW → APPROVED → ACTIVE → RETIRED. Only an approved active version posts. New versions apply prospectively; they never rewrite posted history. Backdated use needs explicit period/reposting approval.
 
-Each template defines source event and lifecycle state; required fields; account-role mapping; amount basis and rounding; approved debit/credit rules; dimensions; tax/discount/fee handling; subledger/inventory references; idempotency; reversal template; tests; approver and effective date.
+Each template is scoped to legal entity + accounting book + event type + immutable version, and defines source event and lifecycle state; required fields; account-role mapping; amount basis and rounding; approved debit/credit rules; dimensions; tax/discount/fee handling; subledger/inventory references; idempotency; reversal template; tests; approver and effective date.
 
 ## 5. Event posting matrix — questions to approve
 **This matrix specifies required links and policy questions, not final debit/credit.** Accountant approval is required for account roles, timing, tax, valuation and presentation.
@@ -104,3 +104,8 @@ Legal entities/books; reporting currency and accounting basis; account codes and
 ## Related accounting engine design
 
 - [Accounting engine and posting orchestration](MALVIA-ACCOUNTING-ENGINE-AND-POSTING-ORCHESTRATION-v1.md) — canonical source events, server-side command pipeline, synchronous source/journal/receipt/outbox commit or an explicitly approved pending-posting workflow with a separate later journal transaction, idempotency, template versioning, reversals, offline late-event handling and migration gates. Target architecture only; no runtime implementation is implied.
+
+
+## Book-specific account availability
+
+A tenant may maintain a common chart catalogue, but each legal-entity book must explicitly enable the accounts it uses. Posting validation checks the account's effective book assignment on the accounting date. A template's account-role mapping is validated against that same book. No template or account assignment is inferred from branch identity.
