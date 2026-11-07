@@ -184,10 +184,11 @@ Append-only event/ledger rows use `occurred_at`, `recorded_at`, actor, source ty
 | `finance.opening_balance_effects` | tenant_id, id, batch_id, line_id, target_type, target_id, source_effect_key, applied_at | unique batch/line/target effect; prevents replay of generated opening effects |
 | `accounting.chart_of_accounts` | tenant_id, id, code, name, account_type, parent_account_id, status_code | unique tenant/code; parent same tenant |
 | `accounting.books` | tenant_id, id, legal_entity_id, book_code, book_type, currency_policy, status_code | unique tenant/legal entity/book code; statutory/management/tax book types require policy |
+| `accounting.book_accounts` | tenant_id, id, book_id, account_id, effective_from, effective_to, status_code | unique tenant/book/account; only accounts assigned to the journal's book may be posted |
 | `accounting.fiscal_periods` | tenant_id, id, legal_entity_id, book_id, starts_on, ends_on, status_code, locked_at | valid range; no overlapping open periods per legal entity/book/calendar |
 | `accounting.journals` | tenant_id, id, legal_entity_id, book_id, journal_number, source_type, source_id, template_version_id, currency_code, posting_date, status_code, posted_at, reversal_of_id | unique scoped journal no; posted immutable; balance independently by book/currency |
 | `accounting.journal_lines` | tenant_id, id, journal_id, line_number, account_id, branch_id, debit, credit, currency_code, memo | exactly one debit/credit positive; journal balance validated transactionally |
-| `accounting.posting_templates` | tenant_id, id, event_code, version, effective_from, effective_to, approval_status, definition | unique tenant/event/version; immutable once effective |
+| `accounting.posting_templates` | tenant_id, id, legal_entity_id, book_id, event_code, version, effective_from, effective_to, approval_status, definition | unique tenant/legal entity/book/event/version; immutable once effective |
 | `accounting.posting_receipts` | tenant_id, id, legal_entity_id, book_id, source_type, source_id, posting_purpose, template_generation, journal_id, command_id, outcome, created_at | unique tenant/legal entity/book/source/purpose; template generation is stored as evidence, not a key that permits automatic reposting |
 | `accounting.journal_reversals` | tenant_id, id, original_journal_id, reversal_journal_id, reason, approved_by, occurred_at | one approved reversal per policy |
 | `accounting.period_close_runs` | tenant_id, id, fiscal_period_id, started_at, completed_at, status_code, evidence_ref | period FK; immutable close evidence |
@@ -263,3 +264,8 @@ For GL posting, the unique effect key is tenant + legal entity + accounting book
 ## Cross-document consistency review
 
 - [MALVIA-DESIGN-CONSISTENCY-REVIEW-v1.md](MALVIA-DESIGN-CONSISTENCY-REVIEW-v1.md) — resolved cross-document conflicts, canonical invariants, remaining approval decisions and release-blocking verification checklist. Design review only; no implementation approval.
+
+
+## Accounting book-to-account integrity
+
+The chart of accounts is a tenant-owned master catalogue. `accounting.book_accounts` explicitly assigns each account to one or more legal-entity books and carries the effective interval/status. Journal lines must reference an account assignment valid for the journal's book and posting date; a plain tenant/account FK is not enough. Posting templates are scoped to legal entity + book + event type + version so an approved template cannot be applied to the wrong book.
