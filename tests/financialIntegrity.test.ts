@@ -598,6 +598,7 @@ assert.equal(getOpenPartnerCurrentAccountOrigins('pca-partner', 'company_repayme
 const pcaPartnerDeposit: any = {
   id: 'PCA-DEPOSIT-1', partnerId: 'pca-partner', partnerName: 'Partner A',
   type: 'partner_deposit', amount: 350, date: '2026-11-04', paymentMethod: 'محفظة إلكترونية',
+  bankAccountId: '', // legacy clients may keep an empty selector value on the source record
   treasuryTransactionId: 'TX-PCA-DEPOSIT-1', recordedBy: 'Test', createdAt: '2026-11-04T15:00:00.000Z',
 };
 const pcaPartnerDepositTreasury: any = {
@@ -610,6 +611,11 @@ assert.equal(validatePartnerCurrentAccountSync({
   bankAccounts: [], treasury: [pcaPartnerDepositTreasury], bankLedgerEntries: [], openingBalances: [],
 }), null);
 assert.equal(getPartnerCurrentAccountBalance('pca-partner', [pcaPartnerDeposit], []), 350);
+assert.equal(validatePartnerCurrentAccountSync({
+  previous: [], incoming: [pcaPartnerDeposit],
+  partners: [{ id: 'pca-partner', name: 'Partner A', role: 'Test', phone: '01000000000', sharePercentage: 100, initialCapital: 1000, addedCapital: 0, reinvestedProfits: 0, totalCurrentCapital: 1000, totalWithdrawn: 0, joinDate: '2026-01-01', status: 'ACTIVE' }],
+  bankAccounts: [], treasury: [pcaPartnerDepositTreasury], bankLedgerEntries: [], openingBalances: [],
+}), null);
 
 const pcaPartnerWithdrawal: any = {
   id: 'PCA-WITHDRAW-1', partnerId: 'pca-partner', partnerName: 'Partner A',
