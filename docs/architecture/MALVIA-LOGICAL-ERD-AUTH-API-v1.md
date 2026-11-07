@@ -251,7 +251,7 @@ The detailed ownership, lifecycle and acceptance rules are maintained in:
 - `MALVIA-INDUSTRY-PACKS-AND-COMMON-MODULES-v1.md`: shared platform contracts and industry pack boundaries for restaurants, auto parts/service, supermarket/retail, clothing and pharmacy.
 
 Logical ERD clarifications:
-- Add `cashboxes` as explicit branch-owned cash custody accounts; do not overload `treasury_accounts` without a future approved mapping.
+- Use `cashboxes` as the canonical branch-owned cash custody accounts; do not create a generic cash-account master as a competing cashbox identity.
 - Add `register_cashbox_assignments` with effective interval and audit actor; do not hard-code one cashbox per branch/register.
 - Add `stock_allocations` with source warehouse, demand reference, quantity, status and expiry; allocations reserve availability but do not post physical movement.
 - Add transfer event/line tables for dispatch, transit, partial receipt, shortage, damage and cancellation; legacy immediate transfers map to completed history.
