@@ -96,7 +96,23 @@ export default async function handler(req: any, res: any) {
     const hasPermission = (permission: string) => owner || permissionList.includes('*') || permissionList.includes(permission) || permissions[permission] === true || permissions['*'] === true;
     for (const op of operations) {
       const allowed = owner || (role === 'محاسب مالي' && policy[op.resource].includes('canManagePartners')) || policy[op.resource].some(hasPermission);
-      if (!allowed) return res.status(403).json({ code: 'EMPLOYEE_PERMISSION_DENIED', resource: op.resource, error: 'لا تملك صلاحية مزامنة أحد عناصر الدفعة.', diagnostic: { traceId, phase, resource: op.resource, operationCount: operationResources.length, errorName: 'PermissionError', errorCode: 'EMPLOYEE_PERMISSION_DENIED' } });
+      if (!allowed) {
+        // Safe server-side diagnostics: never log employee identity, credentials, or payload.
+        console.warn('[MALVIA_PERMISSION_DIAGNOSTIC]', {
+          traceId,
+          resource: op.resource,
+          role,
+          normalizedRole,
+          permissionsShape: Array.isArray(employee.permissions) ? 'array' : (employee.permissions && typeof employee.permissions === 'object' ? 'object' : typeof employee.permissions),
+          permissionKeys: Object.keys(permissions).filter((key) => typeof key === 'string').slice(0, 80),
+          permissionListHasWildcard: permissionList.includes('*'),
+          settingsPermission: permissions.canManageSettings === true || permissionList.includes('canManageSettings'),
+          wildcardPermission: permissions['*'] === true || permissionList.includes('*'),
+          usernameIsAdmin: String(employee.username || '').trim().toLowerCase() === 'admin',
+          operationCount: operationResources.length,
+        });
+        return res.status(403).json({ code: 'EMPLOYEE_PERMISSION_DENIED', resource: op.resource, error: 'لا تملك صلاحية مزامنة أحد عناصر الدفعة.', diagnostic: { traceId, phase, resource: op.resource, operationCount: operationResources.length, errorName: 'PermissionError', errorCode: 'EMPLOYEE_PERMISSION_DENIED' } });
+      }
     }
     if (!owner && operations.some((op: any) => op.resource === 'partnerCurrentAccountTransactions')
       && !(role === 'محاسب مالي' || (permissions.canManagePartners === true && permissions.canManageTreasury === true))) {
