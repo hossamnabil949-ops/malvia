@@ -324,3 +324,8 @@ Polymorphic provenance (source_type/source_id) is not a relational FK. For busin
 ## Posting identity protection
 
 A posting receipt's uniqueness is tenant + legal entity + accounting book + source event + posting purpose. The template version/generation is recorded for audit and reproducibility but is not part of the uniqueness key. Template upgrades therefore cannot generate a second journal for the same source purpose. Separate journals require an explicitly distinct approved purpose or a reversal/replacement command.
+
+
+## Cross-document consistency review
+
+- [MALVIA-DESIGN-CONSISTENCY-REVIEW-v1.md](MALVIA-DESIGN-CONSISTENCY-REVIEW-v1.md) — resolved cross-document conflicts, canonical invariants, remaining approval decisions and release-blocking verification checklist. Design review only; no implementation approval.
