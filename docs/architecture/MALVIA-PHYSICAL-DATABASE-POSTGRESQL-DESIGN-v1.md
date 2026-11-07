@@ -276,3 +276,11 @@ No physical schema implementation until owner approves ownership dimensions, acc
 - [ ] Offline pending operations survive migration/replay.
 - [ ] Reports/exports enforce same authorization scope.
 - [ ] Restore/rollback rehearsal and sign-offs complete.
+
+
+## Detailed physical model companions
+
+- [MALVIA-POSTGRESQL-DATA-DICTIONARY-v1.md](MALVIA-POSTGRESQL-DATA-DICTIONARY-v1.md) — proposed per-table columns, logical PostgreSQL types, required fields, unique/check constraints and relationship rules.
+- [MALVIA-DETAILED-RELATIONAL-ERD-v1.md](MALVIA-DETAILED-RELATIONAL-ERD-v1.md) — domain ERDs and explicit ownership/cardinality/transaction invariants.
+
+These are review artifacts only. They do not authorize DDL, migrations or data cutover.
