@@ -3182,7 +3182,8 @@ export default function App() {
                 description: `${PARTNER_CURRENT_ACCOUNT_CATEGORIES[record.type]} — ${target.name}`,
                 recordedBy: currentUser?.employeeName || 'المحاسب المالي',
               };
-              const normalizedRecord = { ...record, partnerName: target.name };
+              // Persist the same canonical optional bank-account value used by the paired treasury entry.
+              const normalizedRecord = { ...record, partnerName: target.name, bankAccountId: isBank ? record.bankAccountId : undefined };
               const nextCurrentAccount = [normalizedRecord, ...partnerCurrentAccountTransactions];
               const nextTreasury = [tx, ...treasury];
               const nextBankEntries = bankEntry ? [bankEntry, ...bankLedgerEntries] : bankLedgerEntries;
