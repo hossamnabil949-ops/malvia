@@ -144,7 +144,7 @@ A trial belongs to a tenant, not to a downloaded binary or device. The 14-day cl
 
 ### 4.2 Recommended trial defaults — approval required
 
-- Duration: exactly 14 consecutive calendar days, stored as UTC timestamps and displayed in the tenant timezone.
+- Duration: 14 days, stored as UTC timestamps and displayed in the tenant timezone. **OPEN detail:** approve whether this means 14 calendar days in the tenant timezone or exactly 336 elapsed hours; do not implement expiry boundary until this is explicit.
 - One active trial per verified company/tenant identity by default; support can approve exceptions. Avoid invasive device fingerprinting as the primary fraud control.
 - Trial includes one selected industry pack and a clearly listed starter set of modules; optional cross-industry add-ons can be demonstrated but not silently enabled.
 - Seat allowance should be a published small-team number; proposed default: 3 active user seats. This is a commercial policy choice, not a branch limit.
