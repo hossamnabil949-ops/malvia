@@ -42,7 +42,7 @@ The following is a logical constraint matrix. Names are illustrative; final SQL 
 | Sessions/devices | tenant/user/device FKs | token hash unique; device key hash unique per tenant | expiry > issue; revoked session cannot authorize; one active session policy OPEN |
 | Legal entities/branches | composite tenant FKs | legal entity code per tenant; branch code per legal entity | branch belongs to exactly one legal entity; branch scope explicit |
 | Registers/cashboxes | tenant + branch/account FKs | register code per branch; valid assignment uniqueness | at most one active cashbox assignment per register/time interval; no overlapping validity intervals |
-| Branch sequences | tenant/branch FK | (tenant, branch, document_type) unique | next value positive; increment atomic and never reused after committed issuance |
+| Document sequences | tenant/legal entity plus optional branch/register FKs | unique approved numbering-scope tuple + document type/series | next value positive; scope policy may be entity-, branch- or register-based; increment and document insert atomic; committed number never reused |
 | Catalog items/units | tenant-safe item/unit FKs | item code per tenant; unit code per item; barcode policy OPEN | conversion factor > 0; exactly one typed attribute value matches declared type |
 | Prices/tax | item/list/tax FKs | uniqueness by item/list/currency/effective version | valid_from < valid_to; overlapping active price intervals prohibited for same key unless priority policy exists |
 | Warehouses/locations | warehouse branch FK; location warehouse FK | warehouse code per branch; location code per warehouse | warehouse branch immutable after posting or changed only by controlled migration |
@@ -50,12 +50,12 @@ The following is a logical constraint matrix. Names are illustrative; final SQL 
 | Stock movements | source item/branch/warehouse FKs | source-effect key unique for each posting effect | quantity delta nonzero; reversal references original; append-only |
 | Batches/serials | item/warehouse and event FKs | batch code scope OPEN; serial uniqueness scope OPEN | expiry >= manufacture date; one active custody state per serial; no serial allocated/sold twice concurrently |
 | Allocations | item/warehouse/source FKs | active allocation source identity unique | allocated quantity > 0; total active allocation cannot exceed eligible availability under locked transaction |
-| Transfers | source/destination branch and line FKs | transfer number unique in approved scope | source != destination; quantities nonnegative; received/damaged <= dispatched; lifecycle transition validated |
+| Transfers | source/destination branch and warehouse FKs | transfer number unique in approved scope | source warehouse != destination warehouse; source and destination branch may be equal for intra-branch transfer; quantities nonnegative; received/damaged <= dispatched; lifecycle transition validated |
 | Inventory counts | branch/warehouse/item FKs | count number unique per warehouse | only approved variance posts stock movement; one approval effect |
 | Sales documents | tenant/legal entity/branch/register/customer FKs | invoice number unique by tenant/legal entity/series; line number unique per invoice | totals recomputed server-side; posted snapshot immutable; valid currency/date/amount rules |
 | Invoice tenders | invoice/cashbox/bank FKs | source tender effect unique | positive amount; exactly one applicable custody destination; sum reconciles to invoice settlement state |
 | Sales returns | original invoice/line FKs | return number unique in scope; source effect unique | cumulative returned quantity <= eligible sold quantity; return cannot target cancelled/voided line unless approved policy says otherwise; refund/credit totals reconcile |
-| Procurement | supplier/branch/warehouse/invoice FKs | internal purchase number unique; supplier external ref duplicate policy OPEN | received/accepted quantities valid; source and settlement dimensions distinct |
+| Procurement | supplier/invoice/receipt/receipt-line/warehouse FKs | internal invoice and receipt numbers unique in approved scopes; supplier external ref duplicate policy OPEN | invoiced quantity is distinct from accepted receipt quantity; only accepted receipt lines increase stock; returns cannot exceed accepted net quantity |
 | Purchase returns | original purchase/line FKs | return number unique; settlement effect unique | cumulative returned quantity <= net accepted quantity; cash refund + debt reduction + store credit cannot exceed approved return value |
 | Cashboxes/treasury | branch/cashbox/source FKs | source effect key unique | amount > 0; direction explicit; reversal linked; no mutable balance snapshot as ledger source |
 | Bank ledger | bank account/source FKs | source effect key unique | amount > 0; direction explicit; bank and cash custody are distinct ledgers |
@@ -91,13 +91,13 @@ A record may carry multiple dimensions for different meanings. Each FK must be t
 
 ### 4.1 Document numbering
 
-Invoice/return/purchase/transfer/shift numbers use a server-owned sequence row scoped to the approved numbering domain. Increment and document insert occur in one transaction while holding a row lock on the sequence. A committed number is never reused, including after later void/reversal. Gaps are acceptable unless a jurisdiction-specific policy requires otherwise; that policy is OPEN.
+Invoice/return/purchase/receipt/transfer/shift numbers use a server-owned sequence row scoped to the approved numbering domain. The domain may be legal-entity, branch, register or a configured combination with document type and series; do not assume branch-only scope. Increment and document insert occur in one transaction while holding a row lock on the sequence. A committed number is never reused, including after later void/reversal. Gaps are acceptable unless a jurisdiction-specific policy requires otherwise; that policy is OPEN.
 
 Do not use MAX(number)+1, client timestamps, localStorage counters or an unlocked read-modify-write. If multiple numbering series exist, include the series in the unique key. Offline provisional numbers require a separately approved namespace and collision reconciliation; do not silently merge them into the online sequence.
 
 ### 4.2 Idempotency receipts
 
-Recommended logical identity: (tenant_id, command_type, idempotency_key) or a narrower documented scope. Store canonical payload hash, actor, command ID, status, receipt, source IDs, committed timestamp and schema version.
+Canonical logical identity: (tenant_id, command_type, idempotency_key). Store canonical payload hash, actor ID, originating device ID, command ID, status, receipt, source IDs, committed timestamp and schema version. The actor is bound to the receipt: a different actor reusing the key must not receive the first actor's response or effects; return a safe conflict/authorization denial. A narrower scope is allowed only when explicitly documented and proven not to permit duplicate business effects.
 
 - First valid request claims the key and executes.
 - Same key + same canonical payload returns the original durable receipt and does not repeat effects.
@@ -180,7 +180,7 @@ The detailed per-command contracts, exact reads/writes and lock keys are in [Com
 - Return disposition (saleable, damaged, quarantine, supplier return) must be explicit and inventory/accounting treatment defined before implementation.
 - Reservation allocation must be checked under lock; expired reservations are released by an auditable command, not by silently ignoring rows.
 
-**OPEN:** whether negative stock is allowed, for which roles/branches/items, and whether backorders are supported. Do not choose a default in code until approved.
+**OPEN:** whether negative stock is allowed, for which roles/branches/items, and whether backorders are supported. Do not choose a default in code until approved. Same-branch warehouse transfers are valid when source and destination warehouses differ; branch inequality is not a transfer invariant.
 
 ## 8. Accounting and custody invariants
 
@@ -298,3 +298,13 @@ No implementation may silently settle these:
 - PostgreSQL partitioning and index thresholds.
 
 **Approval gate:** engineering, security and accounting review this document; unresolved items receive named decisions before schema DDL or command implementation. This document alone does not authorize runtime changes.
+
+
+## Review clarification — accounting pending mode
+
+Atomicity has two mutually exclusive, explicitly selected modes per command family:
+
+1. **Synchronous posting:** source, required stock/subledger/custody effects, journal, posting receipt, command receipt, audit and outbox commit in one database transaction. Any mandatory failure rolls everything back.
+2. **Approved pending-posting mode:** source and required operational effects commit atomically with a visible pending-posting case, command receipt, audit and outbox. The later posting attempt is a separate transaction that atomically commits the balanced journal and posting receipt, or records a retryable/rejected exception. A pending source is never represented as posted.
+
+The default mode for each event family remains OPEN until the owner and accountant approve it. This removes any implication that all source events and journals are always committed together when pending posting is permitted.
