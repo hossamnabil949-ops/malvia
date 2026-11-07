@@ -328,8 +328,7 @@ export default function App() {
   // إشعارات الرفض محفوظة على الخادم وتُحمّل للمدير العام حتى بعد إعادة تسجيل الدخول.
   useEffect(() => {
     const role = String(effectiveRole || '').trim().toUpperCase();
-    const canView = ['مدير عام', 'ADMIN', 'OWNER', 'SUPER_ADMIN'].includes(role)
-      || String(currentUser?.username || '').trim().toLowerCase() === 'admin';
+    const canView = ['مدير عام', 'ADMIN', 'OWNER', 'SUPER_ADMIN'].includes(role);
     if (!canView || !activeTenant?.licenseKey) {
       setSyncRejectionNotifications([]);
       return;
@@ -342,7 +341,7 @@ export default function App() {
     void load();
     const timer = window.setInterval(() => { void load(); }, 45_000);
     return () => { alive = false; window.clearInterval(timer); };
-  }, [effectiveRole, currentUser?.username, activeTenant?.licenseKey]);
+  }, [effectiveRole, activeTenant?.licenseKey]);
 
   // لوحة المالك: اقرأ سجل المحلات من السحابة (يتطلب رمز الإدارة)
   useEffect(() => {
