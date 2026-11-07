@@ -49,7 +49,8 @@
 | Table | Key columns / relationships | Current resource lineage |
 |---|---|---|
 | branches | id, tenant_id, code, name, address, status | New explicit branch master; do not infer from warehouse names |
-| warehouses | id, tenant_id, branch_id, code, name, status | warehouses |\n| document_sequences | tenant_id, legal_entity_id, optional branch_id/register_id, document_type, series_code, next_value | New; numbering scope matches approved unique document key |
+| warehouses | id, tenant_id, branch_id, code, name, status | warehouses |
+| document_sequences | tenant_id, legal_entity_id, optional branch_id/register_id, document_type, series_code, next_value | New; numbering scope matches approved unique document key |
 | registers | id, tenant_id, branch_id, code, name, status | New POS register identity |
 | employee_profiles | id, tenant_id, user_id nullable, legacy_employee_id, employment fields | employees |
 | employee_branch_assignments | employee_profile_id, branch_id, role, dates | New; current Employee type has no reviewed branch assignment |
@@ -69,7 +70,9 @@
 | sales_settlements | id, invoice_id, amount, date/time, receipt reference | Invoice.settlementPayments |
 | sales_returns | id, tenant_id, branch_id, invoice_id, refund treatment, status | salesReturns |
 | sales_return_lines | id, return_id, invoice_line_id, product_id, quantity, amount | SalesReturn.items |
-| purchase_invoices | id, tenant_id, branch_id, supplier_id, invoice totals/status | purchaseInvoices; invoice facts are separate from receipt quantities |\n| purchase_receipts / purchase_receipt_lines | id, tenant_id, branch_id, warehouse_id, purchase invoice/line link, accepted/rejected quantities | New; stock increases only for accepted receipt quantities |\n| purchase_invoice_receipt_allocations | invoice line, receipt line, allocated quantity | New; supports partial receipts and quantity reconciliation |
+| purchase_invoices | id, tenant_id, branch_id, supplier_id, invoice totals/status | purchaseInvoices; invoice facts are separate from receipt quantities |
+| purchase_receipts / purchase_receipt_lines | id, tenant_id, branch_id, warehouse_id, purchase invoice/line link, accepted/rejected quantities | New; stock increases only for accepted receipt quantities |
+| purchase_invoice_receipt_allocations | invoice line, receipt line, allocated quantity | New; supports partial receipts and quantity reconciliation |
 | purchase_invoice_lines | id, purchase_invoice_id, product_id, quantity, cost, tax, returned qty | PurchaseInvoice.items |
 | purchase_returns | id, tenant_id, branch_id, purchase_invoice_id, supplier_id, settlement data | purchaseReturns |
 | purchase_return_lines | id, purchase_return_id, purchase_invoice_line_id, quantity, amount | PurchaseReturn.items |
