@@ -258,3 +258,8 @@ The following entities were absent or under-specified in the initial table list 
 All business document numbers (sales invoices/orders/returns, purchase invoices/receipts/returns, transfers and shifts where numbered) use the same configured numbering-scope definition as `org.document_sequences`. The document unique constraint must include the resolved scope identity, document type, series and number. The scope can be legal entity, branch or register according to the approved numbering policy; no document table may silently use a different scope.
 
 For GL posting, the unique effect key is tenant + legal entity + accounting book + source event + posting purpose. Template version/generation is immutable evidence on the receipt, not a key that allows the same source purpose to be posted again after a template change. Any legitimate additional posting needs a distinct approved posting purpose or an explicit reversal/replacement workflow.
+
+
+## Cross-document consistency review
+
+- [MALVIA-DESIGN-CONSISTENCY-REVIEW-v1.md](MALVIA-DESIGN-CONSISTENCY-REVIEW-v1.md) — resolved cross-document conflicts, canonical invariants, remaining approval decisions and release-blocking verification checklist. Design review only; no implementation approval.
