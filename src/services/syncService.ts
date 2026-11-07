@@ -218,7 +218,7 @@ async function sha256Hex(value: string): Promise<string> {
 
 // Push all dirty documents as one server transaction. A retry of identical
 // content gets the same idempotency key, including after a lost HTTP response.
-async function pushBatch(tenantId: string, licenseKey: string, resources: string[]): Promise<void> {
+async function pushBatch(tenantId: string, licenseKey: string, resources: string[]): Promise<{ warnings: any[] }> {
   for (let attempt = 0; attempt < 4; attempt++) {
     const meta = readMeta(tenantId);
     const operations = resources.flatMap(resource => {
@@ -227,7 +227,7 @@ async function pushBatch(tenantId: string, licenseKey: string, resources: string
       if (!hasLocalChanges(resource, data, meta.base[resource]) && meta.versions[resource] !== undefined) return [];
       return [{ resource, data, baseVersion: meta.versions[resource] || 0 }];
     });
-    if (!operations.length) return;
+    if (!operations.length) return { warnings: [] };
     const serialized = JSON.stringify(operations);
     const idempotencyKey = `sync-${await sha256Hex(serialized)}`;
     const r = await api('/api/sync-batch', {
@@ -236,12 +236,20 @@ async function pushBatch(tenantId: string, licenseKey: string, resources: string
       body: JSON.stringify({ operations, idempotencyKey }),
     });
     if (r.ok) {
+      const reconciled = r.body?.reconciled && typeof r.body.reconciled === 'object' ? r.body.reconciled : {};
       for (const op of operations) {
+        const acceptedData = Object.prototype.hasOwnProperty.call(reconciled, op.resource)
+          ? reconciled[op.resource]
+          : op.data;
+        if (Object.prototype.hasOwnProperty.call(reconciled, op.resource)) {
+          writeLocal(tenantId, op.resource, acceptedData);
+        }
         meta.versions[op.resource] = Number(r.body?.versions?.[op.resource]);
-        meta.base[op.resource] = baseFor(op.resource, op.data);
+        meta.base[op.resource] = baseFor(op.resource, acceptedData);
       }
       writeMeta(tenantId, meta);
-      return;
+      const warnings = Array.isArray(r.body?.warnings) ? r.body.warnings : [];
+      return { warnings };
     }
     if (r.status === 409 && r.body?.conflict && r.body?.resource) {
       if (r.body.code === 'DUPLICATE_INVOICE_NUMBER') {
@@ -340,7 +348,7 @@ async function flush() {
     emitStatus('syncing', dirty.size ? `عناصر بانتظار الرفع: ${dirty.size}` : 'فحص التغييرات المحلية');
     const list = [...dirty];
     if (!active || active.tenantId !== tenantId) return;
-    await pushBatch(tenantId, licenseKey, list);
+    const batchResult = await pushBatch(tenantId, licenseKey, list);
     for (const res of list) {
       const latest = readLocal(tenantId, res);
       const latestMeta = readMeta(tenantId);
@@ -355,7 +363,17 @@ async function flush() {
       emitStatus('syncing', `ما زال هناك ${dirty.size} عنصر بانتظار المزامنة`);
       schedule(1500);
     } else {
-      emitStatus('synced', 'تم رفع جميع التغييرات المحلية');
+      const warningText = batchResult.warnings.map((warning: any) =>
+        String(warning?.message || 'تم رفض تعديل تاريخي واستعادة السجل المعتمد.')
+        + (warning?.actor?.employeeName ? ` المسؤول عن المحاولة: ${String(warning.actor.employeeName).slice(0, 120)}.` : '')
+        + (Array.isArray(warning?.affectedRecordIds) && warning.affectedRecordIds.length
+          ? ` أرقام الحركات: ${warning.affectedRecordIds.slice(0, 10).join(', ')}.`
+          : '')
+      ).join(' ');
+      emitStatus('synced', warningText || 'تم رفع جميع التغييرات المحلية');
+      if (batchResult.warnings.length) {
+        window.dispatchEvent(new CustomEvent('malvia-sync-warning', { detail: { warnings: batchResult.warnings } }));
+      }
     }
   } catch (e: any) {
     emitStatus(navigator.onLine ? 'error' : 'offline', String(e?.message || e));
