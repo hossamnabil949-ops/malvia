@@ -69,7 +69,8 @@ export default async function handler(req: any, res: any) {
     const employee = await getAuthenticatedEmployee(tenant, tokenHash);
     if (!employee) return res.status(401).json({ code: 'EMPLOYEE_SESSION_INVALID', error: 'جلسة الموظف غير صالحة أو انتهت.' });
     phase = 'payload_validation';
-    const operations = req.body?.operations;
+    let operations = req.body?.operations;
+    const syncWarnings: any[] = [];
     const idempotencyKey = String(req.body?.idempotencyKey || '').trim();
     if (!Array.isArray(operations) || operations.length < 1 || operations.length > 40 ||
         !/^[A-Za-z0-9:_-]{12,160}$/.test(idempotencyKey) ||
@@ -175,7 +176,83 @@ export default async function handler(req: any, res: any) {
         bankLedgerEntries: await currentArray('bankLedgerEntries') as any[],
         openingBalances: await currentArray('openingBalances') as any[],
       });
-      if (currentAccountError) return res.status(403).json({
+      if (currentAccountError === 'PARTNER_CURRENT_ACCOUNT_HISTORY_MODIFIED') {
+        // A historical partner-current-account entry is immutable. Repair only the
+        // protected historical rows from the server copy, then continue validating
+        // and committing unrelated resources in this same sync batch.
+        const incomingPca = Array.isArray(partnerCurrentAccountOperation.data) ? partnerCurrentAccountOperation.data : [];
+        const previousById = new Map(previous.map((item: any) => [String(item.id), item]));
+        const incomingById = new Map(incomingPca.map((item: any) => [String(item?.id), item]));
+        const affected = previous.filter((old: any) => {
+          const current: any = incomingById.get(String(old.id));
+          return !current || JSON.stringify(current) !== JSON.stringify(old);
+        });
+        const affectedIds = new Set(affected.map((item: any) => String(item.id)));
+        const protectedTreasuryIds = new Set(affected.map((item: any) => String(item.treasuryTransactionId || '')).filter(Boolean));
+        const previousTreasury = await loadArray('treasury');
+        const previousBankEntries = await loadArray('bankLedgerEntries');
+
+        // Restore old PCA rows and reject deletion/modification, while preserving
+        // newly-created rows so valid new movements can still be accepted.
+        partnerCurrentAccountOperation.data = [
+          ...incomingPca.filter((item: any) => !previousById.has(String(item?.id))),
+          ...previous,
+        ];
+
+        const treasuryOperation: any = operationMap.get('treasury');
+        if (treasuryOperation && Array.isArray(treasuryOperation.data)) {
+          const protectedRows = previousTreasury.filter((item: any) =>
+            protectedTreasuryIds.has(String(item.id)) || affectedIds.has(String(item.referenceId)));
+          const protectedIds = new Set(protectedRows.map((item: any) => String(item.id)));
+          treasuryOperation.data = [
+            ...treasuryOperation.data.filter((item: any) =>
+              !protectedIds.has(String(item?.id)) && !affectedIds.has(String(item?.referenceId))),
+            ...protectedRows,
+          ];
+        }
+
+        const bankOperation: any = operationMap.get('bankLedgerEntries');
+        if (bankOperation && Array.isArray(bankOperation.data)) {
+          const protectedRows = previousBankEntries.filter((item: any) =>
+            affectedIds.has(String(item.batchId)) || affectedIds.has(String(item.reference)));
+          const protectedIds = new Set(protectedRows.map((item: any) => String(item.id)));
+          bankOperation.data = [
+            ...bankOperation.data.filter((item: any) =>
+              !protectedIds.has(String(item?.id))
+              && !affectedIds.has(String(item?.batchId))
+              && !affectedIds.has(String(item?.reference))),
+            ...protectedRows,
+          ];
+        }
+
+        const repairedCurrentAccountError = validatePartnerCurrentAccountSync({
+          previous,
+          incoming: partnerCurrentAccountOperation.data,
+          partners: await currentArray('partners') as any[],
+          bankAccounts: await currentArray('bankAccounts') as any[],
+          treasury: await currentArray('treasury') as any[],
+          bankLedgerEntries: await currentArray('bankLedgerEntries') as any[],
+          openingBalances: await currentArray('openingBalances') as any[],
+        });
+        if (repairedCurrentAccountError) return res.status(403).json({
+          code: repairedCurrentAccountError,
+          resource: 'partnerCurrentAccountTransactions',
+          error: 'تم استرجاع السجل التاريخي المحمي، لكن توجد حركة جديدة غير مطابقة لم تستطع اجتياز التحقق.',
+          diagnostic: { traceId, phase, resource: 'partnerCurrentAccountTransactions', operationCount: operationResources.length, errorName: 'LedgerValidationError', errorCode: repairedCurrentAccountError },
+        });
+
+        const actorName = String(employee.name || employee.employeeName || employee.username || employee.id || 'موظف غير محدد').slice(0, 120);
+        const warning = {
+          code: currentAccountError,
+          resource: 'partnerCurrentAccountTransactions',
+          actor: { employeeId: String(employee.id || '').slice(0, 120), employeeName: actorName, username: String(employee.username || '').slice(0, 80) },
+          affectedRecordIds: [...affectedIds].slice(0, 50),
+          traceId,
+          message: 'تم رفض تعديل/حذف حركة تاريخية في جاري الشريك واستعادة النسخة المعتمدة من الخادم. استمرت مزامنة باقي البيانات.',
+        };
+        syncWarnings.push(warning);
+        console.warn('[MALVIA_LEDGER_HISTORY_RESTORED]', warning);
+      } else if (currentAccountError) return res.status(403).json({
         code: currentAccountError,
         resource: 'partnerCurrentAccountTransactions',
         error: 'حركة جاري الشركاء غير مطابقة لحركة الخزينة أو البنك، أو تحاول تعديل سجل سابق.',
@@ -306,7 +383,12 @@ export default async function handler(req: any, res: any) {
     resource = operationResources.join(',');
     const result = await commitSyncBatch(tenant, idempotencyKey, requestHash, operations);
     if (result?.conflict) return res.status(409).json(result);
-    return res.status(200).json(result);
+    const reconciled = Object.fromEntries(
+      operations
+        .filter((op: any) => ['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'].includes(op.resource))
+        .map((op: any) => [op.resource, op.data]),
+    );
+    return res.status(200).json({ ...result, ...(syncWarnings.length ? { warnings: syncWarnings, reconciled } : {}) });
   } catch (error: any) {
     const errorName = error instanceof Error ? error.name : typeof error;
     const errorCode = typeof error?.code === 'string' || typeof error?.code === 'number' ? String(error.code).slice(0, 80) : undefined;
