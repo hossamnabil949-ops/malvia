@@ -81,7 +81,7 @@ Authorization evaluates tenant state, session, user, seat, module entitlement, p
 | `org.locations` | branch and physical/business location type |
 | `org.registers` | branch, code, device policy; unique tenant + branch + code |
 | `org.register_cashbox_assignments` | register, cashbox, effective interval, actor; auditable history |
-| `org.branch_sequences` | branch, document type, prefix, next value, version; concurrency-safe |
+| `org.document_sequences` | legal entity, optional branch/register, document type/series, prefix, next value, version; approved scope tuple is unique and allocated atomically |
 | `org.branch_membership_events` | branch/user assignment history |
 
 A legal entity may own multiple branches. A transaction's originating branch is distinct from the branch that collects payment. Central costs may be tenant-owned with explicit allocation lines.
@@ -165,7 +165,7 @@ Posted journals balance by approved currency policy. Currency precision, FX, tax
 ## 10. Workflow, sync, integration, audit and insights
 
 - `workflow.definitions`, `definition_versions`, `steps`, `transitions`, `instances`, `tasks`, `approvals`, `events`; active instances pin a version.
-- `sync.command_receipts`: unique tenant + idempotency key + command type; stores outcome/version.
+- `sync.command_receipts`: unique tenant + command type + idempotency key; actor identity is bound to the receipt to prevent cross-actor receipt disclosure; stores outcome/version.
 - `sync.command_events`, `outbox_events`, `inbox_events`, `device_cursors`, `conflict_cases`.
 - `integration.connections`, `webhook_deliveries`, `import_jobs`, `export_jobs`.
 - `audit.events`: append-only actor/action/resource/scope/time/correlation metadata.
@@ -191,7 +191,7 @@ Initial index candidates (confirm with query plans):
 - tenant + branch + occurred/issue date;
 - tenant + status + updated_at;
 - tenant + parent_id on FK columns;
-- unique tenant + legal entity + document series + number;
+- unique tenant + legal entity + approved numbering scope + document type/series + number;
 - partial active-session index by tenant/user/expiry;
 - partial pending-outbox index by tenant/status/created_at;
 - unique tenant + idempotency key + command type;
@@ -213,7 +213,7 @@ API authorization is primary. Add defense in depth:
 
 Use ordinary tables and tenant-aware indexes first. Consider time partitioning later for audit, command events, outbox, stock movements and journal lines only after measured volume. PostgreSQL partitioned uniqueness constraints may require partition key inclusion; global idempotency may need a separate registry. Neon-specific pooling/RLS behavior needs a security spike.
 
-Server command transaction includes source record, dependent movements/subledgers, journal (if synchronous), receipt, audit and outbox. Use unique constraints, row locks or optimistic versions for stock, returns, sequences, allocations and closeouts. Do not hold transactions open during external calls; use outbox workers.
+Server command transaction includes source record, dependent movements/subledgers, journal (if synchronous), receipt, audit and outbox. If pending posting is explicitly approved, source + pending exception + receipt + audit + outbox commit atomically, and a later posting transaction commits journal + posting receipt; the two states must never be described as one already-completed atomic posting. Use unique constraints, row locks or optimistic versions for stock, returns, sequences, allocations and closeouts. Do not hold transactions open during external calls; use outbox workers.
 
 ## 14. Conceptual ERD
 
@@ -284,3 +284,12 @@ No physical schema implementation until owner approves ownership dimensions, acc
 - [MALVIA-DETAILED-RELATIONAL-ERD-v1.md](MALVIA-DETAILED-RELATIONAL-ERD-v1.md) — domain ERDs and explicit ownership/cardinality/transaction invariants.
 
 These are review artifacts only. They do not authorize DDL, migrations or data cutover.
+
+
+## Design review corrections — transaction and data coverage
+
+- Purchase invoices and physical goods receipts are separate aggregates. Partial accepted receipts create stock; invoice quantities alone never increase inventory. Purchase returns reference the accepted receipt line that supplied the stock.
+- Transfers require distinct source and destination warehouses. Source and destination branches may be the same for a same-branch warehouse transfer; cross-branch transfers additionally validate both branch scopes.
+- Document numbering uses a configured legal-entity/branch/register/document-type/series scope. A branch-only sequence is not assumed; exact scope and offline provisional-number reconciliation remain policy decisions.
+- Accounting books are explicit. Fiscal periods, journals and posting receipts carry book identity so balancing and close controls cannot accidentally combine statutory/management books.
+- Customer/supplier receipts and allocations, payment instruments/card settlement, reservations/deposits, loyalty, expense allocations and opening-balance effect receipts are represented as first-class structures, not inferred from snapshots.
