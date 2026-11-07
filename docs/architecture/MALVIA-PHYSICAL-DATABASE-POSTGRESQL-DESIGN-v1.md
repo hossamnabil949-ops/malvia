@@ -81,7 +81,7 @@ Authorization evaluates tenant state, session, user, seat, module entitlement, p
 | `org.locations` | branch and physical/business location type |
 | `org.registers` | branch, code, device policy; unique tenant + branch + code |
 | `org.register_cashbox_assignments` | register, cashbox, effective interval, actor; auditable history |
-| `org.document_sequences` | legal entity, optional branch/register, document type/series, prefix, next value, version; approved scope tuple is unique and allocated atomically |
+| `org.document_sequences` | legal entity, optional branch/register, scope type, document type/series, prefix, next value, version; partial unique indexes per scope handle NULL values correctly; register scope requires branch |
 | `org.branch_membership_events` | branch/user assignment history |
 
 A legal entity may own multiple branches. A transaction's originating branch is distinct from the branch that collects payment. Central costs may be tenant-owned with explicit allocation lines.
@@ -116,7 +116,7 @@ Sales tables:
 - `sales.invoice_lines`: item/service, quantity, price, discount, tax and cost snapshots, returned quantity.
 - `sales.invoice_payments`: one row per tender component, invoice, tender method, amount, collection branch, cashbox/bank account and external reference.
 - `sales.sales_returns`, `sales.sales_return_lines`, `sales.sales_return_tenders`: original invoice and line, quantity, disposition, refund method/destination.
-- `sales.customer_receipts`, `customer_receipt_allocations`, `customer_ledger_events`: standalone customer receipts, explicit allocations and append-only AR events.
+- `sales.customer_receipts`, `customer_receipt_tenders`, `customer_receipt_allocations`, `customer_ledger_events`: standalone multi-tender customer receipts, explicit allocations and append-only AR events.
 - `sales.reservations`, `reservation_lines`, `reservation_deposits`: availability holds and separately traceable deposits; a reservation is not a sale or stock issue.
 - `sales.loyalty_ledger`: append-only earn/redeem/reversal/expiry events.
 - `sales.shifts`, `shift_events`, `shift_closeouts`: register/branch/cashbox and expected vs counted tenders.
@@ -125,7 +125,7 @@ Procurement tables:
 - `procurement.suppliers`.
 - `procurement.purchase_invoices`, `purchase_invoice_lines`: supplier invoice facts and invoiced quantities, separate from physical receipt.
 - `procurement.purchase_receipts`, `purchase_receipt_lines`, `purchase_invoice_receipt_allocations`: accepted/rejected quantities, receiving branch/warehouse, batch/serial evidence and partial receipt allocation. Only accepted receipt lines create stock movements.
-- `procurement.supplier_payments`, `supplier_payment_allocations`, `supplier_ledger_events`.
+- `procurement.supplier_payments`, `supplier_payment_tenders`, `supplier_payment_allocations`, `supplier_ledger_events`.
 - `procurement.purchase_returns`, `purchase_return_lines`, `purchase_return_settlements`: return lines reference accepted receipt lines; physical stock return is separated from debt reduction, cash refund and supplier credit.
 
 Unique invoice/receipt keys use the configured numbering scope, not an assumed branch-only scope. Return cumulative quantity is validated inside a locked server transaction. Customer/supplier balances are derived from subledger events and explicit allocations, not editable snapshots.
@@ -312,3 +312,10 @@ These are review artifacts only. They do not authorize DDL, migrations or data c
 - Canonical command idempotency scope is tenant + command type + key, with initiating actor/device bound to the receipt. A different actor cannot retrieve another actor's receipt by reusing a key.
 - For synchronous posting, source and mandatory journal effects commit together. If pending posting is separately approved, source + pending exception/receipt/audit/outbox commit first, and journal + posting receipt commit in a later transaction.
 - Polymorphic references such as source_type/source_id are event provenance, not automatic foreign keys. Where referential integrity is required, use typed association tables or explicit nullable typed FKs with CHECK constraints; do not claim a generic polymorphic FK is enforced.
+
+
+## Optional-scope uniqueness and typed-FK safeguards
+
+PostgreSQL UNIQUE constraints treat NULL values as distinct unless a supported NULLS NOT DISTINCT form is explicitly selected. For `org.document_sequences`, use separate partial unique indexes for legal-entity, branch and register scopes (or a version-supported equivalent) so duplicate NULL-scoped sequences cannot be created. The document-number unique constraint must match the sequence scope exactly. Register-scoped rows require a branch and tenant-safe register-to-branch ownership.
+
+Polymorphic provenance (source_type/source_id) is not a relational FK. For business relationships that require database enforcement, use typed nullable FKs and CHECK constraints or dedicated association tables. Multi-tender receipts use header + tender lines + allocation lines; tender totals and allocations are independently reconciled.
