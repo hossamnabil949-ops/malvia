@@ -206,6 +206,7 @@ export default function App() {
   const [showExcelModal, setShowExcelModal] = useState<boolean>(false);
   const [showDeploymentGuide, setShowDeploymentGuide] = useState<boolean>(false);
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
+  const [syncWarningMessage, setSyncWarningMessage] = useState<string | null>(null);
   const [showVoiceAssistant, setShowVoiceAssistant] = useState<boolean>(false);
   const [showInventoryAudit, setShowInventoryAudit] = useState<boolean>(false);
   const [showBarcodeStocktake, setShowBarcodeStocktake] = useState<boolean>(false);
@@ -305,6 +306,23 @@ export default function App() {
     window.addEventListener(SYNC_EVENT, onRemote);
     return () => window.removeEventListener(SYNC_EVENT, onRemote);
   }, [activeTenant, reloadTenantData]);
+
+  useEffect(() => {
+    const onSyncWarning = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      const warnings = Array.isArray(detail?.warnings) ? detail.warnings : [];
+      const message = warnings.map((warning: any) => [
+        String(warning?.message || 'تم رفض حركة مالية غير سليمة واستعادة السجل المعتمد.'),
+        warning?.actor?.employeeName ? `الموظف: ${String(warning.actor.employeeName)}` : '',
+        Array.isArray(warning?.affectedRecordIds) && warning.affectedRecordIds.length
+          ? `الحركات المتأثرة: ${warning.affectedRecordIds.join('، ')}` : '',
+        warning?.traceId ? `رقم التتبع: ${String(warning.traceId)}` : '',
+      ].filter(Boolean).join('\n')).join('\n\n');
+      if (message) setSyncWarningMessage(message);
+    };
+    window.addEventListener('malvia-sync-warning', onSyncWarning);
+    return () => window.removeEventListener('malvia-sync-warning', onSyncWarning);
+  }, []);
 
   // لوحة المالك: اقرأ سجل المحلات من السحابة (يتطلب رمز الإدارة)
   useEffect(() => {
@@ -2611,6 +2629,15 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950 pb-20 lg:pb-0" dir="rtl">
       <SyncBadge />
+      {syncWarningMessage && (
+        <div role="alert" className="fixed top-4 inset-x-3 z-[100] mx-auto max-w-2xl rounded-2xl border border-amber-500/50 bg-slate-900 p-4 text-white shadow-2xl">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <strong className="text-sm text-amber-300">تنبيه سلامة السجل المالي — المزامنة مستمرة</strong>
+            <button type="button" onClick={() => setSyncWarningMessage(null)} className="rounded-lg px-2 py-1 text-xs font-bold text-slate-300 hover:bg-slate-700">إغلاق</button>
+          </div>
+          <p className="whitespace-pre-wrap text-xs leading-6 text-slate-200">{syncWarningMessage}</p>
+        </div>
+      )}
       {exitHint && (
         <div className="fixed bottom-24 lg:bottom-8 inset-x-0 z-[70] flex justify-center pointer-events-none">
           <div className="px-4 py-2 rounded-full bg-neutral-800 border border-neutral-700 text-xs font-bold text-white shadow-2xl">
