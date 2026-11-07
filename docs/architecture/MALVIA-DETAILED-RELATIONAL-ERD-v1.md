@@ -172,3 +172,11 @@ Every tenant-owned FK follows this pattern, including multi-parent joins. Global
 ## 9. Review gates
 
 This ERD does not settle UUID strategy, branch mapping of legacy data, tax, currency/FX, stock valuation, account codes, debit/credit directions, RLS, partitioning, retention, FK delete actions or trial policy. Those decisions require named owner/accountant/security/engineering approval before DDL.
+
+
+## Database constraints and command transaction companions
+
+- [MALVIA-DATABASE-CONSTRAINTS-AND-TRANSACTION-SPEC-v1.md](MALVIA-DATABASE-CONSTRAINTS-AND-TRANSACTION-SPEC-v1.md) — tenant-safe keys, domain constraints, uniqueness/idempotency, locking/isolation, atomicity, ledger immutability, RLS safeguards and concurrency acceptance tests.
+- [MALVIA-COMMAND-TRANSACTION-CATALOG-v1.md](MALVIA-COMMAND-TRANSACTION-CATALOG-v1.md) — command-by-command preconditions, read/write sets, locks, idempotency, receipts, reversals and rollback semantics.
+
+Both are design-only review documents; they do not authorize SQL, migrations, API implementation or production changes.
