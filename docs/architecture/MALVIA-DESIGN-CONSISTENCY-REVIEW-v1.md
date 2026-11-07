@@ -98,7 +98,7 @@ These remain release gates. The design supports them, but neither this review no
 
 ## 6. Review result
 
-The package's internal relative Markdown links were checked against the 23-file PR document set; no missing local document targets were found. The schema, command and lifecycle documents were amended to address the inconsistencies listed above.
+The package's internal relative Markdown links were checked against the 24-file PR document set (23 architecture specifications plus this review); no missing local document targets were found. The schema, command and lifecycle documents were amended to address the inconsistencies listed above.
 
 **Disposition:** suitable for continued architecture review as a Draft design package. It is **not** an approved implementation baseline until the remaining owner/accountant/security decisions and the executable verification gates are completed.
 
