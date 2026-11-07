@@ -67,7 +67,7 @@ Audit source: current `malvia-web` application contracts and utilities inspected
 
 | Stage | Current evidence | Target lifecycle |
 |---|---|---|
-| Transfer request | `StockTransfer` currently has fromWarehouseId, toWarehouseId, items, date/time and creator. | Require sourceBranchId + destinationBranchId and source/destination warehouse IDs; validate both scopes and transfer permission. |
+| Transfer request | `StockTransfer` currently has fromWarehouseId, toWarehouseId, items, date/time and creator. | Require sourceBranchId + destinationBranchId and source/destination warehouse IDs; source and destination warehouses must differ, but branch IDs may match for an intra-branch warehouse transfer. Validate both warehouse ownerships and both branch scopes where cross-branch. |
 | Dispatch | Current interface does not show explicit in-transit status or dispatch/receipt events. | Deduct source available stock and create an in-transit asset/quantity at dispatch. |
 | Receive | Current interface does not expose partial receipt, shortage, damage or received quantities. | Receive each line with accepted, short, damaged and rejected quantities; reconcile in-transit remainder. |
 | Cancel | No complete cancellation lifecycle established from inspected type. | Before dispatch, cancel request only. After dispatch, reverse only the unreceived balance through a traceable return-to-source movement. |
@@ -154,7 +154,7 @@ Audit source: current `malvia-web` application contracts and utilities inspected
 
 Every posted command must carry:
 - `operationId`: stable ID generated once on device and reused on retries.
-- `idempotencyKey`: unique per logical operation, tenant-scoped, not regenerated after timeout.
+- `idempotencyKey`: unique per logical operation, scoped by tenant + command type, actor-bound in the receipt, and not regenerated after timeout.
 - `schemaVersion`: payload version for offline compatibility.
 - `sourceDocumentType`, `sourceDocumentId`, and source line IDs where applicable.
 - `tenantId`: derived by server, never trusted from request.
@@ -168,7 +168,7 @@ Server transaction sequence:
 4. Lock or compare affected stock/ledger aggregates.
 5. Check idempotency key; return prior result if already committed.
 6. Validate document, references, cumulative returns, tender totals and account state.
-7. Write source document and all linked stock/ledger/loyalty/audit events atomically.
+7. Write source document and all mandatory synchronous stock/ledger/loyalty/audit effects atomically. If an approved pending-posting mode is used, commit the source and visible pending exception/receipt/audit/outbox together; post the journal later in a separate atomic transaction.
 8. Update versioned projections/caches.
 9. Commit and return durable operation receipt + versions.
 
@@ -205,3 +205,11 @@ The proposed financial ownership, subledger and consolidation model is documente
 ## Related accounting engine design
 
 - [Accounting engine and posting orchestration](MALVIA-ACCOUNTING-ENGINE-AND-POSTING-ORCHESTRATION-v1.md) — canonical source events, server-side command pipeline, atomic source/journal/receipt/outbox commit, idempotency, template versioning, reversals, offline late-event handling and migration gates. Target architecture only; no runtime implementation is implied.
+
+
+## 7. Transaction-model clarifications from cross-document review
+
+- Purchase invoice facts and accepted physical receipt quantities are separate. A purchase invoice line is not evidence of stock on hand. Partial receipts create separate receipt lines; supplier returns reference accepted receipt lines.
+- Same-branch transfers between different warehouses are valid. Branch equality is not a transfer rejection condition.
+- Canonical command idempotency key scope is tenant + command type + key. The initiating actor/device is bound to the receipt to prevent cross-actor result disclosure; a retry by another actor is not allowed to inherit the first actor's receipt.
+- Source and GL posting atomicity has two modes only: synchronous source+mandatory journal in one transaction, or explicitly approved source+pending exception transaction followed by a separate posting transaction. The default for each event family is still an owner/accountant decision.
