@@ -116,6 +116,10 @@ const validDate = (value: unknown): boolean =>
   typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
   && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+// Older clients may serialize an unused bank account as an empty string while
+// the paired treasury entry correctly omits it. Treat all empty optional IDs alike.
+const optionalId = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim() ? value.trim() : undefined;
 
 export function validatePartnerCurrentAccountSync(input: {
   previous: PartnerCurrentAccountTransaction[];
@@ -159,7 +163,7 @@ export function validatePartnerCurrentAccountSync(input: {
     if (!cashTx || cashTx.referenceId !== item.id || cashTx.category !== expectedCategory
       || cashTx.type !== expectedType || Number(cashTx.amount) !== Number(item.amount)
       || cashTx.date !== item.date || cashTx.paymentMethod !== item.paymentMethod
-      || cashTx.bankAccountId !== item.bankAccountId) return 'PARTNER_CURRENT_ACCOUNT_TREASURY_MISMATCH';
+      || optionalId(cashTx.bankAccountId) !== optionalId(item.bankAccountId)) return 'PARTNER_CURRENT_ACCOUNT_TREASURY_MISMATCH';
 
     const bankEntry = bankLedgerEntries.find(entry => entry.id === `partner-current-account:${item.id}`);
     if (account === 'bank') {
