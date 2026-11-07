@@ -52,7 +52,7 @@ If a downstream external system is involved, write a durable pending instruction
 
 ### 1.3 Receipt, event and error conventions
 
-Each accepted command returns a receipt ID, command ID, status, source IDs, resulting versions, accounting status/journal IDs where applicable, sync cursor and safe trace ID. A source document committed with pending accounting is not described as fully posted.
+Each accepted command returns a receipt ID, command ID, status, source IDs, resulting versions, accounting status/journal IDs where applicable, sync cursor and safe trace ID. Canonical idempotency scope is tenant + command type + key; the receipt is bound to the initiating actor/device so another actor cannot retrieve its result by guessing or reusing the key. A source document committed with pending accounting is not described as fully posted.
 
 Common rejection codes: AUTH_REQUIRED, SESSION_REVOKED, TENANT_SUSPENDED, MODULE_NOT_ENTITLED, SEAT_LIMIT_REACHED, BRANCH_SCOPE_DENIED, ACCOUNT_SCOPE_DENIED, VALIDATION_FAILED, VERSION_CONFLICT, IDEMPOTENCY_CONFLICT, PERIOD_LOCKED, APPROVAL_REQUIRED, SOURCE_STATE_INVALID, STOCK_UNAVAILABLE, RETURN_LIMIT_EXCEEDED, POSTING_MAPPING_MISSING, POSTING_UNBALANCED, DEPENDENCY_UNAVAILABLE.
 
@@ -169,53 +169,82 @@ Exact table names may change with physical design, but lock order must remain de
 - No deletion of posted return. Correct by a linked return reversal/adjustment command.
 - A return's refund and restock effects are independently traceable but commit atomically.
 
-### CMD-PROC-001 — procurement.purchase.receive
+### CMD-PROC-001A — procurement.purchase_invoice.record
 
 **Preconditions**
-- Supplier, legal entity, receiving branch and warehouse authorized.
-- Purchase lines, units, accepted quantities, cost, currency, tax and discounts valid.
-- Batch/serial data valid; duplicate supplier-document reference follows approved policy.
-- Any immediate payment has valid tender destination and amount.
+- Supplier, legal entity and originating/receiving business context are authorized.
+- Supplier invoice identity, invoice lines, units, currency, tax and discounts are valid.
+- Duplicate supplier-document reference follows an explicit policy; invoice quantity is not assumed to be physically received.
+- Any payment entered in the same workflow is a separate payment command/allocation, not proof of stock receipt.
 
 **Read set**
-- supplier payable aggregate and supplier reference;
-- branch/warehouse, item units, costs, batch/serial state;
-- currency/tax/period/posting policy;
-- cashbox/bank accounts and payment allocation targets.
+- supplier identity and payable subledger;
+- legal entity/book, invoice numbering scope and period;
+- item/unit, tax and price/cost policy;
+- existing supplier invoice references and allocations.
 
 **Write set**
-- purchase invoice and line snapshots;
-- stock movements/balances/cost layers/batches/serials;
-- supplier payable and payment allocation;
-- supplier payment and treasury/bank effects only for actual settlement;
-- journal, command receipt, audit and outbox.
+- supplier invoice header and immutable line/tax/discount snapshots;
+- supplier payable event and invoice allocation projection only when invoice recognition policy requires;
+- accounting journal/receipt when synchronous posting is approved;
+- command receipt, audit and outbox.
 
 **Idempotency / locks**
-- Scope: tenant + procurement.purchase.receive + command key/source reference.
-- Lock supplier/document identity, stock balances sorted, cost layers/batches/serials, payment accounts and period.
-- Unique internal purchase number and source receipt.
+- Scope: tenant + procurement.purchase_invoice.record + command key.
+- Lock supplier/document identity, numbering sequence and accounting period.
+- Unique internal invoice number; external supplier-reference uniqueness remains policy-controlled.
 
 **Reversal / rollback**
-- Receipt failure rolls back stock and payable together.
-- Later purchase return uses CMD-PROC-002; do not erase original receipt.
-- Receipt and payment remain distinct dimensions even if created in one user workflow.
+- Does not increase inventory. Stock changes only through an accepted receipt command.
+- Correct posted invoice through linked credit/reversal events, not physical deletion.
+
+### CMD-PROC-001B — procurement.purchase_receipt.post
+
+**Preconditions**
+- Receiving branch and warehouse are authorized; source supplier and optional purchase invoice are valid.
+- Receipt lines identify accepted/rejected quantities, units, batch/serial data and cost evidence.
+- For invoice-linked receipts, cumulative allocation cannot exceed invoiced quantity; unlinked receipt policy must be approved.
+- Source stock availability/custody and serial uniqueness are checked under lock.
+
+**Read set**
+- purchase invoice lines and prior receipt allocations, if linked;
+- supplier, branch/warehouse, item units and stock balances;
+- batch/serial identities and cost-layer policy;
+- period, tax/landed-cost policy and posting templates.
+
+**Write set**
+- receipt header/lines and invoice-to-receipt allocations;
+- stock movements/balances/cost layers/batches/serial custody for accepted quantities only;
+- receipt accrual/subledger effect only under approved accounting policy;
+- journal/posting receipt when synchronous posting is approved;
+- command receipt, audit and outbox.
+
+**Idempotency / locks**
+- Scope: tenant + procurement.purchase_receipt.post + command key.
+- Lock receipt number, source invoice lines/receipt allocations, stock balances in sorted order, then batch/serial rows and period.
+- Unique receipt line source-effect key prevents duplicate stock receipt.
+
+**Reversal / rollback**
+- Any mandatory synchronous failure rolls back receipt and stock effects together.
+- Rejected/damaged quantities do not become available stock; their disposition remains explicit.
+- Later supplier return references the accepted receipt line, not merely the invoice line.
 
 ### CMD-PROC-002 — procurement.purchase_return.create_or_settle
 
 **Preconditions**
-- Original purchase and lines exist; accepted unreturned quantity sufficient.
+- Original accepted purchase receipt lines exist; cumulative accepted quantity less prior returns is sufficient. Invoice-only quantity is not returnable stock.
 - Return disposition and supplier settlement components are explicit.
 - Cash refund, deferred debt reduction and supplier store credit are mutually reconciled to approved return value.
 - Any stock being returned is in eligible custody and tracked batch/serial matches.
 
 **Read set**
-- original purchase lines and all prior returns;
+- original accepted receipt lines, linked invoice lines and all prior returns;
 - stock balances/batches/serials and cost layers;
 - supplier payable, payment allocations, store-credit balance;
 - cashbox/bank destination and period.
 
 **Write set**
-- purchase return/lines and source-line allocations;
+- purchase return/lines linked to original accepted receipt lines and source-line allocations;
 - stock-out movement and batch/serial custody events;
 - settlement components: cash refund, supplier debt reduction, store credit;
 - supplier subledger and purchase invoice allocation projections;
@@ -261,7 +290,7 @@ Exact table names may change with physical design, but lock order must remain de
 ### CMD-INV-001 — inventory.transfer.create_dispatch_receive
 
 **Preconditions**
-- Source and destination branches/warehouses differ and are authorized.
+- Source and destination warehouses must differ and both are authorized. The branches may be the same for a transfer between warehouses within one branch; cross-branch transfers require authorization for both branches.
 - Items, quantities, batches/serials and transfer route valid.
 - Source available stock verified under lock; destination receipt policy known.
 - Transfer approval/dispatch/receipt roles validated.
@@ -281,7 +310,7 @@ Exact table names may change with physical design, but lock order must remain de
 **Idempotency / locks**
 - Separate stable keys for create, dispatch, receive and approved correction.
 - Lock transfer, source/destination balances in deterministic order, then batch/serial rows.
-- Transfer number unique in approved numbering scope.
+- Transfer number unique in the configured legal-entity/branch/register/document-type/series scope; the scope is policy-driven, not branch-only.
 
 **Reversal / rollback**
 - Do not treat dispatch as destination receipt.
@@ -529,6 +558,52 @@ Exact table names may change with physical design, but lock order must remain de
 - A duplicate approval returns original receipt.
 - Reassignment or correction is a new event under policy; active workflow definition is not edited in place.
 - Approval of a financial action invokes its domain command through the same authorization/transaction contract.
+
+## 2A. Additional cross-domain command contracts
+
+### CMD-AR-001 — sales.customer_receipt.record_and_allocate
+
+- Preconditions: active customer, authorized collecting branch/cashbox/bank account, valid currency and amount; each invoice allocation references an eligible open receivable.
+- Read/lock: customer AR aggregate, target invoices/credits and prior allocations, collection account and period.
+- Atomic writes: receipt header/tender, explicit invoice allocations (or unapplied customer credit), customer subledger event, cashbox or bank movement, journal when synchronous, receipt/audit/outbox.
+- Invariant: total allocations cannot exceed receipt amount or eligible invoice balance; unapplied remainder remains explicit and is not auto-assigned.
+- Retry/reversal: same tenant + command + key returns original receipt; corrections use linked refund/reallocation events.
+
+### CMD-AP-001 — procurement.supplier_payment.record_and_allocate
+
+- Preconditions: supplier and paying account authorized; allocations target eligible supplier invoices/credits.
+- Read/lock: supplier AP aggregate, invoice balances, prior allocations, paying cashbox/bank account and period.
+- Atomic writes: payment, invoice allocations, supplier AP event, one cashbox or bank movement, journal when synchronous, receipt/audit/outbox.
+- Invariant: allocation cannot exceed payment or eligible payable; unapplied amount remains supplier credit. Central payment retains each originating receipt/invoice branch.
+- Retry/reversal: stable receipt identity; corrections use linked reversal/reallocation events.
+
+### CMD-FIN-002 — finance.bank_transfer.confirm
+
+- Preconditions: source/destination bank accounts are distinct, same tenant/legal-entity/currency policy is satisfied, and actor can use both accounts.
+- Read/lock: both bank accounts in stable ID order, transfer state and period.
+- Atomic writes: transfer instruction/state plus paired bank-ledger out/in events, fees/clearing only under approved policy, journal when required, receipt/audit/outbox.
+- Invariant: one side cannot be reported as a completed transfer without its paired side or an explicit pending-in-transit state. It is not revenue or expense.
+
+### CMD-INV-002 — inventory.count.approve_and_post
+
+- Preconditions: count belongs to authorized branch/warehouse; count evidence is complete; approval and variance reason are present.
+- Read/lock: count and lines, stock balances in sorted order, relevant batch/serial rows and period.
+- Atomic writes: immutable count approval, variance stock movements/balance projection, batch/serial corrections, journal when applicable, receipt/audit/outbox.
+- Invariant: one approval effect per count version; count cannot overwrite movement history.
+
+### CMD-SALES-004 — sales.reservation.create_convert_or_cancel
+
+- Preconditions: customer/branch/warehouse scope valid; reservation expiry and available-to-promise policy valid; any deposit tender is explicit.
+- Read/lock: reservation, stock availability/allocation, customer and deposit/custody records.
+- Atomic writes: reservation lifecycle, availability allocation/release, deposit liability/receipt and conversion link to invoice where applicable, receipt/audit/outbox.
+- Invariant: reservation is not a sale or stock issue; conversion consumes the hold once; deposit is allocated/refunded/forfeited only under approved policy.
+
+### CMD-FIN-003 — finance.payment_instrument.transition_or_card_settlement
+
+- Preconditions: instrument/provider event is authenticated, deduplicated and linked to the original tender/source; state transition is allowed.
+- Read/lock: instrument, source allocations, card batch and bank account.
+- Atomic writes: append-only instrument event; for card settlement, batch/line gross-fee-net reconciliation and bank deposit event; journal when approved; receipt/audit/outbox.
+- Invariant: deposited/cleared is not assumed from instrument status alone; card gross less fees reconciles to net settlement under approved rounding. Bounced/chargeback events create linked reversals, not silent edits.
 
 ## 3. Legacy migration mapping and protection
 
