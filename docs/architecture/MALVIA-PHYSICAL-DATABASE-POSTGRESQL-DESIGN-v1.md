@@ -110,35 +110,42 @@ Do not reuse legacy `warehouseId` as `branch_id`. Preserve aggregate stock and p
 ## 8. Sales and procurement
 
 Sales tables:
-- `sales.customers`, `customer_addresses`
-- `sales.sales_orders`, `sales.sales_order_lines` (where enabled)
-- `sales.invoices`: legal entity, originating branch, register, document series/number, issue timestamp, status, currency and immutable totals snapshot.
+- `sales.customers`, `customer_addresses`.
+- `sales.sales_orders`, `sales.sales_order_lines` (where enabled).
+- `sales.invoices`: legal entity, originating branch, register, configured document sequence/series, issue timestamp, status, currency and immutable totals snapshot.
 - `sales.invoice_lines`: item/service, quantity, price, discount, tax and cost snapshots, returned quantity.
-- `sales.invoice_payments`: invoice, tender method, amount, collection branch, cashbox/bank account, external reference.
+- `sales.invoice_payments`: one row per tender component, invoice, tender method, amount, collection branch, cashbox/bank account and external reference.
 - `sales.sales_returns`, `sales.sales_return_lines`, `sales.sales_return_tenders`: original invoice and line, quantity, disposition, refund method/destination.
+- `sales.customer_receipts`, `customer_receipt_allocations`, `customer_ledger_events`: standalone customer receipts, explicit allocations and append-only AR events.
+- `sales.reservations`, `reservation_lines`, `reservation_deposits`: availability holds and separately traceable deposits; a reservation is not a sale or stock issue.
+- `sales.loyalty_ledger`: append-only earn/redeem/reversal/expiry events.
 - `sales.shifts`, `shift_events`, `shift_closeouts`: register/branch/cashbox and expected vs counted tenders.
 
 Procurement tables:
-- `procurement.suppliers`
-- `procurement.purchase_invoices`, `purchase_invoice_lines`: receiving branch, warehouse, supplier, document number, receipt date and historical price/tax/cost snapshots.
-- `procurement.supplier_payments`, `supplier_payment_allocations`
-- `procurement.purchase_returns`, `purchase_return_lines`, `purchase_return_settlements`: physical stock return separated from debt reduction, cash refund and supplier credit.
+- `procurement.suppliers`.
+- `procurement.purchase_invoices`, `purchase_invoice_lines`: supplier invoice facts and invoiced quantities, separate from physical receipt.
+- `procurement.purchase_receipts`, `purchase_receipt_lines`, `purchase_invoice_receipt_allocations`: accepted/rejected quantities, receiving branch/warehouse, batch/serial evidence and partial receipt allocation. Only accepted receipt lines create stock movements.
+- `procurement.supplier_payments`, `supplier_payment_allocations`, `supplier_ledger_events`.
+- `procurement.purchase_returns`, `purchase_return_lines`, `purchase_return_settlements`: return lines reference accepted receipt lines; physical stock return is separated from debt reduction, cash refund and supplier credit.
 
-Unique invoice key: tenant + legal entity + series + document number. Return cumulative quantity is validated inside a locked server transaction. Customer/supplier balances are derived from subledger events and explicit allocations, not editable snapshots.
+Unique invoice/receipt keys use the configured numbering scope, not an assumed branch-only scope. Return cumulative quantity is validated inside a locked server transaction. Customer/supplier balances are derived from subledger events and explicit allocations, not editable snapshots.
 
 ## 9. Treasury, bank, partners and accounting
 
-### Custody and bank books
+### Custody, expenses and bank books
 
 - `finance.cashboxes`: tenant, branch, code, currency, status.
 - `finance.treasury_movements`: cashbox, branch, direction, amount, currency, source, reversal link; append-only.
 - `finance.cashbox_transfers`: paired transfer, not income/expense.
+- `finance.expenses`, `expense_allocations`: direct branch or explicitly tenant-wide expense; allocation lines do not duplicate statutory GL expense.
 - `finance.bank_accounts`: legal entity, optional explicit branch scope, currency, status.
-- `finance.bank_ledger_entries`: bank account, direction, amount, value date, source, reversal link.
+- `finance.bank_ledger_entries`, `bank_transfers`: bank-book movements and paired internal transfers.
 - `finance.bank_statement_imports`, `bank_statement_lines`: external statement evidence and matching state.
-- `finance.payment_instruments`, `payment_allocations`: cheques/card settlement and explicit document allocations.
+- `finance.payment_instruments`, `payment_instrument_events`: cheque/other instrument lifecycle as append-only events.
+- `finance.card_settlement_batches`, `card_settlement_lines`: processor gross, fee, net and original tender reconciliation.
+- `finance.opening_balance_batches`, `opening_balance_lines`, `opening_balance_effects`: approved opening snapshot and replay-proof mapping of each generated effect.
 
-Treasury custody, bank-book entries, processor settlement and GL journals are separate books.
+Treasury custody, bank-book entries, processor settlement and GL journals are separate books. A bank transfer is not income or expense. Card fees and cheque settlement/reversal rules require approved accounting policy.
 
 ### Partner subledger
 
@@ -152,15 +159,16 @@ Capital, current account, withdrawal, advance and exit liability remain separate
 
 ### Accounting
 
-- `accounting.chart_of_accounts`: tenant, code, name, type, parent; unique tenant + code.
-- `accounting.fiscal_periods`: legal entity, date range, state; prevent overlapping open periods.
-- `accounting.journals`, `journal_lines`: source event, branch/legal entity, template version, posted timestamp, account, debit/credit, currency/dimensions.
+- `accounting.books`: legal-entity books with explicit book type and currency policy.
+- `accounting.chart_of_accounts`: tenant/book scope as approved, code, name, type, parent.
+- `accounting.fiscal_periods`: legal entity + book, date range and state; prevent overlapping open periods per book/calendar.
+- `accounting.journals`, `journal_lines`: source event, legal entity/book, branch, template version, posted timestamp, account, debit/credit, currency/dimensions.
 - `accounting.posting_templates`: event type, immutable version, effective dates, approval state.
-- `accounting.posting_receipts`: source event, command, journal, outcome; unique source + posting purpose.
+- `accounting.posting_receipts`: source event, command, legal entity/book, posting purpose/template generation, journal and outcome; scoped unique source effect.
 - `accounting.journal_reversals`: original/reversal journal and reason.
 - `accounting.subledger_control_accounts`, `period_close_runs`.
 
-Posted journals balance by approved currency policy. Currency precision, FX, tax, account codes and debit/credit directions require accountant approval; this schema does not prescribe them.
+Posted journals balance by approved currency policy independently per legal entity/book/currency. Currency precision, FX, tax, account codes and debit/credit directions require accountant approval; this schema does not prescribe them.
 
 ## 10. Workflow, sync, integration, audit and insights
 
@@ -293,3 +301,14 @@ These are review artifacts only. They do not authorize DDL, migrations or data c
 - Document numbering uses a configured legal-entity/branch/register/document-type/series scope. A branch-only sequence is not assumed; exact scope and offline provisional-number reconciliation remain policy decisions.
 - Accounting books are explicit. Fiscal periods, journals and posting receipts carry book identity so balancing and close controls cannot accidentally combine statutory/management books.
 - Customer/supplier receipts and allocations, payment instruments/card settlement, reservations/deposits, loyalty, expense allocations and opening-balance effect receipts are represented as first-class structures, not inferred from snapshots.
+
+
+## Review clarification — references and transaction modes
+
+- A purchase invoice and a physical goods receipt are separate aggregates. Partial receipts are represented explicitly; invoiced quantity is not stock on hand, and returns reference accepted receipt lines.
+- Transfers require different source/destination warehouses, but may remain within the same branch. Cross-branch authorization applies only when branch IDs differ.
+- Sequence uniqueness and sequence allocation share one configured legal-entity/branch/register/document-type/series scope. Offline provisional numbers require a collision-safe namespace and reconciliation.
+- Every accounting journal, fiscal period and posting receipt carries an accounting book identity. Balancing and close controls are evaluated per legal entity/book/currency.
+- Canonical command idempotency scope is tenant + command type + key, with initiating actor/device bound to the receipt. A different actor cannot retrieve another actor's receipt by reusing a key.
+- For synchronous posting, source and mandatory journal effects commit together. If pending posting is separately approved, source + pending exception/receipt/audit/outbox commit first, and journal + posting receipt commit in a later transaction.
+- Polymorphic references such as source_type/source_id are event provenance, not automatic foreign keys. Where referential integrity is required, use typed association tables or explicit nullable typed FKs with CHECK constraints; do not claim a generic polymorphic FK is enforced.
