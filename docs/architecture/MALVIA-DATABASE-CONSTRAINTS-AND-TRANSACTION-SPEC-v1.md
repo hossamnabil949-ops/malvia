@@ -318,3 +318,8 @@ Polymorphic `type + id` fields are provenance references unless a typed FK is ex
 ## Posting uniqueness rule
 
 The canonical posting uniqueness key is tenant + legal entity + accounting book + source event + posting purpose. The selected template version is stored on the receipt/journal for audit but cannot be used to create a second posting for the same source purpose after a template update. Additional postings require a distinct approved purpose or a reversal/replacement flow.
+
+
+## Cross-document consistency review
+
+- [MALVIA-DESIGN-CONSISTENCY-REVIEW-v1.md](MALVIA-DESIGN-CONSISTENCY-REVIEW-v1.md) — resolved cross-document conflicts, canonical invariants, remaining approval decisions and release-blocking verification checklist. Design review only; no implementation approval.
