@@ -71,7 +71,7 @@ erDiagram
   SUPPLIERS ||--o{ PURCHASE_INVOICES : supplies
   BRANCHES ||--o{ PURCHASE_INVOICES : receives
   WAREHOUSES ||--o{ PURCHASE_INVOICES : stocks
-  PURCHASE_INVOICES ||--|{ PURCHASE_INVOICE_LINES : contains
+  PURCHASE_INVOICES ||--|{ PURCHASE_INVOICE_LINES : contains\n  PURCHASE_INVOICES ||--o{ PURCHASE_RECEIPTS : received_by\n  PURCHASE_RECEIPTS ||--|{ PURCHASE_RECEIPT_LINES : contains\n  PURCHASE_INVOICE_LINES ||--o{ PURCHASE_INVOICE_RECEIPT_ALLOCATIONS : allocated\n  PURCHASE_RECEIPT_LINES ||--o{ PURCHASE_INVOICE_RECEIPT_ALLOCATIONS : reconciles\n  PURCHASE_RECEIPT_LINES ||--o{ PURCHASE_RETURN_LINES : returned
   SUPPLIERS ||--o{ SUPPLIER_PAYMENTS : paid
   SUPPLIER_PAYMENTS ||--o{ SUPPLIER_PAYMENT_ALLOCATIONS : allocated
   PURCHASE_INVOICES ||--o{ SUPPLIER_PAYMENT_ALLOCATIONS : settled
@@ -99,9 +99,9 @@ erDiagram
   PARTNER_EXIT_SETTLEMENTS ||--o{ PARTNER_EXIT_PAYMENTS : paid
   LEGAL_ENTITIES ||--o{ FISCAL_PERIODS : periods
   FISCAL_PERIODS ||--o{ PERIOD_CLOSE_RUNS : closes
-  CHART_OF_ACCOUNTS ||--o{ JOURNAL_LINES : account
+  CHART_OF_ACCOUNTS ||--o{ JOURNAL_LINES : account\n  BOOK_ACCOUNTS ||--o{ JOURNAL_LINES : permits
   JOURNALS ||--|{ JOURNAL_LINES : contains
-  POSTING_TEMPLATES ||--o{ JOURNALS : template
+  BOOKS ||--o{ JOURNALS : records\n  BOOKS ||--o{ POSTING_RECEIPTS : scopes\n  POSTING_TEMPLATES ||--o{ JOURNALS : template
   JOURNALS ||--o| JOURNAL_REVERSALS : reversed_by
   SOURCE_EVENTS ||--o{ POSTING_RECEIPTS : posted_once
   POSTING_RECEIPTS }o--o| JOURNALS : creates
@@ -180,3 +180,8 @@ This ERD does not settle UUID strategy, branch mapping of legacy data, tax, curr
 - [MALVIA-COMMAND-TRANSACTION-CATALOG-v1.md](MALVIA-COMMAND-TRANSACTION-CATALOG-v1.md) — command-by-command preconditions, read/write sets, locks, idempotency, receipts, reversals and rollback semantics.
 
 Both are design-only review documents; they do not authorize SQL, migrations, API implementation or production changes.
+
+
+## Book and purchase-receipt ERD clarifications
+
+The finance ERD includes legal entity → books → fiscal periods/journals/posting receipts, and chart accounts → book-account assignments → journal lines. The procurement ERD distinguishes supplier invoices from physical receipts and links accepted receipt lines to invoice lines and later supplier-return lines.
