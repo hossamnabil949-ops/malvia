@@ -61,7 +61,7 @@ Arabic and English are first-class languages. Layout direction, navigation, form
 9. Server atomically activates trial and writes immutable `trial_started_at`, `trial_ends_at`, duration and policy version.
 10. Redirect to guided setup and first-use checklist.
 
-The 14-day clock starts on server activation after the required verification/setup gate, not when the installer is downloaded, opened or reinstalled. The server is authoritative for trial time and entitlement.
+The tenant may be provisioned in a pending setup state. The 14-day clock starts only when the server atomically activates the trial after required identity verification and the defined first-use setup gate; not when the installer is downloaded, opened or reinstalled. The server is authoritative for trial time and entitlement. The exact expiry boundary (14 tenant-local calendar days versus 336 elapsed hours) remains an explicit product decision and must be identical across every client.
 
 ## 4. Trial workspace experience
 
