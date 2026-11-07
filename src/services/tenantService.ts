@@ -164,24 +164,36 @@ function recoverTenantTransaction(tenantId: string): void {
   if (journal.version !== 1 || !journal.updates || typeof journal.updates !== 'object') {
     throw new Error('تعذّر استعادة معاملة محلية غير صالحة؛ أوقفنا التحميل لحماية البيانات.');
   }
-  for (const [resource, value] of Object.entries(journal.updates)) {
+  const normalizedUpdates = Object.fromEntries(Object.entries(journal.updates).map(([resource, value]) => [
+    resource === 'treasuryTransactions' ? 'treasury' : resource,
+    value,
+  ]));
+  for (const [resource, value] of Object.entries(normalizedUpdates)) {
     localStorage.setItem(getTenantKey(tenantId, resource), JSON.stringify(value));
   }
   localStorage.removeItem(journalKey);
-  markDirty(tenantId, Object.keys(journal.updates));
+  markDirty(tenantId, Object.keys(normalizedUpdates));
 }
 
 /** Commit all changed tenant resources behind one recoverable local transaction journal. */
 export function commitTenantTransaction(tenantId: string, updates: TenantTransactionPayload): void {
   if (!tenantId || !updates || Object.keys(updates).length === 0) return;
   recoverTenantTransaction(tenantId);
+  // UI state calls this collection "treasuryTransactions", while the sync API,
+  // cloud resource and loader use the canonical key "treasury". Normalize before
+  // both local persistence and dirty-queue registration so paired ledger writes
+  // are always included in the same atomic sync batch.
+  const normalizedUpdates = Object.fromEntries(Object.entries(updates).map(([resource, value]) => [
+    resource === 'treasuryTransactions' ? 'treasury' : resource,
+    value,
+  ]));
   const journalKey = getTenantKey(tenantId, '__transaction_journal');
-  localStorage.setItem(journalKey, JSON.stringify({ version: 1, updates }));
-  for (const [resource, value] of Object.entries(updates)) {
+  localStorage.setItem(journalKey, JSON.stringify({ version: 1, updates: normalizedUpdates }));
+  for (const [resource, value] of Object.entries(normalizedUpdates)) {
     localStorage.setItem(getTenantKey(tenantId, resource), JSON.stringify(value));
   }
   localStorage.removeItem(journalKey);
-  markDirty(tenantId, Object.keys(updates));
+  markDirty(tenantId, Object.keys(normalizedUpdates));
 }
 
 export function loadTenantStoreData(tenant: TenantLicense) {
