@@ -7,7 +7,7 @@
 - Separate legal entities/books where legally required. A branch is a reporting/operational dimension, not automatically a legal entity.
 - Every posted journal is balanced per legal entity, book and currency; it references one immutable source event and a versioned approved template.
 - Operational documents, inventory movements, treasury custody movements, bank statement lines and GL journal lines are related but distinct records.
-- Each source event has a unique posting receipt keyed by tenant/legal entity, source type, source ID, event version and template version. Replays return the same receipt.
+- Each source event has one posting effect per tenant/legal entity/book/source event/posting purpose. The receipt stores source version and the exact template version used, but a template upgrade does not create a new posting identity or repost history. Replays return the same receipt.
 - Posted journals are append-only. Corrections use linked reversals and replacement entries.
 - No account numbers are assigned here. Codes, statutory presentation, tax accounts and local requirements need accountant approval.
 
@@ -76,7 +76,7 @@ Each template defines source event and lifecycle state; required fields; account
 | Pharmacy | Prescription/dispense, lot/expiry, controlled stock adjustment, supplier rebate | Shared GL; regulated traceability and jurisdiction-specific tax/rebate rules |
 
 ## 7. Posting receipt and idempotency
-Persist source type/ID/version, tenant/legal entity, template version, deterministic idempotency key, journal IDs, result, timestamp and actor. Retries return the original receipt. Changed source facts require a correction event, not a second posting of the same version.
+Persist source type/ID/version, tenant/legal entity/book, posting purpose, template version, deterministic idempotency key, journal IDs, result, timestamp and actor. Uniqueness is source + purpose + book; template version is evidence only. Retries return the original receipt. Changed source facts require a correction event, not a second posting of the same version.
 
 ## 8. Illustrative balance example (not a posting template)
 For a simple cash sale of 100 currency units with no tax, discount, return, inventory cost, fee or credit, the journal must contain equal total debit and credit. This document intentionally does not prescribe the account names or sides. A real sale also needs the separate approved inventory/COGS valuation posting where applicable.
