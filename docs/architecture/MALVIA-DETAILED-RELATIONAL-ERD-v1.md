@@ -25,7 +25,7 @@ erDiagram
   BRANCHES ||--o{ REGISTERS : hosts
   REGISTERS ||--o{ REGISTER_CASHBOX_ASSIGNMENTS : maps
   CASHBOXES ||--o{ REGISTER_CASHBOX_ASSIGNMENTS : assigned
-  BRANCHES ||--o{ BRANCH_SEQUENCES : numbers
+  BRANCHES ||--o{ DOCUMENT_SEQUENCES : numbers
 ~~~
 
 ## 2. Catalog and inventory
