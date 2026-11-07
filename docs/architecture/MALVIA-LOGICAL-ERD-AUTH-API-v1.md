@@ -49,7 +49,7 @@
 | Table | Key columns / relationships | Current resource lineage |
 |---|---|---|
 | branches | id, tenant_id, code, name, address, status | New explicit branch master; do not infer from warehouse names |
-| warehouses | id, tenant_id, branch_id, code, name, status | warehouses |
+| warehouses | id, tenant_id, branch_id, code, name, status | warehouses |\n| document_sequences | tenant_id, legal_entity_id, optional branch_id/register_id, document_type, series_code, next_value | New; numbering scope matches approved unique document key |
 | registers | id, tenant_id, branch_id, code, name, status | New POS register identity |
 | employee_profiles | id, tenant_id, user_id nullable, legacy_employee_id, employment fields | employees |
 | employee_branch_assignments | employee_profile_id, branch_id, role, dates | New; current Employee type has no reviewed branch assignment |
@@ -58,7 +58,7 @@
 | product_compatibilities | product_id, industry reference, fitment fields | compatibleModels / carModels |
 | stock_balances | tenant_id, branch_id, warehouse_id, product_id, on_hand, reserved, version | stockLevels + stockQuantity compatibility |
 | stock_movements | id, tenant_id, branch_id, warehouse_id, product_id, qty_delta, balance_after, source type/id, actor | stockMovements |
-| stock_transfers | id, tenant_id, source/destination branch+warehouse, status, references | stockTransfers |
+| stock_transfers | id, tenant_id, source/destination branch+warehouse, status, references | stockTransfers; different warehouses required, same branch permitted |
 | stock_batches | id, tenant_id, branch_id, warehouse_id, product_id, batch_no, expiry | stockBatches |
 | serial_units | id, tenant_id, branch_id, warehouse_id, product_id, serial_no, status | serialUnits |
 | customers | id, tenant_id, customer master fields | customers |
@@ -69,7 +69,7 @@
 | sales_settlements | id, invoice_id, amount, date/time, receipt reference | Invoice.settlementPayments |
 | sales_returns | id, tenant_id, branch_id, invoice_id, refund treatment, status | salesReturns |
 | sales_return_lines | id, return_id, invoice_line_id, product_id, quantity, amount | SalesReturn.items |
-| purchase_invoices | id, tenant_id, branch_id, warehouse_id, supplier_id, totals, status | purchaseInvoices |
+| purchase_invoices | id, tenant_id, branch_id, supplier_id, invoice totals/status | purchaseInvoices; invoice facts are separate from receipt quantities |\n| purchase_receipts / purchase_receipt_lines | id, tenant_id, branch_id, warehouse_id, purchase invoice/line link, accepted/rejected quantities | New; stock increases only for accepted receipt quantities |\n| purchase_invoice_receipt_allocations | invoice line, receipt line, allocated quantity | New; supports partial receipts and quantity reconciliation |
 | purchase_invoice_lines | id, purchase_invoice_id, product_id, quantity, cost, tax, returned qty | PurchaseInvoice.items |
 | purchase_returns | id, tenant_id, branch_id, purchase_invoice_id, supplier_id, settlement data | purchaseReturns |
 | purchase_return_lines | id, purchase_return_id, purchase_invoice_line_id, quantity, amount | PurchaseReturn.items |
@@ -267,3 +267,10 @@ See MALVIA-FINANCIAL-OWNERSHIP-SUBLEDGER-CONSOLIDATION-v1.md for the proposed te
 
 - [MALVIA-PHYSICAL-DATABASE-POSTGRESQL-DESIGN-v1.md](MALVIA-PHYSICAL-DATABASE-POSTGRESQL-DESIGN-v1.md) — proposed PostgreSQL schemas, relational table catalog, tenant-safe keys/FKs, ownership dimensions, constraints, indexes and isolation. Design only; no SQL or runtime schema is deployed.
 - [MALVIA-DATA-MIGRATION-JSONB-TO-RELATIONAL-v1.md](MALVIA-DATA-MIGRATION-JSONB-TO-RELATIONAL-v1.md) — staged preservation-first migration from JSONB documents and local sync state, including ID mapping, effect receipts, reconciliation, offline outbox/journal protection, cutover and rollback.
+
+
+## 11. Cross-document model clarifications
+
+- A purchase invoice and a goods receipt are separate records. A receipt can be partial; only accepted receipt lines create stock movements. A supplier return points to the accepted receipt line.
+- Transfer endpoints are warehouse identities. They must differ; their branch identities may be the same for a same-branch transfer.
+- Document numbering is configured by legal entity and optional branch/register plus document type/series; the unique key and sequence scope must be identical.
