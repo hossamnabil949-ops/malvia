@@ -160,7 +160,8 @@ Capital, current account, withdrawal, advance and exit liability remain separate
 ### Accounting
 
 - `accounting.books`: legal-entity books with explicit book type and currency policy.
-- `accounting.chart_of_accounts`: tenant-owned master catalogue of code, name, type and parent.\n- `accounting.book_accounts`: effective assignment of an account to a legal-entity book; journal lines may use only accounts assigned to that book and posting date.
+- `accounting.chart_of_accounts`: tenant-owned master catalogue of code, name, type and parent.
+- `accounting.book_accounts`: effective assignment of an account to a legal-entity book; journal lines may use only accounts assigned to that book and posting date.
 - `accounting.fiscal_periods`: legal entity + book, date range and state; prevent overlapping open periods per book/calendar.
 - `accounting.journals`, `journal_lines`: source event, legal entity/book, branch, template version, posted timestamp, account, debit/credit, currency/dimensions.
 - `accounting.posting_templates`: legal entity + book + event type, immutable version, effective dates and approval state.
