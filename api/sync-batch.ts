@@ -84,16 +84,16 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ code: 'SYNC_BATCH_DUPLICATE_RESOURCE', error: 'لا يمكن تكرار المورد داخل دفعة واحدة.', diagnostic: { traceId, phase, resource: operationResources.join(','), operationCount: operationResources.length, errorName: 'SyncValidationError', errorCode: 'SYNC_BATCH_DUPLICATE_RESOURCE' } });
     }
     phase = 'permission_validation';
-    const role = String(employee.role || '');
-    const permissions = employee.permissions || {};
-    const owner = role === 'مدير عام';
+    const role = String(employee.role || '').trim();
+    const permissions = employee.permissions && typeof employee.permissions === 'object' ? employee.permissions : {};
+    const owner = role === 'مدير عام' || String(employee.username || '').trim().toLowerCase() === 'admin';
     for (const op of operations) {
       const allowed = owner || (role === 'محاسب مالي' && policy[op.resource].includes('canManagePartners')) || policy[op.resource].some((permission) => permissions[permission] === true);
-      if (!allowed) return res.status(403).json({ code: 'EMPLOYEE_PERMISSION_DENIED', resource: op.resource, error: 'لا تملك صلاحية مزامنة أحد عناصر الدفعة.' });
+      if (!allowed) return res.status(403).json({ code: 'EMPLOYEE_PERMISSION_DENIED', resource: op.resource, error: 'لا تملك صلاحية مزامنة أحد عناصر الدفعة.', diagnostic: { traceId, phase, resource: op.resource, operationCount: operationResources.length, errorName: 'PermissionError', errorCode: 'EMPLOYEE_PERMISSION_DENIED' } });
     }
     if (!owner && operations.some((op: any) => op.resource === 'partnerCurrentAccountTransactions')
       && !(role === 'محاسب مالي' || (permissions.canManagePartners === true && permissions.canManageTreasury === true))) {
-      return res.status(403).json({ code: 'PARTNER_CURRENT_ACCOUNT_PERMISSION_DENIED', resource: 'partnerCurrentAccountTransactions', error: 'حساب جاري الشركاء يتطلب صلاحية إدارة الشركاء والخزينة معاً.' });
+      return res.status(403).json({ code: 'PARTNER_CURRENT_ACCOUNT_PERMISSION_DENIED', resource: 'partnerCurrentAccountTransactions', error: 'حساب جاري الشركاء يتطلب صلاحية إدارة الشركاء والخزينة معاً.', diagnostic: { traceId, phase, resource: 'partnerCurrentAccountTransactions', operationCount: operationResources.length, errorName: 'PermissionError', errorCode: 'PARTNER_CURRENT_ACCOUNT_PERMISSION_DENIED' } });
     }
 
     phase = 'bank_ledger_validation';
@@ -126,7 +126,7 @@ export default async function handler(req: any, res: any) {
         cardSettlements: await currentArray('cardSettlements'),
         cheques: await currentArray('cheques'),
       });
-      if (bankError) return res.status(403).json({ code: bankError, resource: 'bankLedgerEntries', error: 'حركة دفتر البنك غير مطابقة للمستند المالي أو تحاول تعديل سجل سابق.' });
+      if (bankError) return res.status(403).json({ code: bankError, resource: 'bankLedgerEntries', error: 'حركة دفتر البنك غير مطابقة للمستند المالي أو تحاول تعديل سجل سابق.', diagnostic: { traceId, phase, resource: 'bankLedgerEntries', operationCount: operationResources.length, errorName: 'LedgerValidationError', errorCode: bankError } });
     }
 
     phase = 'partner_current_account_validation';
@@ -156,13 +156,14 @@ export default async function handler(req: any, res: any) {
         code: currentAccountError,
         resource: 'partnerCurrentAccountTransactions',
         error: 'حركة جاري الشركاء غير مطابقة لحركة الخزينة أو البنك، أو تحاول تعديل سجل سابق.',
+        diagnostic: { traceId, phase, resource: 'partnerCurrentAccountTransactions', operationCount: operationResources.length, errorName: 'LedgerValidationError', errorCode: currentAccountError },
       });
     }
 
     phase = 'opening_balance_validation';
     const openingOperation: any = operations.find((op: any) => op.resource === 'openingBalances');
     if (openingOperation) {
-      if (!owner) return res.status(403).json({ code: 'OPENING_BALANCE_OWNER_ONLY', resource: 'openingBalances', error: 'تهيئة الأرصدة الافتتاحية متاحة للمالك فقط.' });
+      if (!owner) return res.status(403).json({ code: 'OPENING_BALANCE_OWNER_ONLY', resource: 'openingBalances', error: 'تهيئة الأرصدة الافتتاحية متاحة للمالك فقط.', diagnostic: { traceId, phase, resource: 'openingBalances', operationCount: operationResources.length, errorName: 'PermissionError', errorCode: 'OPENING_BALANCE_OWNER_ONLY' } });
       const previousRow = await getOne(tenant, 'openingBalances');
       const previous = Array.isArray(previousRow?.data) ? previousRow.data as any[] : [];
       const incoming = openingOperation.data;
