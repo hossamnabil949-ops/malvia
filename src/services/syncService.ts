@@ -170,6 +170,35 @@ async function api(path: string, init: RequestInit & { headers?: Record<string, 
   };
 }
 
+export interface SyncRejectionNotification {
+  id: number;
+  traceId: string;
+  actor: { employeeId: string; employeeName: string; username: string; role: string };
+  resource: string;
+  recordIds: string[];
+  relatedGroupIds: string[];
+  code: string;
+  message: string;
+  status: string;
+  createdAt: string;
+  readAt: string | null;
+}
+
+export async function fetchSyncRejectionNotifications(licenseKey: string): Promise<{ ok: boolean; notifications: SyncRejectionNotification[] }> {
+  try {
+    const result = await api('/api/sync-notifications?limit=50', {
+      method: 'GET',
+      headers: { 'x-license-key': licenseKey },
+    });
+    return {
+      ok: result.ok,
+      notifications: result.ok && Array.isArray(result.body?.notifications) ? result.body.notifications : [],
+    };
+  } catch {
+    return { ok: false, notifications: [] };
+  }
+}
+
 async function pushResource(tenantId: string, licenseKey: string, res: string): Promise<boolean> {
   for (let attempt = 0; attempt < 4; attempt++) {
     const local = readLocal(tenantId, res);
