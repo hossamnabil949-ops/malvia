@@ -225,6 +225,26 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     address: `${tenant.city} - مجمع قطع الغيار التجاري`,
   };
 
+  // Recover treasury entries saved by older builds under the UI alias
+  // "treasuryTransactions". The canonical sync/storage resource is "treasury".
+  // Keep cloud/canonical copies authoritative for duplicate IDs, and restore
+  // only missing legacy entries so a failed paired sync is not lost on refresh.
+  const canonicalTreasury = loadResource<TreasuryTransaction[]>('treasury', INITIAL_TREASURY_TRANSACTIONS);
+  const legacyTreasury = loadResource<TreasuryTransaction[]>('treasuryTransactions', []);
+  const canonicalTreasuryIds = new Set(canonicalTreasury.map(item => String(item.id)));
+  const legacyOnlyTreasury = legacyTreasury.filter(item => item?.id && !canonicalTreasuryIds.has(String(item.id)));
+  const treasuryTransactions = legacyOnlyTreasury.length
+    ? [...legacyOnlyTreasury, ...canonicalTreasury]
+    : canonicalTreasury;
+  if (legacyOnlyTreasury.length) {
+    try {
+      localStorage.setItem(getTenantKey(tenantId, 'treasury'), JSON.stringify(treasuryTransactions));
+      markDirty(tenantId, ['treasury']);
+    } catch (error) {
+      console.error('تعذّر استعادة حركات الخزينة المحلية القديمة:', error);
+    }
+  }
+
   return {
     parts: loadResource<AutoPart[]>('parts', INITIAL_PARTS),
     invoices: loadResource<Invoice[]>('invoices', INITIAL_INVOICES),
@@ -232,7 +252,7 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     suppliers: loadResource<Supplier[]>('suppliers', INITIAL_SUPPLIERS),
     supplierPayments: loadResource<SupplierPayment[]>('supplierPayments', INITIAL_SUPPLIER_PAYMENTS),
     supplierPaymentSchedules: loadResource<SupplierPaymentSchedule[]>('supplierPaymentSchedules', []),
-    treasuryTransactions: loadResource<TreasuryTransaction[]>('treasury', INITIAL_TREASURY_TRANSACTIONS),
+    treasuryTransactions,
     employees: loadResource<Employee[]>('employees', INITIAL_EMPLOYEES),
     settings: loadResource<ShopSettings>('settings', tenantSettings),
     salesReturns: loadResource<SalesReturn[]>('salesReturns', INITIAL_SALES_RETURNS),
