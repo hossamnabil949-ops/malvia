@@ -458,7 +458,7 @@ Exact table names may change with physical design, but lock order must remain de
 ### CMD-GL-001 — accounting.period.close
 
 **Preconditions**
-- Period open and all required branch/legal entity subledgers reconciled.
+- Period is in an eligible pre-close state (OPEN or SOFT_CLOSED as defined by the approved state machine) and all required branch/legal entity/book subledgers are reconciled.
 - No unresolved mandatory posting, outbox, bank/cash, stock valuation, tax or approval blockers.
 - Authorized finance approver and close policy version present.
 
@@ -565,7 +565,7 @@ Exact table names may change with physical design, but lock order must remain de
 
 - Preconditions: active customer, authorized collecting branch/cashbox/bank account, valid currency and amount; each invoice allocation references an eligible open receivable.
 - Read/lock: customer AR aggregate, target invoices/credits and prior allocations, collection account and period.
-- Atomic writes: receipt header/tender, explicit invoice allocations (or unapplied customer credit), customer subledger event, cashbox or bank movement, journal when synchronous, receipt/audit/outbox.
+- Atomic writes: receipt header plus one or more tender lines, explicit invoice allocations (or unapplied customer credit), customer subledger event, cashbox and/or bank movements for the actual tender lines, journal when synchronous, receipt/audit/outbox.
 - Invariant: total allocations cannot exceed receipt amount or eligible invoice balance; unapplied remainder remains explicit and is not auto-assigned.
 - Retry/reversal: same tenant + command + key returns original receipt; corrections use linked refund/reallocation events.
 
@@ -573,7 +573,7 @@ Exact table names may change with physical design, but lock order must remain de
 
 - Preconditions: supplier and paying account authorized; allocations target eligible supplier invoices/credits.
 - Read/lock: supplier AP aggregate, invoice balances, prior allocations, paying cashbox/bank account and period.
-- Atomic writes: payment, invoice allocations, supplier AP event, one cashbox or bank movement, journal when synchronous, receipt/audit/outbox.
+- Atomic writes: payment header plus one or more tender lines, invoice allocations, supplier AP event, cashbox and/or bank movements for actual tender lines, journal when synchronous, receipt/audit/outbox.
 - Invariant: allocation cannot exceed payment or eligible payable; unapplied amount remains supplier credit. Central payment retains each originating receipt/invoice branch.
 - Retry/reversal: stable receipt identity; corrections use linked reversal/reallocation events.
 
@@ -627,7 +627,7 @@ Current legacy flows may write multiple resource documents from the client. Duri
 | CMD-T02 | sales.create | same key and payload retried after timeout | original receipt; one invoice and effect set |
 | CMD-T03 | sales.void | void after partial return | only eligible remaining refund/restock |
 | CMD-T04 | sales.return.create | simultaneous returns exceed sold quantity | aggregate limit enforced |
-| CMD-T05 | purchase.receive | retry after stock updated but response lost | one receipt, stock and payable |
+| CMD-T05 | purchase_receipt.post | retry after stock updated but response lost | one accepted receipt and one stock effect set |
 | CMD-T06 | purchase_return | cash refund + credit + debt reduction exceed return | reject atomically |
 | CMD-T07 | expense.create | bank write or journal fails | full rollback or explicitly approved pending state |
 | CMD-T08 | inventory.transfer | dispatch succeeds but receipt not yet done | in-transit custody; no double availability |
@@ -662,3 +662,11 @@ Current legacy flows may write multiple resource documents from the client. Duri
 - workflow separation of duties and approval thresholds.
 
 **Implementation gate:** each command requires a versioned API contract, schema/constraint mapping, migration compatibility test, concurrency/idempotency tests, accounting sign-off where applicable, and security review. This catalog is not permission to implement or deploy any of those changes.
+
+
+## Numbering and receipt-line enforcement notes
+
+- The sequence allocator and document unique constraint must use the identical approved scope (legal entity, optional branch/register, document type and series). Nullable scope columns require partial unique indexes or a reviewed equivalent; do not rely on a plain nullable composite UNIQUE.
+- Customer and supplier receipts may contain multiple tender lines. Each tender line has one actual custody destination; the header total equals the sum of tender lines. Invoice allocations are a separate dimension and may leave an explicit unapplied balance.
+- Purchase invoice recording does not create stock. A later receipt command creates stock only for accepted receipt-line quantities. A purchase return references accepted receipt lines.
+- A same-branch transfer between different warehouses is valid. Only identical source/destination warehouses are prohibited.
