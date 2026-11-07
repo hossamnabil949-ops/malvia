@@ -245,7 +245,7 @@ export default async function handler(req: any, res: any) {
         const warning = {
           code: currentAccountError,
           resource: 'partnerCurrentAccountTransactions',
-          actor: { employeeId: String(employee.id || '').slice(0, 120), employeeName: actorName, username: String(employee.username || '').slice(0, 80) },
+          actor: { employeeId: String(employee.id || '').slice(0, 120), employeeName: actorName, username: String(employee.username || '').slice(0, 80), role: String(employee.role || '').slice(0, 80) },
           affectedRecordIds: [...affectedIds].slice(0, 50),
           traceId,
           message: 'تم رفض تعديل/حذف حركة تاريخية في جاري الشريك واستعادة النسخة المعتمدة من الخادم. استمرت مزامنة باقي البيانات.',
@@ -381,7 +381,16 @@ export default async function handler(req: any, res: any) {
     const requestHash = createHash('sha256').update(serialized).digest('hex');
     phase = 'database_commit';
     resource = operationResources.join(',');
-    const result = await commitSyncBatch(tenant, idempotencyKey, requestHash, operations);
+    const durableRejections = syncWarnings.map((warning: any) => ({
+      traceId: warning.traceId || traceId,
+      actor: warning.actor || {},
+      resource: warning.resource || 'unknown',
+      recordIds: Array.isArray(warning.affectedRecordIds) ? warning.affectedRecordIds : [],
+      relatedGroupIds: Array.isArray(warning.relatedGroupIds) ? warning.relatedGroupIds : [],
+      code: warning.code || 'SYNC_RECORD_REJECTED',
+      message: warning.message || 'تم رفض حركة أثناء المزامنة.',
+    }));
+    const result = await commitSyncBatch(tenant, idempotencyKey, requestHash, operations, durableRejections);
     if (result?.conflict) return res.status(409).json(result);
     const reconciled = Object.fromEntries(
       operations
