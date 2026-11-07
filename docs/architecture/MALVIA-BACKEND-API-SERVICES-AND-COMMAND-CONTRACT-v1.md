@@ -279,3 +279,11 @@ Diagnostics visible to customers contain safe error code, stage, trace ID and ne
 
 - [MALVIA-PHYSICAL-DATABASE-POSTGRESQL-DESIGN-v1.md](MALVIA-PHYSICAL-DATABASE-POSTGRESQL-DESIGN-v1.md) — proposed PostgreSQL schemas, relational table catalog, tenant-safe keys/FKs, ownership dimensions, constraints, indexes and isolation. Design only; no SQL or runtime schema is deployed.
 - [MALVIA-DATA-MIGRATION-JSONB-TO-RELATIONAL-v1.md](MALVIA-DATA-MIGRATION-JSONB-TO-RELATIONAL-v1.md) — staged preservation-first migration from JSONB documents and local sync state, including ID mapping, effect receipts, reconciliation, offline outbox/journal protection, cutover and rollback.
+
+
+## Database constraints and command transaction companions
+
+- [MALVIA-DATABASE-CONSTRAINTS-AND-TRANSACTION-SPEC-v1.md](MALVIA-DATABASE-CONSTRAINTS-AND-TRANSACTION-SPEC-v1.md) — tenant-safe keys, domain constraints, uniqueness/idempotency, locking/isolation, atomicity, ledger immutability, RLS safeguards and concurrency acceptance tests.
+- [MALVIA-COMMAND-TRANSACTION-CATALOG-v1.md](MALVIA-COMMAND-TRANSACTION-CATALOG-v1.md) — command-by-command preconditions, read/write sets, locks, idempotency, receipts, reversals and rollback semantics.
+
+Both are design-only review documents; they do not authorize SQL, migrations, API implementation or production changes.
