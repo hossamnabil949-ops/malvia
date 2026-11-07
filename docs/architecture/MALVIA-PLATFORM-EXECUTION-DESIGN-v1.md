@@ -140,7 +140,7 @@ Arabic and English are first-class languages with RTL/LTR layouts. Mobile-first 
 - `download_releases`: platform, architecture, version, channel, file checksum, signature metadata, minimum supported version and release notes.
 - `download_entitlements` (optional): download access policy and release eligibility; download does not itself grant business-data access.
 
-A trial belongs to a tenant, not to a downloaded binary or device. The 14-day clock starts at successful tenant provisioning after required verification, not when a user first downloads an installer. Re-downloading, changing devices or reinstalling cannot reset the clock.
+A trial belongs to a tenant, not to a downloaded binary or device. The tenant may first be provisioned in a pending setup state. The 14-day clock starts only at the server-owned trial activation after required identity verification and the defined first-use setup gate. Downloading an installer is never the start event. Re-downloading, changing devices or reinstalling cannot reset the clock.
 
 ### 4.2 Recommended trial defaults — approval required
 
