@@ -91,4 +91,4 @@ Every posting API atomically checks actor/session, tenant membership, module/act
 
 ## Related accounting engine design
 
-- [Accounting engine and posting orchestration](MALVIA-ACCOUNTING-ENGINE-AND-POSTING-ORCHESTRATION-v1.md) — canonical source events, server-side command pipeline, atomic source/journal/receipt/outbox commit, idempotency, template versioning, reversals, offline late-event handling and migration gates. Target architecture only; no runtime implementation is implied.
+- [Accounting engine and posting orchestration](MALVIA-ACCOUNTING-ENGINE-AND-POSTING-ORCHESTRATION-v1.md) — canonical source events, server-side command pipeline, synchronous source/journal/receipt/outbox commit or an explicitly approved pending-posting workflow with a separate later journal transaction, idempotency, template versioning, reversals, offline late-event handling and migration gates. Target architecture only; no runtime implementation is implied.
