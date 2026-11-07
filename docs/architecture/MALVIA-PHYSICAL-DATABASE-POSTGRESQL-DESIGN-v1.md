@@ -160,10 +160,10 @@ Capital, current account, withdrawal, advance and exit liability remain separate
 ### Accounting
 
 - `accounting.books`: legal-entity books with explicit book type and currency policy.
-- `accounting.chart_of_accounts`: tenant/book scope as approved, code, name, type, parent.
+- `accounting.chart_of_accounts`: tenant-owned master catalogue of code, name, type and parent.\n- `accounting.book_accounts`: effective assignment of an account to a legal-entity book; journal lines may use only accounts assigned to that book and posting date.
 - `accounting.fiscal_periods`: legal entity + book, date range and state; prevent overlapping open periods per book/calendar.
 - `accounting.journals`, `journal_lines`: source event, legal entity/book, branch, template version, posted timestamp, account, debit/credit, currency/dimensions.
-- `accounting.posting_templates`: event type, immutable version, effective dates, approval state.
+- `accounting.posting_templates`: legal entity + book + event type, immutable version, effective dates and approval state.
 - `accounting.posting_receipts`: source event, command, legal entity/book, posting purpose and template generation evidence; unique source effect per tenant/legal entity/book/source/purpose, so template changes cannot auto-repost history.
 - `accounting.journal_reversals`: original/reversal journal and reason.
 - `accounting.subledger_control_accounts`, `period_close_runs`.
@@ -329,3 +329,8 @@ A posting receipt's uniqueness is tenant + legal entity + accounting book + sour
 ## Cross-document consistency review
 
 - [MALVIA-DESIGN-CONSISTENCY-REVIEW-v1.md](MALVIA-DESIGN-CONSISTENCY-REVIEW-v1.md) — resolved cross-document conflicts, canonical invariants, remaining approval decisions and release-blocking verification checklist. Design review only; no implementation approval.
+
+
+## Accounting book/account enforcement
+
+The chart of accounts is a tenant-level catalogue; `accounting.book_accounts` defines which accounts are enabled for each legal-entity book and effective date. Journal lines must reference an active book-account assignment. Posting templates are book-scoped (legal entity + book + event type + version). This prevents a journal from balancing numerically while posting to an account unavailable in that book.
