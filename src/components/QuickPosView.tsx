@@ -1304,7 +1304,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           )}
 
           <button
-            onClick={handleCompleteSale}
+            onClick={() => handleCompleteSale()}
             disabled={cart.length === 0}
             className="w-full py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed active:scale-98"
           >
