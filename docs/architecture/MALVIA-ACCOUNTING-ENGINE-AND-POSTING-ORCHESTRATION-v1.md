@@ -70,7 +70,7 @@ Do not use a generic `success` flag to imply both source commit and GL posting. 
 
 - Enforce a unique idempotency receipt scoped to tenant + command namespace + key. Store a canonical request hash and the final result.
 - Same key + same canonical payload returns the original receipt; same key + different payload is a conflict requiring a new command, not a replay.
-- Add a unique posting constraint on source event + posting purpose + accounting book + effective template generation, unless an approved multi-part posting design explicitly requires multiple receipts.
+- Enforce one posting effect per tenant + legal entity + accounting book + source event + posting purpose. Store the exact template version/generation as evidence, but do not include template generation in the uniqueness key in a way that allows a template change to repost the same source automatically. A genuinely separate posting requires a distinct approved posting purpose or explicit reversal/replacement workflow.
 - A retry must never repeat stock, customer/supplier balance, cash/bank, loyalty, partner or GL effects.
 - Use database transactions and row/aggregate locking or optimistic version checks for competing sales, returns, settlements and stock allocations.
 - Enforce cumulative return quantities, serial uniqueness, available stock, credit limits, settlement limits and source state on the server at commit time.
