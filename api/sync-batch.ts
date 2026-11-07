@@ -85,10 +85,17 @@ export default async function handler(req: any, res: any) {
     }
     phase = 'permission_validation';
     const role = String(employee.role || '').trim();
-    const permissions = employee.permissions && typeof employee.permissions === 'object' ? employee.permissions : {};
-    const owner = role === 'مدير عام' || String(employee.username || '').trim().toLowerCase() === 'admin';
+    // Support both legacy array permissions (including ["*"]) and the current
+    // permission map. Some existing tenant admin records use role "ADMIN".
+    const permissionList = Array.isArray(employee.permissions) ? employee.permissions.map((value: any) => String(value)) : [];
+    const permissions = employee.permissions && typeof employee.permissions === 'object' && !Array.isArray(employee.permissions) ? employee.permissions : {};
+    const normalizedRole = role.toUpperCase();
+    const owner = ['مدير عام', 'ADMIN', 'OWNER', 'SUPER_ADMIN'].includes(normalizedRole)
+      || String(employee.username || '').trim().toLowerCase() === 'admin'
+      || permissionList.includes('*') || permissions['*'] === true;
+    const hasPermission = (permission: string) => owner || permissionList.includes('*') || permissionList.includes(permission) || permissions[permission] === true || permissions['*'] === true;
     for (const op of operations) {
-      const allowed = owner || (role === 'محاسب مالي' && policy[op.resource].includes('canManagePartners')) || policy[op.resource].some((permission) => permissions[permission] === true);
+      const allowed = owner || (role === 'محاسب مالي' && policy[op.resource].includes('canManagePartners')) || policy[op.resource].some(hasPermission);
       if (!allowed) return res.status(403).json({ code: 'EMPLOYEE_PERMISSION_DENIED', resource: op.resource, error: 'لا تملك صلاحية مزامنة أحد عناصر الدفعة.', diagnostic: { traceId, phase, resource: op.resource, operationCount: operationResources.length, errorName: 'PermissionError', errorCode: 'EMPLOYEE_PERMISSION_DENIED' } });
     }
     if (!owner && operations.some((op: any) => op.resource === 'partnerCurrentAccountTransactions')
