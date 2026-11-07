@@ -256,3 +256,11 @@ Open decisions: canonical ID format; branch/legal entity mapping; retention/anon
 - `MALVIA-MIGRATION-RECONCILIATION-WORKBOOK-v1.md`
 - `MALVIA-ACCOUNTING-ENGINE-AND-POSTING-ORCHESTRATION-v1.md`
 - `MALVIA-REPOSITORY-AUDIT-ADDENDUM-v1.md`
+
+
+## Detailed physical model companions
+
+- [MALVIA-POSTGRESQL-DATA-DICTIONARY-v1.md](MALVIA-POSTGRESQL-DATA-DICTIONARY-v1.md) — proposed per-table columns, logical PostgreSQL types, required fields, unique/check constraints and relationship rules.
+- [MALVIA-DETAILED-RELATIONAL-ERD-v1.md](MALVIA-DETAILED-RELATIONAL-ERD-v1.md) — domain ERDs and explicit ownership/cardinality/transaction invariants.
+
+These are review artifacts only. They do not authorize DDL, migrations or data cutover.
