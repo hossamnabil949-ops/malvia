@@ -74,7 +74,7 @@ Every aggregate preserves branch-level values and source IDs. Group totals are d
 - A branch can have multiple warehouses (store, backroom, service bay, quarantine, damaged/returns, transit where operationally needed).
 - Stock is warehouse-level and item/variant/lot/serial-aware where the industry pack requires it.
 - Available = on-hand − reserved − blocked/quarantined, subject to the relevant stock policy. Do not treat a branch total or a cached product quantity as authoritative.
-- Transfers retain source and destination warehouse/branch, requested/dispatched/received quantities, actor, timestamps, and discrepancy reasons.
+- Transfers retain source and destination warehouse/branch, requested/dispatched/received quantities, actor, timestamps, and discrepancy reasons. A transfer between two different warehouses in the same branch is valid; source and destination warehouse IDs must differ, while branch IDs may match.
 - Reservations/allocations do not move physical stock; dispatch/receipt events do.
 
 ### Transfer lifecycle
@@ -95,7 +95,7 @@ Rules:
 - A cash session/shift opens against a cashbox and register (or a documented non-register channel), with opening float, cashier, timestamps, counted close, expected balance and variance.
 - Split tender can settle across cashbox, bank, wallet or other configured methods. Each settlement line references its actual account and originating invoice.
 - Cashbox transfer between branches is a transfer, not income/expense.
-- Offline invoice numbering must remain unique across branch/register/device; server-issued sequence reservations or collision-safe identifiers are required. Preserve legacy invoice numbers and device codes during migration.
+- Document numbering uses an approved legal-entity/branch/register/document-type/series scope; do not assume branch-only numbering. Offline invoice numbering must remain unique across branch/register/device; server-issued sequence reservations or collision-safe provisional identifiers are required. Preserve legacy invoice numbers and device codes during migration.
 - Duplicate command retries return the original operation receipt; they must not post a second invoice, payment, stock move or loyalty event.
 
 ## 8. Accounting policy decisions still open
@@ -125,3 +125,10 @@ Preserve existing tenant IDs, invoice/purchase/return IDs, invoice numbers, date
 - No existing data, pending outbox or transaction journal is cleared by migration.
 
 **Gate:** logical design only. Physical ERD, accounting policy, SQL and runtime rollout require separate approval.
+
+
+## 11. Transfer and numbering clarifications
+
+- Same-branch warehouse transfers are supported and must not be rejected merely because sourceBranchId equals destinationBranchId. The source and destination warehouse IDs must be different.
+- A transfer between branches must validate both branch assignments and both warehouse ownership relationships.
+- Numbering is configured by document type and series, with legal-entity, branch and/or register scope selected by approved business/legal policy. A sequence allocator must match the unique document-number constraint exactly. Offline provisional numbers use a collision-safe namespace and are reconciled without rewriting legacy document numbers.
