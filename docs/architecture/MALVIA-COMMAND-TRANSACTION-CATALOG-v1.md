@@ -676,3 +676,8 @@ Current legacy flows may write multiple resource documents from the client. Duri
 - Customer and supplier receipts may contain multiple tender lines. Each tender line has one actual custody destination; the header total equals the sum of tender lines. Invoice allocations are a separate dimension and may leave an explicit unapplied balance.
 - Purchase invoice recording does not create stock. A later receipt command creates stock only for accepted receipt-line quantities. A purchase return references accepted receipt lines.
 - A same-branch transfer between different warehouses is valid. Only identical source/destination warehouses are prohibited.
+
+
+## Cross-document consistency review
+
+- [MALVIA-DESIGN-CONSISTENCY-REVIEW-v1.md](MALVIA-DESIGN-CONSISTENCY-REVIEW-v1.md) — resolved cross-document conflicts, canonical invariants, remaining approval decisions and release-blocking verification checklist. Design review only; no implementation approval.
