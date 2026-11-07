@@ -101,12 +101,11 @@
 | partner_settlement_payments | id, tenant_id, settlement_id, amount, account/source | partnerSettlementPayments |
 | opening_balance_batches | id, tenant_id, status, effective_date, approved_by | openingBalances |
 | opening_balance_lines | id, batch_id, category, typed account/party/item/custody FKs, amount, quantity, cost | OpeningBalanceLine; typed FKs + category CHECK, not generic polymorphic FK |
+| accounting_books | id, tenant_id, legal_entity_id, book_code, book_type, currency policy | New; periods, journals and posting receipts are book-scoped |
 | audit_events | id, tenant_id, branch_id nullable, actor, action, entity reference, payload | auditLog |
 | idempotency_records | tenant_id, command_type, idempotency_key, actor_id, device_id, request_hash, response reference | Unique tenant + command type + key; actor/device bound to receipt |
 
 **Important:** this is a logical target, not a finalized physical schema. Exact columns, indexes, decimal precision, deletion rules, and legacy nested-object mappings require the full field-level migration worksheet and domain-owner approval.
-
-| accounting_books | id, tenant_id, legal_entity_id, book_code, book_type, currency policy | New; period/journal/posting receipt is book-scoped |
 
 ## 4. Scope ownership matrix
 
