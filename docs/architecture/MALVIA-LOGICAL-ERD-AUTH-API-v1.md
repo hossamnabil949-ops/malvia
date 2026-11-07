@@ -79,7 +79,7 @@
 | purchase_return_lines | id, purchase_return_id, purchase_receipt_line_id, quantity, amount | PurchaseReturn.items; returns reference accepted stock receipt lines |
 | supplier_payments / supplier_payment_tenders / supplier_payment_allocations | payment header, multiple tender lines, invoice allocations | supplierPayments; tender and payable allocation are distinct |
 | supplier_ledger_events | id, tenant_id, supplier_id, source, branch, amount, event type | New append-only AP subledger events |
-| supplier_payment_schedules | id, tenant_id, supplier_id, invoice_id, plan and due data | supplierPaymentSchedules |
+| supplier_payment_schedules | id, tenant_id, supplier_id, invoice_id, schedule version, due dates and amounts | supplierPaymentSchedules; payment plan is not a payment or ledger event |
 | expenses | id, tenant_id, branch_id nullable, title, category, amount, date, account | expenses |
 | expense_allocations | expense_id, branch_id, allocation_basis, amount | New for tenant-wide allocated expenses |
 | cashboxes | id, tenant_id, branch_id, code, currency, status | New explicit branch-owned cash custody account |
