@@ -57,7 +57,7 @@
 | products | id, tenant_id, sku, barcode identifiers, descriptive/catalog fields | parts |
 | product_alternatives | id, tenant_id, product_id, alternate identifiers and pricing | AutoPart.alternatives |
 | product_compatibilities | product_id, industry reference, fitment fields | compatibleModels / carModels |
-| stock_balances | tenant_id, branch_id, warehouse_id, product_id, on_hand, reserved, version | stockLevels + stockQuantity compatibility |
+| stock_balances | tenant_id, warehouse_id, product_id, on_hand, reserved, version | Branch is derived through the warehouse's required branch FK; stockLevels + stockQuantity compatibility |
 | stock_movements | id, tenant_id, branch_id, warehouse_id, product_id, qty_delta, balance_after, source type/id, actor | stockMovements |
 | stock_transfers | id, tenant_id, source/destination branch+warehouse, status, references | stockTransfers; different warehouses required, same branch permitted |
 | stock_batches | id, tenant_id, branch_id, warehouse_id, product_id, batch_no, expiry | stockBatches |
@@ -66,8 +66,9 @@
 | suppliers | id, tenant_id, supplier master fields | suppliers |
 | sales_invoices | id, tenant_id, branch_id, register_id, shift_id, customer_id, cashier_id, legacy fields | invoices |
 | sales_invoice_lines | id, invoice_id, product_id, quantity, unit price, cost snapshot, tax, returned qty | Invoice.items |
-| sales_payments | id, invoice_id, method, amount, bank_account_id | Invoice.payments |
-| sales_settlements | id, invoice_id, amount, date/time, receipt reference | Invoice.settlementPayments |
+| sales_invoice_payments | id, invoice_id, tender type, amount, collection branch, cashbox/bank account | Invoice.payments; one row per tender component |
+| customer_receipts / customer_receipt_tenders / customer_receipt_allocations | receipt, multiple tender lines, explicit invoice allocations | New standalone AR receipts; unapplied remainder remains explicit |
+| customer_ledger_events | id, tenant_id, customer_id, source, branch, amount, event type | New append-only AR subledger events |
 | sales_returns | id, tenant_id, branch_id, invoice_id, refund treatment, status | salesReturns |
 | sales_return_lines | id, return_id, invoice_line_id, product_id, quantity, amount | SalesReturn.items |
 | purchase_invoices | id, tenant_id, branch_id, supplier_id, invoice totals/status | purchaseInvoices; invoice facts are separate from receipt quantities |
@@ -75,13 +76,14 @@
 | purchase_invoice_receipt_allocations | invoice line, receipt line, allocated quantity | New; supports partial receipts and quantity reconciliation |
 | purchase_invoice_lines | id, purchase_invoice_id, product_id, quantity, cost, tax, returned qty | PurchaseInvoice.items |
 | purchase_returns | id, tenant_id, branch_id, purchase_invoice_id, supplier_id, settlement data | purchaseReturns |
-| purchase_return_lines | id, purchase_return_id, purchase_invoice_line_id, quantity, amount | PurchaseReturn.items |
-| supplier_payments | id, tenant_id, branch_id, supplier_id, amount, payment account, source | supplierPayments |
+| purchase_return_lines | id, purchase_return_id, purchase_receipt_line_id, quantity, amount | PurchaseReturn.items; returns reference accepted stock receipt lines |
+| supplier_payments / supplier_payment_tenders / supplier_payment_allocations | payment header, multiple tender lines, invoice allocations | supplierPayments; tender and payable allocation are distinct |
+| supplier_ledger_events | id, tenant_id, supplier_id, source, branch, amount, event type | New append-only AP subledger events |
 | supplier_payment_schedules | id, tenant_id, supplier_id, invoice_id, plan and due data | supplierPaymentSchedules |
 | expenses | id, tenant_id, branch_id nullable, title, category, amount, date, account | expenses |
 | expense_allocations | expense_id, branch_id, allocation_basis, amount | New for tenant-wide allocated expenses |
-| treasury_accounts | id, tenant_id, branch_id nullable, code, type, status | New normalized cashbox/account identity |
-| treasury_transactions | id, tenant_id, branch_id, treasury_account_id, type, amount, source reference | treasury |
+| cashboxes | id, tenant_id, branch_id, code, currency, status | New explicit branch-owned cash custody account |
+| treasury_movements | id, tenant_id, branch_id, cashbox_id, direction, amount, source reference | treasury; append-only cash custody events |
 | bank_accounts | id, tenant_id, branch_id nullable, ownership_scope, bank metadata | bankAccounts; scope policy remains open |
 | bank_ledger_entries | id, tenant_id, bank_account_id, source reference, amount, occurred_at | bankLedgerEntries |
 | card_settlements | id, tenant_id, branch_id, bank_account_id, amounts, batch references | cardSettlements |
@@ -98,11 +100,13 @@
 | partner_exit_settlements | id, tenant_id, partner_id, snapshot amounts, status | partnerExitSettlements |
 | partner_settlement_payments | id, tenant_id, settlement_id, amount, account/source | partnerSettlementPayments |
 | opening_balance_batches | id, tenant_id, status, effective_date, approved_by | openingBalances |
-| opening_balance_lines | id, batch_id, category, entity reference, amount, quantity, cost | OpeningBalanceLine |
+| opening_balance_lines | id, batch_id, category, typed account/party/item/custody FKs, amount, quantity, cost | OpeningBalanceLine; typed FKs + category CHECK, not generic polymorphic FK |
 | audit_events | id, tenant_id, branch_id nullable, actor, action, entity reference, payload | auditLog |
-| idempotency_records | tenant_id, actor, operation_key, request_hash, response reference | Existing sync/agent idempotency patterns |
+| idempotency_records | tenant_id, command_type, idempotency_key, actor_id, device_id, request_hash, response reference | Unique tenant + command type + key; actor/device bound to receipt |
 
 **Important:** this is a logical target, not a finalized physical schema. Exact columns, indexes, decimal precision, deletion rules, and legacy nested-object mappings require the full field-level migration worksheet and domain-owner approval.
+
+| accounting_books | id, tenant_id, legal_entity_id, book_code, book_type, currency policy | New; period/journal/posting receipt is book-scoped |
 
 ## 4. Scope ownership matrix
 
@@ -277,3 +281,13 @@ See MALVIA-FINANCIAL-OWNERSHIP-SUBLEDGER-CONSOLIDATION-v1.md for the proposed te
 - A purchase invoice and a goods receipt are separate records. A receipt can be partial; only accepted receipt lines create stock movements. A supplier return points to the accepted receipt line.
 - Transfer endpoints are warehouse identities. They must differ; their branch identities may be the same for a same-branch transfer.
 - Document numbering is configured by legal entity and optional branch/register plus document type/series; the unique key and sequence scope must be identical.
+
+
+## Physical-model alignment notes
+
+- Inventory stock-balance branch scope is derived through the warehouse's required branch relationship; the balance row does not duplicate branch_id. Stock movement events retain branch attribution as historical evidence.
+- Canonical cash custody tables are `cashboxes` and append-only `treasury_movements`; do not create a competing `treasury_accounts` identity for the same cashbox.
+- Standalone customer/supplier receipts have a header, one or more tender lines and separate document-allocation rows. Tender settlement is not the same as AR/AP allocation.
+- Purchase return lines reference accepted purchase receipt lines, not invoice quantity alone.
+- Idempotency identity is tenant + command type + key, with actor/device bound to the receipt.
+- Opening-balance and other typed business references require typed FKs or dedicated association tables; generic entity references are provenance only.
