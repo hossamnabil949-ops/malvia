@@ -61,7 +61,7 @@ The following is a logical constraint matrix. Names are illustrative; final SQL 
 | Bank ledger | bank account/source FKs | source effect key unique | amount > 0; direction explicit; bank and cash custody are distinct ledgers |
 | Partners | partner/source/cashbox/bank FKs | source event unique | capital, current-account advance/repayment, withdrawal and exit settlement remain distinct event types |
 | Customer/supplier allocations | party/document/payment FKs | allocation source identity unique | allocations > 0; cumulative allocation <= eligible payment/document amount |
-| Journals | legal entity/period/account FKs | journal number unique per legal entity/period; one source posting effect per tenant/legal entity/book/source/purpose; template version is evidence, not a duplicate-posting escape hatch | debit/credit nonnegative; each posted journal balances per legal entity + currency; period open; posted lines immutable |
+| Books/accounts/journals | legal entity/book/period/account and book-account assignment FKs | account assignment unique per book/effective interval; journal number unique in approved scope; one source posting effect per tenant/legal entity/book/source/purpose | journal line account must be active in the journal book/date; debit/credit nonnegative; balance per legal entity + book + currency; period open; posted lines immutable |
 | Reversals | original event/journal FKs | one full reversal per original unless partial-reversal model explicitly supported | reversal cannot exceed unreversed original; correction preserves source chain |
 | Workflow | tenant/definition/version/step FKs | step code/order unique within version | active workflow version immutable; valid transitions; approval actor authorized |
 | Sync/commands | tenant/actor/command FKs | idempotency key unique in defined scope; event sequence unique | same key + same hash returns receipt; same key + different hash conflicts |
@@ -323,3 +323,8 @@ The canonical posting uniqueness key is tenant + legal entity + accounting book 
 ## Cross-document consistency review
 
 - [MALVIA-DESIGN-CONSISTENCY-REVIEW-v1.md](MALVIA-DESIGN-CONSISTENCY-REVIEW-v1.md) — resolved cross-document conflicts, canonical invariants, remaining approval decisions and release-blocking verification checklist. Design review only; no implementation approval.
+
+
+## Book-account validation
+
+A tenant chart account is not automatically valid in every accounting book. Enforce an effective `book_accounts` assignment for each journal line at the journal posting date. Posting templates are scoped to legal entity and book. Test cross-book account misuse as a release-blocking validation failure.
