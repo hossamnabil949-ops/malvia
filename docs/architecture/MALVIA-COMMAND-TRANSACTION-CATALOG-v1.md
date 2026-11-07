@@ -628,7 +628,8 @@ Current legacy flows may write multiple resource documents from the client. Duri
 | CMD-T03 | sales.void | void after partial return | only eligible remaining refund/restock |
 | CMD-T04 | sales.return.create | simultaneous returns exceed sold quantity | aggregate limit enforced |
 | CMD-T05 | procurement.purchase_invoice.record | retry after invoice record response lost | one invoice and one payable recognition effect |
-| CMD-T05B | procurement.purchase_receipt.post | retry after stock updated but response lost | one accepted receipt and one stock effect set |\n| CMD-T06 | purchase_return | cash refund + credit + debt reduction exceed return | reject atomically |
+| CMD-T05B | procurement.purchase_receipt.post | retry after stock updated but response lost | one accepted receipt and one stock effect set |
+| CMD-T06 | purchase_return | cash refund + credit + debt reduction exceed return | reject atomically |
 | CMD-T07 | expense.create | bank write or journal fails | full rollback or explicitly approved pending state |
 | CMD-T08 | inventory.transfer | dispatch succeeds but receipt not yet done | in-transit custody; no double availability |
 | CMD-T09 | partner_current_account | repayment exceeds linked advance | reject under lock |
@@ -642,7 +643,12 @@ Current legacy flows may write multiple resource documents from the client. Duri
 | CMD-T17 | workflow.approve | duplicate approval or stale row version | one approval; stale request rejected |
 | CMD-T18 | all | cross-tenant or unauthorized branch ID supplied | denied before data mutation |
 | CMD-T19 | all | outbox/audit insert failure | mandatory transaction rolls back |
-| CMD-T20 | all | deadlock/serialization retry | same idempotency identity; no duplicate effects |\n| CMD-T21 | AR/AP receipts | split tender and partial invoice allocation | tender sum, custody and allocations reconcile independently |\n| CMD-T22 | bank transfer | paired side write failure | no completed one-sided transfer |\n| CMD-T23 | inventory count | replay approved count | one variance movement set |\n| CMD-T24 | reservation | invoice conversion retry | reservation consumed once; deposit remains traceable |\n| CMD-T25 | card/cheque | duplicate provider/bank callback | one instrument transition and one settlement effect |
+| CMD-T20 | all | deadlock/serialization retry | same idempotency identity; no duplicate effects |
+| CMD-T21 | AR/AP receipts | split tender and partial invoice allocation | tender sum, custody and allocations reconcile independently |
+| CMD-T22 | bank transfer | paired side write failure | no completed one-sided transfer |
+| CMD-T23 | inventory count | replay approved count | one variance movement set |
+| CMD-T24 | reservation | invoice conversion retry | reservation consumed once; deposit remains traceable |
+| CMD-T25 | card/cheque | duplicate provider/bank callback | one instrument transition and one settlement effect |
 
 ## 5. Decisions requiring approval before implementation
 
