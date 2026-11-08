@@ -1308,7 +1308,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     <td className="p-3 text-[11px]">{exp.paymentMethod}</td>
                     <td className="p-3 font-mono font-black text-rose-400">{exp.amount.toLocaleString()} ج.م</td>
                     <td className="p-3 text-neutral-400 text-[11px]">{exp.recordedBy}</td>
-                    <td className="p-3"><div className="flex gap-1"><button type="button" onClick={() => openExpenseEditor(exp)} className="px-2 py-1 rounded-lg bg-sky-900/50 text-sky-300 text-[10px]">تعديل</button><button type="button" onClick={() => { if (window.confirm('سيتم حذف المصروف وسند الصرف والقيد البنكي المرتبط به. هل تريد المتابعة؟')) onDeleteExpense?.(exp.id); }} className="px-2 py-1 rounded-lg bg-rose-900/50 text-rose-300 text-[10px]">حذف</button></div></td>
+                    <td className="p-3">{!exp.id.startsWith('EXP-') && !exp.id.includes('-FEE') && <div className="flex gap-1"><button type="button" onClick={() => openExpenseEditor(exp)} className="px-2 py-1 rounded-lg bg-sky-900/50 text-sky-300 text-[10px]">تعديل</button><button type="button" onClick={() => { if (window.confirm('سيتم إنشاء قيد عكسي مع الاحتفاظ بسند الصرف الأصلي وسجل البنك. هل تريد المتابعة؟')) onDeleteExpense?.(exp.id); }} className="px-2 py-1 rounded-lg bg-rose-900/50 text-rose-300 text-[10px]">حذف</button></div>}</td>
                   </tr>
                 ))}
               </tbody>
