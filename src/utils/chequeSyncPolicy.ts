@@ -230,30 +230,27 @@ export function validateExpenseOnlySync(input: {
   return null;
 }
 
-export function validatePurchaseAuditSync(input: {
-  previousAudit: ChequeRecord[];
-  incomingAudit: ChequeRecord[];
-  previousInvoices: ChequeRecord[];
-  incomingInvoices: ChequeRecord[];
-  employee: { name?: string };
-}): string | null {
+type PurchaseAuditInput = { previousAudit: ChequeRecord[]; incomingAudit: ChequeRecord[]; previousInvoices: ChequeRecord[]; incomingInvoices: ChequeRecord[]; employee: { name?: string } };
+export function validatePurchaseAuditSync(input: PurchaseAuditInput): string | null;
+export function validatePurchaseAuditSync(input: PurchaseAuditInput, detailed: true): ChequeSyncFailure | null;
+export function validatePurchaseAuditSync(input: PurchaseAuditInput, detailed = false): string | ChequeSyncFailure | null {
   const oldById = new Map(input.previousAudit.map(item => [String(item.id), item]));
   const newById = new Map(input.incomingAudit.map(item => [String(item.id), item]));
   for (const oldItem of input.previousAudit) {
     const next = newById.get(String(oldItem.id));
-    if (!next || !same(oldItem, next)) return 'PURCHASE_AUDIT_UPDATE_DENIED';
+    if (!next || !same(oldItem, next)) return chequeFailure(detailed, 'PURCHASE_AUDIT_UPDATE_DENIED', [oldItem]);
   }
   const oldInvoices = new Map(input.previousInvoices.map(item => [String(item.id), item]));
   const newInvoices = new Map(input.incomingInvoices.map(item => [String(item.id), item]));
   for (const item of input.incomingAudit) {
     if (oldById.has(String(item.id))) continue;
     if (item.action !== 'purchase.create' || (input.employee.name && item.userName !== input.employee.name)) {
-      return 'PURCHASE_AUDIT_ACTION_INVALID';
+      return chequeFailure(detailed, 'PURCHASE_AUDIT_ACTION_INVALID', [item]);
     }
     const id = String(item.entityId || '');
     const invoice = newInvoices.get(id);
     if (!invoice || oldInvoices.has(id) || Number(item.amount) !== Number(invoice.grandTotal)) {
-      return 'PURCHASE_AUDIT_REFERENCE_INVALID';
+      return chequeFailure(detailed, 'PURCHASE_AUDIT_REFERENCE_INVALID', [item]);
     }
   }
   return null;
