@@ -428,8 +428,14 @@ export default async function handler(req: any, res: any) {
             previousInvoices,
             incomingInvoices: purchaseOperation.data,
             employee,
-          });
-          if (purchaseAuditError) await rejectResourceGroup(['auditLog', 'purchaseInvoices', 'supplierPayments', 'treasury', 'bankLedgerEntries', 'parts', 'stockMovements'], purchaseAuditError, 'تم عزل مجموعة استلام المشتريات وسجل التدقيق والمخزون المرتبط بها بسبب فشل التحقق.');
+          }, true);
+          if (purchaseAuditError) await rejectResourceGroup(
+            ['auditLog', 'purchaseInvoices', 'supplierPayments', 'treasury', 'bankLedgerEntries', 'parts', 'stockMovements'],
+            purchaseAuditError.code,
+            'تم عزل مجموعة استلام المشتريات وسجل التدقيق والمخزون المرتبط بها بسبب فشل التحقق.',
+            purchaseAuditError.recordIds,
+            purchaseAuditError.relatedGroupIds,
+          );
         }
       }
 
