@@ -383,8 +383,14 @@ export default async function handler(req: any, res: any) {
       const previousCheques = await loadArray('cheques');
       const incomingCheques = chequeOperation ? chequeOperation.data : previousCheques;
       if (chequeOperation) {
-        const chequeError = validateChequeCollectionSync(previousCheques, incomingCheques, employee, permissions);
-        if (chequeError) await rejectResourceGroup(['cheques', 'treasury', 'bankLedgerEntries', 'auditLog'], chequeError, 'تم عزل مجموعة الشيك والحركات المرتبطة بها بسبب فشل التحقق.');
+        const chequeError = validateChequeCollectionSync(previousCheques, incomingCheques, employee, permissions, true);
+        if (chequeError) await rejectResourceGroup(
+          ['cheques', 'treasury', 'bankLedgerEntries', 'auditLog'],
+          chequeError.code,
+          'تم عزل مجموعة الشيك والحركات المرتبطة بها بسبب فشل التحقق.',
+          chequeError.recordIds,
+          chequeError.relatedGroupIds,
+        );
       }
       const auditOperation: any = operationMap.get('auditLog');
       const hasOtherAuditPermission = ['canSellPos', 'canManageInventory', 'canManagePurchases', 'canManageTreasury', 'canManageSettings', 'canManageExpenses', 'canManagePartners']
