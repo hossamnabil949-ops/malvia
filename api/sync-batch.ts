@@ -196,7 +196,7 @@ export default async function handler(req: any, res: any) {
         cardSettlements: await currentArray('cardSettlements'),
         cheques: await currentArray('cheques'),
       });
-      if (bankError) await rejectResourceGroup(['bankLedgerEntries', 'treasury', 'partnerCurrentAccountTransactions', 'cheques', 'auditLog'], bankError, 'تم عزل مجموعة الحركة البنكية المرتبطة بسبب عدم تطابقها، مع استمرار مزامنة الموارد المستقلة.');
+      if (bankError) await rejectResourceGroup(['bankLedgerEntries', 'treasury', 'partnerCurrentAccountTransactions', 'cheques', 'auditLog', 'invoices', 'supplierPayments', 'purchaseInvoices', 'expenses', 'partnerWithdrawals', 'partnerSettlementPayments', 'partnerExitSettlements', 'cardSettlements', 'partners'], bankError, 'تم عزل مجموعة الحركة البنكية المرتبطة بسبب عدم تطابقها، مع استمرار مزامنة الموارد المستقلة.');
     }
 
     phase = 'partner_current_account_validation';
