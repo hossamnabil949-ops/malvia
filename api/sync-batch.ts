@@ -99,7 +99,7 @@ export default async function handler(req: any, res: any) {
         for (const id of primaryOldById.keys()) if (!primaryNewById.has(id)) primaryAffectedIds.add(id);
       }
       const groupIds = new Set<string>([...explicitGroupIds, ...primaryAffectedIds]);
-      const linkKeys = ['batchId', 'referenceId', 'treasuryTransactionId', 'relatedTransactionId', 'settlementId', 'txNumber', 'entityId', 'invoiceId', 'purchaseInvoiceId', 'supplierPaymentId', 'chequeId', 'sourceId'];
+      const linkKeys = ['batchId', 'referenceId', 'reference', 'invoiceNumber', 'treasuryTransactionId', 'relatedTransactionId', 'settlementId', 'txNumber', 'entityId', 'invoiceId', 'purchaseInvoiceId', 'supplierPaymentId', 'chequeId', 'sourceId'];
       for (const id of primaryAffectedIds) {
         const item: any = primaryNewById.get(id) || primaryOldById.get(id);
         for (const key of linkKeys) if (item?.[key] != null && String(item[key]).trim()) groupIds.add(String(item[key]).slice(0, 160));
