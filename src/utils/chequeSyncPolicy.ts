@@ -190,6 +190,8 @@ export function validateChequeAuditSync(input: ChequeAuditInput, detailed = fals
 }
 
 type ExpenseOnlyInput = { previousExpenses: ChequeRecord[]; incomingExpenses: ChequeRecord[]; previousTreasury: ChequeRecord[]; incomingTreasury: ChequeRecord[]; employee: { name?: string } };
+export function validateExpenseOnlySync(input: ExpenseOnlyInput): string | null;
+export function validateExpenseOnlySync(input: ExpenseOnlyInput, detailed: true): ChequeSyncFailure | null;
 export function validateExpenseOnlySync(input: ExpenseOnlyInput, detailed = false): string | ChequeSyncFailure | null {
   const expenseHistoryFailure = input.previousExpenses.find(oldItem => {
     const next = input.incomingExpenses.find(item => String(item.id) === String(oldItem.id));
