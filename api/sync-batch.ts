@@ -417,9 +417,6 @@ export default async function handler(req: any, res: any) {
     phase = 'database_commit';
     resource = operationResources.join(',');
     const acceptedOperations = operations.filter((op: any) => !rejectedResources.has(op.resource));
-    if (acceptedOperations.length === 0 && rejectedResources.size > 0) {
-      return res.status(403).json({ code: 'SYNC_ALL_OPERATIONS_REJECTED', error: 'لم توجد حركة مستقلة سليمة يمكن اعتمادها في هذه الدفعة. تم رفض الدفعة دون تعديل بيانات الخادم.', warnings: syncWarnings, diagnostic: { traceId, phase, resource: [...rejectedResources].join(','), operationCount: operationResources.length, errorName: 'LedgerValidationError', errorCode: 'SYNC_ALL_OPERATIONS_REJECTED' } });
-    }
     const reconciled = Object.fromEntries([...rejectedResources].map(name => [name, rejectedResourceData[name]]));
     for (const op of operations) if (['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'].includes(op.resource)) reconciled[op.resource] = op.data;
     const durableRejections = syncWarnings.map((warning: any, index: number) => ({
