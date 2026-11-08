@@ -600,7 +600,8 @@ export interface TreasuryTransaction {
     | 'ارتداد شيك وارد'
     | 'ارتداد شيك صادر'
     | 'تسوية مستحقات الفيزا'
-    | 'إيداع صافي تسوية الفيزا بالبنك';
+    | 'إيداع صافي تسوية الفيزا بالبنك'
+    | 'إيرادات أخرى';
   amount: number;
   paymentMethod: PaymentMethod | string;
   balanceAfter: number;
