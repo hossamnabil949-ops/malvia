@@ -488,8 +488,14 @@ export default async function handler(req: any, res: any) {
           incomingCheques,
           bankAccounts,
           employee,
-        });
-        if (error) await rejectResourceGroup(['cheques', resource, 'treasury', 'bankLedgerEntries', 'auditLog'], error, 'تم عزل مجموعة الشيك والحركة البنكية المرتبطة بها بسبب فشل التحقق.');
+        }, true);
+        if (error) await rejectResourceGroup(
+          [resource, 'cheques', 'treasury', 'bankLedgerEntries', 'auditLog'],
+          error.code,
+          'تم عزل مجموعة الشيك والحركة البنكية المرتبطة بها بسبب فشل التحقق.',
+          error.recordIds,
+          error.relatedGroupIds,
+        );
       }
     }
     phase = 'batch_size_and_hash';
