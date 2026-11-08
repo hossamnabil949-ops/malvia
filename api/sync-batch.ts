@@ -405,8 +405,14 @@ export default async function handler(req: any, res: any) {
           previousCheques,
           incomingCheques,
           employee,
-        });
-        if (auditError) await rejectResourceGroup(['auditLog', 'cheques', 'treasury', 'bankLedgerEntries'], auditError, 'تم عزل سجل تدقيق الشيك والحالة المرتبطة به بسبب فشل التحقق.');
+        }, true);
+        if (auditError) await rejectResourceGroup(
+          ['auditLog', 'cheques', 'treasury', 'bankLedgerEntries'],
+          auditError.code,
+          'تم عزل سجل تدقيق الشيك والحالة المرتبطة به بسبب فشل التحقق.',
+          auditError.recordIds,
+          auditError.relatedGroupIds,
+        );
       }
       if (auditOperation && permissions.canReceivePurchases === true &&
           permissions.canManagePurchases !== true && !hasOtherAuditPermission) {
