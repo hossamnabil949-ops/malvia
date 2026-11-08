@@ -95,20 +95,15 @@ export function validateChequeCollectionSync(
   return null;
 }
 
-export function validateChequeAuxiliarySync(input: {
-  resource: 'treasury' | 'bankLedgerEntries';
-  previous: ChequeRecord[];
-  incoming: ChequeRecord[];
-  previousCheques: ChequeRecord[];
-  incomingCheques: ChequeRecord[];
-  bankAccounts: ChequeRecord[];
-  employee: { name?: string };
-}): string | null {
+type ChequeAuxiliaryInput = { resource: 'treasury' | 'bankLedgerEntries'; previous: ChequeRecord[]; incoming: ChequeRecord[]; previousCheques: ChequeRecord[]; incomingCheques: ChequeRecord[]; bankAccounts: ChequeRecord[]; employee: { name?: string } };
+export function validateChequeAuxiliarySync(input: ChequeAuxiliaryInput): string | null;
+export function validateChequeAuxiliarySync(input: ChequeAuxiliaryInput, detailed: true): ChequeSyncFailure | null;
+export function validateChequeAuxiliarySync(input: ChequeAuxiliaryInput, detailed = false): string | ChequeSyncFailure | null {
   const oldById = new Map(input.previous.map(item => [String(item.id), item]));
   const newById = new Map(input.incoming.map(item => [String(item.id), item]));
   for (const oldItem of input.previous) {
     const next = newById.get(String(oldItem.id));
-    if (!next || !same(oldItem, next)) return 'CHEQUE_AUXILIARY_UPDATE_DENIED';
+    if (!next || !same(oldItem, next)) return chequeFailure(detailed, 'CHEQUE_AUXILIARY_UPDATE_DENIED', [oldItem]);
   }
   const oldCheques = new Map(input.previousCheques.map(item => [String(item.id), item]));
   const newCheques = new Map(input.incomingCheques.map(item => [String(item.id), item]));
@@ -118,7 +113,7 @@ export function validateChequeAuxiliarySync(input: {
     const chequeId = input.resource === 'treasury' ? String(item.referenceId || '') : String(item.batchId || '');
     const cheque = newCheques.get(chequeId);
     const previousCheque = oldCheques.get(chequeId);
-    if (!cheque || !previousCheque) return 'CHEQUE_REFERENCE_INVALID';
+    if (!cheque || !previousCheque) return chequeFailure(detailed, 'CHEQUE_REFERENCE_INVALID', [item]);
     const expectedStatus = cheque.direction === 'incoming' ? 'محصّل' : 'مصروف';
     const previousClearedStatus = cheque.direction === 'incoming' ? 'محصّل' : 'مصروف';
     const bouncedAfterClear = cheque.status === 'مرتد' && previousCheque.status === previousClearedStatus;
@@ -126,9 +121,9 @@ export function validateChequeAuxiliarySync(input: {
       ? ['في الحافظة', 'مودع بالبنك'].includes(String(previousCheque.status))
       : previousCheque.status === 'صادر';
     if ((!bouncedAfterClear && (!oldOpen || cheque.status !== expectedStatus)) || !(Number(cheque.amount) > 0)) {
-      return 'CHEQUE_STATE_INVALID';
+      return chequeFailure(detailed, 'CHEQUE_STATE_INVALID', [item]);
     }
-    if (input.resource === 'treasury' && input.employee.name && item.recordedBy !== input.employee.name) return 'CHEQUE_ACTOR_MISMATCH';
+    if (input.resource === 'treasury' && input.employee.name && item.recordedBy !== input.employee.name) return chequeFailure(detailed, 'CHEQUE_ACTOR_MISMATCH', [item]);
     if (input.resource === 'treasury') {
       const expectedType = bouncedAfterClear
         ? (cheque.direction === 'incoming' ? 'صرف' : 'قبض')
@@ -138,7 +133,7 @@ export function validateChequeAuxiliarySync(input: {
         : (cheque.direction === 'incoming' ? 'تحصيل من عميل / ورشة' : 'سداد دفعة لمورد');
       if (!String(item.id || '').startsWith('TX-CHQ-') || item.type !== expectedType ||
           item.category !== expectedCategory || item.paymentMethod !== 'شيك (حساب بنكي)' ||
-          Number(item.amount) !== Number(cheque.amount)) return 'CHEQUE_TREASURY_ENTRY_INVALID';
+          Number(item.amount) !== Number(cheque.amount)) return chequeFailure(detailed, 'CHEQUE_TREASURY_ENTRY_INVALID', [item]);
     } else {
       const account = accounts.get(String(item.bankAccountId || ''));
       if (bouncedAfterClear) {
@@ -148,13 +143,13 @@ export function validateChequeAuxiliarySync(input: {
             Number(item.amount) !== Number(cheque.amount) ||
             item.bankAccountId !== cheque.clearedBankAccountId || !original ||
             original.bankAccountId !== item.bankAccountId || !account || account.active !== true) {
-          return 'CHEQUE_BANK_REVERSAL_INVALID';
+          return chequeFailure(detailed, 'CHEQUE_BANK_REVERSAL_INVALID', [item]);
         }
       } else if (item.id !== 'cheque:' + chequeId || item.batchId !== chequeId ||
           item.accountKind !== 'bank' || item.direction !== (cheque.direction === 'incoming' ? 'in' : 'out') ||
           Number(item.amount) !== Number(cheque.amount) ||
           item.bankAccountId !== cheque.clearedBankAccountId || !account || account.active !== true) {
-        return 'CHEQUE_BANK_ENTRY_INVALID';
+        return chequeFailure(detailed, 'CHEQUE_BANK_ENTRY_INVALID', [item]);
       }
     }
   }
