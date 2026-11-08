@@ -82,8 +82,8 @@ export default async function handler(req: any, res: any) {
         const op: any = operationMap.get(name);
         if (!op || rejectedResources.has(name)) continue;
         const row = await getOne(tenant, name);
-        if (!row || !Object.prototype.hasOwnProperty.call(row, 'data')) throw new Error('SYNC_REJECTION_SNAPSHOT_UNAVAILABLE');
-        const previous = row.data;
+        if (row && !Object.prototype.hasOwnProperty.call(row, 'data')) throw new Error('SYNC_REJECTION_SNAPSHOT_UNAVAILABLE');
+        const previous = row?.data ?? [];
         const oldRows = Array.isArray(previous) ? previous : [];
         const incomingRows = Array.isArray(op.data) ? op.data : [];
         const oldById = new Map(oldRows.filter((x: any) => x?.id != null).map((x: any) => [String(x.id), x]));
@@ -98,7 +98,7 @@ export default async function handler(req: any, res: any) {
         op.data = previous;
         rejectedResources.add(name);
         rejectedResourceData[name] = previous;
-        rejectedResourceVersions[name] = Number(row.version || 0);
+        rejectedResourceVersions[name] = Number(row?.version || 0);
         syncWarnings.push({
           code, resource: name,
           actor: { employeeId: String(employee.id || '').slice(0,120), employeeName: actorName, username: String(employee.username || '').slice(0,80), role: String(employee.role || '').slice(0,80) },
