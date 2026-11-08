@@ -292,12 +292,7 @@ export default async function handler(req: any, res: any) {
         };
         syncWarnings.push(warning);
         console.warn('[MALVIA_LEDGER_HISTORY_RESTORED]', warning);
-      } else if (currentAccountError) return res.status(403).json({
-        code: currentAccountError,
-        resource: 'partnerCurrentAccountTransactions',
-        error: 'حركة جاري الشركاء غير مطابقة لحركة الخزينة أو البنك، أو تحاول تعديل سجل سابق.',
-        diagnostic: { traceId, phase, resource: 'partnerCurrentAccountTransactions', operationCount: operationResources.length, errorName: 'LedgerValidationError', errorCode: currentAccountError },
-      });
+      } else if (currentAccountError) await rejectResourceGroup(['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'], currentAccountError, 'تم عزل مجموعة جاري الشريك والخزينة والبنك المرتبطة لعدم تطابقها، واستمرت مزامنة الموارد المستقلة.');
     }
 
     phase = 'opening_balance_validation';
@@ -338,7 +333,7 @@ export default async function handler(req: any, res: any) {
       const incomingCheques = chequeOperation ? chequeOperation.data : previousCheques;
       if (chequeOperation) {
         const chequeError = validateChequeCollectionSync(previousCheques, incomingCheques, employee, permissions);
-        if (chequeError) return res.status(403).json({ code: chequeError, resource: 'cheques', error: 'تعديل الشيكات غير مسموح بهذه الصلاحية.' });
+        if (chequeError) await rejectResourceGroup(['cheques', 'treasury', 'bankLedgerEntries', 'auditLog'], chequeError, 'تم عزل مجموعة الشيك والحركات المرتبطة بها بسبب فشل التحقق.');
       }
       const auditOperation: any = operationMap.get('auditLog');
       const hasOtherAuditPermission = ['canSellPos', 'canManageInventory', 'canManagePurchases', 'canManageTreasury', 'canManageSettings', 'canManageExpenses', 'canManagePartners']
@@ -354,7 +349,7 @@ export default async function handler(req: any, res: any) {
           incomingCheques,
           employee,
         });
-        if (auditError) return res.status(403).json({ code: auditError, resource: 'auditLog', error: 'تعديل سجل الشيكات غير مسموح.' });
+        if (auditError) await rejectResourceGroup(['auditLog', 'cheques'], auditError, 'تم عزل سجل تدقيق الشيك والحالة المرتبطة به بسبب فشل التحقق.');
       }
       if (auditOperation && permissions.canReceivePurchases === true &&
           permissions.canManagePurchases !== true && !hasOtherAuditPermission) {
@@ -369,7 +364,7 @@ export default async function handler(req: any, res: any) {
           incomingInvoices: purchaseOperation.data,
           employee,
         });
-        if (purchaseAuditError) return res.status(403).json({ code: purchaseAuditError, resource: 'auditLog', error: 'تعديل سجل استلام المشتريات غير مسموح.' });
+        if (purchaseAuditError) await rejectResourceGroup(['auditLog', 'purchaseInvoices', 'parts', 'stockMovements'], purchaseAuditError, 'تم عزل مجموعة استلام المشتريات وسجل التدقيق والمخزون المرتبط بها بسبب فشل التحقق.');
       }
 
       if (permissions.canManageExpenses === true && permissions.canManageTreasury !== true &&
@@ -378,7 +373,7 @@ export default async function handler(req: any, res: any) {
         const treasuryOperation: any = operationMap.get('treasury');
         if (expenseOperation || treasuryOperation) {
           if (!expenseOperation || !treasuryOperation) {
-            return res.status(403).json({ code: 'EXPENSE_TREASURY_MISMATCH', resource: 'expenses', error: 'يجب حفظ المصروف وحركته المالية معاً.' });
+            await rejectResourceGroup(['expenses', 'treasury', 'bankLedgerEntries'], 'EXPENSE_TREASURY_MISMATCH', 'تم عزل المصروف والحركات المالية المرتبطة به لعدم اكتمال المجموعة.');
           }
           const previousExpenses = await loadArray('expenses');
           const previousTreasury = await loadArray('treasury');
@@ -389,7 +384,7 @@ export default async function handler(req: any, res: any) {
             incomingTreasury: treasuryOperation.data,
             employee,
           });
-          if (expenseError) return res.status(403).json({ code: expenseError, resource: 'expenses', error: 'يمكنك إضافة مصروف تشغيلي فقط دون تعديل الحركات المالية السابقة.' });
+          if (expenseError) await rejectResourceGroup(['expenses', 'treasury', 'bankLedgerEntries'], expenseError, 'تم عزل مجموعة المصروف والحركات المالية المرتبطة بها بسبب فشل التحقق.');
         }
       }
       for (const resource of ['treasury', 'bankLedgerEntries']) {
@@ -400,7 +395,7 @@ export default async function handler(req: any, res: any) {
         // POS/purchase operators already have the legacy workflow permission for treasury writes;
         // apply the narrow cheque-only rule only to lifecycle-only staff.
         if (resource === 'treasury' && (permissions.canSellPos === true || permissions.canManagePurchases === true)) continue;
-        if (!chequeOperation) return res.status(403).json({ code: 'CHEQUE_STATE_REQUIRED', resource, error: 'يجب مزامنة حالة الشيك المرتبطة بالحركة البنكية.' });
+        if (!chequeOperation) { await rejectResourceGroup([resource, 'treasury', 'bankLedgerEntries'], 'CHEQUE_STATE_REQUIRED', 'تم عزل الحركة البنكية لعدم وجود حالة الشيك المرتبطة بها.'); continue; }
         const previous = await loadArray(resource);
         const bankAccounts = resource === 'bankLedgerEntries' ? await loadArray('bankAccounts') : [];
         const error = validateChequeAuxiliarySync({
@@ -412,7 +407,7 @@ export default async function handler(req: any, res: any) {
           bankAccounts,
           employee,
         });
-        if (error) return res.status(403).json({ code: error, resource, error: 'حركة الشيك البنكية غير مطابقة أو غير مسموح بها.' });
+        if (error) await rejectResourceGroup(['cheques', resource, 'treasury', 'bankLedgerEntries', 'auditLog'], error, 'تم عزل مجموعة الشيك والحركة البنكية المرتبطة بها بسبب فشل التحقق.');
       }
     }
     phase = 'batch_size_and_hash';
