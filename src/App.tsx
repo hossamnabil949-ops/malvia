@@ -2422,6 +2422,79 @@ export default function App() {
     }
   };
 
+  const handleAddOtherIncome = (input: { id: string; title: string; amount: number; date: string; paymentMethod: string; bankAccountId?: string }) => {
+    const allowed = currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageTreasury);
+    if (!allowed || !input.title.trim() || !Number.isFinite(input.amount) || input.amount <= 0) return;
+    if (requiresSpecificBankAccount(input.paymentMethod)) {
+      const posting = createBankMovementEntry({
+        id: `other-income:${input.id}`, batchId: input.id, bankAccountId: input.bankAccountId || '',
+        direction: 'in', amount: input.amount, date: input.date, reference: input.id,
+        description: `إيراد آخر: ${input.title.trim()}`,
+      }, bankAccounts, bankLedgerEntries);
+      if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً لاستلام الإيراد.'); return; }
+      const nextEntries = [posting.entry, ...bankLedgerEntries];
+      setBankLedgerEntries(nextEntries);
+      persistChanges({ bankLedgerEntries: nextEntries });
+    }
+    const tx: TreasuryTransaction = {
+      id: `TX-OI-${input.id}`, txNumber: uniqueTransactionNumber('TX-OI'),
+      date: input.date, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+      type: 'قبض', category: 'إيرادات أخرى', amount: input.amount, paymentMethod: input.paymentMethod,
+      bankAccountId: input.bankAccountId, balanceAfter: treasuryBalance + input.amount,
+      referenceId: input.id, description: `إيراد آخر: ${input.title.trim()}`,
+      recordedBy: currentUser?.employeeName || 'المحاسب',
+    };
+    const nextTreasury = [tx, ...treasury];
+    setTreasury(nextTreasury); persistChanges({ treasuryTransactions: nextTreasury });
+    logAudit('treasury.income', `تسجيل إيراد آخر: ${input.title.trim()}`, input.id, input.amount);
+  };
+
+  const handleUpdateExpense = (updatedExpense: Expense) => {
+    const allowed = currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury);
+    const original = expenses.find(item => item.id === updatedExpense.id);
+    if (!allowed || !original || !Number.isFinite(updatedExpense.amount) || updatedExpense.amount <= 0) return;
+    const linkedTx = treasury.find(tx => tx.referenceId === original.id && tx.category === 'مصروفات تشغيلية');
+    if (!linkedTx) { window.alert('تعذر العثور على سند الصرف المرتبط؛ لم يتم تعديل المصروف.'); return; }
+    let nextBankEntries = bankLedgerEntries.filter(entry => entry.id !== `expense:${original.id}`);
+    if (requiresSpecificBankAccount(updatedExpense.paymentMethod)) {
+      const posting = createBankMovementEntry({
+        id: `expense:${updatedExpense.id}`, batchId: updatedExpense.id, bankAccountId: updatedExpense.bankAccountId || '',
+        direction: 'out', amount: updatedExpense.amount, date: updatedExpense.date, reference: updatedExpense.id,
+        description: `مصروف بنكي: ${updatedExpense.title}`,
+      }, bankAccounts, nextBankEntries);
+      if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً لتسجيل المصروف. لم يتم حفظ التعديل.'); return; }
+      nextBankEntries = [posting.entry, ...nextBankEntries];
+    }
+    const nextExpense = { ...updatedExpense, recordedBy: currentUser?.employeeName || updatedExpense.recordedBy };
+    const nextExpenses = expenses.map(item => item.id === original.id ? nextExpense : item);
+    const nextTreasury = treasury.map(tx => tx.id === linkedTx.id ? {
+      ...tx, date: nextExpense.date, amount: nextExpense.amount, paymentMethod: nextExpense.paymentMethod,
+      bankAccountId: nextExpense.bankAccountId, description: `مصروف: ${nextExpense.title} (${nextExpense.category})`,
+      recordedBy: nextExpense.recordedBy,
+    } : tx);
+    setExpenses(nextExpenses); setTreasury(nextTreasury); setBankLedgerEntries(nextBankEntries);
+    persistChanges({ expenses: nextExpenses, treasuryTransactions: nextTreasury, bankLedgerEntries: nextBankEntries });
+    logAudit('expense.update', `تعديل المصروف: ${nextExpense.title}`, nextExpense.id, nextExpense.amount);
+  };
+
+  const handleDeleteExpense = (expenseId: string) => {
+    const allowed = currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury);
+    const original = expenses.find(item => item.id === expenseId);
+    if (!allowed || !original) return;
+    if (original.id.startsWith('EXP-') || original.id.includes('-FEE')) {
+      window.alert('هذا المصروف ناتج عن تسوية مالية آلية ولا يمكن حذفه من سجل المصروفات.');
+      return;
+    }
+    const linkedTx = treasury.find(tx => tx.referenceId === expenseId && tx.category === 'مصروفات تشغيلية');
+    if (!linkedTx) { window.alert('تعذر العثور على سند الصرف المرتبط؛ لم يتم الحذف.'); return; }
+    const nextExpenses = expenses.filter(item => item.id !== expenseId);
+    const nextTreasury = treasury.filter(tx => tx.id !== linkedTx.id);
+    const nextBankEntries = bankLedgerEntries.filter(entry => entry.id !== `expense:${expenseId}`);
+    setExpenses(nextExpenses); setTreasury(nextTreasury); setBankLedgerEntries(nextBankEntries);
+    persistChanges({ expenses: nextExpenses, treasuryTransactions: nextTreasury, bankLedgerEntries: nextBankEntries });
+    logAudit('expense.delete', `حذف المصروف: ${original.title} — تم حذف سند الصرف والقيد البنكي المرتبطين`, expenseId, original.amount);
+  };
+
   const handleAddBankAccount = (account: BankAccount) => {
     const validation = validateBankAccount(account, bankAccounts);
     if (validation) { window.alert('بيانات الحساب البنكي غير صالحة أو مكررة.'); return; }
@@ -3070,6 +3143,9 @@ export default function App() {
             shifts={shifts}
             treasuryBalance={treasuryBalance}
             onAddExpense={handleAddExpense}
+            onUpdateExpense={handleUpdateExpense}
+            onDeleteExpense={handleDeleteExpense}
+            onAddOtherIncome={handleAddOtherIncome}
             bankAccounts={bankAccounts}
             cardSettlements={cardSettlements}
             bankLedgerEntries={bankLedgerEntries}
