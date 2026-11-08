@@ -227,8 +227,14 @@ export default async function handler(req: any, res: any) {
         partnerExitSettlements: await currentArray('partnerExitSettlements'),
         cardSettlements: await currentArray('cardSettlements'),
         cheques: await currentArray('cheques'),
-      });
-      if (bankError) await rejectResourceGroup(['bankLedgerEntries', 'treasury', 'partnerCurrentAccountTransactions', 'cheques', 'auditLog', 'invoices', 'supplierPayments', 'purchaseInvoices', 'expenses', 'partnerWithdrawals', 'partnerSettlementPayments', 'partnerExitSettlements', 'cardSettlements', 'partners'], bankError, 'تم عزل مجموعة الحركة البنكية المرتبطة بسبب عدم تطابقها، مع استمرار مزامنة الموارد المستقلة.');
+      }, true);
+      if (bankError) await rejectResourceGroup(
+        ['bankLedgerEntries', 'treasury', 'partnerCurrentAccountTransactions', 'cheques', 'auditLog', 'invoices', 'supplierPayments', 'purchaseInvoices', 'expenses', 'partnerWithdrawals', 'partnerSettlementPayments', 'partnerExitSettlements', 'cardSettlements', 'partners'],
+        bankError.code,
+        'تم عزل الحركة البنكية والسجلات المرتبطة بها بسبب عدم تطابقها، مع استمرار الحركات المستقلة.',
+        bankError.recordIds,
+        bankError.relatedGroupIds,
+      );
     }
 
     phase = 'partner_current_account_validation';
