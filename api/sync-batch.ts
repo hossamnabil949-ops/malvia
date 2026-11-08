@@ -259,8 +259,8 @@ export default async function handler(req: any, res: any) {
         treasury: await currentArray('treasury') as any[],
         bankLedgerEntries: await currentArray('bankLedgerEntries') as any[],
         openingBalances: await currentArray('openingBalances') as any[],
-      });
-      if (currentAccountError === 'PARTNER_CURRENT_ACCOUNT_HISTORY_MODIFIED') {
+      }, true);
+      if (currentAccountError?.code === 'PARTNER_CURRENT_ACCOUNT_HISTORY_MODIFIED') {
         // A historical partner-current-account entry is immutable. Repair only the
         // protected historical rows from the server copy, then continue validating
         // and committing unrelated resources in this same sync batch.
@@ -317,12 +317,18 @@ export default async function handler(req: any, res: any) {
           treasury: await currentArray('treasury') as any[],
           bankLedgerEntries: await currentArray('bankLedgerEntries') as any[],
           openingBalances: await currentArray('openingBalances') as any[],
-        });
-        if (repairedCurrentAccountError) await rejectResourceGroup(['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'], repairedCurrentAccountError, 'تم عزل مجموعة جاري الشريك والحركات المرتبطة بها بعد فشل التحقق من الحركة الجديدة.');
+        }, true);
+        if (repairedCurrentAccountError) await rejectResourceGroup(
+          ['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'],
+          repairedCurrentAccountError.code,
+          'تم عزل مجموعة جاري الشريك والحركات المرتبطة بها بعد فشل التحقق من الحركة الجديدة.',
+          repairedCurrentAccountError.recordIds,
+          repairedCurrentAccountError.relatedGroupIds,
+        );
 
         const actorName = String(employee.name || employee.employeeName || employee.username || employee.id || 'موظف غير محدد').slice(0, 120);
         const warning = {
-          code: currentAccountError,
+          code: currentAccountError.code,
           resource: 'partnerCurrentAccountTransactions',
           actor: { employeeId: String(employee.id || '').slice(0, 120), employeeName: actorName, username: String(employee.username || '').slice(0, 80), role: String(employee.role || '').slice(0, 80) },
           affectedRecordIds: [...affectedIds].slice(0, 50),
@@ -331,7 +337,13 @@ export default async function handler(req: any, res: any) {
         };
         syncWarnings.push(warning);
         console.warn('[MALVIA_LEDGER_HISTORY_RESTORED]', warning);
-      } else if (currentAccountError) await rejectResourceGroup(['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'], currentAccountError, 'تم عزل مجموعة جاري الشريك والخزينة والبنك المرتبطة لعدم تطابقها، واستمرت مزامنة الموارد المستقلة.');
+      } else if (currentAccountError) await rejectResourceGroup(
+        ['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'],
+        currentAccountError.code,
+        'تم عزل مجموعة جاري الشريك والخزينة والبنك المرتبطة لعدم تطابقها، واستمرت مزامنة الموارد المستقلة.',
+        currentAccountError.recordIds,
+        currentAccountError.relatedGroupIds,
+      );
     }
 
     phase = 'opening_balance_validation';
