@@ -2386,6 +2386,7 @@ export default function App() {
     }
     const expense: Expense = {
       ...newExp,
+      bankLedgerEntryId: requiresSpecificBankAccount(newExp.paymentMethod) ? `expense:${newExp.id}` : undefined,
       recordedBy: currentUser?.employeeName || newExp.recordedBy || 'المحاسب',
     };
     const tx: TreasuryTransaction = {
@@ -2455,26 +2456,52 @@ export default function App() {
     if (!allowed || !original || !Number.isFinite(updatedExpense.amount) || updatedExpense.amount <= 0) return;
     const linkedTx = treasury.find(tx => tx.referenceId === original.id && tx.category === 'مصروفات تشغيلية');
     if (!linkedTx) { window.alert('تعذر العثور على سند الصرف المرتبط؛ لم يتم تعديل المصروف.'); return; }
-    let nextBankEntries = bankLedgerEntries.filter(entry => entry.id !== `expense:${original.id}`);
+    const now = new Date();
+    const date = todayISO();
+    const time = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    const oldBankEntryId = original.bankLedgerEntryId || (requiresSpecificBankAccount(original.paymentMethod) ? `expense:${original.id}` : undefined);
+    let nextBankEntries = [...bankLedgerEntries];
+    if (oldBankEntryId) {
+      const oldEntry = nextBankEntries.find(entry => entry.id === oldBankEntryId);
+      if (oldEntry) nextBankEntries = [{
+        ...oldEntry, id: `expense-reversal:${original.id}:${Date.now()}`, batchId: original.id,
+        direction: oldEntry.direction === 'out' ? 'in' : 'out', date, reference: original.id,
+        description: `عكس قيد تعديل المصروف: ${original.title}`,
+      }, ...nextBankEntries];
+    }
+    let newBankLedgerEntryId: string | undefined;
     if (requiresSpecificBankAccount(updatedExpense.paymentMethod)) {
+      newBankLedgerEntryId = `expense-update:${updatedExpense.id}:${Date.now()}`;
       const posting = createBankMovementEntry({
-        id: `expense:${updatedExpense.id}`, batchId: updatedExpense.id, bankAccountId: updatedExpense.bankAccountId || '',
+        id: newBankLedgerEntryId, batchId: updatedExpense.id, bankAccountId: updatedExpense.bankAccountId || '',
         direction: 'out', amount: updatedExpense.amount, date: updatedExpense.date, reference: updatedExpense.id,
         description: `مصروف بنكي: ${updatedExpense.title}`,
       }, bankAccounts, nextBankEntries);
       if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً لتسجيل المصروف. لم يتم حفظ التعديل.'); return; }
       nextBankEntries = [posting.entry, ...nextBankEntries];
     }
-    const nextExpense = { ...updatedExpense, recordedBy: currentUser?.employeeName || updatedExpense.recordedBy };
+    const nextExpense = { ...updatedExpense, bankLedgerEntryId: newBankLedgerEntryId, recordedBy: currentUser?.employeeName || updatedExpense.recordedBy };
     const nextExpenses = expenses.map(item => item.id === original.id ? nextExpense : item);
-    const nextTreasury = treasury.map(tx => tx.id === linkedTx.id ? {
-      ...tx, date: nextExpense.date, amount: nextExpense.amount, paymentMethod: nextExpense.paymentMethod,
-      bankAccountId: nextExpense.bankAccountId, description: `مصروف: ${nextExpense.title} (${nextExpense.category})`,
+    const reversalTx: TreasuryTransaction = {
+      id: `TX-EXP-REV-${Date.now()}`, txNumber: uniqueTransactionNumber('TX-EXR'),
+      date, time, type: 'قبض', category: 'عكس مصروفات تشغيلية', amount: original.amount,
+      paymentMethod: original.paymentMethod, bankAccountId: original.bankAccountId,
+      balanceAfter: treasuryBalance + original.amount, referenceId: original.id,
+      description: `عكس سند المصروف السابق قبل التعديل: ${original.title}`,
+      recordedBy: currentUser?.employeeName || 'النظام',
+    };
+    const updatedTx: TreasuryTransaction = {
+      id: `TX-EXP-UPD-${Date.now()}`, txNumber: uniqueTransactionNumber('TX-EXU'),
+      date: updatedExpense.date, time, type: 'صرف', category: 'مصروفات تشغيلية', amount: updatedExpense.amount,
+      paymentMethod: updatedExpense.paymentMethod, bankAccountId: updatedExpense.bankAccountId,
+      balanceAfter: treasuryBalance + original.amount - updatedExpense.amount, referenceId: original.id,
+      description: `مصروف معدل: ${updatedExpense.title} (${updatedExpense.category})`,
       recordedBy: nextExpense.recordedBy,
-    } : tx);
+    };
+    const nextTreasury = [updatedTx, reversalTx, ...treasury];
     setExpenses(nextExpenses); setTreasury(nextTreasury); setBankLedgerEntries(nextBankEntries);
     persistChanges({ expenses: nextExpenses, treasuryTransactions: nextTreasury, bankLedgerEntries: nextBankEntries });
-    logAudit('expense.update', `تعديل المصروف: ${nextExpense.title}`, nextExpense.id, nextExpense.amount);
+    logAudit('expense.update', `تعديل المصروف: ${nextExpense.title} — تم عكس القيد السابق وإضافة القيد الجديد`, nextExpense.id, nextExpense.amount);
   };
 
   const handleDeleteExpense = (expenseId: string) => {
@@ -2487,12 +2514,31 @@ export default function App() {
     }
     const linkedTx = treasury.find(tx => tx.referenceId === expenseId && tx.category === 'مصروفات تشغيلية');
     if (!linkedTx) { window.alert('تعذر العثور على سند الصرف المرتبط؛ لم يتم الحذف.'); return; }
+    const date = todayISO();
+    const time = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    const reversalTx: TreasuryTransaction = {
+      id: `TX-EXP-DEL-${Date.now()}`, txNumber: uniqueTransactionNumber('TX-EXD'),
+      date, time, type: 'قبض', category: 'عكس مصروفات تشغيلية', amount: original.amount,
+      paymentMethod: original.paymentMethod, bankAccountId: original.bankAccountId,
+      balanceAfter: treasuryBalance + original.amount, referenceId: expenseId,
+      description: `عكس سند المصروف المحذوف: ${original.title}`,
+      recordedBy: currentUser?.employeeName || 'النظام',
+    };
+    let nextBankEntries = [...bankLedgerEntries];
+    const activeBankEntryId = original.bankLedgerEntryId || (requiresSpecificBankAccount(original.paymentMethod) ? `expense:${expenseId}` : undefined);
+    if (activeBankEntryId) {
+      const oldEntry = nextBankEntries.find(entry => entry.id === activeBankEntryId);
+      if (oldEntry) nextBankEntries = [{
+        ...oldEntry, id: `expense-delete-reversal:${expenseId}:${Date.now()}`, batchId: expenseId,
+        direction: oldEntry.direction === 'out' ? 'in' : 'out', date, reference: expenseId,
+        description: `عكس القيد البنكي للمصروف المحذوف: ${original.title}`,
+      }, ...nextBankEntries];
+    }
     const nextExpenses = expenses.filter(item => item.id !== expenseId);
-    const nextTreasury = treasury.filter(tx => tx.id !== linkedTx.id);
-    const nextBankEntries = bankLedgerEntries.filter(entry => entry.id !== `expense:${expenseId}`);
+    const nextTreasury = [reversalTx, ...treasury];
     setExpenses(nextExpenses); setTreasury(nextTreasury); setBankLedgerEntries(nextBankEntries);
     persistChanges({ expenses: nextExpenses, treasuryTransactions: nextTreasury, bankLedgerEntries: nextBankEntries });
-    logAudit('expense.delete', `حذف المصروف: ${original.title} — تم حذف سند الصرف والقيد البنكي المرتبطين`, expenseId, original.amount);
+    logAudit('expense.delete', `حذف المصروف: ${original.title} — تم إنشاء قيد عكسي مع الاحتفاظ بالتاريخ الأصلي`, expenseId, original.amount);
   };
 
   const handleAddBankAccount = (account: BankAccount) => {
