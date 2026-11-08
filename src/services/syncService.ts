@@ -266,18 +266,32 @@ async function pushBatch(tenantId: string, licenseKey: string, resources: string
     });
     if (r.ok) {
       const reconciled = r.body?.reconciled && typeof r.body.reconciled === 'object' ? r.body.reconciled : {};
+      const warnings = Array.isArray(r.body?.warnings) ? r.body.warnings : [];
       for (const op of operations) {
-        const acceptedData = Object.prototype.hasOwnProperty.call(reconciled, op.resource)
-          ? reconciled[op.resource]
-          : op.data;
-        if (Object.prototype.hasOwnProperty.call(reconciled, op.resource)) {
-          writeLocal(tenantId, op.resource, acceptedData);
+        const wasRejected = Object.prototype.hasOwnProperty.call(reconciled, op.resource);
+        const acceptedData = wasRejected ? reconciled[op.resource] : op.data;
+        if (wasRejected) {
+          const latestLocal = readLocal(tenantId, op.resource);
+          const rejectedIds = new Set<string>(warnings
+            .filter((warning: any) => warning?.resource === op.resource && Array.isArray(warning.affectedRecordIds))
+            .flatMap((warning: any) => warning.affectedRecordIds.map((id: any) => String(id))));
+          if (hashOf(latestLocal) === hashOf(op.data)) {
+            writeLocal(tenantId, op.resource, acceptedData);
+          } else if (Array.isArray(latestLocal) && Array.isArray(acceptedData) && rejectedIds.size > 0) {
+            // Keep edits made while the request was in flight, but remove only the
+            // rejected records before merging against the server's accepted snapshot.
+            const keptLocal = latestLocal.filter((item: Item) => !rejectedIds.has(String(item?.id)));
+            writeLocal(tenantId, op.resource, mergeArrays(op.resource, keptLocal, acceptedData as Item[], meta.base[op.resource] || {}));
+          } else {
+            // Do not overwrite newer or unidentifiable local changes. Keep them queued
+            // for a safe follow-up instead of silently losing data.
+            queueResource(tenantId, op.resource);
+          }
         }
         meta.versions[op.resource] = Number(r.body?.versions?.[op.resource]);
         meta.base[op.resource] = baseFor(op.resource, acceptedData);
       }
       writeMeta(tenantId, meta);
-      const warnings = Array.isArray(r.body?.warnings) ? r.body.warnings : [];
       return { warnings };
     }
     if (r.status === 409 && r.body?.conflict && r.body?.resource) {
