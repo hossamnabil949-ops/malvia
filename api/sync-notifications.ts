@@ -25,12 +25,9 @@ export default async function handler(req: any, res: any) {
     if (!employee) return res.status(401).json({ code: 'EMPLOYEE_SESSION_INVALID', error: 'جلسة الموظف غير صالحة أو انتهت.' });
 
     const role = String(employee.role || '').trim().toUpperCase();
-    const permissions = employee.permissions && typeof employee.permissions === 'object' && !Array.isArray(employee.permissions)
-      ? employee.permissions : {};
-    const permissionList = Array.isArray(employee.permissions) ? employee.permissions.map((value: any) => String(value)) : [];
-    const isGeneralManager = ['مدير عام', 'ADMIN', 'OWNER', 'SUPER_ADMIN'].includes(role)
-      || String(employee.username || '').trim().toLowerCase() === 'admin'
-      || permissionList.includes('*') || permissions['*'] === true;
+    // Notifications are restricted to an explicit administrator role. A username or
+    // wildcard permission alone must never grant access to sensitive audit history.
+    const isGeneralManager = ['مدير عام', 'ADMIN', 'OWNER', 'SUPER_ADMIN'].includes(role);
     if (!isGeneralManager) return res.status(403).json({ code: 'SYNC_NOTIFICATIONS_FORBIDDEN', error: 'عرض إشعارات رفض المزامنة متاح للمدير العام فقط.' });
 
     phase = 'load_notifications';
