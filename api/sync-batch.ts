@@ -75,13 +75,44 @@ export default async function handler(req: any, res: any) {
     const rejectedResourceData: Record<string, any> = {};
     const rejectedResourceVersions: Record<string, number> = {};
     const actorName = String(employee?.name || employee?.employeeName || employee?.username || employee?.id || 'موظف غير محدد').slice(0, 120);
-    const rejectResourceGroup = async (resourceNames: string[], code: string, message: string) => {
+    const rejectResourceGroup = async (
+      resourceNames: string[], code: string, message: string,
+      explicitRecordIds: string[] = [], explicitGroupIds: string[] = [],
+    ) => {
       const operationMap = new Map(operations.map((op: any) => [op.resource, op]));
-      const groupIds = new Set<string>();
+      const primaryName = resourceNames[0];
+      const primaryOp: any = operationMap.get(primaryName);
+      if (!primaryOp) return;
+      const primaryRow = await getOne(tenant, primaryName);
+      if (primaryRow && !Object.prototype.hasOwnProperty.call(primaryRow, 'data')) throw new Error('SYNC_REJECTION_SNAPSHOT_UNAVAILABLE');
+      const primaryPrevious = primaryRow?.data ?? [];
+      const primaryOldRows = Array.isArray(primaryPrevious) ? primaryPrevious : [];
+      const primaryIncomingRows = Array.isArray(primaryOp.data) ? primaryOp.data : [];
+      const primaryOldById = new Map<string, any>(primaryOldRows.filter((x: any) => x?.id != null).map((x: any): [string, any] => [String(x.id), x]));
+      const primaryNewById = new Map<string, any>(primaryIncomingRows.filter((x: any) => x?.id != null).map((x: any): [string, any] => [String(x.id), x]));
+      const primaryAffectedIds = new Set<string>(explicitRecordIds.map(String));
+      if (!primaryAffectedIds.size) {
+        for (const [id, item] of primaryNewById) {
+          const old = primaryOldById.get(id);
+          if (!old || JSON.stringify(old) !== JSON.stringify(item)) primaryAffectedIds.add(id);
+        }
+        for (const id of primaryOldById.keys()) if (!primaryNewById.has(id)) primaryAffectedIds.add(id);
+      }
+      const groupIds = new Set<string>([...explicitGroupIds, ...primaryAffectedIds]);
+      const linkKeys = ['batchId', 'referenceId', 'treasuryTransactionId', 'relatedTransactionId', 'settlementId', 'txNumber', 'entityId', 'invoiceId', 'purchaseInvoiceId', 'supplierPaymentId', 'chequeId', 'sourceId'];
+      for (const id of primaryAffectedIds) {
+        const item: any = primaryNewById.get(id) || primaryOldById.get(id);
+        for (const key of linkKeys) if (item?.[key] != null && String(item[key]).trim()) groupIds.add(String(item[key]).slice(0, 160));
+      }
+      const matchesGroup = (item: any) => {
+        if (!item || typeof item !== 'object') return false;
+        if (item.id != null && groupIds.has(String(item.id))) return true;
+        return linkKeys.some(key => item[key] != null && groupIds.has(String(item[key])));
+      };
       for (const name of resourceNames) {
         const op: any = operationMap.get(name);
         if (!op || rejectedResources.has(name)) continue;
-        const row = await getOne(tenant, name);
+        const row = name === primaryName ? primaryRow : await getOne(tenant, name);
         if (row && !Object.prototype.hasOwnProperty.call(row, 'data')) throw new Error('SYNC_REJECTION_SNAPSHOT_UNAVAILABLE');
         const previous = row?.data ?? [];
         const oldRows = Array.isArray(previous) ? previous : [];
@@ -89,33 +120,34 @@ export default async function handler(req: any, res: any) {
         const oldById = new Map<string, any>(oldRows.filter((x: any) => x?.id != null).map((x: any): [string, any] => [String(x.id), x]));
         const newById = new Map<string, any>(incomingRows.filter((x: any) => x?.id != null).map((x: any): [string, any] => [String(x.id), x]));
         const affectedIds = new Set<string>();
-        for (const [id, item] of newById) {
-          const old = oldById.get(id);
-          if (!old || JSON.stringify(old) !== JSON.stringify(item)) affectedIds.add(id);
-        }
-        for (const id of oldById.keys()) if (!newById.has(id)) affectedIds.add(id);
-        for (const id of affectedIds) {
-          const item: any = newById.get(id) || oldById.get(id);
-          groupIds.add(id);
-          for (const key of ['batchId', 'referenceId', 'treasuryTransactionId', 'relatedTransactionId', 'settlementId']) {
-            if (item?.[key] != null && String(item[key]).trim()) groupIds.add(String(item[key]).slice(0, 160));
+        if (name === primaryName) {
+          for (const id of primaryAffectedIds) affectedIds.add(id);
+          // If the validator cannot identify a row, fail closed for this primary resource only.
+          if (!affectedIds.size) {
+            for (const item of incomingRows) if (item?.id != null) affectedIds.add(String(item.id));
+            for (const item of oldRows) if (item?.id != null) affectedIds.add(String(item.id));
           }
+        } else {
+          for (const item of incomingRows) if (matchesGroup(item) && item?.id != null) affectedIds.add(String(item.id));
+          for (const item of oldRows) if (matchesGroup(item) && item?.id != null) affectedIds.add(String(item.id));
         }
-        op.data = previous;
+        if (name !== primaryName && affectedIds.size === 0) continue;
+        const rejectedSet = new Set(affectedIds);
+        const keptIncoming = incomingRows.filter((item: any) => item?.id == null || !rejectedSet.has(String(item.id)));
+        const restoredRows = oldRows.filter((item: any) => item?.id != null && rejectedSet.has(String(item.id)));
+        const nextData = [...keptIncoming, ...restoredRows];
+        op.data = Array.isArray(previous) ? nextData : previous;
         rejectedResources.add(name);
-        rejectedResourceData[name] = previous;
+        rejectedResourceData[name] = op.data;
         rejectedResourceVersions[name] = Number(row?.version || 0);
         syncWarnings.push({
           code, resource: name,
           actor: { employeeId: String(employee.id || '').slice(0,120), employeeName: actorName, username: String(employee.username || '').slice(0,80), role: String(employee.role || '').slice(0,80) },
           affectedRecordIds: [...affectedIds].slice(0,100),
-          relatedGroupIds: [],
-          traceId,
-          message
+          relatedGroupIds: [...groupIds].slice(0,100),
+          traceId, message
         });
       }
-      const ids = [...groupIds].slice(0,100);
-      for (const warning of syncWarnings.filter((item: any) => resourceNames.includes(item.resource) && item.code === code)) warning.relatedGroupIds = ids;
     };
     const idempotencyKey = String(req.body?.idempotencyKey || '').trim();
     if (!Array.isArray(operations) || operations.length < 1 || operations.length > 40 ||
