@@ -445,7 +445,11 @@ export default async function handler(req: any, res: any) {
         const treasuryOperation: any = operationMap.get('treasury');
         if (expenseOperation || treasuryOperation) {
           if (!expenseOperation || !treasuryOperation) {
-            await rejectResourceGroup(['expenses', 'treasury', 'bankLedgerEntries'], 'EXPENSE_TREASURY_MISMATCH', 'تم عزل المصروف والحركات المالية المرتبطة به لعدم اكتمال المجموعة.');
+            await rejectResourceGroup(
+              expenseOperation ? ['expenses', 'treasury', 'bankLedgerEntries'] : ['treasury', 'expenses', 'bankLedgerEntries'],
+              'EXPENSE_TREASURY_MISMATCH',
+              'تم عزل المصروف والحركات المالية المرتبطة به لعدم اكتمال المجموعة.',
+            );
           }
           const previousExpenses = await loadArray('expenses');
           const previousTreasury = await loadArray('treasury');
@@ -455,8 +459,14 @@ export default async function handler(req: any, res: any) {
             previousTreasury,
             incomingTreasury: treasuryOperation.data,
             employee,
-          });
-          if (expenseError) await rejectResourceGroup(['expenses', 'treasury', 'bankLedgerEntries'], expenseError, 'تم عزل مجموعة المصروف والحركات المالية المرتبطة بها بسبب فشل التحقق.');
+          }, true);
+          if (expenseError) await rejectResourceGroup(
+            ['expenses', 'treasury', 'bankLedgerEntries'],
+            expenseError.code,
+            'تم عزل مجموعة المصروف والحركات المالية المرتبطة بها بسبب فشل التحقق.',
+            expenseError.recordIds,
+            expenseError.relatedGroupIds,
+          );
         }
       }
       for (const resource of ['treasury', 'bankLedgerEntries']) {
