@@ -427,7 +427,8 @@ export default async function handler(req: any, res: any) {
       recordIds: Array.isArray(warning.affectedRecordIds) ? warning.affectedRecordIds : [],
       relatedGroupIds: Array.isArray(warning.relatedGroupIds) ? warning.relatedGroupIds : [],
       code: warning.code || 'SYNC_RECORD_REJECTED', message: warning.message || 'تم رفض حركة أثناء المزامنة.',
-      warning, version: rejectedResourceVersions[warning.resource] ?? 0,
+      warning,
+      ...(Object.prototype.hasOwnProperty.call(rejectedResourceVersions, warning.resource) ? { version: rejectedResourceVersions[warning.resource] } : {}),
       ...(index === 0 ? { reconciled } : {}),
     }));
     const result = await commitSyncBatch(tenant, idempotencyKey, requestHash, acceptedOperations, durableRejections);
