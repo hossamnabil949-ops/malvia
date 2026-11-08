@@ -71,6 +71,84 @@ export default async function handler(req: any, res: any) {
     phase = 'payload_validation';
     let operations = req.body?.operations;
     const syncWarnings: any[] = [];
+    const rejectedResources = new Set<string>();
+    const rejectedResourceData: Record<string, any> = {};
+    const rejectedResourceVersions: Record<string, number> = {};
+    const actorName = String(employee?.name || employee?.employeeName || employee?.username || employee?.id || 'موظف غير محدد').slice(0, 120);
+    const rejectResourceGroup = async (
+      resourceNames: string[], code: string, message: string,
+      explicitRecordIds: string[] = [], explicitGroupIds: string[] = [],
+    ) => {
+      const operationMap = new Map(operations.map((op: any) => [op.resource, op]));
+      const primaryName = resourceNames[0];
+      const primaryOp: any = operationMap.get(primaryName);
+      if (!primaryOp) return;
+      const primaryRow = await getOne(tenant, primaryName);
+      if (primaryRow && !Object.prototype.hasOwnProperty.call(primaryRow, 'data')) throw new Error('SYNC_REJECTION_SNAPSHOT_UNAVAILABLE');
+      const primaryPrevious = primaryRow?.data ?? [];
+      const primaryOldRows = Array.isArray(primaryPrevious) ? primaryPrevious : [];
+      const primaryIncomingRows = Array.isArray(primaryOp.data) ? primaryOp.data : [];
+      const primaryOldById = new Map<string, any>(primaryOldRows.filter((x: any) => x?.id != null).map((x: any): [string, any] => [String(x.id), x]));
+      const primaryNewById = new Map<string, any>(primaryIncomingRows.filter((x: any) => x?.id != null).map((x: any): [string, any] => [String(x.id), x]));
+      const primaryAffectedIds = new Set<string>(explicitRecordIds.map(String));
+      if (!primaryAffectedIds.size) {
+        for (const [id, item] of primaryNewById) {
+          const old = primaryOldById.get(id);
+          if (!old || JSON.stringify(old) !== JSON.stringify(item)) primaryAffectedIds.add(id);
+        }
+        for (const id of primaryOldById.keys()) if (!primaryNewById.has(id)) primaryAffectedIds.add(id);
+      }
+      const groupIds = new Set<string>([...explicitGroupIds, ...primaryAffectedIds]);
+      const linkKeys = ['batchId', 'referenceId', 'reference', 'invoiceNumber', 'treasuryTransactionId', 'relatedTransactionId', 'settlementId', 'txNumber', 'entityId', 'invoiceId', 'purchaseInvoiceId', 'supplierPaymentId', 'chequeId', 'sourceId'];
+      for (const id of primaryAffectedIds) {
+        const item: any = primaryNewById.get(id) || primaryOldById.get(id);
+        for (const key of linkKeys) if (item?.[key] != null && String(item[key]).trim()) groupIds.add(String(item[key]).slice(0, 160));
+      }
+      const matchesGroup = (item: any) => {
+        if (!item || typeof item !== 'object') return false;
+        if (item.id != null && groupIds.has(String(item.id))) return true;
+        return linkKeys.some(key => item[key] != null && groupIds.has(String(item[key])));
+      };
+      for (const name of resourceNames) {
+        const op: any = operationMap.get(name);
+        if (!op || rejectedResources.has(name)) continue;
+        const row = name === primaryName ? primaryRow : await getOne(tenant, name);
+        if (row && !Object.prototype.hasOwnProperty.call(row, 'data')) throw new Error('SYNC_REJECTION_SNAPSHOT_UNAVAILABLE');
+        const previous = row?.data ?? [];
+        const oldRows = Array.isArray(previous) ? previous : [];
+        const incomingRows = Array.isArray(op.data) ? op.data : [];
+        const oldById = new Map<string, any>(oldRows.filter((x: any) => x?.id != null).map((x: any): [string, any] => [String(x.id), x]));
+        const newById = new Map<string, any>(incomingRows.filter((x: any) => x?.id != null).map((x: any): [string, any] => [String(x.id), x]));
+        const affectedIds = new Set<string>();
+        if (name === primaryName) {
+          for (const id of primaryAffectedIds) affectedIds.add(id);
+          // If the validator cannot identify a row, fail closed for this primary resource only.
+          if (!affectedIds.size) {
+            for (const item of incomingRows) if (item?.id != null) affectedIds.add(String(item.id));
+            for (const item of oldRows) if (item?.id != null) affectedIds.add(String(item.id));
+          }
+        } else {
+          for (const item of incomingRows) if (matchesGroup(item) && item?.id != null) affectedIds.add(String(item.id));
+          for (const item of oldRows) if (matchesGroup(item) && item?.id != null) affectedIds.add(String(item.id));
+        }
+        if (name !== primaryName && affectedIds.size === 0) continue;
+        const rejectedSet = new Set(affectedIds);
+        const keptIncoming = incomingRows.filter((item: any) => item?.id == null || !rejectedSet.has(String(item.id)));
+        const restoredRows = oldRows.filter((item: any) => item?.id != null && rejectedSet.has(String(item.id)));
+        const nextData = [...keptIncoming, ...restoredRows];
+        op.data = Array.isArray(previous) ? nextData : previous;
+        rejectedResources.add(name);
+        rejectedResourceData[name] = op.data;
+        rejectedResourceVersions[name] = Number(row?.version || 0);
+        syncWarnings.push({
+          code, resource: name,
+          actor: { employeeId: String(employee.id || '').slice(0,120), employeeName: actorName, username: String(employee.username || '').slice(0,80), role: String(employee.role || '').slice(0,80) },
+          affectedRecordIds: [...affectedIds].slice(0,100),
+          relatedGroupIds: [...groupIds].slice(0,100),
+          traceId, message
+        });
+      }
+    };
     const idempotencyKey = String(req.body?.idempotencyKey || '').trim();
     if (!Array.isArray(operations) || operations.length < 1 || operations.length > 40 ||
         !/^[A-Za-z0-9:_-]{12,160}$/.test(idempotencyKey) ||
@@ -121,7 +199,7 @@ export default async function handler(req: any, res: any) {
     }
 
     phase = 'bank_ledger_validation';
-    if (!owner && operations.some((op: any) => op.resource === 'bankLedgerEntries')) {
+    if (operations.some((op: any) => op.resource === 'bankLedgerEntries')) {
       const operationMap = new Map(operations.map((op: any) => [op.resource, op]));
       const loadArray = async (resource: string): Promise<any[]> => {
         const row = await getOne(tenant, resource);
@@ -149,8 +227,14 @@ export default async function handler(req: any, res: any) {
         partnerExitSettlements: await currentArray('partnerExitSettlements'),
         cardSettlements: await currentArray('cardSettlements'),
         cheques: await currentArray('cheques'),
-      });
-      if (bankError) return res.status(403).json({ code: bankError, resource: 'bankLedgerEntries', error: 'حركة دفتر البنك غير مطابقة للمستند المالي أو تحاول تعديل سجل سابق.', diagnostic: { traceId, phase, resource: 'bankLedgerEntries', operationCount: operationResources.length, errorName: 'LedgerValidationError', errorCode: bankError } });
+      }, true);
+      if (bankError) await rejectResourceGroup(
+        ['bankLedgerEntries', 'treasury', 'partnerCurrentAccountTransactions', 'cheques', 'auditLog', 'invoices', 'supplierPayments', 'purchaseInvoices', 'expenses', 'partnerWithdrawals', 'partnerSettlementPayments', 'partnerExitSettlements', 'cardSettlements', 'partners'],
+        bankError.code,
+        'تم عزل الحركة البنكية والسجلات المرتبطة بها بسبب عدم تطابقها، مع استمرار الحركات المستقلة.',
+        bankError.recordIds,
+        bankError.relatedGroupIds,
+      );
     }
 
     phase = 'partner_current_account_validation';
@@ -175,8 +259,8 @@ export default async function handler(req: any, res: any) {
         treasury: await currentArray('treasury') as any[],
         bankLedgerEntries: await currentArray('bankLedgerEntries') as any[],
         openingBalances: await currentArray('openingBalances') as any[],
-      });
-      if (currentAccountError === 'PARTNER_CURRENT_ACCOUNT_HISTORY_MODIFIED') {
+      }, true);
+      if (currentAccountError?.code === 'PARTNER_CURRENT_ACCOUNT_HISTORY_MODIFIED') {
         // A historical partner-current-account entry is immutable. Repair only the
         // protected historical rows from the server copy, then continue validating
         // and committing unrelated resources in this same sync batch.
@@ -233,56 +317,58 @@ export default async function handler(req: any, res: any) {
           treasury: await currentArray('treasury') as any[],
           bankLedgerEntries: await currentArray('bankLedgerEntries') as any[],
           openingBalances: await currentArray('openingBalances') as any[],
-        });
-        if (repairedCurrentAccountError) return res.status(403).json({
-          code: repairedCurrentAccountError,
-          resource: 'partnerCurrentAccountTransactions',
-          error: 'تم استرجاع السجل التاريخي المحمي، لكن توجد حركة جديدة غير مطابقة لم تستطع اجتياز التحقق.',
-          diagnostic: { traceId, phase, resource: 'partnerCurrentAccountTransactions', operationCount: operationResources.length, errorName: 'LedgerValidationError', errorCode: repairedCurrentAccountError },
-        });
+        }, true);
+        if (repairedCurrentAccountError) await rejectResourceGroup(
+          ['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'],
+          repairedCurrentAccountError.code,
+          'تم عزل مجموعة جاري الشريك والحركات المرتبطة بها بعد فشل التحقق من الحركة الجديدة.',
+          repairedCurrentAccountError.recordIds,
+          repairedCurrentAccountError.relatedGroupIds,
+        );
 
         const actorName = String(employee.name || employee.employeeName || employee.username || employee.id || 'موظف غير محدد').slice(0, 120);
         const warning = {
-          code: currentAccountError,
+          code: currentAccountError.code,
           resource: 'partnerCurrentAccountTransactions',
-          actor: { employeeId: String(employee.id || '').slice(0, 120), employeeName: actorName, username: String(employee.username || '').slice(0, 80) },
+          actor: { employeeId: String(employee.id || '').slice(0, 120), employeeName: actorName, username: String(employee.username || '').slice(0, 80), role: String(employee.role || '').slice(0, 80) },
           affectedRecordIds: [...affectedIds].slice(0, 50),
           traceId,
           message: 'تم رفض تعديل/حذف حركة تاريخية في جاري الشريك واستعادة النسخة المعتمدة من الخادم. استمرت مزامنة باقي البيانات.',
         };
         syncWarnings.push(warning);
         console.warn('[MALVIA_LEDGER_HISTORY_RESTORED]', warning);
-      } else if (currentAccountError) return res.status(403).json({
-        code: currentAccountError,
-        resource: 'partnerCurrentAccountTransactions',
-        error: 'حركة جاري الشركاء غير مطابقة لحركة الخزينة أو البنك، أو تحاول تعديل سجل سابق.',
-        diagnostic: { traceId, phase, resource: 'partnerCurrentAccountTransactions', operationCount: operationResources.length, errorName: 'LedgerValidationError', errorCode: currentAccountError },
-      });
+      } else if (currentAccountError) await rejectResourceGroup(
+        ['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'],
+        currentAccountError.code,
+        'تم عزل مجموعة جاري الشريك والخزينة والبنك المرتبطة لعدم تطابقها، واستمرت مزامنة الموارد المستقلة.',
+        currentAccountError.recordIds,
+        currentAccountError.relatedGroupIds,
+      );
     }
 
     phase = 'opening_balance_validation';
     const openingOperation: any = operations.find((op: any) => op.resource === 'openingBalances');
-    if (openingOperation) {
+    if (openingOperation) openingValidation: {
       if (!owner) return res.status(403).json({ code: 'OPENING_BALANCE_OWNER_ONLY', resource: 'openingBalances', error: 'تهيئة الأرصدة الافتتاحية متاحة للمالك فقط.', diagnostic: { traceId, phase, resource: 'openingBalances', operationCount: operationResources.length, errorName: 'PermissionError', errorCode: 'OPENING_BALANCE_OWNER_ONLY' } });
       const previousRow = await getOne(tenant, 'openingBalances');
       const previous = Array.isArray(previousRow?.data) ? previousRow.data as any[] : [];
       const incoming = openingOperation.data;
-      if (!Array.isArray(incoming) || incoming.length > 1 || (previous.length > 0 && JSON.stringify(previous) !== JSON.stringify(incoming))) return res.status(409).json({ code: 'OPENING_BALANCE_IMMUTABLE', resource: 'openingBalances', error: 'سجل الأرصدة الافتتاحية موجود بالفعل ولا يسمح باستبداله أو حذفه.' });
+      if (!Array.isArray(incoming) || incoming.length > 1 || (previous.length > 0 && JSON.stringify(previous) !== JSON.stringify(incoming))) { await rejectResourceGroup(['openingBalances'], 'OPENING_BALANCE_IMMUTABLE', 'سجل الأرصدة الافتتاحية موجود بالفعل ولا يسمح باستبداله أو حذفه.'); break openingValidation; }
       if (incoming.length === 1) {
         const record = incoming[0];
-        if (!record || record.status !== 'approved' || !record.id || String(record.cutoverDate || '').length !== 10 || String(record.cutoverDate)[4] !== '-' || String(record.cutoverDate)[7] !== '-' || !Number.isFinite(record.originalCapital) || record.originalCapital < 0 || !Array.isArray(record.lines) || !Array.isArray(record.partners)) return res.status(400).json({ code: 'OPENING_BALANCE_INVALID', resource: 'openingBalances', error: 'بيانات الأرصدة الافتتاحية غير صالحة.', diagnostic: { traceId, phase, resource: 'openingBalances', operationCount: operationResources.length, errorName: 'SyncValidationError', errorCode: 'OPENING_BALANCE_INVALID' } });
+        if (!record || record.status !== 'approved' || !record.id || String(record.cutoverDate || '').length !== 10 || String(record.cutoverDate)[4] !== '-' || String(record.cutoverDate)[7] !== '-' || !Number.isFinite(record.originalCapital) || record.originalCapital < 0 || !Array.isArray(record.lines) || !Array.isArray(record.partners)) { await rejectResourceGroup(['openingBalances'], 'OPENING_BALANCE_INVALID', 'بيانات الأرصدة الافتتاحية غير صالحة.'); break openingValidation; }
         const lineIds = new Set<string>();
         for (const line of record.lines) {
-          if (!line || !line.id || lineIds.has(String(line.id)) || !String(line.label || '').trim() || !Number.isFinite(line.amount) || line.amount < 0) return res.status(400).json({ code: 'OPENING_BALANCE_LINE_INVALID', resource: 'openingBalances', error: 'أحد بنود الأرصدة الافتتاحية غير صالح أو مكرر.', diagnostic: { traceId, phase, resource: 'openingBalances', operationCount: operationResources.length, errorName: 'SyncValidationError', errorCode: 'OPENING_BALANCE_LINE_INVALID' } });
+          if (!line || !line.id || lineIds.has(String(line.id)) || !String(line.label || '').trim() || !Number.isFinite(line.amount) || line.amount < 0) { await rejectResourceGroup(['openingBalances'], 'OPENING_BALANCE_LINE_INVALID', 'أحد بنود الأرصدة الافتتاحية غير صالح أو مكرر.'); break openingValidation; }
           lineIds.add(String(line.id));
-          if (line.category === 'bank') { const row = await getOne(tenant, 'bankAccounts'); const accounts = Array.isArray(row?.data) ? row.data as any[] : []; if (!line.bankAccountId || !accounts.some((a: any) => a.id === line.bankAccountId && a.active === true)) return res.status(400).json({ code: 'OPENING_BALANCE_BANK_INVALID', resource: 'openingBalances', error: 'الحساب البنكي غير موجود أو غير نشط.', diagnostic: { traceId, phase, resource: 'openingBalances', operationCount: operationResources.length, errorName: 'SyncValidationError', errorCode: 'OPENING_BALANCE_BANK_INVALID' } }); }
-          if (line.category === 'inventory' && (line.partId !== undefined || line.quantity !== undefined || line.unitCost !== undefined)) { const partsRow = await getOne(tenant, 'parts'); const currentParts = Array.isArray(partsRow?.data) ? partsRow.data as any[] : []; if (!line.partId || !currentParts.some((part: any) => part.id === line.partId)) return res.status(400).json({ code: 'OPENING_BALANCE_PART_MISSING', resource: 'openingBalances', error: 'صنف المخزون التفصيلي غير موجود.', diagnostic: { traceId, phase, resource: 'openingBalances', operationCount: operationResources.length, errorName: 'SyncValidationError', errorCode: 'OPENING_BALANCE_PART_MISSING' } }); }
-          if (line.category === 'customer_receivable' || line.category === 'supplier_payable') { const resource = line.category === 'customer_receivable' ? 'customers' : 'suppliers'; const row = await getOne(tenant, resource); const list = Array.isArray(row?.data) ? row.data as any[] : []; if (!line.entityId || !list.some((item: any) => item.id === line.entityId)) return res.status(400).json({ code: 'OPENING_BALANCE_ENTITY_INVALID', resource: 'openingBalances', error: 'العميل أو المورد المرتبط غير موجود.', diagnostic: { traceId, phase, resource: 'openingBalances', operationCount: operationResources.length, errorName: 'SyncValidationError', errorCode: 'OPENING_BALANCE_ENTITY_INVALID' } }); }
+          if (line.category === 'bank') { const row = await getOne(tenant, 'bankAccounts'); const accounts = Array.isArray(row?.data) ? row.data as any[] : []; if (!line.bankAccountId || !accounts.some((a: any) => a.id === line.bankAccountId && a.active === true)) { await rejectResourceGroup(['openingBalances'], 'OPENING_BALANCE_BANK_INVALID', 'الحساب البنكي غير موجود أو غير نشط.'); break openingValidation; } }
+          if (line.category === 'inventory' && (line.partId !== undefined || line.quantity !== undefined || line.unitCost !== undefined)) { const partsRow = await getOne(tenant, 'parts'); const currentParts = Array.isArray(partsRow?.data) ? partsRow.data as any[] : []; if (!line.partId || !currentParts.some((part: any) => part.id === line.partId)) { await rejectResourceGroup(['openingBalances'], 'OPENING_BALANCE_PART_MISSING', 'صنف المخزون التفصيلي غير موجود.'); break openingValidation; } }
+          if (line.category === 'customer_receivable' || line.category === 'supplier_payable') { const resource = line.category === 'customer_receivable' ? 'customers' : 'suppliers'; const row = await getOne(tenant, resource); const list = Array.isArray(row?.data) ? row.data as any[] : []; if (!line.entityId || !list.some((item: any) => item.id === line.entityId)) { await rejectResourceGroup(['openingBalances'], 'OPENING_BALANCE_ENTITY_INVALID', 'العميل أو المورد المرتبط غير موجود.'); break openingValidation; } }
           const hasInventoryDetail = line.partId !== undefined || line.quantity !== undefined || line.unitCost !== undefined;
-          if (line.category === 'inventory' && hasInventoryDetail && (!line.partId || !Number.isFinite(line.quantity) || line.quantity <= 0 || !Number.isFinite(line.unitCost) || line.unitCost < 0 || Math.round(line.quantity * line.unitCost * 100) !== Math.round(line.amount * 100))) return res.status(400).json({ code: 'OPENING_BALANCE_INVENTORY_INVALID', resource: 'openingBalances', error: 'بيانات صنف المخزون الافتتاحي غير صالحة.', diagnostic: { traceId, phase, resource: 'openingBalances', operationCount: operationResources.length, errorName: 'SyncValidationError', errorCode: 'OPENING_BALANCE_INVENTORY_INVALID' } });
+          if (line.category === 'inventory' && hasInventoryDetail && (!line.partId || !Number.isFinite(line.quantity) || line.quantity <= 0 || !Number.isFinite(line.unitCost) || line.unitCost < 0 || Math.round(line.quantity * line.unitCost * 100) !== Math.round(line.amount * 100))) { await rejectResourceGroup(['openingBalances'], 'OPENING_BALANCE_INVENTORY_INVALID', 'بيانات صنف المخزون الافتتاحي غير صالحة.'); break openingValidation; }
         }
         const shares = record.partners.reduce((sum: number, p: any) => sum + (Number.isFinite(p?.ownershipPercentage) ? p.ownershipPercentage : NaN), 0);
-        if (record.partners.some((p: any) => !p.partnerId || !String(p.partnerName || '').trim() || !Number.isFinite(p.originalContribution) || p.originalContribution < 0 || !Number.isFinite(p.ownershipPercentage) || p.ownershipPercentage < 0 || p.ownershipPercentage > 100 || (p.currentAccountBalance !== undefined && !Number.isFinite(p.currentAccountBalance))) || (record.partners.length > 0 && Math.abs(shares - 100) > 0.01)) return res.status(400).json({ code: 'OPENING_BALANCE_PARTNERS_INVALID', resource: 'openingBalances', error: 'بيانات الشركاء أو مجموع نسب الملكية غير صالحة.', diagnostic: { traceId, phase, resource: 'openingBalances', operationCount: operationResources.length, errorName: 'SyncValidationError', errorCode: 'OPENING_BALANCE_PARTNERS_INVALID' } });
+        if (record.partners.some((p: any) => !p.partnerId || !String(p.partnerName || '').trim() || !Number.isFinite(p.originalContribution) || p.originalContribution < 0 || !Number.isFinite(p.ownershipPercentage) || p.ownershipPercentage < 0 || p.ownershipPercentage > 100 || (p.currentAccountBalance !== undefined && !Number.isFinite(p.currentAccountBalance))) || (record.partners.length > 0 && Math.abs(shares - 100) > 0.01)) { await rejectResourceGroup(['openingBalances'], 'OPENING_BALANCE_PARTNERS_INVALID', 'بيانات الشركاء أو مجموع نسب الملكية غير صالحة.'); break openingValidation; }
       }
     }
     phase = 'finance_policy_validation';
@@ -297,15 +383,21 @@ export default async function handler(req: any, res: any) {
       const previousCheques = await loadArray('cheques');
       const incomingCheques = chequeOperation ? chequeOperation.data : previousCheques;
       if (chequeOperation) {
-        const chequeError = validateChequeCollectionSync(previousCheques, incomingCheques, employee, permissions);
-        if (chequeError) return res.status(403).json({ code: chequeError, resource: 'cheques', error: 'تعديل الشيكات غير مسموح بهذه الصلاحية.' });
+        const chequeError = validateChequeCollectionSync(previousCheques, incomingCheques, employee, permissions, true);
+        if (chequeError) await rejectResourceGroup(
+          ['cheques', 'treasury', 'bankLedgerEntries', 'auditLog'],
+          chequeError.code,
+          'تم عزل مجموعة الشيك والحركات المرتبطة بها بسبب فشل التحقق.',
+          chequeError.recordIds,
+          chequeError.relatedGroupIds,
+        );
       }
       const auditOperation: any = operationMap.get('auditLog');
       const hasOtherAuditPermission = ['canSellPos', 'canManageInventory', 'canManagePurchases', 'canManageTreasury', 'canManageSettings', 'canManageExpenses', 'canManagePartners']
         .some(permission => permissions[permission] === true);
       if (auditOperation && !hasOtherAuditPermission &&
           (permissions.canRegisterCheques === true || permissions.canManageChequeLifecycle === true)) {
-        if (!chequeOperation) return res.status(403).json({ code: 'CHEQUE_AUDIT_STATE_REQUIRED', resource: 'auditLog', error: 'سجل التدقيق يحتاج إلى حالة الشيك المرتبطة به.' });
+        if (!chequeOperation) { await rejectResourceGroup(['auditLog', 'cheques', 'treasury', 'bankLedgerEntries'], 'CHEQUE_AUDIT_STATE_REQUIRED', 'تم عزل سجل تدقيق الشيك لعدم وجود حالة الشيك المرتبطة به.'); }
         const previousAudit = await loadArray('auditLog');
         const auditError = validateChequeAuditSync({
           previous: previousAudit,
@@ -313,23 +405,38 @@ export default async function handler(req: any, res: any) {
           previousCheques,
           incomingCheques,
           employee,
-        });
-        if (auditError) return res.status(403).json({ code: auditError, resource: 'auditLog', error: 'تعديل سجل الشيكات غير مسموح.' });
+        }, true);
+        if (auditError) await rejectResourceGroup(
+          ['auditLog', 'cheques', 'treasury', 'bankLedgerEntries'],
+          auditError.code,
+          'تم عزل سجل تدقيق الشيك والحالة المرتبطة به بسبب فشل التحقق.',
+          auditError.recordIds,
+          auditError.relatedGroupIds,
+        );
       }
       if (auditOperation && permissions.canReceivePurchases === true &&
           permissions.canManagePurchases !== true && !hasOtherAuditPermission) {
         const purchaseOperation: any = operationMap.get('purchaseInvoices');
-        if (!purchaseOperation) return res.status(403).json({ code: 'PURCHASE_AUDIT_STATE_REQUIRED', resource: 'auditLog', error: 'سجل التدقيق يحتاج إلى فاتورة الاستلام المرتبطة به.' });
-        const previousAudit = await loadArray('auditLog');
-        const previousInvoices = await loadArray('purchaseInvoices');
-        const purchaseAuditError = validatePurchaseAuditSync({
-          previousAudit,
-          incomingAudit: auditOperation.data,
-          previousInvoices,
-          incomingInvoices: purchaseOperation.data,
-          employee,
-        });
-        if (purchaseAuditError) return res.status(403).json({ code: purchaseAuditError, resource: 'auditLog', error: 'تعديل سجل استلام المشتريات غير مسموح.' });
+        if (!purchaseOperation) {
+          await rejectResourceGroup(['auditLog', 'purchaseInvoices', 'supplierPayments', 'treasury', 'bankLedgerEntries', 'parts', 'stockMovements'], 'PURCHASE_AUDIT_STATE_REQUIRED', 'تم عزل سجل استلام المشتريات لعدم وجود الفاتورة المرتبطة به.');
+        } else {
+          const previousAudit = await loadArray('auditLog');
+          const previousInvoices = await loadArray('purchaseInvoices');
+          const purchaseAuditError = validatePurchaseAuditSync({
+            previousAudit,
+            incomingAudit: auditOperation.data,
+            previousInvoices,
+            incomingInvoices: purchaseOperation.data,
+            employee,
+          }, true);
+          if (purchaseAuditError) await rejectResourceGroup(
+            ['auditLog', 'purchaseInvoices', 'supplierPayments', 'treasury', 'bankLedgerEntries', 'parts', 'stockMovements'],
+            purchaseAuditError.code,
+            'تم عزل مجموعة استلام المشتريات وسجل التدقيق والمخزون المرتبط بها بسبب فشل التحقق.',
+            purchaseAuditError.recordIds,
+            purchaseAuditError.relatedGroupIds,
+          );
+        }
       }
 
       if (permissions.canManageExpenses === true && permissions.canManageTreasury !== true &&
@@ -338,7 +445,11 @@ export default async function handler(req: any, res: any) {
         const treasuryOperation: any = operationMap.get('treasury');
         if (expenseOperation || treasuryOperation) {
           if (!expenseOperation || !treasuryOperation) {
-            return res.status(403).json({ code: 'EXPENSE_TREASURY_MISMATCH', resource: 'expenses', error: 'يجب حفظ المصروف وحركته المالية معاً.' });
+            await rejectResourceGroup(
+              expenseOperation ? ['expenses', 'treasury', 'bankLedgerEntries'] : ['treasury', 'expenses', 'bankLedgerEntries'],
+              'EXPENSE_TREASURY_MISMATCH',
+              'تم عزل المصروف والحركات المالية المرتبطة به لعدم اكتمال المجموعة.',
+            );
           }
           const previousExpenses = await loadArray('expenses');
           const previousTreasury = await loadArray('treasury');
@@ -348,8 +459,14 @@ export default async function handler(req: any, res: any) {
             previousTreasury,
             incomingTreasury: treasuryOperation.data,
             employee,
-          });
-          if (expenseError) return res.status(403).json({ code: expenseError, resource: 'expenses', error: 'يمكنك إضافة مصروف تشغيلي فقط دون تعديل الحركات المالية السابقة.' });
+          }, true);
+          if (expenseError) await rejectResourceGroup(
+            ['expenses', 'treasury', 'bankLedgerEntries'],
+            expenseError.code,
+            'تم عزل مجموعة المصروف والحركات المالية المرتبطة بها بسبب فشل التحقق.',
+            expenseError.recordIds,
+            expenseError.relatedGroupIds,
+          );
         }
       }
       for (const resource of ['treasury', 'bankLedgerEntries']) {
@@ -360,7 +477,7 @@ export default async function handler(req: any, res: any) {
         // POS/purchase operators already have the legacy workflow permission for treasury writes;
         // apply the narrow cheque-only rule only to lifecycle-only staff.
         if (resource === 'treasury' && (permissions.canSellPos === true || permissions.canManagePurchases === true)) continue;
-        if (!chequeOperation) return res.status(403).json({ code: 'CHEQUE_STATE_REQUIRED', resource, error: 'يجب مزامنة حالة الشيك المرتبطة بالحركة البنكية.' });
+        if (!chequeOperation) { await rejectResourceGroup([resource, 'cheques', 'treasury', 'bankLedgerEntries', 'auditLog'], 'CHEQUE_STATE_REQUIRED', 'تم عزل الحركة البنكية لعدم وجود حالة الشيك المرتبطة بها.'); continue; }
         const previous = await loadArray(resource);
         const bankAccounts = resource === 'bankLedgerEntries' ? await loadArray('bankAccounts') : [];
         const error = validateChequeAuxiliarySync({
@@ -371,24 +488,37 @@ export default async function handler(req: any, res: any) {
           incomingCheques,
           bankAccounts,
           employee,
-        });
-        if (error) return res.status(403).json({ code: error, resource, error: 'حركة الشيك البنكية غير مطابقة أو غير مسموح بها.' });
+        }, true);
+        if (error) await rejectResourceGroup(
+          [resource, 'cheques', 'treasury', 'bankLedgerEntries', 'auditLog'],
+          error.code,
+          'تم عزل مجموعة الشيك والحركة البنكية المرتبطة بها بسبب فشل التحقق.',
+          error.recordIds,
+          error.relatedGroupIds,
+        );
       }
     }
     phase = 'batch_size_and_hash';
-    const serialized = JSON.stringify(operations);
+    const serialized = JSON.stringify(req.body.operations);
     if (serialized.length > 5_000_000) return res.status(413).json({ code: 'SYNC_BATCH_TOO_LARGE', error: 'حجم دفعة المزامنة أكبر من الحد المسموح.' });
     const requestHash = createHash('sha256').update(serialized).digest('hex');
     phase = 'database_commit';
     resource = operationResources.join(',');
-    const result = await commitSyncBatch(tenant, idempotencyKey, requestHash, operations);
+    const acceptedOperations = operations.filter((op: any) => !rejectedResources.has(op.resource));
+    const reconciled = Object.fromEntries([...rejectedResources].map(name => [name, rejectedResourceData[name]]));
+    for (const op of operations) if (['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'].includes(op.resource)) reconciled[op.resource] = op.data;
+    const durableRejections = syncWarnings.map((warning: any, index: number) => ({
+      traceId: warning.traceId || traceId, actor: warning.actor || {}, resource: warning.resource || 'unknown',
+      recordIds: Array.isArray(warning.affectedRecordIds) ? warning.affectedRecordIds : [],
+      relatedGroupIds: Array.isArray(warning.relatedGroupIds) ? warning.relatedGroupIds : [],
+      code: warning.code || 'SYNC_RECORD_REJECTED', message: warning.message || 'تم رفض حركة أثناء المزامنة.',
+      warning,
+      ...(Object.prototype.hasOwnProperty.call(rejectedResourceVersions, warning.resource) ? { version: rejectedResourceVersions[warning.resource] } : {}),
+      ...(index === 0 ? { reconciled } : {}),
+    }));
+    const result = await commitSyncBatch(tenant, idempotencyKey, requestHash, acceptedOperations, durableRejections);
     if (result?.conflict) return res.status(409).json(result);
-    const reconciled = Object.fromEntries(
-      operations
-        .filter((op: any) => ['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'].includes(op.resource))
-        .map((op: any) => [op.resource, op.data]),
-    );
-    return res.status(200).json({ ...result, ...(syncWarnings.length ? { warnings: syncWarnings, reconciled } : {}) });
+    return res.status(200).json({ ...result, ...(result?.warnings ? {} : syncWarnings.length ? { warnings: syncWarnings } : {}), ...(result?.reconciled ? {} : Object.keys(reconciled).length ? { reconciled } : {}) });
   } catch (error: any) {
     const errorName = error instanceof Error ? error.name : typeof error;
     const errorCode = typeof error?.code === 'string' || typeof error?.code === 'number' ? String(error.code).slice(0, 80) : undefined;
