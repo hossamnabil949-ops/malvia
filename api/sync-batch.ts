@@ -355,17 +355,20 @@ export default async function handler(req: any, res: any) {
       if (auditOperation && permissions.canReceivePurchases === true &&
           permissions.canManagePurchases !== true && !hasOtherAuditPermission) {
         const purchaseOperation: any = operationMap.get('purchaseInvoices');
-        if (!purchaseOperation) { await rejectResourceGroup(['auditLog', 'purchaseInvoices', 'supplierPayments', 'treasury', 'bankLedgerEntries', 'parts', 'stockMovements'], 'PURCHASE_AUDIT_STATE_REQUIRED', 'تم عزل سجل استلام المشتريات لعدم وجود الفاتورة المرتبطة به.'); }
-        const previousAudit = await loadArray('auditLog');
-        const previousInvoices = await loadArray('purchaseInvoices');
-        const purchaseAuditError = validatePurchaseAuditSync({
-          previousAudit,
-          incomingAudit: auditOperation.data,
-          previousInvoices,
-          incomingInvoices: purchaseOperation.data,
-          employee,
-        });
-        if (purchaseAuditError) await rejectResourceGroup(['auditLog', 'purchaseInvoices', 'supplierPayments', 'treasury', 'bankLedgerEntries', 'parts', 'stockMovements'], purchaseAuditError, 'تم عزل مجموعة استلام المشتريات وسجل التدقيق والمخزون المرتبط بها بسبب فشل التحقق.');
+        if (!purchaseOperation) {
+          await rejectResourceGroup(['auditLog', 'purchaseInvoices', 'supplierPayments', 'treasury', 'bankLedgerEntries', 'parts', 'stockMovements'], 'PURCHASE_AUDIT_STATE_REQUIRED', 'تم عزل سجل استلام المشتريات لعدم وجود الفاتورة المرتبطة به.');
+        } else {
+          const previousAudit = await loadArray('auditLog');
+          const previousInvoices = await loadArray('purchaseInvoices');
+          const purchaseAuditError = validatePurchaseAuditSync({
+            previousAudit,
+            incomingAudit: auditOperation.data,
+            previousInvoices,
+            incomingInvoices: purchaseOperation.data,
+            employee,
+          });
+          if (purchaseAuditError) await rejectResourceGroup(['auditLog', 'purchaseInvoices', 'supplierPayments', 'treasury', 'bankLedgerEntries', 'parts', 'stockMovements'], purchaseAuditError, 'تم عزل مجموعة استلام المشتريات وسجل التدقيق والمخزون المرتبط بها بسبب فشل التحقق.');
+        }
       }
 
       if (permissions.canManageExpenses === true && permissions.canManageTreasury !== true &&
