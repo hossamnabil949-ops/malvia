@@ -119,6 +119,9 @@ interface FinanceViewProps {
   onApprovePartnerExitSettlement?: (settlementId: string) => boolean | void;
   onRecordPartnerSettlementPayment?: (payment: PartnerSettlementPayment) => boolean | void;
   onAddExpense: (expense: Expense) => void;
+  onUpdateExpense?: (expense: Expense) => void;
+  onDeleteExpense?: (expenseId: string) => void;
+  onAddOtherIncome?: (input: { id: string; title: string; amount: number; date: string; paymentMethod: string; bankAccountId?: string }) => void;
   onAddDistribution: (record: ProfitDistributionRecord) => void;
   onAddPartner?: (partner: Partner, paymentMethod: string, notes: string, bankAccountId?: string) => boolean | void;
   onUpdatePartnerShare?: (partnerId: string, newSharePercentage: number) => void;
@@ -159,6 +162,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   stockMovements = [],
   treasuryBalance,
   onAddExpense,
+  onUpdateExpense, onDeleteExpense, onAddOtherIncome,
   onAddDistribution,
   onAddPartner,
   onUpdatePartnerShare,
@@ -185,6 +189,14 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   }, [canManageExpenses, canManageTreasury, canManagePartners, activeFinanceTab]);
   
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [expenseDate, setExpenseDate] = useState(new Date().toISOString().slice(0, 10));
+  const [showOtherIncomeModal, setShowOtherIncomeModal] = useState(false);
+  const [otherIncomeTitle, setOtherIncomeTitle] = useState('');
+  const [otherIncomeAmount, setOtherIncomeAmount] = useState(0);
+  const [otherIncomeDate, setOtherIncomeDate] = useState(new Date().toISOString().slice(0, 10));
+  const [otherIncomeMethod, setOtherIncomeMethod] = useState<string>('نقدي');
+  const [otherIncomeBankId, setOtherIncomeBankId] = useState('');
   const [showDistributeModal, setShowDistributeModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showAddPartnerModal, setShowAddPartnerModal] = useState(false);
@@ -340,12 +352,12 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   // نسبة الربح على أساس التكلفة وليس سعر البيع
   const grossProfitMargin = estimatedCOGS > 0 ? ((grossProfit / estimatedCOGS) * 100).toFixed(1) : '0';
 
-  const totalOperatingExpenses = useMemo(() => {
-    return expenses.reduce((sum, exp) => sum + exp.amount, 0);
-  }, [expenses]);
+  const totalOperatingExpenses = useMemo(() => expenses.reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
+  const otherIncomeTransactions = useMemo(() => treasuryTransactions.filter(tx => tx.type === 'قبض' && tx.category === 'إيرادات أخرى'), [treasuryTransactions]);
+  const totalOtherIncome = useMemo(() => otherIncomeTransactions.reduce((sum, tx) => sum + tx.amount, 0), [otherIncomeTransactions]);
 
-  // VAT is excluded from sales revenue above; do not deduct the VAT liability from profit again.
-  const netDistributableProfit = Math.max(0, grossProfit - totalOperatingExpenses);
+  // الإيرادات الأخرى بند مستقل عن مبيعات قطع الغيار وتدخل في صافي الدخل.
+  const netDistributableProfit = Math.max(0, grossProfit + totalOtherIncome - totalOperatingExpenses);
   const netProfitMargin = estimatedCOGS > 0 ? ((netDistributableProfit / estimatedCOGS) * 100).toFixed(1) : '0';
 
   const totalInitialCapital = useMemo(() => {
@@ -443,27 +455,34 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     return Number(((netDistributableProfit * selectedTargetPartner.sharePercentage) / 100).toFixed(2));
   }, [netDistributableProfit, selectedTargetPartner]);
 
+  const openExpenseEditor = (expense: Expense) => {
+    setEditingExpenseId(expense.id); setExpenseTitle(expense.title); setExpenseAmount(expense.amount);
+    setExpenseCategory(expense.category); setExpensePaymentMethod(expense.paymentMethod as PaymentMethod);
+    setExpenseBankAccountId(expense.bankAccountId || ''); setExpenseNotes(expense.notes || '');
+    setExpenseDate(expense.date); setShowAddExpenseModal(true);
+  };
+
   const handleSaveExpense = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!expenseTitle.trim() || expenseAmount <= 0) return;
-
-    const newExp: Expense = {
-      id: `exp-${Date.now()}`,
-      title: expenseTitle.trim(),
-      category: expenseCategory,
-      amount: expenseAmount,
-      date: new Date().toISOString().split('T')[0],
-      paymentMethod: expensePaymentMethod,
+    if (!expenseTitle.trim() || expenseAmount <= 0 || !expenseDate) return;
+    const expense: Expense = {
+      id: editingExpenseId || `exp-${Date.now()}`, title: expenseTitle.trim(), category: expenseCategory,
+      amount: expenseAmount, date: expenseDate, paymentMethod: expensePaymentMethod,
       bankAccountId: requiresSpecificBankAccount(expensePaymentMethod) ? expenseBankAccountId : undefined,
-      notes: expenseNotes,
-      recordedBy: 'المحاسب المالي',
+      notes: expenseNotes, recordedBy: currentUserName || 'المحاسب المالي',
     };
+    if (editingExpenseId) onUpdateExpense?.(expense); else onAddExpense(expense);
+    setEditingExpenseId(null); setExpenseTitle(''); setExpenseAmount(0); setExpenseNotes('');
+    setExpenseDate(new Date().toISOString().slice(0, 10)); setShowAddExpenseModal(false);
+  };
 
-    onAddExpense(newExp);
-    setExpenseTitle('');
-    setExpenseAmount(0);
-    setExpenseNotes('');
-    setShowAddExpenseModal(false);
+  const handleSaveOtherIncome = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otherIncomeTitle.trim() || otherIncomeAmount <= 0 || !otherIncomeDate) return;
+    onAddOtherIncome?.({ id: `oi-${Date.now()}`, title: otherIncomeTitle.trim(), amount: otherIncomeAmount,
+      date: otherIncomeDate, paymentMethod: otherIncomeMethod,
+      bankAccountId: requiresSpecificBankAccount(otherIncomeMethod) ? otherIncomeBankId : undefined });
+    setOtherIncomeTitle(''); setOtherIncomeAmount(0); setOtherIncomeBankId(''); setShowOtherIncomeModal(false);
   };
 
   const handleExecuteDistribution = () => {
@@ -660,8 +679,9 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {canManageTreasury && onAddOtherIncome && <button onClick={() => setShowOtherIncomeModal(true)} className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs"><Plus className="w-4 h-4" /><span>تسجيل إيراد آخر</span></button>}
           {canManageExpenses && <button
-            onClick={() => setShowAddExpenseModal(true)}
+            onClick={() => { setEditingExpenseId(null); setExpenseTitle(''); setExpenseAmount(0); setExpenseDate(new Date().toISOString().slice(0, 10)); setShowAddExpenseModal(true); }}
             className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-surface-3 hover:bg-surface-4 text-white border border-neutral-700 font-bold text-xs transition-all shadow-sm"
           >
             <Plus className="w-4 h-4 text-amber-400" />
@@ -1137,6 +1157,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <span className="font-mono">{grossProfit.toFixed(2)} ج.م</span>
               </div>
 
+              <div className="py-2.5 flex justify-between text-emerald-300"><span>(+) الإيرادات الأخرى</span><span className="font-mono">+{totalOtherIncome.toFixed(2)} ج.م</span></div>
               <div className="py-2.5 flex justify-between text-neutral-400">
                 <span>(-) إجمالي المصروفات العامة والإدارية والتشغيلية</span>
                 <span className="font-mono text-rose-400">-{totalOperatingExpenses.toFixed(2)} ج.م</span>
@@ -1271,7 +1292,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   <th className="p-3">التصنيف</th>
                   <th className="p-3">طريقة السداد</th>
                   <th className="p-3">المبلغ</th>
-                  <th className="p-3">المسؤول</th>
+                  <th className="p-3">المسؤول</th><th className="p-3">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800 bg-surface-2">
@@ -1287,6 +1308,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     <td className="p-3 text-[11px]">{exp.paymentMethod}</td>
                     <td className="p-3 font-mono font-black text-rose-400">{exp.amount.toLocaleString()} ج.م</td>
                     <td className="p-3 text-neutral-400 text-[11px]">{exp.recordedBy}</td>
+                    <td className="p-3">{!exp.id.startsWith('EXP-') && !exp.id.includes('-FEE') && <div className="flex gap-1"><button type="button" onClick={() => openExpenseEditor(exp)} className="px-2 py-1 rounded-lg bg-sky-900/50 text-sky-300 text-[10px]">تعديل</button><button type="button" onClick={() => { if (window.confirm('سيتم إنشاء قيد عكسي مع الاحتفاظ بسند الصرف الأصلي وسجل البنك. هل تريد المتابعة؟')) onDeleteExpense?.(exp.id); }} className="px-2 py-1 rounded-lg bg-rose-900/50 text-rose-300 text-[10px]">حذف</button></div>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1637,7 +1659,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
               <h3 className="text-sm font-bold flex items-center gap-2">
                 <Plus className="w-4 h-4 text-amber-400" />
-                <span>تسجيل سند صرف / مصروف جديد</span>
+                <span>{editingExpenseId ? 'تعديل المصروف وسند الصرف' : 'تسجيل سند صرف / مصروف جديد'}</span>
               </h3>
               <button onClick={() => setShowAddExpenseModal(false)} className="text-neutral-400 hover:text-white">
                 <X className="w-4 h-4" />
@@ -1657,6 +1679,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 />
               </div>
 
+              <div><label className="text-neutral-300 font-bold block mb-1">تاريخ المصروف *</label><input type="date" required value={expenseDate} onChange={e => setExpenseDate(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white" /></div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-neutral-300 font-bold block mb-1">المبلغ (ج.م) *</label>
@@ -1698,8 +1721,23 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 type="submit"
                 className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs shadow-lg mt-2"
               >
-                تأكيد وقيد المصروف
+                {editingExpenseId ? 'حفظ تعديل المصروف' : 'تأكيد وقيد المصروف'}
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showOtherIncomeModal && canManageTreasury && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowOtherIncomeModal(false)}>
+          <div className="w-full max-w-md bg-surface-2 rounded-3xl border border-neutral-800 p-6 text-white space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-3"><h3 className="text-sm font-bold text-emerald-300">تسجيل إيراد آخر — سند قبض</h3><button type="button" onClick={() => setShowOtherIncomeModal(false)}><X className="w-4 h-4" /></button></div>
+            <form onSubmit={handleSaveOtherIncome} className="space-y-3 text-xs">
+              <label className="block">بيان الإيراد *<input required value={otherIncomeTitle} onChange={e => setOtherIncomeTitle(e.target.value)} className="mt-1 w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700" /></label>
+              <div className="grid grid-cols-2 gap-3"><label className="block">المبلغ *<input type="number" min="0.01" step="0.01" required value={otherIncomeAmount || ''} onChange={e => setOtherIncomeAmount(Number(e.target.value))} className="mt-1 w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700" /></label><label className="block">التاريخ *<input type="date" required value={otherIncomeDate} onChange={e => setOtherIncomeDate(e.target.value)} className="mt-1 w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700" /></label></div>
+              <label className="block">طريقة الاستلام<select value={otherIncomeMethod} onChange={e => { setOtherIncomeMethod(e.target.value); setOtherIncomeBankId(''); }} className="mt-1 w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700"><option value="نقدي">نقدي — الخزنة</option><option value="تحويل بنكي">تحويل بنكي</option><option value="InstaPay - حساب بنكي">InstaPay — حساب بنكي</option></select></label>
+              {requiresSpecificBankAccount(otherIncomeMethod) && <label className="block">الحساب البنكي المستلم *<select required value={otherIncomeBankId} onChange={e => setOtherIncomeBankId(e.target.value)} className="mt-1 w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700"><option value="">اختر الحساب</option>{bankAccounts.filter(account => account.active).map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}</option>)}</select></label>}
+              <button type="submit" className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black">تأكيد سند القبض وقيد الإيراد</button>
             </form>
           </div>
         </div>

@@ -159,7 +159,8 @@ export type AuditAction =
   | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
   | 'stock.adjust' | 'part.restock' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'cheque.create' | 'cheque.action' | 'batch.create' | 'batch.writeoff' | 'serial.register' | 'serial.scrap' | 'stock.transfer' | 'supplier.payment'
   | 'shift.open' | 'shift.close' | 'shift.variance' | 'part.delete'
-  | 'partner.add' | 'partner.share.update' | 'partner.capital.add' | 'partner.profit.reinvest' | 'partner.profile.update' | 'partner.withdrawal' | 'partner.advance' | 'partner.exit' | 'partner.settlement.payment' | 'partner.current_account' | 'bank.settlement' | 'bank.transfer' | 'capital.opening.create';
+  | 'partner.add' | 'partner.share.update' | 'partner.capital.add' | 'partner.profit.reinvest' | 'partner.profile.update' | 'partner.withdrawal' | 'partner.advance' | 'partner.exit' | 'partner.settlement.payment' | 'partner.current_account' | 'bank.settlement' | 'bank.transfer' | 'capital.opening.create'
+  | 'treasury.income' | 'expense.update' | 'expense.delete';
 
 export interface AuditEntry {
   id: string;
@@ -262,6 +263,7 @@ export interface Expense {
   notes?: string;
   paymentMethod: PaymentMethod | string;
   bankAccountId?: string;
+  bankLedgerEntryId?: string; // القيد البنكي الحالي المرتبط بالمصروف لتسهيل عكسه دون حذف التاريخ
   recordedBy: string;
 }
 
@@ -600,7 +602,9 @@ export interface TreasuryTransaction {
     | 'ارتداد شيك وارد'
     | 'ارتداد شيك صادر'
     | 'تسوية مستحقات الفيزا'
-    | 'إيداع صافي تسوية الفيزا بالبنك';
+    | 'إيداع صافي تسوية الفيزا بالبنك'
+    | 'إيرادات أخرى'
+    | 'عكس مصروفات تشغيلية';
   amount: number;
   paymentMethod: PaymentMethod | string;
   balanceAfter: number;
