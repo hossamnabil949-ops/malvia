@@ -86,8 +86,8 @@ export default async function handler(req: any, res: any) {
         const previous = row?.data ?? [];
         const oldRows = Array.isArray(previous) ? previous : [];
         const incomingRows = Array.isArray(op.data) ? op.data : [];
-        const oldById = new Map(oldRows.filter((x: any) => x?.id != null).map((x: any) => [String(x.id), x]));
-        const newById = new Map(incomingRows.filter((x: any) => x?.id != null).map((x: any) => [String(x.id), x]));
+        const oldById = new Map<string, any>(oldRows.filter((x: any) => x?.id != null).map((x: any): [string, any] => [String(x.id), x]));
+        const newById = new Map<string, any>(incomingRows.filter((x: any) => x?.id != null).map((x: any): [string, any] => [String(x.id), x]));
         const affectedIds = new Set<string>();
         for (const [id, item] of newById) {
           const old = oldById.get(id);
