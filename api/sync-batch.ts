@@ -71,6 +71,46 @@ export default async function handler(req: any, res: any) {
     phase = 'payload_validation';
     let operations = req.body?.operations;
     const syncWarnings: any[] = [];
+    const rejectedResources = new Set<string>();
+    const rejectedResourceData: Record<string, any> = {};
+    const rejectedResourceVersions: Record<string, number> = {};
+    const actorName = String(employee?.name || employee?.employeeName || employee?.username || employee?.id || 'موظف غير محدد').slice(0, 120);
+    const rejectResourceGroup = async (resourceNames: string[], code: string, message: string) => {
+      const operationMap = new Map(operations.map((op: any) => [op.resource, op]));
+      const groupIds = new Set<string>();
+      for (const name of resourceNames) {
+        const op: any = operationMap.get(name);
+        if (!op || rejectedResources.has(name)) continue;
+        const row = await getOne(tenant, name);
+        if (!row || !Object.prototype.hasOwnProperty.call(row, 'data')) throw new Error('SYNC_REJECTION_SNAPSHOT_UNAVAILABLE');
+        const previous = row.data;
+        const oldRows = Array.isArray(previous) ? previous : [];
+        const incomingRows = Array.isArray(op.data) ? op.data : [];
+        const oldById = new Map(oldRows.filter((x: any) => x?.id != null).map((x: any) => [String(x.id), x]));
+        const newById = new Map(incomingRows.filter((x: any) => x?.id != null).map((x: any) => [String(x.id), x]));
+        const affectedIds = new Set<string>();
+        for (const [id, item] of newById) {
+          const old = oldById.get(id);
+          if (!old || JSON.stringify(old) !== JSON.stringify(item)) affectedIds.add(id);
+        }
+        for (const id of oldById.keys()) if (!newById.has(id)) affectedIds.add(id);
+        for (const id of affectedIds) groupIds.add(id);
+        op.data = previous;
+        rejectedResources.add(name);
+        rejectedResourceData[name] = previous;
+        rejectedResourceVersions[name] = Number(row.version || 0);
+        syncWarnings.push({
+          code, resource: name,
+          actor: { employeeId: String(employee.id || '').slice(0,120), employeeName: actorName, username: String(employee.username || '').slice(0,80), role: String(employee.role || '').slice(0,80) },
+          affectedRecordIds: [...affectedIds].slice(0,100),
+          relatedGroupIds: [],
+          traceId,
+          message
+        });
+      }
+      const ids = [...groupIds].slice(0,100);
+      for (const warning of syncWarnings.filter((item: any) => resourceNames.includes(item.resource) && item.code === code)) warning.relatedGroupIds = ids;
+    };
     const idempotencyKey = String(req.body?.idempotencyKey || '').trim();
     if (!Array.isArray(operations) || operations.length < 1 || operations.length > 40 ||
         !/^[A-Za-z0-9:_-]{12,160}$/.test(idempotencyKey) ||
@@ -150,7 +190,7 @@ export default async function handler(req: any, res: any) {
         cardSettlements: await currentArray('cardSettlements'),
         cheques: await currentArray('cheques'),
       });
-      if (bankError) return res.status(403).json({ code: bankError, resource: 'bankLedgerEntries', error: 'حركة دفتر البنك غير مطابقة للمستند المالي أو تحاول تعديل سجل سابق.', diagnostic: { traceId, phase, resource: 'bankLedgerEntries', operationCount: operationResources.length, errorName: 'LedgerValidationError', errorCode: bankError } });
+      if (bankError) await rejectResourceGroup(['bankLedgerEntries', 'treasury', 'partnerCurrentAccountTransactions', 'cheques', 'auditLog'], bankError, 'تم عزل مجموعة الحركة البنكية المرتبطة بسبب عدم تطابقها، مع استمرار مزامنة الموارد المستقلة.');
     }
 
     phase = 'partner_current_account_validation';
@@ -376,28 +416,28 @@ export default async function handler(req: any, res: any) {
       }
     }
     phase = 'batch_size_and_hash';
-    const serialized = JSON.stringify(operations);
+    const serialized = JSON.stringify(req.body.operations);
     if (serialized.length > 5_000_000) return res.status(413).json({ code: 'SYNC_BATCH_TOO_LARGE', error: 'حجم دفعة المزامنة أكبر من الحد المسموح.' });
     const requestHash = createHash('sha256').update(serialized).digest('hex');
     phase = 'database_commit';
     resource = operationResources.join(',');
-    const durableRejections = syncWarnings.map((warning: any) => ({
-      traceId: warning.traceId || traceId,
-      actor: warning.actor || {},
-      resource: warning.resource || 'unknown',
+    const acceptedOperations = operations.filter((op: any) => !rejectedResources.has(op.resource));
+    if (acceptedOperations.length === 0 && rejectedResources.size > 0) {
+      return res.status(403).json({ code: 'SYNC_ALL_OPERATIONS_REJECTED', error: 'لم توجد حركة مستقلة سليمة يمكن اعتمادها في هذه الدفعة. تم رفض الدفعة دون تعديل بيانات الخادم.', warnings: syncWarnings, diagnostic: { traceId, phase, resource: [...rejectedResources].join(','), operationCount: operationResources.length, errorName: 'LedgerValidationError', errorCode: 'SYNC_ALL_OPERATIONS_REJECTED' } });
+    }
+    const reconciled = Object.fromEntries([...rejectedResources].map(name => [name, rejectedResourceData[name]]));
+    for (const op of operations) if (['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'].includes(op.resource)) reconciled[op.resource] = op.data;
+    const durableRejections = syncWarnings.map((warning: any, index: number) => ({
+      traceId: warning.traceId || traceId, actor: warning.actor || {}, resource: warning.resource || 'unknown',
       recordIds: Array.isArray(warning.affectedRecordIds) ? warning.affectedRecordIds : [],
       relatedGroupIds: Array.isArray(warning.relatedGroupIds) ? warning.relatedGroupIds : [],
-      code: warning.code || 'SYNC_RECORD_REJECTED',
-      message: warning.message || 'تم رفض حركة أثناء المزامنة.',
+      code: warning.code || 'SYNC_RECORD_REJECTED', message: warning.message || 'تم رفض حركة أثناء المزامنة.',
+      warning, version: rejectedResourceVersions[warning.resource] ?? 0,
+      ...(index === 0 ? { reconciled } : {}),
     }));
-    const result = await commitSyncBatch(tenant, idempotencyKey, requestHash, operations, durableRejections);
+    const result = await commitSyncBatch(tenant, idempotencyKey, requestHash, acceptedOperations, durableRejections);
     if (result?.conflict) return res.status(409).json(result);
-    const reconciled = Object.fromEntries(
-      operations
-        .filter((op: any) => ['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'].includes(op.resource))
-        .map((op: any) => [op.resource, op.data]),
-    );
-    return res.status(200).json({ ...result, ...(syncWarnings.length ? { warnings: syncWarnings, reconciled } : {}) });
+    return res.status(200).json({ ...result, ...(result?.warnings ? {} : syncWarnings.length ? { warnings: syncWarnings } : {}), ...(result?.reconciled ? {} : Object.keys(reconciled).length ? { reconciled } : {}) });
   } catch (error: any) {
     const errorName = error instanceof Error ? error.name : typeof error;
     const errorCode = typeof error?.code === 'string' || typeof error?.code === 'number' ? String(error.code).slice(0, 80) : undefined;
