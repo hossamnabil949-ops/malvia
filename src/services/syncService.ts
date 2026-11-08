@@ -410,13 +410,17 @@ async function flush() {
       schedule(1500);
     } else {
       const warningText = batchResult.warnings.map((warning: any) =>
-        String(warning?.message || 'تم رفض تعديل تاريخي واستعادة السجل المعتمد.')
+        String(warning?.message || 'تم رفض حركة واستعادة السجل المعتمد.')
         + (warning?.actor?.employeeName ? ` المسؤول عن المحاولة: ${String(warning.actor.employeeName).slice(0, 120)}.` : '')
         + (Array.isArray(warning?.affectedRecordIds) && warning.affectedRecordIds.length
           ? ` أرقام الحركات: ${warning.affectedRecordIds.slice(0, 10).join(', ')}.`
           : '')
       ).join(' ');
-      emitStatus('synced', warningText || 'تم رفع جميع التغييرات المحلية');
+      if (batchResult.warnings.length) {
+        emitStatus('error', `اكتملت مزامنة الحركات السليمة، مع رفض ${batchResult.warnings.length} حركة/مجموعة تحتاج إلى مراجعة المدير العام. ${warningText}`);
+      } else {
+        emitStatus('synced', 'تم رفع جميع التغييرات المحلية');
+      }
     }
   } catch (e: any) {
     emitStatus(navigator.onLine ? 'error' : 'offline', String(e?.message || e));
