@@ -280,12 +280,7 @@ export default async function handler(req: any, res: any) {
           bankLedgerEntries: await currentArray('bankLedgerEntries') as any[],
           openingBalances: await currentArray('openingBalances') as any[],
         });
-        if (repairedCurrentAccountError) return res.status(403).json({
-          code: repairedCurrentAccountError,
-          resource: 'partnerCurrentAccountTransactions',
-          error: 'تم استرجاع السجل التاريخي المحمي، لكن توجد حركة جديدة غير مطابقة لم تستطع اجتياز التحقق.',
-          diagnostic: { traceId, phase, resource: 'partnerCurrentAccountTransactions', operationCount: operationResources.length, errorName: 'LedgerValidationError', errorCode: repairedCurrentAccountError },
-        });
+        if (repairedCurrentAccountError) await rejectResourceGroup(['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'], repairedCurrentAccountError, 'تم عزل مجموعة جاري الشريك والحركات المرتبطة بها بعد فشل التحقق من الحركة الجديدة.');
 
         const actorName = String(employee.name || employee.employeeName || employee.username || employee.id || 'موظف غير محدد').slice(0, 120);
         const warning = {
@@ -346,7 +341,7 @@ export default async function handler(req: any, res: any) {
         .some(permission => permissions[permission] === true);
       if (auditOperation && !hasOtherAuditPermission &&
           (permissions.canRegisterCheques === true || permissions.canManageChequeLifecycle === true)) {
-        if (!chequeOperation) return res.status(403).json({ code: 'CHEQUE_AUDIT_STATE_REQUIRED', resource: 'auditLog', error: 'سجل التدقيق يحتاج إلى حالة الشيك المرتبطة به.' });
+        if (!chequeOperation) { await rejectResourceGroup(['auditLog', 'cheques', 'treasury', 'bankLedgerEntries'], 'CHEQUE_AUDIT_STATE_REQUIRED', 'تم عزل سجل تدقيق الشيك لعدم وجود حالة الشيك المرتبطة به.'); }
         const previousAudit = await loadArray('auditLog');
         const auditError = validateChequeAuditSync({
           previous: previousAudit,
@@ -360,7 +355,7 @@ export default async function handler(req: any, res: any) {
       if (auditOperation && permissions.canReceivePurchases === true &&
           permissions.canManagePurchases !== true && !hasOtherAuditPermission) {
         const purchaseOperation: any = operationMap.get('purchaseInvoices');
-        if (!purchaseOperation) return res.status(403).json({ code: 'PURCHASE_AUDIT_STATE_REQUIRED', resource: 'auditLog', error: 'سجل التدقيق يحتاج إلى فاتورة الاستلام المرتبطة به.' });
+        if (!purchaseOperation) { await rejectResourceGroup(['auditLog', 'purchaseInvoices', 'supplierPayments', 'treasury', 'bankLedgerEntries', 'parts', 'stockMovements'], 'PURCHASE_AUDIT_STATE_REQUIRED', 'تم عزل سجل استلام المشتريات لعدم وجود الفاتورة المرتبطة به.'); }
         const previousAudit = await loadArray('auditLog');
         const previousInvoices = await loadArray('purchaseInvoices');
         const purchaseAuditError = validatePurchaseAuditSync({
