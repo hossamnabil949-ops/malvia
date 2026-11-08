@@ -2424,7 +2424,7 @@ export default function App() {
   };
 
   const handleAddOtherIncome = (input: { id: string; title: string; amount: number; date: string; paymentMethod: string; bankAccountId?: string }) => {
-    const allowed = currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageTreasury);
+    const allowed = effectiveRole === 'مدير عام' || effectiveRole === 'محاسب مالي' || Boolean(effectivePermissions?.canManageTreasury);
     if (!allowed || !input.title.trim() || !Number.isFinite(input.amount) || input.amount <= 0) return;
     if (requiresSpecificBankAccount(input.paymentMethod)) {
       const posting = createBankMovementEntry({
