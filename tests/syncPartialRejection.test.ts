@@ -19,7 +19,7 @@ const bank = validateBankLedgerSync({
 }, true);
 assert.equal(bank?.code, 'BANK_LEDGER_ACCOUNT_INVALID');
 assert.deepEqual(bank?.recordIds, ['bank-entry-1']);
-assert.deepEqual(bank?.relatedGroupIds, ['invoice-1']);
+assert.deepEqual(bank?.relatedGroupIds, ['invoice-1', 'INV-1']);
 
 const partner = validatePartnerCurrentAccountSync({
   previous: [],
