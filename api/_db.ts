@@ -290,7 +290,19 @@ export async function init() {
           end if;
           v_versions := v_versions || jsonb_build_object(v_resource,v_version);
         end loop;
-        v_result := jsonb_build_object('success',true,'versions',v_versions);
+        -- Persist the partial-rejection response inside the idempotency result so a lost
+        -- HTTP response can be replayed without re-applying rejected local records.
+        for v_rejection in select value from jsonb_array_elements(coalesce(p_rejections, '[]'::jsonb)) loop
+          if v_rejection ? 'resource' then
+            v_versions := v_versions || jsonb_build_object(v_rejection->>'resource', coalesce((v_rejection->>'version')::bigint, 0));
+          end if;
+        end loop;
+        v_result := jsonb_build_object(
+          'success',true,
+          'versions',v_versions,
+          'warnings',coalesce((select jsonb_agg(value->'warning') from jsonb_array_elements(coalesce(p_rejections, '[]'::jsonb)) where value ? 'warning'),'[]'::jsonb),
+          'reconciled',coalesce((select value->'reconciled' from jsonb_array_elements(coalesce(p_rejections, '[]'::jsonb)) where value ? 'reconciled' limit 1),'{}'::jsonb)
+        );
         insert into malvia_sync_ops(tenant,idempotency_key,request_hash,result) values(p_tenant,p_key,p_hash,v_result);
         if jsonb_typeof(coalesce(p_rejections, '[]'::jsonb)) <> 'array' then raise exception 'SYNC_REJECTIONS_INVALID'; end if;
         for v_rejection in select value from jsonb_array_elements(coalesce(p_rejections, '[]'::jsonb)) loop
