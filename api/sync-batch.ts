@@ -167,7 +167,7 @@ export default async function handler(req: any, res: any) {
     }
 
     phase = 'bank_ledger_validation';
-    if (!owner && operations.some((op: any) => op.resource === 'bankLedgerEntries')) {
+    if (operations.some((op: any) => op.resource === 'bankLedgerEntries')) {
       const operationMap = new Map(operations.map((op: any) => [op.resource, op]));
       const loadArray = async (resource: string): Promise<any[]> => {
         const row = await getOne(tenant, resource);
