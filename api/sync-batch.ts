@@ -94,7 +94,13 @@ export default async function handler(req: any, res: any) {
           if (!old || JSON.stringify(old) !== JSON.stringify(item)) affectedIds.add(id);
         }
         for (const id of oldById.keys()) if (!newById.has(id)) affectedIds.add(id);
-        for (const id of affectedIds) groupIds.add(id);
+        for (const id of affectedIds) {
+          const item: any = newById.get(id) || oldById.get(id);
+          groupIds.add(id);
+          for (const key of ['batchId', 'referenceId', 'treasuryTransactionId', 'relatedTransactionId', 'settlementId']) {
+            if (item?.[key] != null && String(item[key]).trim()) groupIds.add(String(item[key]).slice(0, 160));
+          }
+        }
         op.data = previous;
         rejectedResources.add(name);
         rejectedResourceData[name] = previous;
