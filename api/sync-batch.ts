@@ -349,7 +349,7 @@ export default async function handler(req: any, res: any) {
           incomingCheques,
           employee,
         });
-        if (auditError) await rejectResourceGroup(['auditLog', 'cheques'], auditError, 'تم عزل سجل تدقيق الشيك والحالة المرتبطة به بسبب فشل التحقق.');
+        if (auditError) await rejectResourceGroup(['auditLog', 'cheques', 'treasury', 'bankLedgerEntries'], auditError, 'تم عزل سجل تدقيق الشيك والحالة المرتبطة به بسبب فشل التحقق.');
       }
       if (auditOperation && permissions.canReceivePurchases === true &&
           permissions.canManagePurchases !== true && !hasOtherAuditPermission) {
@@ -364,7 +364,7 @@ export default async function handler(req: any, res: any) {
           incomingInvoices: purchaseOperation.data,
           employee,
         });
-        if (purchaseAuditError) await rejectResourceGroup(['auditLog', 'purchaseInvoices', 'parts', 'stockMovements'], purchaseAuditError, 'تم عزل مجموعة استلام المشتريات وسجل التدقيق والمخزون المرتبط بها بسبب فشل التحقق.');
+        if (purchaseAuditError) await rejectResourceGroup(['auditLog', 'purchaseInvoices', 'supplierPayments', 'treasury', 'bankLedgerEntries', 'parts', 'stockMovements'], purchaseAuditError, 'تم عزل مجموعة استلام المشتريات وسجل التدقيق والمخزون المرتبط بها بسبب فشل التحقق.');
       }
 
       if (permissions.canManageExpenses === true && permissions.canManageTreasury !== true &&
@@ -395,7 +395,7 @@ export default async function handler(req: any, res: any) {
         // POS/purchase operators already have the legacy workflow permission for treasury writes;
         // apply the narrow cheque-only rule only to lifecycle-only staff.
         if (resource === 'treasury' && (permissions.canSellPos === true || permissions.canManagePurchases === true)) continue;
-        if (!chequeOperation) { await rejectResourceGroup([resource, 'treasury', 'bankLedgerEntries'], 'CHEQUE_STATE_REQUIRED', 'تم عزل الحركة البنكية لعدم وجود حالة الشيك المرتبطة بها.'); continue; }
+        if (!chequeOperation) { await rejectResourceGroup([resource, 'cheques', 'treasury', 'bankLedgerEntries', 'auditLog'], 'CHEQUE_STATE_REQUIRED', 'تم عزل الحركة البنكية لعدم وجود حالة الشيك المرتبطة بها.'); continue; }
         const previous = await loadArray(resource);
         const bankAccounts = resource === 'bankLedgerEntries' ? await loadArray('bankAccounts') : [];
         const error = validateChequeAuxiliarySync({
