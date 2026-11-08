@@ -235,7 +235,8 @@ export async function init() {
       declare v_op jsonb; v_resource text; v_data jsonb; v_base bigint; v_current jsonb;
         v_version bigint; v_versions jsonb := '{}'::jsonb; v_result jsonb; v_existing jsonb; v_hash text; v_rejection jsonb;
       begin
-        if jsonb_typeof(p_ops) <> 'array' or jsonb_array_length(p_ops) = 0 or jsonb_array_length(p_ops) > 40 then
+        if jsonb_typeof(p_ops) <> 'array' or jsonb_array_length(p_ops) > 40
+          or (jsonb_array_length(p_ops) = 0 and jsonb_array_length(coalesce(p_rejections, '[]'::jsonb)) = 0) then
           raise exception 'SYNC_BATCH_INVALID';
         end if;
         perform pg_advisory_xact_lock(hashtext(p_tenant));
