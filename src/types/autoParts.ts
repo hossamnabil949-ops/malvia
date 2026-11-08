@@ -263,6 +263,7 @@ export interface Expense {
   notes?: string;
   paymentMethod: PaymentMethod | string;
   bankAccountId?: string;
+  bankLedgerEntryId?: string; // القيد البنكي الحالي المرتبط بالمصروف لتسهيل عكسه دون حذف التاريخ
   recordedBy: string;
 }
 
@@ -602,7 +603,8 @@ export interface TreasuryTransaction {
     | 'ارتداد شيك صادر'
     | 'تسوية مستحقات الفيزا'
     | 'إيداع صافي تسوية الفيزا بالبنك'
-    | 'إيرادات أخرى';
+    | 'إيرادات أخرى'
+    | 'عكس مصروفات تشغيلية';
   amount: number;
   paymentMethod: PaymentMethod | string;
   balanceAfter: number;
