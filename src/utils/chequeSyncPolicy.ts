@@ -4,6 +4,16 @@
  * must be narrowly validated before the database write.
  */
 type ChequeRecord = Record<string, any>;
+export interface ChequeSyncFailure {
+  code: string;
+  recordIds: string[];
+  relatedGroupIds: string[];
+}
+const chequeFailure = (detailed: boolean, code: string, records: ChequeRecord[] = []): string | ChequeSyncFailure => detailed ? {
+  code,
+  recordIds: [...new Set(records.map(item => String(item?.id || '')).filter(Boolean))].slice(0, 100),
+  relatedGroupIds: [...new Set(records.flatMap(item => [item?.batchId, item?.referenceId, item?.entityId, item?.settlementId, item?.relatedTransactionId].filter(Boolean).map(String)))].slice(0, 100),
+} : code;
 
 const stable = (value: any): any => {
   if (Array.isArray(value)) return value.map(stable);
@@ -22,12 +32,11 @@ const NEXT: Record<string, string[]> = {
   'outgoing:مصروف': ['مرتد'],
 };
 
+export function validateChequeCollectionSync(previous: ChequeRecord[], incoming: ChequeRecord[], employee: { name?: string }, permissions: Record<string, unknown>): string | null;
+export function validateChequeCollectionSync(previous: ChequeRecord[], incoming: ChequeRecord[], employee: { name?: string }, permissions: Record<string, unknown>, detailed: true): ChequeSyncFailure | null;
 export function validateChequeCollectionSync(
-  previous: ChequeRecord[],
-  incoming: ChequeRecord[],
-  employee: { name?: string },
-  permissions: Record<string, unknown>,
-): string | null {
+  previous: ChequeRecord[], incoming: ChequeRecord[], employee: { name?: string }, permissions: Record<string, unknown>, detailed = false,
+): string | ChequeSyncFailure | null {
   const canRegister = permissions.canRegisterCheques === true || permissions.canManageTreasury === true;
   const canManage = permissions.canManageChequeLifecycle === true || permissions.canManageTreasury === true;
   const oldById = new Map(previous.map(item => [String(item.id), item]));
@@ -35,29 +44,29 @@ export function validateChequeCollectionSync(
 
   // No cheque may be deleted by a staff collection replacement.
   for (const oldItem of previous) {
-    if (!newById.has(String(oldItem.id))) return 'CHEQUE_DELETE_DENIED';
+    if (!newById.has(String(oldItem.id))) return chequeFailure(detailed, 'CHEQUE_DELETE_DENIED', [oldItem]);
   }
 
   for (const item of incoming) {
-    if (!item || typeof item !== 'object' || !String(item.id || '').trim()) return 'CHEQUE_INVALID';
+    if (!item || typeof item !== 'object' || !String(item.id || '').trim()) return chequeFailure(detailed, 'CHEQUE_INVALID', [item]);
     const oldItem = oldById.get(String(item.id));
     if (!oldItem) {
-      if (!canRegister) return 'CHEQUE_REGISTER_DENIED';
+      if (!canRegister) return chequeFailure(detailed, 'CHEQUE_REGISTER_DENIED', [item]);
       const expectedStatus = item.direction === 'incoming' ? 'في الحافظة' : item.direction === 'outgoing' ? 'صادر' : '';
       if (!expectedStatus || item.status !== expectedStatus || !(Number(item.amount) > 0) ||
           !String(item.number || '').trim() || !String(item.bankName || '').trim() ||
           !String(item.partyId || '').trim() || !Array.isArray(item.history) || item.history.length !== 1 ||
-          item.history[0]?.status !== expectedStatus || item.clearedBankAccountId) return 'CHEQUE_INVALID';
-      if (employee.name && item.createdBy !== employee.name) return 'CHEQUE_ACTOR_MISMATCH';
+          item.history[0]?.status !== expectedStatus || item.clearedBankAccountId) return chequeFailure(detailed, 'CHEQUE_INVALID', [item]);
+      if (employee.name && item.createdBy !== employee.name) return chequeFailure(detailed, 'CHEQUE_ACTOR_MISMATCH', [item]);
       continue;
     }
 
     if (same(oldItem, item)) continue;
-    if (!canManage) return 'CHEQUE_LIFECYCLE_DENIED';
+    if (!canManage) return chequeFailure(detailed, 'CHEQUE_LIFECYCLE_DENIED', [item]);
 
     const oldStatus = String(oldItem.status || '');
     const nextStatus = String(item.status || '');
-    if (!(NEXT[`${oldItem.direction}:${oldStatus}`] || []).includes(nextStatus)) return 'CHEQUE_TRANSITION_INVALID';
+    if (!(NEXT[`${oldItem.direction}:${oldStatus}`] || []).includes(nextStatus)) return chequeFailure(detailed, 'CHEQUE_TRANSITION_INVALID', [item]);
 
     const oldImmutable = { ...oldItem };
     const newImmutable = { ...item };
@@ -65,22 +74,22 @@ export function validateChequeCollectionSync(
       delete oldImmutable[key];
       delete newImmutable[key];
     }
-    if (!same(oldImmutable, newImmutable)) return 'CHEQUE_IMMUTABLE_FIELDS_CHANGED';
+    if (!same(oldImmutable, newImmutable)) return chequeFailure(detailed, 'CHEQUE_IMMUTABLE_FIELDS_CHANGED', [item]);
 
     const oldHistory = Array.isArray(oldItem.history) ? oldItem.history : [];
     const newHistory = Array.isArray(item.history) ? item.history : [];
     if (newHistory.length !== oldHistory.length + 1 || newHistory[newHistory.length - 1]?.status !== nextStatus) {
-      return 'CHEQUE_HISTORY_INVALID';
+      return chequeFailure(detailed, 'CHEQUE_HISTORY_INVALID', [item]);
     }
     if (oldItem.clearedBankAccountId && item.clearedBankAccountId !== oldItem.clearedBankAccountId) {
-      return 'CHEQUE_BANK_ACCOUNT_IMMUTABLE';
+      return chequeFailure(detailed, 'CHEQUE_BANK_ACCOUNT_IMMUTABLE', [item]);
     }
     if (nextStatus === 'محصّل' || nextStatus === 'مصروف') {
-      if (!String(item.clearedBankAccountId || '').trim()) return 'CHEQUE_BANK_ACCOUNT_REQUIRED';
+      if (!String(item.clearedBankAccountId || '').trim()) return chequeFailure(detailed, 'CHEQUE_BANK_ACCOUNT_REQUIRED', [item]);
     } else if (nextStatus === 'مرتد' && (oldStatus === 'محصّل' || oldStatus === 'مصروف')) {
-      if (!String(item.clearedBankAccountId || '').trim()) return 'CHEQUE_BANK_ACCOUNT_REQUIRED';
+      if (!String(item.clearedBankAccountId || '').trim()) return chequeFailure(detailed, 'CHEQUE_BANK_ACCOUNT_REQUIRED', [item]);
     } else if (item.clearedBankAccountId) {
-      return 'CHEQUE_BANK_ACCOUNT_INVALID';
+      return chequeFailure(detailed, 'CHEQUE_BANK_ACCOUNT_INVALID', [item]);
     }
   }
   return null;
