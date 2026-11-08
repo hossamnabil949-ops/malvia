@@ -18,7 +18,7 @@ export default async function handler(req: any, res: any) {
     const tenant = String(license.tenantId);
 
     phase = 'employee_authentication';
-    const bearer = String(req.headers.authorization || '').match(/^Bearer\\s+(.+)$/i)?.[1] || '';
+    const bearer = String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1] || '';
     if (!bearer) return res.status(401).json({ code: 'EMPLOYEE_SESSION_REQUIRED', error: 'يلزم تسجيل الدخول لعرض إشعارات المزامنة.' });
     const tokenHash = createHash('sha256').update(bearer).digest('hex');
     const employee = await getAuthenticatedEmployee(tenant, tokenHash);
