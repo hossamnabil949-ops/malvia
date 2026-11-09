@@ -599,7 +599,7 @@ export async function authenticateShopUser(
     };
   }
 
-  if (matchedEmp.status === 'معلق') {
+  if (!serverSessionToken && matchedEmp.status === 'معلق') {
     return {
       success: false,
       message: 'تم إيقاف حساب هذا الموظف مؤقتاً بواسطة إدارة المحل.'
