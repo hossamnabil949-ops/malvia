@@ -127,6 +127,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [editSalePrice, setEditSalePrice] = useState<number>(0);
   const [editBarcode, setEditBarcode] = useState<string>('');
   const [editName, setEditName] = useState('');
+  const [editPartNumber, setEditPartNumber] = useState('');
+  const [editMinAlertStock, setEditMinAlertStock] = useState(0);
+  const [editIsScreenOrDisplay, setEditIsScreenOrDisplay] = useState(false);
   const [editBrand, setEditBrand] = useState('');
   const [editCategory, setEditCategory] = useState('');
   const [editCompatibleModels, setEditCompatibleModels] = useState('');
@@ -247,6 +250,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setEditBusy(true);
     setEditError('');
     if (!editName.trim()) { setEditError('اسم الصنف مطلوب.'); setEditBusy(false); return; }
+    if (!editPartNumber.trim()) { setEditError('رقم الصنف / كود OEM مطلوب.'); setEditBusy(false); return; }
+    if (!Number.isFinite(editMinAlertStock) || editMinAlertStock < 0) { setEditError('حد التنبيه يجب أن يكون صفراً أو أكبر.'); setEditBusy(false); return; }
+    const duplicatePartNumber = parts.some(p => p.id !== editPricePart.id && p.partNumber.trim().toLowerCase() === editPartNumber.trim().toLowerCase());
+    if (duplicatePartNumber) { setEditError('رقم الصنف مستخدم بالفعل لصنف آخر.'); setEditBusy(false); return; }
+    const newBarcode = editBarcode.trim();
+    if (newBarcode && parts.some(p => p.id !== editPricePart.id && [p.barcode, p.internalBarcode, ...(p.extraBarcodes || []).map(b => b.value)].some(code => code?.trim() === newBarcode))) { setEditError('الباركود مستخدم بالفعل لصنف آخر.'); setEditBusy(false); return; }
     if (!Number.isFinite(editCostPrice) || editCostPrice < 0 || !Number.isFinite(editSalePrice) || editSalePrice < 0) { setEditError('راجع الأسعار؛ يجب أن تكون أرقاماً صحيحة غير سالبة.'); setEditBusy(false); return; }
     try {
       const approved = await verifyOwnerPasswordOnline(ownerLicenseKey, editOwnerPassword);
@@ -255,6 +264,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     const updated: AutoPart = {
       ...editPricePart,
       name: editName.trim(),
+      partNumber: editPartNumber.trim(),
+      minAlertStock: editMinAlertStock,
+      isScreenOrDisplay: editIsScreenOrDisplay,
       brand: editBrand as CarBrand,
       category: editCategory as PartCategory,
       compatibleModels: editCompatibleModels.trim(),
@@ -483,6 +495,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                               setEditSalePrice(part.salePrice);
                               setEditBarcode(part.barcode || '');
                               setEditName(part.name || '');
+                              setEditPartNumber(part.partNumber || '');
+                              setEditMinAlertStock(Number(part.minAlertStock || 0));
+                              setEditIsScreenOrDisplay(Boolean(part.isScreenOrDisplay));
                               setEditBrand(part.brand || '');
                               setEditCategory(part.category || '');
                               setEditCompatibleModels(part.compatibleModels || '');
@@ -638,6 +653,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
             <form onSubmit={handleConfirmEditPrices} className="space-y-3 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">رقم الصنف / OEM / SKU *</label>
+                  <input value={editPartNumber} onChange={e => setEditPartNumber(e.target.value)} required maxLength={100} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm font-mono focus:border-amber-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">حد التنبيه عند انخفاض المخزون</label>
+                  <input type="number" min="0" step="1" value={editMinAlertStock} onChange={e => setEditMinAlertStock(Number(e.target.value))} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
                 <div className="sm:col-span-2">
                   <label className="text-neutral-300 font-bold block mb-1">اسم الصنف *</label>
                   <input value={editName} onChange={e => setEditName(e.target.value)} required maxLength={180} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
@@ -675,6 +698,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <input value={editSupplierBarcode} onChange={e => setEditSupplierBarcode(e.target.value)} maxLength={100} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
                 </div>
               </div>
+              <label className="flex items-center gap-2 p-3 rounded-xl bg-surface-1 border border-neutral-800 text-neutral-200">
+                <input type="checkbox" checked={editIsScreenOrDisplay} onChange={e => setEditIsScreenOrDisplay(e.target.checked)} className="accent-amber-500" />
+                <span>الصنف شاشة أو تابلوه</span>
+              </label>
               <div className="border-t border-neutral-800 pt-3">
                 <p className="text-amber-300 font-bold mb-2">الأسعار والباركود</p>
               </div>

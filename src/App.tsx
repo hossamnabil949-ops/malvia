@@ -604,6 +604,9 @@ export default function App() {
     if (!previous) return;
     const changed: string[] = [];
     if (previous.name !== updatedPart.name) changed.push(`الاسم: ${previous.name} ← ${updatedPart.name}`);
+    if (previous.partNumber !== updatedPart.partNumber) changed.push('رقم الصنف / OEM');
+    if (previous.minAlertStock !== updatedPart.minAlertStock) changed.push('حد تنبيه المخزون');
+    if (previous.isScreenOrDisplay !== updatedPart.isScreenOrDisplay) changed.push('تصنيف شاشة / تابلوه');
     if (previous.brand !== updatedPart.brand) changed.push('ماركة السيارة');
     if (previous.category !== updatedPart.category) changed.push('تصنيف الصنف');
     if (previous.compatibleModels !== updatedPart.compatibleModels) changed.push('الموديلات المتوافقة');
