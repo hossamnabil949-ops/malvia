@@ -132,6 +132,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [editShelfLocation, setEditShelfLocation] = useState('');
   const [editUnit, setEditUnit] = useState('');
   const [editSupplierBarcode, setEditSupplierBarcode] = useState('');
+  const [editOwnerPassword, setEditOwnerPassword] = useState('');
+  const [editError, setEditError] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
 
   const [newPartForm, setNewPartForm] = useState<Partial<AutoPart>>({
     partNumber: '',
@@ -236,11 +239,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setRestockPart(null);
   };
 
-  const handleConfirmEditPrices = (e: React.FormEvent) => {
+  const handleConfirmEditPrices = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editPricePart) return;
-    if (!editName.trim()) { window.alert('اسم الصنف مطلوب.'); return; }
-    if (!Number.isFinite(editCostPrice) || editCostPrice < 0 || !Number.isFinite(editSalePrice) || editSalePrice < 0) { window.alert('راجع أسعار الصنف؛ يجب أن تكون أرقاماً صحيحة غير سالبة.'); return; }
+    if (!editPricePart || editBusy) return;
+    setEditBusy(true);
+    setEditError('');
+    if (!editName.trim()) { setEditError('اسم الصنف مطلوب.'); setEditBusy(false); return; }
+    if (!Number.isFinite(editCostPrice) || editCostPrice < 0 || !Number.isFinite(editSalePrice) || editSalePrice < 0) { setEditError('راجع الأسعار؛ يجب أن تكون أرقاماً صحيحة غير سالبة.'); setEditBusy(false); return; }
+    try {
+      const owner = await verifyOwnerPassword(employees, editOwnerPassword);
+      if (!owner) { setEditError('كلمة مرور المالك غير صحيحة. لم يتم حفظ أي تعديل.'); setEditBusy(false); return; }
+    } catch { setEditError('تعذر التحقق من كلمة مرور المالك. حاول مرة أخرى.'); setEditBusy(false); return; }
     const updated: AutoPart = {
       ...editPricePart,
       name: editName.trim(),
@@ -259,6 +268,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     if (onUpdatePart) onUpdatePart(updated);
     else if (onUpdatePartPrices) onUpdatePartPrices(editPricePart.id, editCostPrice, editSalePrice, editBarcode.trim());
     setEditPricePart(null);
+    setEditOwnerPassword('');
+    setEditBusy(false);
   };
 
   return (
@@ -477,6 +488,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                               setEditShelfLocation(part.shelfLocation || '');
                               setEditUnit(part.unit || '');
                               setEditSupplierBarcode(part.supplierBarcode || '');
+                              setEditOwnerPassword('');
+                              setEditError('');
                             }}
                             className="p-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-amber-400"
                             title="تعديل بيانات الصنف وأسعاره"
@@ -696,6 +709,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 <BarcodeField value={editBarcode} onChange={setEditBarcode} />
               </div>
 
+              <div>
+                <label className="text-neutral-300 font-bold block mb-1">كلمة مرور المالك لتأكيد التعديل *</label>
+                <input type="password" autoComplete="current-password" value={editOwnerPassword} onChange={e => setEditOwnerPassword(e.target.value)} required className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                {editError && <p role="alert" className="mt-2 text-rose-400 font-bold">{editError}</p>}
+              </div>
               <div className="p-2.5 rounded-xl bg-surface-1 text-[11px] text-neutral-400 flex justify-between">
                 <span>هامش الربح المتوقع:</span>
                 <span className="font-bold text-emerald-400 font-mono">
@@ -713,9 +731,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="w-1/2 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs shadow-md"
+                  disabled={editBusy}
+                  className="w-1/2 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-neutral-950 font-black text-xs shadow-md"
                 >
-                  حفظ بيانات الصنف
+                  {editBusy ? 'جاري التحقق والحفظ...' : 'حفظ بيانات الصنف'}
                 </button>
               </div>
             </form>
