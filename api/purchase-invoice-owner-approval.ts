@@ -36,6 +36,7 @@ export default async function handler(req: any, res: any) {
       getOne(tenant, 'purchaseInvoices'), getOne(tenant, 'purchaseReturns'),
       getOne(tenant, 'supplierPayments'), getOne(tenant, 'supplierPaymentSchedules'),
       getOne(tenant, 'stockMovements'), getOne(tenant, 'stockBatches'), getOne(tenant, 'serialUnits'),
+      getOne(tenant, 'treasury'), getOne(tenant, 'bankLedgerEntries'),
     ]);
     const asArray = (row: any) => Array.isArray(row?.data) ? row.data : [];
     const invoices = asArray(resources[0]);
@@ -49,6 +50,8 @@ export default async function handler(req: any, res: any) {
       stockMovements: asArray(resources[4]),
       stockBatches: asArray(resources[5]),
       serialUnits: asArray(resources[6]),
+      treasuryTransactions: asArray(resources[7]),
+      bankLedgerEntries: asArray(resources[8]),
     });
     if (!eligibility.allowed) return res.status(409).json({
       code: 'PURCHASE_INVOICE_MUTATION_BLOCKED', action, invoiceId,
@@ -58,7 +61,7 @@ export default async function handler(req: any, res: any) {
     // This is an invoice/action-bound preflight approval only. The mutation endpoint must
     // still re-check versions and commit every affected resource atomically.
     return res.status(200).json({ approved: true, preflightOnly: true, action, invoiceId, ownerId: employee.id, ownerName: employee.name,
-      versions: resources.map((row: any) => row?.version ?? 0) });
+      versions: { purchaseInvoices: resources[0]?.version ?? 0, purchaseReturns: resources[1]?.version ?? 0, supplierPayments: resources[2]?.version ?? 0, supplierPaymentSchedules: resources[3]?.version ?? 0, stockMovements: resources[4]?.version ?? 0, stockBatches: resources[5]?.version ?? 0, serialUnits: resources[6]?.version ?? 0, treasury: resources[7]?.version ?? 0, bankLedgerEntries: resources[8]?.version ?? 0 } });
   } catch (error) {
     return sendError(res, error);
   }

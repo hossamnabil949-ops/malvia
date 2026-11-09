@@ -1,6 +1,6 @@
 import type { PurchaseInvoice, PurchaseReturn, SupplierPayment, SupplierPaymentSchedule, StockMovement } from '../types/autoParts';
 
-export type PurchaseInvoiceMutationBlocker = 'INVOICE_NOT_FOUND' | 'SNAPSHOT_MISSING' | 'PAYMENT_LINKED' | 'RETURN_LINKED' | 'SCHEDULE_LINKED' | 'SUBSEQUENT_STOCK_MOVEMENT' | 'TRACKED_STOCK_LINKED';
+export type PurchaseInvoiceMutationBlocker = 'INVOICE_NOT_FOUND' | 'SNAPSHOT_MISSING' | 'PAYMENT_LINKED' | 'RETURN_LINKED' | 'SCHEDULE_LINKED' | 'SUBSEQUENT_STOCK_MOVEMENT' | 'TRACKED_STOCK_LINKED' | 'FINANCIAL_LEDGER_LINKED';
 export interface PurchaseInvoiceMutationContext {
   invoice: PurchaseInvoice | null | undefined;
   purchaseReturns?: PurchaseReturn[];
@@ -9,6 +9,8 @@ export interface PurchaseInvoiceMutationContext {
   stockMovements?: StockMovement[];
   stockBatches?: Array<{ purchaseInvoiceId?: string; partId?: string }>;
   serialUnits?: Array<{ purchaseInvoiceId?: string; partId?: string; status?: string }>;
+  treasuryTransactions?: Array<{ referenceId?: string; category?: string }>;
+  bankLedgerEntries?: Array<{ batchId?: string; id?: string }>;
 }
 
 /** Conservative UI guard only. The server must repeat all checks before mutating data. */
@@ -34,5 +36,10 @@ export function evaluatePurchaseInvoiceMutation(context: PurchaseInvoiceMutation
   })) blockers.push('SUBSEQUENT_STOCK_MOVEMENT');
   if ((context.stockBatches || []).some(b => b.purchaseInvoiceId === invoice.id)
     || (context.serialUnits || []).some(u => u.purchaseInvoiceId === invoice.id)) blockers.push('TRACKED_STOCK_LINKED');
+  // Cash and bank postings must be explicitly settled/reversed before invoice mutation.
+  if ((context.treasuryTransactions || []).some(tx => tx.referenceId === invoice.id)
+    || (context.bankLedgerEntries || []).some(entry => entry.batchId === invoice.id || entry.id === `purchase:${invoice.id}`)) {
+    blockers.push('FINANCIAL_LEDGER_LINKED');
+  }
   return { allowed: blockers.length === 0, blockers };
 }

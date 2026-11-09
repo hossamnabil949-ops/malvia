@@ -14,3 +14,7 @@ assert.equal(evaluatePurchaseInvoiceMutation({...base,stockBatches:[{purchaseInv
 assert.equal(evaluatePurchaseInvoiceMutation({...base,serialUnits:[{purchaseInvoiceId:'pi-1'}]}).blockers.includes('TRACKED_STOCK_LINKED'),true);
 assert.deepEqual(evaluatePurchaseInvoiceMutation(base),{allowed:true,blockers:[]});
 console.log('purchase invoice mutation policy tests passed');
+
+assert.equal(evaluatePurchaseInvoiceMutation({...base,treasuryTransactions:[{referenceId:'pi-1'}]}).blockers.includes('FINANCIAL_LEDGER_LINKED'),true);
+assert.equal(evaluatePurchaseInvoiceMutation({...base,bankLedgerEntries:[{batchId:'pi-1'}]}).blockers.includes('FINANCIAL_LEDGER_LINKED'),true);
+assert.equal(evaluatePurchaseInvoiceMutation({...base,bankLedgerEntries:[{id:'purchase:pi-1'}]}).blockers.includes('FINANCIAL_LEDGER_LINKED'),true);
