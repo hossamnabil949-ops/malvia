@@ -94,33 +94,43 @@ const normKey = (v?: string) => (v || '').trim().toLowerCase();
 
 // Components
 import { Navigation, ActiveTab } from './components/Navigation';
-import { HomeDashboard } from './components/HomeDashboard';
-import { QuickPosView } from './components/QuickPosView';
-import { InventoryView } from './components/InventoryView';
-import { InvoicesView } from './components/InvoicesView';
-import { PurchasesView } from './components/PurchasesView';
-import { CustomersView } from './components/CustomersView';
-import { SuppliersView } from './components/SuppliersView';
-import { FinanceView } from './components/FinanceView';
-import { ReportsView } from './components/ReportsView';
-import { SettingsView } from './components/SettingsView';
-import { ShiftsView } from './components/ShiftsView';
 
 // Modals
-import { InventoryErrorsModal } from './components/InventoryErrorsModal';
-import { CarModelsModal } from './components/CarModelsModal';
-import { PhotoSharingModal } from './components/PhotoSharingModal';
-import { ExcelImportExportModal } from './components/ExcelImportExportModal';
-import { SuperAdminPortal } from './components/SuperAdminPortal';
-import { TenantActivationGateway } from './components/TenantActivationGateway';
-import { ShopLoginView } from './components/ShopLoginView';
-import { SystemDeploymentGuideModal } from './components/SystemDeploymentGuideModal';
-import { NotificationsModal } from './components/NotificationsModal';
-import { LowStockView } from './components/LowStockView';
-import { VoiceAssistantModal } from './components/VoiceAssistantModal';
-import { InventoryAuditModal } from './components/InventoryAuditModal';
-import { BarcodeStocktakeModal } from './components/BarcodeStocktakeModal';
-import { InvoiceDetailModal } from './components/InvoiceDetailModal';
+
+const lazyView = <T extends React.ComponentType<any>>(loader: () => Promise<{ default: T }>) => {
+  const Component = React.lazy(loader);
+  return (props: React.ComponentProps<T>) => (
+    <React.Suspense fallback={<div className="p-6 text-center text-slate-400" role="status">جارٍ تحميل الشاشة...</div>}>
+      <Component {...props} />
+    </React.Suspense>
+  );
+};
+
+const HomeDashboard = lazyView(() => import('./components/HomeDashboard').then(module => ({ default: module.HomeDashboard })));
+const QuickPosView = lazyView(() => import('./components/QuickPosView').then(module => ({ default: module.QuickPosView })));
+const InventoryView = lazyView(() => import('./components/InventoryView').then(module => ({ default: module.InventoryView })));
+const InvoicesView = lazyView(() => import('./components/InvoicesView').then(module => ({ default: module.InvoicesView })));
+const PurchasesView = lazyView(() => import('./components/PurchasesView').then(module => ({ default: module.PurchasesView })));
+const CustomersView = lazyView(() => import('./components/CustomersView').then(module => ({ default: module.CustomersView })));
+const SuppliersView = lazyView(() => import('./components/SuppliersView').then(module => ({ default: module.SuppliersView })));
+const FinanceView = lazyView(() => import('./components/FinanceView').then(module => ({ default: module.FinanceView })));
+const ReportsView = lazyView(() => import('./components/ReportsView').then(module => ({ default: module.ReportsView })));
+const SettingsView = lazyView(() => import('./components/SettingsView').then(module => ({ default: module.SettingsView })));
+const ShiftsView = lazyView(() => import('./components/ShiftsView').then(module => ({ default: module.ShiftsView })));
+const InventoryErrorsModal = lazyView(() => import('./components/InventoryErrorsModal').then(module => ({ default: module.InventoryErrorsModal })));
+const CarModelsModal = lazyView(() => import('./components/CarModelsModal').then(module => ({ default: module.CarModelsModal })));
+const PhotoSharingModal = lazyView(() => import('./components/PhotoSharingModal').then(module => ({ default: module.PhotoSharingModal })));
+const ExcelImportExportModal = lazyView(() => import('./components/ExcelImportExportModal').then(module => ({ default: module.ExcelImportExportModal })));
+const SuperAdminPortal = lazyView(() => import('./components/SuperAdminPortal').then(module => ({ default: module.SuperAdminPortal })));
+const TenantActivationGateway = lazyView(() => import('./components/TenantActivationGateway').then(module => ({ default: module.TenantActivationGateway })));
+const ShopLoginView = lazyView(() => import('./components/ShopLoginView').then(module => ({ default: module.ShopLoginView })));
+const SystemDeploymentGuideModal = lazyView(() => import('./components/SystemDeploymentGuideModal').then(module => ({ default: module.SystemDeploymentGuideModal })));
+const NotificationsModal = lazyView(() => import('./components/NotificationsModal').then(module => ({ default: module.NotificationsModal })));
+const LowStockView = lazyView(() => import('./components/LowStockView').then(module => ({ default: module.LowStockView })));
+const VoiceAssistantModal = lazyView(() => import('./components/VoiceAssistantModal').then(module => ({ default: module.VoiceAssistantModal })));
+const InventoryAuditModal = lazyView(() => import('./components/InventoryAuditModal').then(module => ({ default: module.InventoryAuditModal })));
+const BarcodeStocktakeModal = lazyView(() => import('./components/BarcodeStocktakeModal').then(module => ({ default: module.BarcodeStocktakeModal })));
+const InvoiceDetailModal = lazyView(() => import('./components/InvoiceDetailModal').then(module => ({ default: module.InvoiceDetailModal })));
 
 export default function App() {
   // Tenant and License State

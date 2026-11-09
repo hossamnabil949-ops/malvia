@@ -1,6 +1,6 @@
-// ملاحظة: هذا الاختبار يعمل على نسخة من api/_security.ts بدون سطر import { getOne } (لأن _db.js يحتاج Neon). انسخ الملف وشِل السطر وعدّل المسار قبل التشغيل.
+// اختبار مباشر لدوال الأمان النقية في طبقة API. لا يتم استدعاء قاعدة البيانات أثناء هذه الاختبارات.
 import assert from 'node:assert/strict';
-import { validateSyncBody, rateLimit, safeEqual, ApiError, sendError } from './sec.ts';
+import { validateSyncBody, rateLimit, safeEqual, ApiError, sendError } from '../api/_security.ts';
 const code = (fn: () => unknown) => { try { fn(); } catch (e) { return (e as ApiError).code; } return 'OK'; };
 assert.equal(code(() => validateSyncBody({ resource: 'parts', data: [{ id: 'a' }], baseVersion: 0 })), 'OK');
 assert.equal(code(() => validateSyncBody({ resource: 'auditLog', data: [{ id: 'a' }], baseVersion: 0 })), 'OK');

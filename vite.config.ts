@@ -1,7 +1,10 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {defineConfig} from 'vite';
+
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(() => {
   return {
@@ -12,7 +15,31 @@ export default defineConfig(() => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': projectRoot,
+      },
+    },
+    build: {
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            minSize: 20_000,
+            groups: [{
+              debugName: 'vendor-packages',
+              name: (id: string) => {
+                const normalized = id.replaceAll('\\', '/');
+                const marker = '/node_modules/';
+                const at = normalized.lastIndexOf(marker);
+                if (at < 0) return null;
+                const packagePath = normalized.slice(at + marker.length);
+                const packageName = packagePath.startsWith('@')
+                  ? packagePath.split('/').slice(0, 2).join('/')
+                  : packagePath.split('/')[0];
+                return `vendor-${packageName.replace(/^@/, '').replaceAll('/', '-')}`;
+              },
+              test: /node_modules/,
+            }],
+          },
+        },
       },
     },
     server: {

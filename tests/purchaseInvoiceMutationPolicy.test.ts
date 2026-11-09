@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { evaluatePurchaseInvoiceMutation } from '../src/utils/purchaseInvoiceMutationPolicy';
+const invoice: any = { id:'pi-1', invoiceNumber:'P-1', date:'2026-11-01', time:'10:00:00', supplierId:'sup-1', supplierName:'Supplier', items:[{partId:'part-1',quantity:2,costPrice:10}], amountPaid:0, grandTotal:20, mutationSnapshot:{version:1} };
+const base: any = { invoice, purchaseReturns:[], supplierPayments:[], paymentSchedules:[], stockMovements:[], stockBatches:[], serialUnits:[] };
+assert.deepEqual(evaluatePurchaseInvoiceMutation({...base,invoice:null}),{allowed:false,blockers:['INVOICE_NOT_FOUND']});
+assert.deepEqual(evaluatePurchaseInvoiceMutation({...base,invoice:{...invoice,mutationSnapshot:undefined}}),{allowed:false,blockers:['SNAPSHOT_MISSING']});
+assert.equal(evaluatePurchaseInvoiceMutation({...base,invoice:{...invoice,amountPaid:5}}).blockers.includes('PAYMENT_LINKED'),true);
+assert.equal(evaluatePurchaseInvoiceMutation({...base,purchaseReturns:[{purchaseInvoiceId:'pi-1'}]}).blockers.includes('RETURN_LINKED'),true);
+assert.equal(evaluatePurchaseInvoiceMutation({...base,paymentSchedules:[{purchaseInvoiceId:'pi-1'}]}).blockers.includes('SCHEDULE_LINKED'),true);
+assert.equal(evaluatePurchaseInvoiceMutation({...base,stockMovements:[{partId:'part-1',refId:'sale-1',at:'2026-11-02T10:00:00Z'}]}).blockers.includes('SUBSEQUENT_STOCK_MOVEMENT'),true);
+assert.equal(evaluatePurchaseInvoiceMutation({...base,stockBatches:[{purchaseInvoiceId:'pi-1'}]}).blockers.includes('TRACKED_STOCK_LINKED'),true);
+assert.equal(evaluatePurchaseInvoiceMutation({...base,serialUnits:[{purchaseInvoiceId:'pi-1'}]}).blockers.includes('TRACKED_STOCK_LINKED'),true);
+assert.deepEqual(evaluatePurchaseInvoiceMutation(base),{allowed:true,blockers:[]});
+console.log('purchase invoice mutation policy tests passed');
