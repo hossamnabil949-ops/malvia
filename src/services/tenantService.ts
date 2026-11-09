@@ -516,22 +516,85 @@ export async function authenticateShopUser(
   }
 
   const storeData = loadTenantStoreData(tenant);
-  const employees = storeData.employees && storeData.employees.length > 0 ? storeData.employees : INITIAL_EMPLOYEES;
+  let employees = storeData.employees && storeData.employees.length > 0 ? storeData.employees : INITIAL_EMPLOYEES;
 
   const cleanUser = usernameOrPhone.trim().toLowerCase();
   const cleanPass = passwordInput.trim();
-
-  const matchedEmp = employees.find(e => 
-    (e.username && e.username.toLowerCase() === cleanUser) ||
-    e.phone === cleanUser ||
-    e.name.toLowerCase() === cleanUser ||
+  let matchedEmp = employees.find(e =>
+    (e.username && e.username.trim().toLowerCase() === cleanUser) ||
+    String(e.phone || '').trim().toLowerCase() === cleanUser ||
+    String(e.name || '').trim().toLowerCase() === cleanUser ||
     (cleanUser === 'admin' && e.role === 'مدير عام')
   );
+
+  // Authenticate against the cloud first whenever online. localStorage is device-local:
+  // a newly opened desktop may not yet have the employee row that another device synced.
+  let serverSessionToken: string | undefined;
+  let serverSessionExpiresAt: string | undefined;
+  let localOnlyLogin = typeof navigator !== 'undefined' && !navigator.onLine;
+  if (typeof navigator !== 'undefined' && navigator.onLine) {
+    try {
+      const authResponse = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-license-key': tenant.licenseKey },
+        body: JSON.stringify({ username: cleanUser, password: cleanPass }),
+      });
+      let authBody: any = {};
+      try { authBody = await authResponse.json(); } catch { /* invalid server response */ }
+      if (authResponse.ok && typeof authBody.token === 'string' && authBody.token.length >= 32 && authBody.employee?.id) {
+        serverSessionToken = authBody.token;
+        serverSessionExpiresAt = typeof authBody.expiresAt === 'string' ? authBody.expiresAt : undefined;
+
+        // Hydrate this device's employee cache from the authenticated server record.
+        // Preserve any local-only fields (including an old password hash) without
+        // marking this hydration as a new employee edit to be uploaded.
+        const serverEmployee = authBody.employee as Employee;
+        const existing = employees.find(e => String(e.id) === String(serverEmployee.id));
+        matchedEmp = existing ? { ...existing, ...serverEmployee } : serverEmployee;
+        employees = [...employees.filter(e => String(e.id) !== String(serverEmployee.id)), matchedEmp];
+        try {
+          localStorage.setItem(getTenantKey(tenant.tenantId, 'employees'), JSON.stringify(employees));
+        } catch (err) {
+          console.warn('تعذّر تحديث نسخة الموظفين المحلية بعد تسجيل الدخول السحابي:', err);
+        }
+      } else if (authResponse.status === 401 && authBody.code === 'EMPLOYEE_INVALID_CREDENTIALS') {
+        // A locally verified account may still enter temporarily if this device has
+        // newer credentials than the cloud. This mode cannot perform cloud sync.
+        if (!matchedEmp) {
+          return { success: false, message: authBody.error || 'اسم المستخدم أو الموظف غير متاح على الخادم.', employees };
+        }
+        let localPasswordOk = false;
+        if (matchedEmp.passwordHash && isHashed(matchedEmp.passwordHash)) {
+          localPasswordOk = await verifyPassword(cleanPass, matchedEmp.passwordHash);
+        } else {
+          const legacyPlain = matchedEmp.password || (matchedEmp.role === 'مدير عام' ? '123456' : '1234');
+          localPasswordOk = cleanPass === legacyPlain;
+        }
+        if (!localPasswordOk) {
+          return { success: false, message: authBody.error || 'اسم المستخدم أو كلمة المرور غير صحيحة.', employees };
+        }
+        localOnlyLogin = true;
+      } else {
+        return {
+          success: false,
+          message: authBody.error || 'تعذّر توثيق الموظف على الخادم. حاول مرة أخرى.',
+          employees,
+        };
+      }
+    } catch (e) {
+      console.warn('Cloud employee authentication failed.', e);
+      return {
+        success: false,
+        message: 'تعذّر الاتصال بخادم تسجيل الدخول. تحقق من الإنترنت وحاول مجددًا.',
+        employees,
+      };
+    }
+  }
 
   if (!matchedEmp) {
     return {
       success: false,
-      message: 'اسم المستخدم أو الموظف غير مسجل في هذا المحل. (لصاحب المحل أول مرة: استخدم admin)',
+      message: 'اسم المستخدم أو الموظف غير مسجل في هذا المحل. تحقق من اتصال الإنترنت أو مزامنة بيانات الموظفين.',
       employees
     };
   }
@@ -543,13 +606,16 @@ export async function authenticateShopUser(
     };
   }
 
-  // التحقق: الحساب المجزّأ أولاً. الحسابات القديمة (نص) تُقبل مرة واحدة ثم تُحوَّل كلها إلى تجزئة.
-  let passwordOk = false;
-  if (matchedEmp.passwordHash && isHashed(matchedEmp.passwordHash)) {
-    passwordOk = await verifyPassword(cleanPass, matchedEmp.passwordHash);
-  } else {
-    const legacyPlain = matchedEmp.password || (matchedEmp.role === 'مدير عام' ? '123456' : '1234');
-    passwordOk = cleanPass === legacyPlain;
+  // The cloud has already verified the password when a server token exists.
+  // Only verify the local copy in offline/local-only mode.
+  let passwordOk = Boolean(serverSessionToken);
+  if (!passwordOk) {
+    if (matchedEmp.passwordHash && isHashed(matchedEmp.passwordHash)) {
+      passwordOk = await verifyPassword(cleanPass, matchedEmp.passwordHash);
+    } else {
+      const legacyPlain = matchedEmp.password || (matchedEmp.role === 'مدير عام' ? '123456' : '1234');
+      passwordOk = cleanPass === legacyPlain;
+    }
   }
   if (!passwordOk) {
     return {
@@ -559,9 +625,10 @@ export async function authenticateShopUser(
     };
   }
 
-  // ترحيل: أي موظف ما زالت كلمته نصاً (أو بلا كلمة) تُحفظ مجزّأة وتُحذف النسخة النصية من الداتا المتزامنة
+  // Migrate legacy local passwords only in local/offline mode. Cloud-authenticated
+  // employee rows may intentionally omit passwordHash from the login response.
   let migratedEmployees = employees;
-  if (employees.some(e => !e.passwordHash || e.password !== undefined)) {
+  if (!serverSessionToken && employees.some(e => !e.passwordHash || e.password !== undefined)) {
     migratedEmployees = await Promise.all(employees.map(async (e) => {
       if (e.passwordHash && e.password === undefined) return e;
       const { password: plain, ...rest } = e;
@@ -578,47 +645,6 @@ export async function authenticateShopUser(
     }
   }
   const usingDefaultPassword = DEFAULT_PASSWORDS.includes(cleanPass);
-
-  // A locally verified employee may enter in LOCAL-ONLY mode when the cloud copy
-  // is stale (for example, credentials were changed while this device was offline).
-  // No server token is created in this case, so protected cloud sync remains blocked.
-  let serverSessionToken: string | undefined;
-  let serverSessionExpiresAt: string | undefined;
-  let localOnlyLogin = typeof navigator !== 'undefined' && !navigator.onLine;
-  if (typeof navigator !== 'undefined' && navigator.onLine) {
-    try {
-      const authResponse = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-license-key': tenant.licenseKey },
-        body: JSON.stringify({ username: cleanUser, password: cleanPass }),
-      });
-      let authBody: any = {};
-      try { authBody = await authResponse.json(); } catch { /* invalid server response */ }
-      if (!authResponse.ok || typeof authBody.token !== 'string' || authBody.token.length < 32) {
-        // Only a credential/employee mismatch can fall back to the locally verified account.
-        // License, authorization, rate-limit and server errors must still fail closed.
-        if (authResponse.status === 401 && authBody.code === 'EMPLOYEE_INVALID_CREDENTIALS') {
-          localOnlyLogin = true;
-        } else {
-          return {
-            success: false,
-            message: authBody.error || 'تعذّر توثيق الموظف على الخادم. حاول مرة أخرى.',
-            employees: migratedEmployees,
-          };
-        }
-      } else {
-        serverSessionToken = authBody.token;
-        serverSessionExpiresAt = typeof authBody.expiresAt === 'string' ? authBody.expiresAt : undefined;
-      }
-    } catch (e) {
-      console.warn('Cloud employee authentication failed.', e);
-      return {
-        success: false,
-        message: 'تعذّر الاتصال بخادم تسجيل الدخول. تحقق من الإنترنت وحاول مجددًا.',
-        employees: migratedEmployees,
-      };
-    }
-  }
 
   const session: UserSession = {
     tenantId: tenant.tenantId,
