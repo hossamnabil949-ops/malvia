@@ -466,6 +466,7 @@ export interface PurchaseInvoiceItem {
   partName: string;
   category: PartCategory;
   brand?: string; // ماركة السيارة (تُستخدم عند إضافة صنف جديد للمخزن تلقائياً)
+  compatibleModels?: string; // موديلات السيارات المتوافقة كما وردت في فاتورة الشراء
   quantity: number;
   costPrice: number;
   salePrice: number;
