@@ -234,6 +234,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         partName: existing.name,
         category: existing.category,
         brand: existing.brand,
+        compatibleModels: existing.compatibleModels || '',
         costPrice: existing.costPrice,
         salePrice: existing.salePrice,
         total: Math.round(updated[index].quantity * existing.costPrice)
@@ -455,15 +456,22 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
   const filteredInvoices = useMemo(() => {
     return purchaseInvoices.filter(inv => {
-      const matchesSearch = 
-        inv.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inv.supplierName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (inv.supplierInvoiceNumber && inv.supplierInvoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()));
+      const q = searchQuery.trim().toLocaleLowerCase();
+      const matchesSearch = !q ||
+        inv.invoiceNumber.toLocaleLowerCase().includes(q) ||
+        inv.supplierName.toLocaleLowerCase().includes(q) ||
+        (inv.supplierInvoiceNumber && inv.supplierInvoiceNumber.toLocaleLowerCase().includes(q)) ||
+        inv.items.some(item => {
+          const linkedPart = item.partId ? parts.find(part => part.id === item.partId) : undefined;
+          return [item.partName, item.partNumber, item.brand, item.compatibleModels,
+            linkedPart?.compatibleModels, linkedPart?.brand, linkedPart?.partNumber, linkedPart?.name]
+            .some(value => String(value ?? '').toLocaleLowerCase().includes(q));
+        });
       
       const matchesStatus = filterStatus === 'all' || inv.paymentStatus === filterStatus;
       return matchesSearch && matchesStatus && inDateRange(inv.date, dateRange);
     });
-  }, [purchaseInvoices, searchQuery, filterStatus, dateRange]);
+  }, [purchaseInvoices, parts, searchQuery, filterStatus, dateRange]);
 
   const filteredReturns = useMemo(() => {
     return purchaseReturns.filter(ret => {
@@ -1147,6 +1155,13 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                                   className="w-24 h-7 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-[11px] font-mono text-amber-400 placeholder-neutral-500 focus:outline-none"
                                 />
                               </div>
+                              <input
+                                type="text"
+                                value={item.compatibleModels || ''}
+                                onChange={(e) => handleItemChange(index, 'compatibleModels', e.target.value)}
+                                placeholder="السيارات المتوافقة (مثال: MG 5 / ZS 2021-2024)"
+                                className="w-full h-7 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-[11px] text-emerald-300 placeholder-neutral-500 focus:outline-none"
+                              />
                             </div>
                           </td>
 
