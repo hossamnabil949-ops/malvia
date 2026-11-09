@@ -27,7 +27,10 @@ export function evaluatePurchaseInvoiceMutation(context: PurchaseInvoiceMutation
   if ((context.stockMovements || []).some(m => {
     if (!partIds.has(m.partId) || m.refId === invoice.id) return false;
     const at = Date.parse(m.at);
-    return Number.isFinite(invoiceTime) && Number.isFinite(at) && at > invoiceTime;
+    // Unknown timestamps must fail closed: otherwise an old/invalid movement could be
+    // mistaken for a movement that predates the invoice and permit unsafe stock reversal.
+    if (!Number.isFinite(invoiceTime) || !Number.isFinite(at)) return true;
+    return at > invoiceTime;
   })) blockers.push('SUBSEQUENT_STOCK_MOVEMENT');
   if ((context.stockBatches || []).some(b => b.purchaseInvoiceId === invoice.id)
     || (context.serialUnits || []).some(u => u.purchaseInvoiceId === invoice.id)) blockers.push('TRACKED_STOCK_LINKED');

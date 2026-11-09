@@ -8,6 +8,8 @@ assert.equal(evaluatePurchaseInvoiceMutation({...base,invoice:{...invoice,amount
 assert.equal(evaluatePurchaseInvoiceMutation({...base,purchaseReturns:[{purchaseInvoiceId:'pi-1'}]}).blockers.includes('RETURN_LINKED'),true);
 assert.equal(evaluatePurchaseInvoiceMutation({...base,paymentSchedules:[{purchaseInvoiceId:'pi-1'}]}).blockers.includes('SCHEDULE_LINKED'),true);
 assert.equal(evaluatePurchaseInvoiceMutation({...base,stockMovements:[{partId:'part-1',refId:'sale-1',at:'2026-11-02T10:00:00Z'}]}).blockers.includes('SUBSEQUENT_STOCK_MOVEMENT'),true);
+assert.equal(evaluatePurchaseInvoiceMutation({...base,stockMovements:[{partId:'part-1',refId:'sale-1',at:'not-a-date'}]}).blockers.includes('SUBSEQUENT_STOCK_MOVEMENT'),true);
+assert.equal(evaluatePurchaseInvoiceMutation({...base,invoice:{...invoice,date:'invalid-date'},stockMovements:[{partId:'part-1',refId:'sale-1',at:'2026-10-30T10:00:00Z'}]}).blockers.includes('SUBSEQUENT_STOCK_MOVEMENT'),true);
 assert.equal(evaluatePurchaseInvoiceMutation({...base,stockBatches:[{purchaseInvoiceId:'pi-1'}]}).blockers.includes('TRACKED_STOCK_LINKED'),true);
 assert.equal(evaluatePurchaseInvoiceMutation({...base,serialUnits:[{purchaseInvoiceId:'pi-1'}]}).blockers.includes('TRACKED_STOCK_LINKED'),true);
 assert.deepEqual(evaluatePurchaseInvoiceMutation(base),{allowed:true,blockers:[]});
