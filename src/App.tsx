@@ -2958,6 +2958,7 @@ export default function App() {
             onDeletePart={handleDeletePart}
             onUpdatePartPrices={handleUpdatePartPrices}
             onUpdatePart={handleUpdatePart}
+            ownerLicenseKey={activeTenant?.licenseKey || ''}
             onQuickSalePart={(part) => {
               handleAddToCart(part);
               setCurrentTab('pos');

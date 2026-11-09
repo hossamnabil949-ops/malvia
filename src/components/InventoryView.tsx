@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { TrackingMode, TRACKING_LABEL } from '../utils/trackingLogic';
 import { Trash2, Lock } from 'lucide-react';
-import { verifyOwnerPassword } from '../services/approvalService';
+import { verifyOwnerPassword, verifyOwnerPasswordOnline } from '../services/approvalService';
 import { Employee, AutoPart, CarBrand, PartCategory, Invoice, PurchaseInvoice, SalesReturn, PurchaseReturn } from '../types/autoParts';
 import { StockCardModal } from './StockCardModal';
 import { ClipboardList, ScanBarcode as ScanBarcodeIcon } from 'lucide-react';
@@ -39,6 +39,7 @@ interface InventoryViewProps {
   onUpdateStock: (partId: string, addedStock: number) => void;
   onUpdatePartPrices?: (partId: string, costPrice: number, salePrice: number, barcode?: string) => void;
   onUpdatePart?: (updatedPart: AutoPart) => void;
+  ownerLicenseKey?: string;
   employees?: Employee[];
   onDeletePart?: (partId: string, approvedBy: string) => void;
   carBrands?: string[];
@@ -63,6 +64,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   onUpdateStock,
   onUpdatePartPrices,
   onUpdatePart,
+  ownerLicenseKey = '',
   employees = [],
   onDeletePart,
   carBrands = CAR_BRANDS,
@@ -247,8 +249,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     if (!editName.trim()) { setEditError('اسم الصنف مطلوب.'); setEditBusy(false); return; }
     if (!Number.isFinite(editCostPrice) || editCostPrice < 0 || !Number.isFinite(editSalePrice) || editSalePrice < 0) { setEditError('راجع الأسعار؛ يجب أن تكون أرقاماً صحيحة غير سالبة.'); setEditBusy(false); return; }
     try {
-      const owner = await verifyOwnerPassword(employees, editOwnerPassword);
-      if (!owner) { setEditError('كلمة مرور المالك غير صحيحة. لم يتم حفظ أي تعديل.'); setEditBusy(false); return; }
+      const approved = await verifyOwnerPasswordOnline(ownerLicenseKey, editOwnerPassword);
+      if (!approved) { setEditError('تعذر اعتماد كلمة مرور المالك من الخادم. تأكد من الاتصال والجلسة وكلمة المرور. لم يتم حفظ أي تعديل.'); setEditBusy(false); return; }
     } catch { setEditError('تعذر التحقق من كلمة مرور المالك. حاول مرة أخرى.'); setEditBusy(false); return; }
     const updated: AutoPart = {
       ...editPricePart,
