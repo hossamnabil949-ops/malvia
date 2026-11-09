@@ -175,6 +175,10 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     }
   ]);
 
+  // بحث سريع عن الصنف بالاسم أو الكود أو ماركة/موديل السيارة المتوافقة.
+  const [partSearchQueries, setPartSearchQueries] = useState<Record<number, string>>({});
+  const [activePartSearchIndex, setActivePartSearchIndex] = useState<number | null>(null);
+
   const selectedSupplier = useMemo(() => {
     return suppliers.find(s => s.id === selectedSupplierId) || suppliers[0];
   }, [suppliers, selectedSupplierId]);
@@ -236,6 +240,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       };
       return updated;
     });
+    setPartSearchQueries(prev => ({ ...prev, [index]: '' }));
+    setActivePartSearchIndex(null);
   };
 
   // مسح الباركود داخل فاتورة الشراء: القطعة موجودة بالفاتورة → +1، وإلا تُملأ أول سطر فاضي أو سطر جديد
@@ -1077,17 +1083,53 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                         <tr className="hover:bg-surface-3">
                           <td className="p-2.5 min-w-56">
                             <div className="space-y-1">
-                              <select
-                                onChange={(e) => handleSelectExistingPart(index, e.target.value)}
-                                className="w-full h-7 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-[11px] text-neutral-300 focus:outline-none"
-                              >
-                                <option value="">-- اختر صنف موجود أو اكتب جديد --</option>
-                                {parts.map(p => (
-                                  <option key={p.id} value={p.partNumber}>
-                                    {p.name} ({p.partNumber}) - تكلفة: {p.costPrice} ج.م
-                                  </option>
-                                ))}
-                              </select>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={partSearchQueries[index] ?? ''}
+                                  onFocus={() => setActivePartSearchIndex(index)}
+                                  onChange={(e) => {
+                                    setPartSearchQueries(prev => ({ ...prev, [index]: e.target.value }));
+                                    setActivePartSearchIndex(index);
+                                  }}
+                                  onKeyDown={(e) => { if (e.key === 'Escape') setActivePartSearchIndex(null); }}
+                                  placeholder="ابحث باسم القطعة أو كودها أو السيارة المتوافقة (مثال: MG 5)"
+                                  className="w-full h-8 px-2 rounded-lg bg-surface-1 border border-amber-500/40 text-[11px] text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400"
+                                  autoComplete="off"
+                                />
+                                {activePartSearchIndex === index && (partSearchQueries[index] ?? '').trim().length > 0 && (
+                                  <>
+                                    <button type="button" aria-label="إغلاق نتائج البحث" className="fixed inset-0 z-20 cursor-default" onClick={() => setActivePartSearchIndex(null)} />
+                                    <div className="absolute right-0 left-0 top-full mt-1 z-30 max-h-64 overflow-y-auto rounded-xl border border-neutral-700 bg-surface-2 shadow-2xl">
+                                      {parts.filter(p => {
+                                        const q = (partSearchQueries[index] ?? '').trim().toLocaleLowerCase();
+                                        return [p.name, p.partNumber, p.brand, p.compatibleModels, p.category, p.origin]
+                                          .some(value => String(value ?? '').toLocaleLowerCase().includes(q));
+                                      }).slice(0, 30).map(p => (
+                                        <button
+                                          key={p.id}
+                                          type="button"
+                                          onClick={() => handleSelectExistingPart(index, p.id)}
+                                          className="w-full px-3 py-2 text-right border-b border-neutral-800 last:border-0 hover:bg-amber-500/10 focus:bg-amber-500/10 focus:outline-none"
+                                        >
+                                          <span className="block text-[11px] font-bold text-white">{p.name}</span>
+                                          <span className="block mt-0.5 text-[10px] text-neutral-400">
+                                            كود: <b className="font-mono text-amber-300">{p.partNumber}</b> · {p.brand} · تكلفة: {p.costPrice} ج.م
+                                          </span>
+                                          <span className="block mt-0.5 text-[10px] text-emerald-300">السيارات المتوافقة: {p.compatibleModels || 'غير محدد'}</span>
+                                        </button>
+                                      ))}
+                                      {parts.filter(p => {
+                                        const q = (partSearchQueries[index] ?? '').trim().toLocaleLowerCase();
+                                        return [p.name, p.partNumber, p.brand, p.compatibleModels, p.category, p.origin]
+                                          .some(value => String(value ?? '').toLocaleLowerCase().includes(q));
+                                      }).length === 0 && (
+                                        <p className="p-3 text-[11px] text-neutral-400 text-center">لا توجد أصناف متوافقة مع كلمة البحث. يمكنك إدخال صنف جديد بالأسفل.</p>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
 
                               <div className="flex gap-1">
                                 <input
