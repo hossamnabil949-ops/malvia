@@ -1918,7 +1918,7 @@ export default function App() {
           partNumber: item.partNumber || `NEW-${Date.now().toString().slice(-6)}-${newParts.length + 1}`,
           name: item.partName,
           brand: item.brand || GENERAL_BRAND,
-          compatibleModels: 'عام',
+          compatibleModels: item.compatibleModels?.trim() || 'عام',
           category: item.category,
           origin: 'تجاري درجة 1',
           shelfLocation: 'مستودع رئيسي',
