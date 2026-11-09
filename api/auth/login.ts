@@ -37,9 +37,10 @@ export default async function handler(req: any, res: any) {
     const row = await getOne(tenant, 'employees');
     const employees = Array.isArray(row?.data) ? row!.data as any[] : [];
     const employee = employees.find((e) => e && e.status !== 'معلق' && (
-      String(e.username || '').toLowerCase() === username ||
-      String(e.phone || '').toLowerCase() === username ||
-      String(e.name || '').toLowerCase() === username
+      String(e.username || '').trim().toLowerCase() === username ||
+      String(e.phone || '').trim().toLowerCase() === username ||
+      String(e.name || '').trim().toLowerCase() === username ||
+      (username === 'admin' && String(e.role || '').trim() === 'مدير عام')
     ));
     if (!employee || !verifyStoredPassword(password, employee)) {
       rateLimit(`employee-login-fail:${ip}`, 8, 10 * 60_000);
