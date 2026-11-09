@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx tests/saleLogic.test.ts && tsx tests/shiftLogic.test.ts && tsx tests/financialIntegrity.test.ts && tsx tests/apiSecurity.test.ts && tsx tests/passwordService.test.ts && tsx tests/permissions.test.ts && tsx tests/purchaseInvoiceMutationPolicy.test.ts"
+    "test": "tsx tests/saleLogic.test.ts && tsx tests/shiftLogic.test.ts && tsx tests/financialIntegrity.test.ts && tsx tests/apiSecurity.test.ts && tsx tests/passwordService.test.ts && tsx tests/permissions.test.ts && tsx tests/purchaseInvoiceMutationPolicy.test.ts && tsx tests/purchaseInvoiceOwnerApproval.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
