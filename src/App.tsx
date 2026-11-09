@@ -604,6 +604,8 @@ export default function App() {
     if (!previous) return;
     const changed: string[] = [];
     if (previous.name !== updatedPart.name) changed.push(`الاسم: ${previous.name} ← ${updatedPart.name}`);
+    if (previous.brand !== updatedPart.brand) changed.push('ماركة السيارة');
+    if (previous.category !== updatedPart.category) changed.push('تصنيف الصنف');
     if (previous.compatibleModels !== updatedPart.compatibleModels) changed.push('الموديلات المتوافقة');
     if (previous.origin !== updatedPart.origin) changed.push('المنشأ');
     if (previous.shelfLocation !== updatedPart.shelfLocation) changed.push('مكان التخزين');

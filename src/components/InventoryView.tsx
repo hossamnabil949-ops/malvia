@@ -125,6 +125,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [editSalePrice, setEditSalePrice] = useState<number>(0);
   const [editBarcode, setEditBarcode] = useState<string>('');
   const [editName, setEditName] = useState('');
+  const [editBrand, setEditBrand] = useState('');
+  const [editCategory, setEditCategory] = useState('');
   const [editCompatibleModels, setEditCompatibleModels] = useState('');
   const [editOrigin, setEditOrigin] = useState('');
   const [editShelfLocation, setEditShelfLocation] = useState('');
@@ -242,6 +244,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     const updated: AutoPart = {
       ...editPricePart,
       name: editName.trim(),
+      brand: editBrand as CarBrand,
+      category: editCategory as PartCategory,
       compatibleModels: editCompatibleModels.trim(),
       origin: editOrigin.trim(),
       shelfLocation: editShelfLocation.trim(),
@@ -466,6 +470,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                               setEditSalePrice(part.salePrice);
                               setEditBarcode(part.barcode || '');
                               setEditName(part.name || '');
+                              setEditBrand(part.brand || '');
+                              setEditCategory(part.category || '');
                               setEditCompatibleModels(part.compatibleModels || '');
                               setEditOrigin(part.origin || '');
                               setEditShelfLocation(part.shelfLocation || '');
@@ -620,6 +626,18 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 <div className="sm:col-span-2">
                   <label className="text-neutral-300 font-bold block mb-1">اسم الصنف *</label>
                   <input value={editName} onChange={e => setEditName(e.target.value)} required maxLength={180} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">ماركة السيارة</label>
+                  <select value={editBrand} onChange={e => setEditBrand(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none">
+                    {[...new Set([editBrand, ...carBrands].filter(Boolean))].map(brand => <option key={brand} value={brand}>{brand}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">التصنيف</label>
+                  <select value={editCategory} onChange={e => setEditCategory(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none">
+                    {[...new Set([editCategory, ...PART_CATEGORIES].filter(Boolean))].map(category => <option key={category} value={category}>{category}</option>)}
+                  </select>
                 </div>
                 <div className="sm:col-span-2">
                   <label className="text-neutral-300 font-bold block mb-1">موديلات السيارات المتوافقة</label>
