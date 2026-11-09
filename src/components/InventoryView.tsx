@@ -38,6 +38,7 @@ interface InventoryViewProps {
   onAddNewPart: (newPart: AutoPart) => void;
   onUpdateStock: (partId: string, addedStock: number) => void;
   onUpdatePartPrices?: (partId: string, costPrice: number, salePrice: number, barcode?: string) => void;
+  onUpdatePart?: (updatedPart: AutoPart) => void;
   employees?: Employee[];
   onDeletePart?: (partId: string, approvedBy: string) => void;
   carBrands?: string[];
@@ -61,6 +62,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   onAddNewPart,
   onUpdateStock,
   onUpdatePartPrices,
+  onUpdatePart,
   employees = [],
   onDeletePart,
   carBrands = CAR_BRANDS,
@@ -122,6 +124,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [editCostPrice, setEditCostPrice] = useState<number>(0);
   const [editSalePrice, setEditSalePrice] = useState<number>(0);
   const [editBarcode, setEditBarcode] = useState<string>('');
+  const [editName, setEditName] = useState('');
+  const [editCompatibleModels, setEditCompatibleModels] = useState('');
+  const [editOrigin, setEditOrigin] = useState('');
+  const [editShelfLocation, setEditShelfLocation] = useState('');
+  const [editUnit, setEditUnit] = useState('');
+  const [editSupplierBarcode, setEditSupplierBarcode] = useState('');
 
   const [newPartForm, setNewPartForm] = useState<Partial<AutoPart>>({
     partNumber: '',
@@ -228,8 +236,24 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const handleConfirmEditPrices = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editPricePart || !onUpdatePartPrices) return;
-    onUpdatePartPrices(editPricePart.id, editCostPrice, editSalePrice, editBarcode.trim());
+    if (!editPricePart) return;
+    if (!editName.trim()) { window.alert('اسم الصنف مطلوب.'); return; }
+    if (!Number.isFinite(editCostPrice) || editCostPrice < 0 || !Number.isFinite(editSalePrice) || editSalePrice < 0) { window.alert('راجع أسعار الصنف؛ يجب أن تكون أرقاماً صحيحة غير سالبة.'); return; }
+    const updated: AutoPart = {
+      ...editPricePart,
+      name: editName.trim(),
+      compatibleModels: editCompatibleModels.trim(),
+      origin: editOrigin.trim(),
+      shelfLocation: editShelfLocation.trim(),
+      unit: editUnit.trim() || editPricePart.unit,
+      costPrice: editCostPrice,
+      salePrice: editSalePrice,
+      barcode: editBarcode.trim() || undefined,
+      internalBarcode: editBarcode.trim() || undefined,
+      supplierBarcode: editSupplierBarcode.trim() || undefined,
+    };
+    if (onUpdatePart) onUpdatePart(updated);
+    else if (onUpdatePartPrices) onUpdatePartPrices(editPricePart.id, editCostPrice, editSalePrice, editBarcode.trim());
     setEditPricePart(null);
   };
 
@@ -441,9 +465,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                               setEditCostPrice(part.costPrice);
                               setEditSalePrice(part.salePrice);
                               setEditBarcode(part.barcode || '');
+                              setEditName(part.name || '');
+                              setEditCompatibleModels(part.compatibleModels || '');
+                              setEditOrigin(part.origin || '');
+                              setEditShelfLocation(part.shelfLocation || '');
+                              setEditUnit(part.unit || '');
+                              setEditSupplierBarcode(part.supplierBarcode || '');
                             }}
                             className="p-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-amber-400"
-                            title="تعديل سعر البيع وسعر الشراء"
+                            title="تعديل بيانات الصنف وأسعاره"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
@@ -573,7 +603,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
               <div className="flex items-center gap-2">
                 <Edit3 className="w-4 h-4 text-amber-400" />
-                <h3 className="text-sm font-bold text-white">تعديل أسعار القطعة</h3>
+                <h3 className="text-sm font-bold text-white">تعديل بيانات الصنف وأسعاره</h3>
               </div>
               <button onClick={() => setEditPricePart(null)} className="text-neutral-400 hover:text-white">
                 <X className="w-4 h-4" />
@@ -586,6 +616,35 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             </div>
 
             <form onSubmit={handleConfirmEditPrices} className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="text-neutral-300 font-bold block mb-1">اسم الصنف *</label>
+                  <input value={editName} onChange={e => setEditName(e.target.value)} required maxLength={180} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-neutral-300 font-bold block mb-1">موديلات السيارات المتوافقة</label>
+                  <input value={editCompatibleModels} onChange={e => setEditCompatibleModels(e.target.value)} maxLength={300} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">المنشأ / النوع</label>
+                  <input value={editOrigin} onChange={e => setEditOrigin(e.target.value)} maxLength={100} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">مكان التخزين</label>
+                  <input value={editShelfLocation} onChange={e => setEditShelfLocation(e.target.value)} maxLength={80} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">وحدة القياس</label>
+                  <input value={editUnit} onChange={e => setEditUnit(e.target.value)} maxLength={30} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">باركود المورد</label>
+                  <input value={editSupplierBarcode} onChange={e => setEditSupplierBarcode(e.target.value)} maxLength={100} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
+              </div>
+              <div className="border-t border-neutral-800 pt-3">
+                <p className="text-amber-300 font-bold mb-2">الأسعار والباركود</p>
+              </div>
               <div>
                 <label className="text-neutral-300 font-bold block mb-1">
                   سعر الشراء / التكلفة من التاجر (ج.م) *
@@ -638,7 +697,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   type="submit"
                   className="w-1/2 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs shadow-md"
                 >
-                  حفظ الأسعار
+                  حفظ بيانات الصنف
                 </button>
               </div>
             </form>

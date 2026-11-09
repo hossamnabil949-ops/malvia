@@ -600,11 +600,25 @@ export default function App() {
 
   // Handlers for Inventory
   const handleUpdatePart = (updatedPart: AutoPart) => {
+    const previous = parts.find(p => p.id === updatedPart.id);
+    if (!previous) return;
+    const changed: string[] = [];
+    if (previous.name !== updatedPart.name) changed.push(`الاسم: ${previous.name} ← ${updatedPart.name}`);
+    if (previous.compatibleModels !== updatedPart.compatibleModels) changed.push('الموديلات المتوافقة');
+    if (previous.origin !== updatedPart.origin) changed.push('المنشأ');
+    if (previous.shelfLocation !== updatedPart.shelfLocation) changed.push('مكان التخزين');
+    if (previous.unit !== updatedPart.unit) changed.push('وحدة القياس');
+    if (previous.costPrice !== updatedPart.costPrice) changed.push(`التكلفة: ${previous.costPrice} ← ${updatedPart.costPrice}`);
+    if (previous.salePrice !== updatedPart.salePrice) changed.push(`سعر البيع: ${previous.salePrice} ← ${updatedPart.salePrice}`);
+    if (previous.barcode !== updatedPart.barcode) changed.push('الباركود');
+    if (previous.supplierBarcode !== updatedPart.supplierBarcode) changed.push('باركود المورد');
+    const auditedPart = { ...updatedPart, updatedAt: todayISO() };
     setParts(prev => {
-      const updated = prev.map(p => p.id === updatedPart.id ? updatedPart : p);
+      const updated = prev.map(p => p.id === auditedPart.id ? auditedPart : p);
       persistChanges({ parts: updated });
       return updated;
     });
+    if (changed.length) logAudit('part.update', `تعديل بيانات الصنف ${previous.name}: ${changed.join('، ')}`, updatedPart.id);
   };
 
   const handleAddPart = (newPart: AutoPart) => {
@@ -2941,6 +2955,7 @@ export default function App() {
             employees={employees}
             onDeletePart={handleDeletePart}
             onUpdatePartPrices={handleUpdatePartPrices}
+            onUpdatePart={handleUpdatePart}
             onQuickSalePart={(part) => {
               handleAddToCart(part);
               setCurrentTab('pos');
