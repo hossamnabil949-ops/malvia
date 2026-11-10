@@ -3153,9 +3153,8 @@ export default function App() {
               if (scheduleId && (!schedule || !scheduleState || scheduleState.status === 'cancelled' || scheduleState.status === 'paid')) {
                 return reject('هذا القسط ملغى أو تم سداده بالفعل.');
               }
-              if (scheduleState && amount > scheduleState.remainingAmount) {
-                return reject('المتبقي من هذا القسط ' + scheduleState.remainingAmount.toLocaleString('ar-EG') + ' جنيه فقط.');
-              }
+              // Accept an amount above this installment: close the installment and
+              // let the supplier's remaining debt/store-credit calculation absorb the excess.
 
               const stamp = Date.now();
               const paymentId = 'SP-' + stamp + '-' + Math.random().toString(36).slice(2,7);

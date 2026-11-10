@@ -38,7 +38,10 @@ const payment = (id: string, amount: number): SupplierPayment => ({
   const state = getSupplierSchedulePaymentState(legacy, [payment('LEGACY-PAY', 250)]);
   assert.equal(state.amountPaid, 250, 'linked historical payments must recover a stale schedule counter');
   assert.equal(state.remainingAmount, 750);
-  assert.equal(applySupplierSchedulePayment(legacy, [payment('LEGACY-PAY', 250)], 751, 'OVER', 'TX-OVER', 'now'), null);
+  const overpaid = applySupplierSchedulePayment(legacy, [payment('LEGACY-PAY', 250)], 751, 'OVER', 'TX-OVER', 'now');
+  assert.ok(overpaid, 'an overpayment must be accepted and applied to the supplier account');
+  assert.equal(overpaid.amountPaid, 1000, 'schedule paid amount must not exceed its face value');
+  assert.equal(overpaid.status, 'paid');
 }
 
 {
@@ -47,3 +50,15 @@ const payment = (id: string, amount: number): SupplierPayment => ({
 }
 
 console.log('supplierPaymentScheduleLogic: all tests passed');
+
+{
+  const smallerSchedule: SupplierPaymentSchedule = { ...schedule, id: 'SCH-OVER', amount: 966.66, amountPaid: 0, status: 'scheduled' };
+  const overpayment = applySupplierSchedulePayment(smallerSchedule, [], 1000, 'PAY-OVER', 'TX-OVER', '2026-11-10T13:00:00.000Z');
+  assert.ok(overpayment, 'payment above the installment amount must be accepted');
+  assert.equal(overpayment.amountPaid, 966.66, 'installment paid amount must be capped at its face value');
+  assert.equal(overpayment.status, 'paid');
+  const state = getSupplierSchedulePaymentState(overpayment, [payment('PAY-OVER', 1000)]);
+  assert.equal(state.status, 'paid');
+  assert.equal(state.remainingAmount, 0);
+  assert.equal(state.amountPaid, 966.66);
+}

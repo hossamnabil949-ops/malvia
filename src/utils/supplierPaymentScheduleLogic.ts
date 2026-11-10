@@ -48,7 +48,7 @@ export function applySupplierSchedulePayment(
 ): SupplierPaymentSchedule | null {
   const state = getSupplierSchedulePaymentState(schedule, payments);
   const paymentAmount = money(amount);
-  if (state.status === 'cancelled' || state.status === 'paid' || paymentAmount <= 0 || paymentAmount > state.remainingAmount) return null;
+  if (state.status === 'cancelled' || state.status === 'paid' || paymentAmount <= 0) return null;
 
   const nextPaid = money(Math.min(Number(schedule.amount) || 0, state.amountPaid + paymentAmount));
   const paymentIds = Array.from(new Set([...(schedule.paymentIds || []), ...(schedule.paymentId ? [schedule.paymentId] : []), paymentId]));
