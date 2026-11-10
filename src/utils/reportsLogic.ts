@@ -276,18 +276,35 @@ export function reportReturns(d: ReportData, r: DateRange): ReportTable {
 // ---------------- المشتريات والمالية ----------------
 export function reportPurchasesBySupplier(d: ReportData, r: DateRange): ReportTable {
   const supplierNames = new Map(d.suppliers.map(s => [s.id, s.name]));
-  const g = group(d.purchaseInvoices.filter(i => inRange(i.date, r)), i => i.supplierId || `legacy-name:${i.supplierName}`);
+  const invoices = d.purchaseInvoices.filter(i => inRange(i.date, r));
+  const g = group(invoices, i => i.supplierId || `legacy-name:${i.supplierName}`);
+  const returnsInRange = (d.purchaseReturns || []).filter(ret => inRange(ret.date, r));
   const rows = [...g.entries()].map(([supplierKey, list]) => {
     const name = supplierNames.get(supplierKey) || list[0]?.supplierName || supplierKey;
-    const total = sum(list, i => i.grandTotal);
+    const gross = sum(list, i => i.originalGrandTotal ?? (i.grandTotal + (i.returnedAmount || 0)));
+    const returned = sum(returnsInRange.filter(ret => ret.supplierId === supplierKey), ret => ret.totalReturnAmount);
+    const legacyReturns = sum(list.filter(i => !(d.purchaseReturns || []).some(ret => ret.purchaseInvoiceId === i.id)), i => i.returnedAmount || 0);
+    const returns = Math.min(gross, returned + legacyReturns);
+    const total = Math.max(0, gross - returns);
     const paid = sum(list, i => i.amountPaid ?? 0);
-    return { name, count: list.length, total: r2(total), paid: r2(paid), remaining: r2(Math.max(0, total - paid)) };
+    return { name, count: list.length, gross: r2(gross), returns: r2(returns), total: r2(total), paid: r2(paid), remaining: r2(Math.max(0, total - paid)) };
   }).sort((a, b) => b.total - a.total);
   return {
     id: 'purchases-by-supplier', title: 'المشتريات حسب المورد',
-    columns: [{ key: 'name', label: 'المورد' }, { key: 'count', label: 'عدد الفواتير', kind: 'int' }, { key: 'total', label: 'إجمالي المشتريات', kind: 'money' }, { key: 'paid', label: 'المسدد', kind: 'money' }, { key: 'remaining', label: 'المتبقي', kind: 'money' }],
+    columns: [
+      { key: 'name', label: 'المورد' }, { key: 'count', label: 'عدد الفواتير', kind: 'int' },
+      { key: 'gross', label: 'إجمالي الفواتير قبل المرتجعات', kind: 'money' },
+      { key: 'returns', label: 'مرتجعات المشتريات', kind: 'money' },
+      { key: 'total', label: 'صافي المشتريات', kind: 'money' },
+      { key: 'paid', label: 'المسدد', kind: 'money' }, { key: 'remaining', label: 'المتبقي', kind: 'money' }
+    ],
     rows,
-    totals: { name: 'الإجمالي', count: sum(rows, x => x.count), total: r2(sum(rows, x => x.total)), paid: r2(sum(rows, x => x.paid)), remaining: r2(sum(rows, x => x.remaining)) },
+    totals: {
+      name: 'الإجمالي', count: sum(rows, x => x.count), gross: r2(sum(rows, x => x.gross)),
+      returns: r2(sum(rows, x => x.returns)), total: r2(sum(rows, x => x.total)),
+      paid: r2(sum(rows, x => x.paid)), remaining: r2(sum(rows, x => x.remaining))
+    },
+    note: 'يتم إسناد الفاتورة إلى تاريخها الأصلي، والمرتجع إلى تاريخ تسجيله. صافي المشتريات = إجمالي الفواتير − المرتجعات.'
   };
 }
 
