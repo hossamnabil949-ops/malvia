@@ -583,7 +583,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       </div>
 
       {deletePart && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={closeDelete}>
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-start sm:items-center justify-center overflow-y-auto overscroll-contain p-3 sm:p-6" onClick={closeDelete}>
           <div className="w-full max-w-sm rounded-3xl bg-surface-2 border border-rose-500/30 p-5 text-white shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
               <div className="flex items-center gap-2">
@@ -633,7 +633,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           onClick={() => setEditPricePart(null)}
         >
           <div 
-            className="w-full max-w-sm rounded-3xl bg-surface-2 border border-neutral-800 p-5 text-white shadow-2xl space-y-4"
+            className="w-full max-w-3xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] overflow-y-auto overscroll-contain rounded-2xl sm:rounded-3xl bg-surface-2 border border-neutral-800 p-4 sm:p-6 text-white shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
