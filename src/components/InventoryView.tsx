@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { TrackingMode, TRACKING_LABEL } from '../utils/trackingLogic';
 import { Trash2, Lock } from 'lucide-react';
-import { verifyOwnerPassword } from '../services/approvalService';
+import { verifyOwnerPassword, verifyOwnerPasswordOnline } from '../services/approvalService';
 import { Employee, AutoPart, CarBrand, PartCategory, Invoice, PurchaseInvoice, SalesReturn, PurchaseReturn } from '../types/autoParts';
 import { StockCardModal } from './StockCardModal';
 import { ClipboardList, ScanBarcode as ScanBarcodeIcon } from 'lucide-react';
@@ -38,6 +38,8 @@ interface InventoryViewProps {
   onAddNewPart: (newPart: AutoPart) => void;
   onUpdateStock: (partId: string, addedStock: number) => void;
   onUpdatePartPrices?: (partId: string, costPrice: number, salePrice: number, barcode?: string) => void;
+  onUpdatePart?: (updatedPart: AutoPart) => void;
+  ownerLicenseKey?: string;
   employees?: Employee[];
   onDeletePart?: (partId: string, approvedBy: string) => void;
   carBrands?: string[];
@@ -61,6 +63,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   onAddNewPart,
   onUpdateStock,
   onUpdatePartPrices,
+  onUpdatePart,
+  ownerLicenseKey = '',
   employees = [],
   onDeletePart,
   carBrands = CAR_BRANDS,
@@ -122,6 +126,22 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [editCostPrice, setEditCostPrice] = useState<number>(0);
   const [editSalePrice, setEditSalePrice] = useState<number>(0);
   const [editBarcode, setEditBarcode] = useState<string>('');
+  const [editName, setEditName] = useState('');
+  const [editPartNumber, setEditPartNumber] = useState('');
+  const [editMinAlertStock, setEditMinAlertStock] = useState(0);
+  const [editIsScreenOrDisplay, setEditIsScreenOrDisplay] = useState(false);
+  const [editBrand, setEditBrand] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editCompatibleModels, setEditCompatibleModels] = useState('');
+  const [editOrigin, setEditOrigin] = useState('');
+  const [editShelfLocation, setEditShelfLocation] = useState('');
+  const [editUnit, setEditUnit] = useState('');
+  const [editSupplierBarcode, setEditSupplierBarcode] = useState('');
+  const [editOwnerPassword, setEditOwnerPassword] = useState('');
+  const [editError, setEditError] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
+
+  const [partNumberMode, setPartNumberMode] = useState<'auto' | 'manual'>('auto');
 
   const [newPartForm, setNewPartForm] = useState<Partial<AutoPart>>({
     partNumber: '',
@@ -142,6 +162,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     const m: Record<string, number> = {};
     parts.forEach((p) => { m[p.brand] = (m[p.brand] || 0) + 1; });
     return m;
+  }, [parts]);
+
+  // MALVIA-managed SKU sequence. Existing OEM/SKU values are preserved; only MAL-###### is auto-incremented.
+  const suggestedPartNumber = useMemo(() => {
+    const last = parts.reduce((max, part) => {
+      const match = /^MAL-(\d+)$/i.exec(String(part.partNumber || '').trim());
+      return match ? Math.max(max, Number(match[1]) || 0) : max;
+    }, 0);
+    return 'MAL-' + String(last + 1).padStart(6, '0');
   }, [parts]);
 
   const filteredParts = useMemo(() => {
@@ -176,12 +205,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const handleSaveNewPart = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPartForm.partNumber || !newPartForm.name) return;
+    const resolvedPartNumber = partNumberMode === 'auto' ? suggestedPartNumber : String(newPartForm.partNumber || '').trim();
+    if (!resolvedPartNumber || !newPartForm.name) return;
+    if (parts.some(part => part.partNumber.trim().toLowerCase() === resolvedPartNumber.toLowerCase())) {
+      window.alert('رقم الصنف مستخدم بالفعل. اختر رقمًا آخر أو استخدم الترقيم التلقائي.');
+      return;
+    }
 
     const generatedInternalBarcode = makeInternalBarcode(parts.flatMap(p => [p.barcode, p.internalBarcode, p.supplierBarcode].filter(Boolean) as string[]));
     const part: AutoPart = {
       id: `p-${Date.now()}`,
-      partNumber: newPartForm.partNumber.trim(),
+      partNumber: resolvedPartNumber,
       name: newPartForm.name.trim(),
       brand: newPartForm.brand as CarBrand,
       compatibleModels: newPartForm.compatibleModels || 'عام',
@@ -201,6 +235,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
     onAddNewPart(part);
     setShowAddModal(false);
+    setPartNumberMode('auto');
     setNewPartForm({
       partNumber: '',
       name: '',
@@ -226,11 +261,46 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setRestockPart(null);
   };
 
-  const handleConfirmEditPrices = (e: React.FormEvent) => {
+  const handleConfirmEditPrices = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editPricePart || !onUpdatePartPrices) return;
-    onUpdatePartPrices(editPricePart.id, editCostPrice, editSalePrice, editBarcode.trim());
+    if (!editPricePart || editBusy) return;
+    setEditBusy(true);
+    setEditError('');
+    if (!editName.trim()) { setEditError('اسم الصنف مطلوب.'); setEditBusy(false); return; }
+    if (!editPartNumber.trim()) { setEditError('رقم الصنف / كود OEM مطلوب.'); setEditBusy(false); return; }
+    if (!Number.isFinite(editMinAlertStock) || editMinAlertStock < 0) { setEditError('حد التنبيه يجب أن يكون صفراً أو أكبر.'); setEditBusy(false); return; }
+    const duplicatePartNumber = parts.some(p => p.id !== editPricePart.id && p.partNumber.trim().toLowerCase() === editPartNumber.trim().toLowerCase());
+    if (duplicatePartNumber) { setEditError('رقم الصنف مستخدم بالفعل لصنف آخر.'); setEditBusy(false); return; }
+    const newBarcode = editBarcode.trim();
+    if (newBarcode && parts.some(p => p.id !== editPricePart.id && [p.barcode, p.internalBarcode, ...(p.extraBarcodes || []).map(b => b.value)].some(code => code?.trim() === newBarcode))) { setEditError('الباركود مستخدم بالفعل لصنف آخر.'); setEditBusy(false); return; }
+    if (!Number.isFinite(editCostPrice) || editCostPrice < 0 || !Number.isFinite(editSalePrice) || editSalePrice < 0) { setEditError('راجع الأسعار؛ يجب أن تكون أرقاماً صحيحة غير سالبة.'); setEditBusy(false); return; }
+    try {
+      const approved = await verifyOwnerPasswordOnline(ownerLicenseKey, editOwnerPassword);
+      if (!approved) { setEditError('تعذر اعتماد كلمة مرور المالك من الخادم. تأكد من الاتصال والجلسة وكلمة المرور. لم يتم حفظ أي تعديل.'); setEditBusy(false); return; }
+    } catch { setEditError('تعذر التحقق من كلمة مرور المالك. حاول مرة أخرى.'); setEditBusy(false); return; }
+    const updated: AutoPart = {
+      ...editPricePart,
+      name: editName.trim(),
+      partNumber: editPartNumber.trim(),
+      minAlertStock: editMinAlertStock,
+      isScreenOrDisplay: editIsScreenOrDisplay,
+      brand: editBrand as CarBrand,
+      category: editCategory as PartCategory,
+      compatibleModels: editCompatibleModels.trim(),
+      origin: editOrigin.trim(),
+      shelfLocation: editShelfLocation.trim(),
+      unit: editUnit.trim() || editPricePart.unit,
+      costPrice: editCostPrice,
+      salePrice: editSalePrice,
+      barcode: editBarcode.trim() || undefined,
+      internalBarcode: editBarcode.trim() || undefined,
+      supplierBarcode: editSupplierBarcode.trim() || undefined,
+    };
+    if (onUpdatePart) onUpdatePart(updated);
+    else if (onUpdatePartPrices) onUpdatePartPrices(editPricePart.id, editCostPrice, editSalePrice, editBarcode.trim());
     setEditPricePart(null);
+    setEditOwnerPassword('');
+    setEditBusy(false);
   };
 
   return (
@@ -318,7 +388,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           )}
 
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => { setPartNumberMode('auto'); setShowAddModal(true); }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all w-fit"
           >
             <Plus className="w-4 h-4" />
@@ -441,9 +511,22 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                               setEditCostPrice(part.costPrice);
                               setEditSalePrice(part.salePrice);
                               setEditBarcode(part.barcode || '');
+                              setEditName(part.name || '');
+                              setEditPartNumber(part.partNumber || '');
+                              setEditMinAlertStock(Number(part.minAlertStock || 0));
+                              setEditIsScreenOrDisplay(Boolean(part.isScreenOrDisplay));
+                              setEditBrand(part.brand || '');
+                              setEditCategory(part.category || '');
+                              setEditCompatibleModels(part.compatibleModels || '');
+                              setEditOrigin(part.origin || '');
+                              setEditShelfLocation(part.shelfLocation || '');
+                              setEditUnit(part.unit || '');
+                              setEditSupplierBarcode(part.supplierBarcode || '');
+                              setEditOwnerPassword('');
+                              setEditError('');
                             }}
                             className="p-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-amber-400"
-                            title="تعديل سعر البيع وسعر الشراء"
+                            title="تعديل بيانات الصنف وأسعاره"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
@@ -517,7 +600,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       </div>
 
       {deletePart && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={closeDelete}>
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-start sm:items-center justify-center overflow-y-auto overscroll-contain p-3 sm:p-6" onClick={closeDelete}>
           <div className="w-full max-w-sm rounded-3xl bg-surface-2 border border-rose-500/30 p-5 text-white shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
               <div className="flex items-center gap-2">
@@ -567,13 +650,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           onClick={() => setEditPricePart(null)}
         >
           <div 
-            className="w-full max-w-sm rounded-3xl bg-surface-2 border border-neutral-800 p-5 text-white shadow-2xl space-y-4"
+            className="w-full max-w-3xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] overflow-y-auto overscroll-contain rounded-2xl sm:rounded-3xl bg-surface-2 border border-neutral-800 p-4 sm:p-6 text-white shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
               <div className="flex items-center gap-2">
                 <Edit3 className="w-4 h-4 text-amber-400" />
-                <h3 className="text-sm font-bold text-white">تعديل أسعار القطعة</h3>
+                <h3 className="text-sm font-bold text-white">تعديل بيانات الصنف وأسعاره</h3>
               </div>
               <button onClick={() => setEditPricePart(null)} className="text-neutral-400 hover:text-white">
                 <X className="w-4 h-4" />
@@ -586,6 +669,59 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             </div>
 
             <form onSubmit={handleConfirmEditPrices} className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">رقم الصنف / OEM / SKU *</label>
+                  <input value={editPartNumber} onChange={e => setEditPartNumber(e.target.value)} required maxLength={100} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm font-mono focus:border-amber-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">حد التنبيه عند انخفاض المخزون</label>
+                  <input type="number" min="0" step="1" value={editMinAlertStock} onChange={e => setEditMinAlertStock(Number(e.target.value))} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-neutral-300 font-bold block mb-1">اسم الصنف *</label>
+                  <input value={editName} onChange={e => setEditName(e.target.value)} required maxLength={180} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">ماركة السيارة</label>
+                  <select value={editBrand} onChange={e => setEditBrand(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none">
+                    {[...new Set([editBrand, ...carBrands].filter(Boolean))].map(brand => <option key={brand} value={brand}>{brand}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">التصنيف</label>
+                  <select value={editCategory} onChange={e => setEditCategory(e.target.value)} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none">
+                    {[...new Set([editCategory, ...PART_CATEGORIES].filter(Boolean))].map(category => <option key={category} value={category}>{category}</option>)}
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-neutral-300 font-bold block mb-1">موديلات السيارات المتوافقة</label>
+                  <input value={editCompatibleModels} onChange={e => setEditCompatibleModels(e.target.value)} maxLength={300} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">المنشأ / النوع</label>
+                  <input value={editOrigin} onChange={e => setEditOrigin(e.target.value)} maxLength={100} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">مكان التخزين</label>
+                  <input value={editShelfLocation} onChange={e => setEditShelfLocation(e.target.value)} maxLength={80} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">وحدة القياس</label>
+                  <input value={editUnit} onChange={e => setEditUnit(e.target.value)} maxLength={30} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-neutral-300 font-bold block mb-1">باركود المورد</label>
+                  <input value={editSupplierBarcode} onChange={e => setEditSupplierBarcode(e.target.value)} maxLength={100} className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 p-3 rounded-xl bg-surface-1 border border-neutral-800 text-neutral-200">
+                <input type="checkbox" checked={editIsScreenOrDisplay} onChange={e => setEditIsScreenOrDisplay(e.target.checked)} className="accent-amber-500" />
+                <span>الصنف شاشة أو تابلوه</span>
+              </label>
+              <div className="border-t border-neutral-800 pt-3">
+                <p className="text-amber-300 font-bold mb-2">الأسعار والباركود</p>
+              </div>
               <div>
                 <label className="text-neutral-300 font-bold block mb-1">
                   سعر الشراء / التكلفة من التاجر (ج.م) *
@@ -619,6 +755,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 <BarcodeField value={editBarcode} onChange={setEditBarcode} />
               </div>
 
+              <div>
+                <label className="text-neutral-300 font-bold block mb-1">كلمة مرور المالك لتأكيد التعديل *</label>
+                <input type="password" autoComplete="current-password" value={editOwnerPassword} onChange={e => setEditOwnerPassword(e.target.value)} required className="w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-sm focus:border-amber-400 focus:outline-none" />
+                {editError && <p role="alert" className="mt-2 text-rose-400 font-bold">{editError}</p>}
+              </div>
               <div className="p-2.5 rounded-xl bg-surface-1 text-[11px] text-neutral-400 flex justify-between">
                 <span>هامش الربح المتوقع:</span>
                 <span className="font-bold text-emerald-400 font-mono">
@@ -636,9 +777,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="w-1/2 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs shadow-md"
+                  disabled={editBusy}
+                  className="w-1/2 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-neutral-950 font-black text-xs shadow-md"
                 >
-                  حفظ الأسعار
+                  {editBusy ? 'جاري التحقق والحفظ...' : 'حفظ بيانات الصنف'}
                 </button>
               </div>
             </form>
@@ -721,12 +863,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-neutral-300 font-bold block mb-1">
-                    رقم القطعة OEM / الكود *
+                    رقم الصنف / OEM / SKU *
                   </label>
+                  <div className="flex gap-2 mb-2">
+                    <button type="button" onClick={() => setPartNumberMode('auto')} className={partNumberMode === 'auto' ? 'px-3 py-1.5 rounded-lg text-xs font-bold border bg-cyan-500/15 border-cyan-500 text-cyan-300' : 'px-3 py-1.5 rounded-lg text-xs font-bold border border-neutral-700 text-neutral-400'}>تلقائي</button>
+                    <button type="button" onClick={() => setPartNumberMode('manual')} className={partNumberMode === 'manual' ? 'px-3 py-1.5 rounded-lg text-xs font-bold border bg-cyan-500/15 border-cyan-500 text-cyan-300' : 'px-3 py-1.5 rounded-lg text-xs font-bold border border-neutral-700 text-neutral-400'}>يدوي</button>
+                  </div>
                   <input
                     type="text"
                     required
-                    value={newPartForm.partNumber}
+                    readOnly={partNumberMode === 'auto'}
+                    value={partNumberMode === 'auto' ? suggestedPartNumber : (newPartForm.partNumber || '')}
                     onChange={(e) => setNewPartForm({ ...newPartForm, partNumber: e.target.value })}
                     placeholder="مثال: 04465-33470"
                     className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"

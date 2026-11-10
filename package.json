@@ -9,13 +9,14 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx tests/saleLogic.test.ts && tsx tests/shiftLogic.test.ts && tsx tests/financialIntegrity.test.ts"
+    "test": "tsx tests/saleLogic.test.ts && tsx tests/shiftLogic.test.ts && tsx tests/financialIntegrity.test.ts && tsx tests/apiSecurity.test.ts && tsx tests/passwordService.test.ts && tsx tests/permissions.test.ts && tsx tests/purchaseInvoiceMutationPolicy.test.ts && tsx tests/purchaseInvoiceOwnerApproval.test.ts && tsx tests/supplierPaymentScheduleLogic.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@neondatabase/serverless": "^1.0.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
+    "@zxing/browser": "^0.2.0",
     "canvas-confetti": "^1.9.4",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
@@ -28,8 +29,7 @@
     "react-is": "^19.0.0",
     "recharts": "^3.10.1",
     "vite": "^8.3.0",
-    "xlsx": "^0.18.5",
-    "@zxing/browser": "^0.2.0"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",

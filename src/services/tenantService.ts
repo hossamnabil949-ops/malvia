@@ -323,16 +323,18 @@ export function saveTenantStoreData(
     stockBatches?: StockBatch[];
     serialUnits?: SerialUnit[];
   }
-) {
+): boolean {
   try {
     const updates = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
     commitTenantTransaction(tenantId, updates);
+    return true;
   } catch (err) {
     console.error('Error saving tenant store data:', err);
     // امتلاء مساحة المتصفح كان يمر بصمت => نبلّغ الواجهة بدل إخفاء ضياع التغييرات
     try {
       window.dispatchEvent(new CustomEvent(SYNC_STATUS_EVENT, { detail: { status: 'error', detail: 'تعذّر حفظ التغييرات محلياً (المساحة ممتلئة). خذ نسخة احتياطية الآن.' } }));
     } catch { /* ignore */ }
+    return false;
   }
 }
 

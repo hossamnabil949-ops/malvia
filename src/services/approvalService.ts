@@ -40,3 +40,31 @@ export async function verifyOwnerPassword(employees: Employee[], password: strin
   }
   return null;
 }
+
+
+/** Online owner re-authentication. Password verification is performed only by the server. */
+export async function verifyOwnerPasswordOnline(licenseKey: string, password: string): Promise<boolean> {
+  if (!licenseKey || !password || password.length > 200) return false;
+  let token = '';
+  try {
+    const raw = localStorage.getItem('malvia_user_session_v1');
+    const session = raw ? JSON.parse(raw) : null;
+    token = String(session?.serverSessionToken || '');
+  } catch { return false; }
+  if (!token) return false;
+  try {
+    const response = await fetch('/api/owner-password-approval', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-license-key': licenseKey,
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ password }),
+    });
+    const result = await response.json().catch(() => null);
+    return response.ok && result?.approved === true;
+  } catch {
+    return false;
+  }
+}
