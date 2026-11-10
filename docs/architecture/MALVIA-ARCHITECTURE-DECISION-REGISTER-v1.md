@@ -13,16 +13,16 @@ Each item records the decision owner, recommended default, alternatives/consider
 - **Blocking — pack launch:** decide before releasing the affected industry pack.
 - **Non-blocking:** may remain configurable until the relevant feature is activated.
 
-Approval must record the approver role, exact selected option, date and conditions. Approval of one row does not approve adjacent rows.
+Approval must record the approver role, exact selected option, date and conditions. Approval of one row does not approve adjacent rows. Previously confirmed product requirements are marked PARTIALLY RESOLVED where only their remaining implementation semantics still need a decision.
 
 ## 2. Product, trial and licensing
 
 | ID | Decision / recommended default | Alternatives / considerations | Owner | Gate | Status |
 |---|---|---|---|---|---|
-| DEC-001 | Trial clock: recommend 14 tenant-local calendar days, starting at the server-recorded activation instant after verification and setup completion. Store UTC timestamps and tenant timezone; show explicit local expiry. | Exactly 336 elapsed hours is simpler and timezone-neutral. Define calendar-day boundary precisely. | Owner + Product/Legal | Implementation | OPEN |
+| DEC-001 | **Trial duration is already approved as 14 days.** Start the server-recorded trial only after verification and required setup. Store UTC timestamps and tenant timezone; show explicit local expiry. | Counting semantics remain OPEN: 14 tenant-local calendar days vs exactly 336 elapsed hours; define the expiry boundary and daylight-saving behavior. | Owner + Product/Legal | Implementation | PARTIALLY RESOLVED |
 | DEC-002 | Trial offer: use a configurable starter entitlement bundle and configurable seat quota; never hard-code pack or seat counts. | Trial may include all modules, selected industry packs, or restricted features; define quotas and payment-card requirement. | Owner + Commercial | Implementation / launch | OPEN |
 | DEC-003 | Trial expiry: recommend suspend new writes, preserve data, provide owner read-only/export access for a defined grace period, then apply approved retention/deletion policy. Never auto-delete on expiry. | Immediate suspension, longer grace, paid archive or reactivation. Proposed 30-day retention is not approved. Legal hold overrides deletion. | Owner + Legal/Security | Implementation | OPEN |
-| DEC-004 | Seat counting: recommend count every enabled human user, including admins; owner counts if represented as a user seat. Disabled accounts do not count. Branches are not seats. | Owner-inclusive bundle vs owner-excluded employee count. If owner is excluded, model as a distinct principal and define admin treatment. | Owner + Commercial | DDL + implementation | OPEN |
+| DEC-004 | **User-based licensing and no fixed branch cap are already approved.** The subscription quantity is based on users, not branches; tenants may add branches as needed. Disabled accounts should not count. | Exact seat-counting rule remains OPEN: whether the owner is a billable seat, and how admins, service accounts, temporary users and inactive users are treated. | Owner + Commercial | DDL + implementation | PARTIALLY RESOLVED |
 | DEC-005 | Sessions/devices: recommend one active session per user by default, with auditable revocation and explicit device policy. | One session per device improves usability but increases credential-sharing risk. Define device/concurrency limits. | Owner + Security | Implementation | OPEN |
 | DEC-006 | Verification/payment: recommend email or phone verification before trial activation; payment method need not be mandatory unless commercially required. Select providers after regional availability, fee and compliance review. | Phone-only, email-only, business verification or card-required trial. | Owner + Legal/Operations | Launch | OPEN |
 
@@ -75,6 +75,8 @@ No approval is implied by preparing this register. Record approvals only after t
 
 | Decision ID | Selected option / approved wording | Approver role | Conditions / evidence | Approval date | State |
 |---|---|---|---|---|---|
+| DEC-001 | Trial duration = 14 days; exact clock semantics remain open. | Product requirement confirmed by owner in prior project discussion; final operational semantics pending. | Do not reset on download, reinstall or device change; server-owned tenant trial. | 2026-11-06 | PARTIALLY RESOLVED |
+| DEC-004 | User-based subscription quantity; no fixed branch-count cap. Exact billable-user definition remains open. | Product/commercial requirement confirmed by owner in prior project discussion; seat-count edge cases pending. | Branch count does not determine subscription quantity. | 2026-11-06 | PARTIALLY RESOLVED |
 | DEC-___ |  |  |  |  | OPEN |
 
 ## 8. Implementation gates
