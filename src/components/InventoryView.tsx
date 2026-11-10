@@ -141,6 +141,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [editError, setEditError] = useState('');
   const [editBusy, setEditBusy] = useState(false);
 
+  const [partNumberMode, setPartNumberMode] = useState<'auto' | 'manual'>('auto');
+
   const [newPartForm, setNewPartForm] = useState<Partial<AutoPart>>({
     partNumber: '',
     name: '',
@@ -160,6 +162,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     const m: Record<string, number> = {};
     parts.forEach((p) => { m[p.brand] = (m[p.brand] || 0) + 1; });
     return m;
+  }, [parts]);
+
+  // MALVIA-managed SKU sequence. Existing OEM/SKU values are preserved; only MAL-###### is auto-incremented.
+  const suggestedPartNumber = useMemo(() => {
+    const last = parts.reduce((max, part) => {
+      const match = /^MAL-(\d+)$/i.exec(String(part.partNumber || '').trim());
+      return match ? Math.max(max, Number(match[1]) || 0) : max;
+    }, 0);
+    return 'MAL-' + String(last + 1).padStart(6, '0');
   }, [parts]);
 
   const filteredParts = useMemo(() => {
@@ -194,12 +205,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const handleSaveNewPart = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPartForm.partNumber || !newPartForm.name) return;
+    const resolvedPartNumber = partNumberMode === 'auto' ? suggestedPartNumber : String(newPartForm.partNumber || '').trim();
+    if (!resolvedPartNumber || !newPartForm.name) return;
+    if (parts.some(part => part.partNumber.trim().toLowerCase() === resolvedPartNumber.toLowerCase())) {
+      window.alert('رقم الصنف مستخدم بالفعل. اختر رقمًا آخر أو استخدم الترقيم التلقائي.');
+      return;
+    }
 
     const generatedInternalBarcode = makeInternalBarcode(parts.flatMap(p => [p.barcode, p.internalBarcode, p.supplierBarcode].filter(Boolean) as string[]));
     const part: AutoPart = {
       id: `p-${Date.now()}`,
-      partNumber: newPartForm.partNumber.trim(),
+      partNumber: resolvedPartNumber,
       name: newPartForm.name.trim(),
       brand: newPartForm.brand as CarBrand,
       compatibleModels: newPartForm.compatibleModels || 'عام',
@@ -219,6 +235,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
     onAddNewPart(part);
     setShowAddModal(false);
+    setPartNumberMode('auto');
     setNewPartForm({
       partNumber: '',
       name: '',
@@ -371,7 +388,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           )}
 
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => { setPartNumberMode('auto'); setShowAddModal(true); }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all w-fit"
           >
             <Plus className="w-4 h-4" />
@@ -846,12 +863,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-neutral-300 font-bold block mb-1">
-                    رقم القطعة OEM / الكود *
+                    رقم الصنف / OEM / SKU *
                   </label>
+                  <div className="flex gap-2 mb-2">
+                    <button type="button" onClick={() => setPartNumberMode('auto')} className={partNumberMode === 'auto' ? 'px-3 py-1.5 rounded-lg text-xs font-bold border bg-cyan-500/15 border-cyan-500 text-cyan-300' : 'px-3 py-1.5 rounded-lg text-xs font-bold border border-neutral-700 text-neutral-400'}>تلقائي</button>
+                    <button type="button" onClick={() => setPartNumberMode('manual')} className={partNumberMode === 'manual' ? 'px-3 py-1.5 rounded-lg text-xs font-bold border bg-cyan-500/15 border-cyan-500 text-cyan-300' : 'px-3 py-1.5 rounded-lg text-xs font-bold border border-neutral-700 text-neutral-400'}>يدوي</button>
+                  </div>
                   <input
                     type="text"
                     required
-                    value={newPartForm.partNumber}
+                    readOnly={partNumberMode === 'auto'}
+                    value={partNumberMode === 'auto' ? suggestedPartNumber : (newPartForm.partNumber || '')}
                     onChange={(e) => setNewPartForm({ ...newPartForm, partNumber: e.target.value })}
                     placeholder="مثال: 04465-33470"
                     className="w-full h-9 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono"
