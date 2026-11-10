@@ -1169,8 +1169,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 </div>
               )}
 
-              <div className="py-3 flex justify-between font-black text-sm bg-emerald-950/30 px-3 rounded-xl border border-emerald-500/30 text-emerald-400">
-                <span>(=) صافي الدخل التشغيلي والأرباح القابلة للتوزيع بين الشركاء</span>
+              <div className={`py-3 flex justify-between font-black text-sm px-3 rounded-xl border ${netDistributableProfit >= 0 ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-400' : 'bg-rose-950/30 border-rose-500/30 text-rose-400'}`}>
+                <span>(=) صافي الربح / (الخسارة) التشغيلية</span>
                 <span className="font-mono text-base">{netDistributableProfit.toFixed(2)} ج.م</span>
               </div>
             </div>
