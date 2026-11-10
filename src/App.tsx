@@ -49,6 +49,7 @@ import type { OpeningBalanceRecord } from './utils/openingBalanceLogic';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
 import { createBankMovementEntry, createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount, summarizeBankAccount } from './utils/bankLedger';
 import { requiresDirectBankAccount, requiresSpecificBankAccount } from './utils/paymentMethods';
+import { applySupplierSchedulePayment, getSupplierSchedulePaymentState } from './utils/supplierPaymentScheduleLogic';
 import { getOpenPartnerCurrentAccountOrigins, partnerCurrentAccountCashDirection, PARTNER_CURRENT_ACCOUNT_CATEGORIES } from './utils/partnerCurrentAccount';
 
 import { INITIAL_SHOP_SETTINGS } from './data/autoPartsData';
@@ -389,9 +390,9 @@ export default function App() {
   }, [licenses]);
 
   // Auto-persist changes to active tenant
-  const persistChanges = useCallback((updates: Parameters<typeof saveTenantStoreData>[1]) => {
-    if (!activeTenantId) return;
-    saveTenantStoreData(activeTenantId, updates);
+  const persistChanges = useCallback((updates: Parameters<typeof saveTenantStoreData>[1]): boolean => {
+    if (!activeTenantId) return false;
+    return saveTenantStoreData(activeTenantId, updates);
   }, [activeTenantId]);
 
   // سجل التدقيق: من فعل ماذا ومتى (يمنع التلاعب ويكشفه)
@@ -3144,59 +3145,75 @@ export default function App() {
               });
             }}
             onSettleSupplierPayment={(supplierId, amount, paymentDate, paymentMethod, _treasurySource, notes, scheduleId, bankAccountId) => {
+              const reject = (message: string) => { window.alert(message); return false; };
               const supplier = suppliers.find(s => s.id === supplierId);
               const schedule = scheduleId ? supplierPaymentSchedules.find(x => x.id === scheduleId) : undefined;
-              if (scheduleId && (!schedule || schedule.status !== 'scheduled' || supplierPayments.some(p => p.scheduleId === scheduleId && p.amount >= schedule.amount - schedule.amountPaid))) return;
-              if (!supplier || !Number.isFinite(amount) || amount <= 0 || (schedule && amount > schedule.amount - schedule.amountPaid)) return;
+              if (!supplier || !Number.isFinite(amount) || amount <= 0) return reject('بيانات السداد غير صحيحة.');
+              const scheduleState = schedule ? getSupplierSchedulePaymentState(schedule, supplierPayments) : undefined;
+              if (scheduleId && (!schedule || !scheduleState || scheduleState.status === 'cancelled' || scheduleState.status === 'paid')) {
+                return reject('هذا القسط ملغى أو تم سداده بالفعل.');
+              }
+              if (scheduleState && amount > scheduleState.remainingAmount) {
+                return reject('المتبقي من هذا القسط ' + scheduleState.remainingAmount.toLocaleString('ar-EG') + ' جنيه فقط.');
+              }
+
               const stamp = Date.now();
-              const paymentId = `SP-${stamp}-${Math.random().toString(36).slice(2,7)}`;
-              const txId = `TX-SUPP-${stamp}-${Math.random().toString(36).slice(2,7)}`;
+              const paymentId = 'SP-' + stamp + '-' + Math.random().toString(36).slice(2,7);
+              const txId = 'TX-SUPP-' + stamp + '-' + Math.random().toString(36).slice(2,7);
+              let bankPostingEntry: (typeof bankLedgerEntries)[number] | undefined;
               if (requiresSpecificBankAccount(paymentMethod)) {
                 const posting = createBankMovementEntry({
-                  id: `supplier-payment:${paymentId}`, batchId: paymentId, bankAccountId: bankAccountId || '',
+                  id: 'supplier-payment:' + paymentId, batchId: paymentId, bankAccountId: bankAccountId || '',
                   direction: 'out', amount, date: paymentDate, reference: paymentId,
-                  description: `سداد مورد ${supplier.name}`,
+                  description: 'سداد مورد ' + supplier.name,
                 }, bankAccounts, bankLedgerEntries);
-                if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً قبل اعتماد السداد.'); return; }
+                if (posting.error || !posting.entry) return reject('اختر حساباً بنكياً نشطاً قبل اعتماد السداد.');
+                bankPostingEntry = posting.entry;
               }
+
               const debt = supplier.deferredDebt ?? supplier.balance ?? 0;
               const newDebt = Math.max(0, debt - amount);
               const overpaid = Math.max(0, amount - debt);
-              const updatedSuppliers = suppliers.map(s => s.id === supplierId ? { ...s, balance: newDebt, deferredDebt: newDebt, storeCredit: (s.storeCredit || 0) + overpaid, totalPaid: (s.totalPaid || 0) + amount, lastPaymentDate: paymentDate } : s);
-              const paymentRecord: import('./types/autoParts').SupplierPayment = { id: paymentId, paymentNumber: paymentId.slice(-6), supplierId, supplierName: supplier.name, amount, paymentDate, paymentMethod, treasurySource: _treasurySource, bankAccountId, notes, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات', scheduleId };
-              const tx: TreasuryTransaction = { id: txId, txNumber: uniqueTransactionNumber('TX-S'), date: paymentDate, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'سداد دفعة لمورد', amount, paymentMethod: paymentMethod as PaymentMethod, balanceAfter: treasuryBalance - amount, referenceId: paymentId, bankAccountId, description: `سداد مورد #${supplierId}: ${notes}`, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات' };
+              const updatedSuppliers = suppliers.map(s => s.id === supplierId
+                ? { ...s, balance: newDebt, deferredDebt: newDebt, storeCredit: (s.storeCredit || 0) + overpaid, totalPaid: (s.totalPaid || 0) + amount, lastPaymentDate: paymentDate }
+                : s);
+              const paymentRecord: import('./types/autoParts').SupplierPayment = {
+                id: paymentId, paymentNumber: paymentId.slice(-6), supplierId, supplierName: supplier.name,
+                amount, paymentDate, paymentMethod, treasurySource: _treasurySource, bankAccountId, notes,
+                recordedBy: currentUser?.employeeName || 'مسؤول المشتريات', scheduleId,
+              };
+              const tx: TreasuryTransaction = {
+                id: txId, txNumber: uniqueTransactionNumber('TX-S'), date: paymentDate,
+                time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+                type: 'صرف', category: 'سداد دفعة لمورد', amount, paymentMethod: paymentMethod as PaymentMethod,
+                balanceAfter: treasuryBalance - amount, referenceId: paymentId,
+                bankAccountId, description: 'سداد مورد #' + supplierId + ': ' + notes,
+                recordedBy: currentUser?.employeeName || 'مسؤول المشتريات',
+              };
               const updatedPayments = [paymentRecord, ...supplierPayments];
               const updatedTreasury = [tx, ...treasury];
-              setSuppliers(updatedSuppliers); persistChanges({ suppliers: updatedSuppliers });
-              setSupplierPayments(updatedPayments); persistChanges({ supplierPayments: updatedPayments });
-              setTreasury(updatedTreasury); persistChanges({ treasuryTransactions: updatedTreasury });
-              if (requiresSpecificBankAccount(paymentMethod)) {
-                const posting = createBankMovementEntry({
-                  id: `supplier-payment:${paymentId}`, batchId: paymentId, bankAccountId: bankAccountId || '',
-                  direction: 'out', amount, date: paymentDate, reference: paymentId,
-                  description: `سداد مورد ${supplier.name}`,
-                }, bankAccounts, bankLedgerEntries);
-                if (posting.entry) {
-                  const nextBankEntries = [posting.entry, ...bankLedgerEntries];
-                  setBankLedgerEntries(nextBankEntries); persistChanges({ bankLedgerEntries: nextBankEntries });
-                }
-              }
-              if (schedule) {
-                const paid = Math.min(schedule.amount, schedule.amountPaid + amount);
-                const nextStatus: import('./types/autoParts').SupplierPaymentSchedule['status'] = paid >= schedule.amount ? 'paid' : 'scheduled';
-                const updatedSchedules = supplierPaymentSchedules.map(item =>
-                  item.id === schedule.id
-                    ? Object.assign({}, item, {
-                        amountPaid: paid,
-                        status: nextStatus,
-                        paymentId,
-                        treasuryTransactionId: txId,
-                        updatedAt: new Date().toISOString(),
-                      })
-                    : item
-                );
-                setSupplierPaymentSchedules(updatedSchedules); persistChanges({ supplierPaymentSchedules: updatedSchedules });
-              }
+              const updatedBankEntries = bankPostingEntry ? [bankPostingEntry, ...bankLedgerEntries] : bankLedgerEntries;
+              const updatedSchedules = schedule
+                ? supplierPaymentSchedules.map(item => item.id === schedule.id
+                    ? (applySupplierSchedulePayment(item, supplierPayments, amount, paymentId, txId, new Date().toISOString()) || item)
+                    : item)
+                : supplierPaymentSchedules;
+
+              const saved = persistChanges({
+                suppliers: updatedSuppliers,
+                supplierPayments: updatedPayments,
+                treasuryTransactions: updatedTreasury,
+                ...(schedule ? { supplierPaymentSchedules: updatedSchedules } : {}),
+                ...(bankPostingEntry ? { bankLedgerEntries: updatedBankEntries } : {}),
+              });
+              if (!saved) return reject('تعذّر حفظ السداد محلياً. لم يتم اعتماد العملية؛ حاول مرة أخرى بعد التأكد من مساحة الجهاز.');
+
+              setSuppliers(updatedSuppliers);
+              setSupplierPayments(updatedPayments);
+              setTreasury(updatedTreasury);
+              if (schedule) setSupplierPaymentSchedules(updatedSchedules);
+              if (bankPostingEntry) setBankLedgerEntries(updatedBankEntries);
+              return true;
             }}
           />
         )}
