@@ -211,3 +211,30 @@ Do not put credentials, license keys, customer records, invoice line items, paym
 8. Public pricing and support tiers.
 
 No decision above should be silently converted into production defaults.
+
+
+## 13. MALVIA as a software company and product portfolio
+
+The public website represents **MALVIA the software company**, not only one POS product. Its primary information architecture must separate:
+
+- **Company:** who MALVIA is, software engineering and development capabilities, implementation/integration services, support, contact and corporate information.
+- **Platform:** the shared modular technology foundation, multi-tenant administration, users, branches, permissions, integrations, offline capability, AI governance and security.
+- **Products / Solutions:** independently selectable business systems for Sales, Restaurants, Pharmacy, Fashion, Supermarket, Construction, Real Estate, and HR/Enterprise.
+
+Each product page must clearly state its target industry, actual supported workflows, shared modules used, optional modules, integrations, implementation status and next step. Products may be bought separately or combined where supported, but customers must not be led to believe that all products are included in one subscription.
+
+### 13.1 Product status labels
+
+Use consistent, truthful labels across the website and portal:
+- **Available:** released and verified for customer use.
+- **In development:** actively being built; no promise of general availability.
+- **Private pilot:** available only to explicitly invited pilot customers.
+- **Planned:** on the roadmap; no download or trial CTA implying availability.
+
+Current positioning supplied by the product owner: MALVIA Sales is operating; MALVIA Restaurant is being prepared. Pharmacy, Fashion, Market, Construction, Real Estate and HR/Enterprise are portfolio directions whose release status must be verified before public launch claims.
+
+### 13.2 Corporate-to-trial journey
+
+Corporate visitors first discover MALVIA and choose a product. A product trial then provisions a tenant for that selected product only, plus its explicitly defined shared starter modules. The website account is a company/customer relationship; the tenant owner is the customer-side administrative principal. Do not create a trial tenant merely because a visitor browses, downloads a brochure or requests a demo.
+
+Downloads remain optional delivery channels for an existing entitled tenant. A download does not itself create an account, activate a trial, reset a trial or grant a license. Only real, signed/versioned artifacts may be published.
