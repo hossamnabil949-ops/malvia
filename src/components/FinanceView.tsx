@@ -349,16 +349,16 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     }, 0);
     return Math.round((outputVat - outputVatReturns - inputVat + inputVatReturns) * 100) / 100;
   }, [taxRegistered, invoices, salesReturns, purchaseInvoices, purchaseReturns]);
-  // نسبة الربح على أساس التكلفة وليس سعر البيع
-  const grossProfitMargin = estimatedCOGS > 0 ? ((grossProfit / estimatedCOGS) * 100).toFixed(1) : '0';
+  // هامش مجمل الربح يُقاس من صافي المبيعات، وليس من تكلفة البضاعة.
+  const grossProfitMargin = totalSalesRevenue > 0 ? ((grossProfit / totalSalesRevenue) * 100).toFixed(1) : '0';
 
   const totalOperatingExpenses = useMemo(() => expenses.reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
   const otherIncomeTransactions = useMemo(() => treasuryTransactions.filter(tx => tx.type === 'قبض' && tx.category === 'إيرادات أخرى'), [treasuryTransactions]);
   const totalOtherIncome = useMemo(() => otherIncomeTransactions.reduce((sum, tx) => sum + tx.amount, 0), [otherIncomeTransactions]);
 
-  // الإيرادات الأخرى بند مستقل عن مبيعات قطع الغيار وتدخل في صافي الدخل.
-  const netDistributableProfit = Math.max(0, grossProfit + totalOtherIncome - totalOperatingExpenses);
-  const netProfitMargin = estimatedCOGS > 0 ? ((netDistributableProfit / estimatedCOGS) * 100).toFixed(1) : '0';
+  // صافي نتيجة النشاط قد يكون ربحاً أو خسارة؛ لا نصفر الخسائر لأن ذلك يخفي العجز الفعلي.
+  const netDistributableProfit = grossProfit + totalOtherIncome - totalOperatingExpenses;
+  const netProfitMargin = totalSalesRevenue > 0 ? ((netDistributableProfit / totalSalesRevenue) * 100).toFixed(1) : '0';
 
   const totalInitialCapital = useMemo(() => {
     return activePartners.reduce((sum, p) => sum + (p.initialCapital || 0), 0);
