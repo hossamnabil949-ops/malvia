@@ -274,3 +274,44 @@ These decisions are intentionally not silently finalized:
 ## Related backend API and service contract
 
 - [Backend API, domain services and command contracts](MALVIA-BACKEND-API-SERVICES-AND-COMMAND-CONTRACT-v1.md) — shared server request pipeline, domain boundaries, versioned read/command/sync APIs, authorization, idempotency, atomic transaction boundaries, safe responses, legacy compatibility and acceptance tests. Design only; no endpoint implementation is authorized.
+
+
+## 11. Company identity and product portfolio — governing direction
+
+MALVIA is a software company focused on software engineering, business systems, product development and ongoing technology services. It is **not** a single POS product or a POS-only vendor. The MALVIA name represents the company, its shared platform and a portfolio of independently marketable software products.
+
+### 11.1 Three distinct levels
+
+1. **MALVIA Company (corporate layer):** corporate identity, website, product marketing, sales, customer relationships, support, implementation services, product roadmap and internal company operations.
+2. **MALVIA Platform (shared technology layer):** tenant identity, organizations, users, roles, permissions, subscriptions, entitlements, branch scopes, audit, notifications, files, integrations, APIs, offline synchronization, reporting foundations and governed AI capabilities.
+3. **MALVIA Products (customer solutions):** independently selectable industry systems and business applications built on shared platform contracts. Each product has its own domain workflows, screens, validations, reports, release lifecycle and optional modules.
+
+These layers must not be conflated in navigation, billing, authorization, code ownership or product messaging. Corporate website visitors are not automatically platform tenants; product trials create customer tenants only after explicit signup and setup.
+
+### 11.2 Product portfolio
+
+The portfolio is intended to include, in staged delivery:
+- **MALVIA Sales:** general sales, POS, inventory, purchasing and finance capabilities; currently operating product.
+- **MALVIA Restaurant:** restaurant and café operations, orders, tables, kitchen and delivery workflows; in preparation.
+- **MALVIA Pharmacy:** pharmacy-specific stock, batches, expiry and regulated workflows subject to compliance approval.
+- **MALVIA Fashion:** clothing, sizes, colors, variants and exchanges.
+- **MALVIA Market:** supermarket and grocery checkout, barcode/weight and replenishment.
+- **MALVIA Construction:** contracting projects, contracts, budgets, BOQs, progress, subcontractors, procurement and project finance.
+- **MALVIA Real Estate:** real-estate marketing, leads, projects, units, inventory, reservations, sales pipeline, commissions and customer follow-up.
+- **MALVIA HR & Enterprise:** HR, workforce, workflows and broader enterprise management capabilities.
+
+Product names are working portfolio labels, not a claim that every product is implemented or commercially released. The portfolio may expand without changing the shared platform identity.
+
+### 11.3 Product independence and shared contracts
+
+A customer may evaluate, subscribe to and use one product without purchasing every other product. Products may share tenant identity, users, branches, customer/supplier masters and approved business modules where the tenant explicitly enables them. Product-specific workflows remain isolated behind versioned domain boundaries. Cross-product data sharing must be explicit, permissioned, auditable and tenant-scoped; no product may bypass shared authorization, accounting, inventory, sync or entitlement contracts.
+
+A product may contain independently sellable modules. Product entitlement and module entitlement are separate dimensions: selecting an industry product does not silently enable every optional module, and buying a shared module does not silently activate an unrelated industry workflow.
+
+### 11.4 Delivery maturity and claims
+
+The website, sales materials, trial selector and customer portal must distinguish **Available**, **In development**, **Private pilot** and **Planned**. Only verified released capabilities may be advertised as available or offered as a public download. Never imply that pharmacy, construction, real estate or other future products are production-ready before their release gates pass.
+
+### 11.5 Corporate website implications
+
+The corporate website is the front door to the software company and its portfolio, not merely a login page for the Sales POS. It must explain the company, platform, product portfolio, engineering/integration capabilities, customer outcomes, support and contact routes. Each product page must have its own audience, workflow story, screenshots/demo evidence, maturity label and trial/lead CTA appropriate to its actual release state.
