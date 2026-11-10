@@ -22,7 +22,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { netSales } from '../utils/reportsLogic';
+import { netSales, cairoDateKey } from '../utils/reportsLogic';
 import { 
   Invoice, 
   PurchaseInvoice, 
@@ -66,26 +66,24 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'month' | 'year'>('all');
   const [downloadingReport, setDownloadingReport] = useState<string | null>(null);
 
+  // Every report uses the Cairo business date. Invalid dates are excluded, never silently included.
+  const todayKey = cairoDateKey(new Date());
   const isDateInFilter = (dateStr: string) => {
     if (dateFilter === 'all') return true;
-    const now = new Date();
-    const itemDate = new Date(dateStr);
-    if (isNaN(itemDate.getTime())) return true;
-
-    if (dateFilter === 'today') {
-      const todayStr = now.toISOString().split('T')[0];
-      return dateStr === todayStr;
+    if (!dateStr) return false;
+    let itemKey = '';
+    try {
+      itemKey = /^\\d{4}-\\d{2}-\\d{2}$/.test(dateStr)
+        ? dateStr
+        : cairoDateKey(new Date(dateStr));
+    } catch {
+      return false;
     }
-
-    if (dateFilter === 'month') {
-      return itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear();
-    }
-
-    if (dateFilter === 'year') {
-      return itemDate.getFullYear() === now.getFullYear();
-    }
-
-    return true;
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(itemKey)) return false;
+    if (dateFilter === 'today') return itemKey === todayKey;
+    if (dateFilter === 'month') return itemKey.slice(0, 7) === todayKey.slice(0, 7);
+    if (dateFilter === 'year') return itemKey.slice(0, 4) === todayKey.slice(0, 4);
+    return false;
   };
 
   const filteredSales = useMemo(() => invoices.filter(i => isDateInFilter(i.date)), [invoices, dateFilter]);
@@ -96,7 +94,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const filteredExpenses = useMemo(() => expenses.filter(e => isDateInFilter(e.date)), [expenses, dateFilter]);
 
   const totalSalesVal = useMemo(() => filteredSales.reduce((acc, i) => i.status === 'ملغاة' ? acc : acc + netSales(i), 0), [filteredSales]);
-  const totalPurchasesVal = useMemo(() => filteredPurchases.reduce((acc, i) => acc + i.grandTotal, 0), [filteredPurchases]);
+  const totalPurchasesVal = useMemo(() => filteredPurchases.reduce((acc, invoice) => {
+    const originalTotal = invoice.originalGrandTotal ?? (invoice.grandTotal + (invoice.returnedAmount || 0));
+    const datedReturns = filteredPurchaseReturns.filter(ret => ret.purchaseInvoiceId === invoice.id)
+      .reduce((sum, ret) => sum + ret.totalReturnAmount, 0);
+    // Legacy invoices may have a returnedAmount but no linked return record.
+    const returnTotal = datedReturns || (purchaseReturns.some(ret => ret.purchaseInvoiceId === invoice.id) ? 0 : (invoice.returnedAmount || 0));
+    return acc + Math.max(0, originalTotal - returnTotal);
+  }, 0), [filteredPurchases, filteredPurchaseReturns, purchaseReturns]);
   const totalInventoryCost = useMemo(() => parts.reduce((acc, p) => acc + (p.stockQuantity * p.costPrice), 0), [parts]);
   const totalSuppliersDebts = useMemo(() => suppliers.reduce((acc, s) => acc + s.balance, 0), [suppliers]);
   const totalCustomersCredits = useMemo(() => customers.reduce((acc, c) => acc + c.balance, 0), [customers]);
