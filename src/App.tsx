@@ -3591,6 +3591,7 @@ export default function App() {
               invoices,
               salesReturns,
               purchaseInvoices,
+              purchaseReturns,
               parts,
               customers,
               suppliers,
