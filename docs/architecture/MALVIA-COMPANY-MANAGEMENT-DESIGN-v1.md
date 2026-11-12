@@ -283,3 +283,8 @@ This document does not authorize:
 - Payment collection, legal contracts, tax filings or statutory accounting postings.
 
 The next approval step is to confirm Phase B scope and resolve MCM-DEC-01 through MCM-DEC-04. Only then should the logical ERD and API contract for MCM be prepared. All implementation remains separately gated.
+
+
+## Phase B scope and acceptance criteria
+
+- [MALVIA Company Management — Phase B Scope & Acceptance Criteria](MALVIA-COMPANY-MANAGEMENT-PHASE-B-SCOPE-v1.md) — detailed internal control-plane scope, role/capability proposal, KPI dictionary, CRM/tenant boundaries, seat/trial visibility, acceptance tests and implementation gates. Owner-authorized design elaboration only; runtime implementation remains separately gated.
