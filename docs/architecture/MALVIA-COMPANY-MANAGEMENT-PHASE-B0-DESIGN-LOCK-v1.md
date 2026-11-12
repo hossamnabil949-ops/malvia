@@ -19,7 +19,7 @@ This document consolidates the B0 design-lock baseline for MALVIA Company Manage
 | Area | Current disposition | Implementation consequence |
 |---|---|---|
 | MALVIA structure | Lock for design: Company / shared Platform / independently selectable Products are distinct layers | Do not merge corporate internal operations with tenant product operations |
-| Phase B scope | Prepared as the proposed minimum internal control plane: dashboard, portfolio, CRM, metadata-only tenant registry, commercial records, plan/seat catalogue and trial/subscription visibility | Owner must accept exact screen/scope baseline before B1 |
+| Phase B scope | **APPROVED BY OWNER on 2026-11-12:** the seven PB capabilities listed in Section 3, including their stated boundaries and exclusions | Scope approval only; unresolved policies and implementation/release gates remain separate |
 | Identity boundary | Lock: InternalUser and tenant user/member are separate identity realms | No shared principal, token audience or implicit identity mapping |
 | Tenant data boundary | Lock: Phase B tenant registry is approved metadata/read-model only | No customer operational records, impersonation or tenant DB reads/writes |
 | Platform authority | Lock: Platform remains authoritative for tenant, trial, subscription and effective entitlement lifecycle | Company Management consumes approved read models; no lifecycle mutation |
@@ -97,7 +97,7 @@ Statuses below reflect only decisions explicitly supported by the existing proje
 
 | Decision | Current status | What is safe to lock now | Still required |
 |---|---|---|---|
-| Phase B scope and exact owner acceptance | OWNER REVIEW REQUIRED | Seven PB capability boundaries are documented | Explicit acceptance of screen inventory and exclusions |
+| Phase B scope and exact owner acceptance | **APPROVED — 2026-11-12** | Seven PB capabilities PB-01 through PB-07 and their documented boundaries/exclusions | No further scope acceptance required for this baseline; any added capability or lifecycle/data-access change requires a separately recorded scope change |
 | MCM-DEC-01 internal module/role assignment | OPEN | Role families and proposed capability map only | Owner approves initial modules, role owners and scope rules |
 | MCM-DEC-02 internal identity/security | OPEN | Separate identity realm; MFA required for privileged roles as baseline proposal | Owner + Security approve provider, MFA, recovery, session/device and break-glass policy |
 | MCM-DEC-03 commercial authority | OPEN | Owner is escalation point; no numeric thresholds assumed | Owner approves discount/contract/order thresholds, delegation and maker-checker |
@@ -119,7 +119,7 @@ Statuses below reflect only decisions explicitly supported by the existing proje
 
 B0 can be marked **APPROVED FOR B1 DESIGN/IMPLEMENTATION PLANNING** only when all required rows below are explicitly accepted and evidence is recorded:
 
-- [ ] Owner accepts the exact seven-capability Phase B scope and exclusions.
+- [x] Owner accepted the exact seven-capability Phase B scope and exclusions on 2026-11-12. This does not approve unresolved policies or authorize implementation.
 - [ ] Owner approves initial internal role families, role owners and resource/action/scope boundaries.
 - [ ] Security approves internal identity provider, MFA, recovery, session/device and break-glass policy.
 - [ ] Owner approves commercial approval authority, thresholds, delegation and maker-checker.
