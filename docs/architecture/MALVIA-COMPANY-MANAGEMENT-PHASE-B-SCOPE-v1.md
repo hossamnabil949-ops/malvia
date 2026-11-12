@@ -379,3 +379,7 @@ Both are design-only. They do not assert that endpoints exist or authorize schem
 ## Phase B traceability and implementation control
 
 - [Phase B Traceability Matrix](MALVIA-COMPANY-MANAGEMENT-PHASE-B-TRACEABILITY-MATRIX-v1.md) — screen-to-entity-to-API-to-permission mapping, acceptance/API test crosswalk, failure and concurrency behavior, implementation slices, DoD, open decisions and security release blockers. Design-only; does not authorize implementation.
+
+## Phase B0 design lock
+
+- [Phase B0 Design Lock & Decision Closure](MALVIA-COMPANY-MANAGEMENT-PHASE-B0-DESIGN-LOCK-v1.md) records the proposed seven-capability scope, confirmed product requirements, unresolved policies and explicit B0 acceptance checklist. Scope is not marked approved until the owner confirms the exact baseline.
