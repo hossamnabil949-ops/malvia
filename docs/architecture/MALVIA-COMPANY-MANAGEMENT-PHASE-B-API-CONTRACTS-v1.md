@@ -429,3 +429,7 @@ Each slice requires contract tests, negative authorization tests, audit verifica
 ## Phase B traceability
 
 - [Phase B Traceability Matrix](MALVIA-COMPANY-MANAGEMENT-PHASE-B-TRACEABILITY-MATRIX-v1.md) provides the screen-to-API-to-permission crosswalk, maps API tests to Phase B acceptance criteria, and defines slice-level DoD and failure handling. Routes remain proposed; this link does not assert implementation or authorize runtime work.
+
+## Phase B0 boundary
+
+- [Phase B0 Design Lock & Decision Closure](MALVIA-COMPANY-MANAGEMENT-PHASE-B0-DESIGN-LOCK-v1.md) consolidates the source-of-truth and security decisions that gate implementation of these proposed API contracts. The routes remain proposals until B0 approvals and slice gates are met.
