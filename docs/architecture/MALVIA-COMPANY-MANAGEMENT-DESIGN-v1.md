@@ -300,3 +300,7 @@ Both are design-only. They do not assert that endpoints exist or authorize schem
 ## Phase B delivery traceability
 
 - [Phase B Traceability Matrix](MALVIA-COMPANY-MANAGEMENT-PHASE-B-TRACEABILITY-MATRIX-v1.md) completes the Phase B design chain from scope through logical ERD and proposed API contracts to screen, permission, test and implementation-slice traceability. It remains design-only.
+
+## Phase B0 design lock
+
+- [Phase B0 Design Lock & Decision Closure](MALVIA-COMPANY-MANAGEMENT-PHASE-B0-DESIGN-LOCK-v1.md) consolidates confirmed requirements, architectural invariants, source-of-truth boundaries, role baseline, open decisions and approval gates. Status: prepared; owner/security/legal/commercial/platform decisions remain pending. No implementation authorization.
