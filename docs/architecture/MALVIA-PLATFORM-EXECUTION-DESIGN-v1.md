@@ -320,3 +320,8 @@ The corporate website is the front door to the software company and its portfoli
 ## Related internal company operating system
 
 - [MALVIA Company Management — Internal Operating System Design](MALVIA-COMPANY-MANAGEMENT-DESIGN-v1.md) — internal CRM, portfolio, sales/contracts, subscription operations, onboarding, support, engineering delivery, finance, people, governance and dashboards. This is separate from customer-facing tenant products and remains design-only.
+
+
+## Related internal company Phase B scope
+
+- [MALVIA Company Management — Phase B Scope & Acceptance Criteria](MALVIA-COMPANY-MANAGEMENT-PHASE-B-SCOPE-v1.md) — defines the first internal control-plane slice and its acceptance gates. It does not authorize runtime code, customer-data writes, trial activation or Production deployment.
