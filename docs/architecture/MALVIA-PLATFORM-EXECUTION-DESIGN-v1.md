@@ -315,3 +315,8 @@ The website, sales materials, trial selector and customer portal must distinguis
 ### 11.5 Corporate website implications
 
 The corporate website is the front door to the software company and its portfolio, not merely a login page for the Sales POS. It must explain the company, platform, product portfolio, engineering/integration capabilities, customer outcomes, support and contact routes. Each product page must have its own audience, workflow story, screenshots/demo evidence, maturity label and trial/lead CTA appropriate to its actual release state.
+
+
+## Related internal company operating system
+
+- [MALVIA Company Management — Internal Operating System Design](MALVIA-COMPANY-MANAGEMENT-DESIGN-v1.md) — internal CRM, portfolio, sales/contracts, subscription operations, onboarding, support, engineering delivery, finance, people, governance and dashboards. This is separate from customer-facing tenant products and remains design-only.
