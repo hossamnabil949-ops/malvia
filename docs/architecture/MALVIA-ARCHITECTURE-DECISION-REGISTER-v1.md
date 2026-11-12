@@ -77,6 +77,7 @@ No approval is implied by preparing this register. Record approvals only after t
 |---|---|---|---|---|---|
 | DEC-001 | Trial duration = 14 days; exact clock semantics remain open. | Product requirement confirmed by owner in prior project discussion; final operational semantics pending. | Do not reset on download, reinstall or device change; server-owned tenant trial. | 2026-11-06 | PARTIALLY RESOLVED |
 | DEC-004 | User-based subscription with no fixed branch-count cap; the basic package includes one owner account plus two employee accounts. The owner is included and does not consume an employee seat. | Explicitly approved by owner on 2026-11-11. Larger package tiers and additional-seat pricing remain open. | Branch count does not determine subscription quantity. Basic package allowance: 2 employees in addition to the owner. | 2026-11-11 | PARTIALLY RESOLVED |
+| MCM-PB-SCOPE | Owner approves the seven-capability MALVIA Company Management Phase B scope (PB-01 through PB-07) and its documented boundaries/exclusions. | Explicitly approved by owner in conversation. | Scope approval only; unresolved identity/security, commercial authority, trial semantics, privacy, KPI and Platform-contract policies remain open. No runtime implementation, DDL, migration, merge or Production release is authorized. | 2026-11-12 | APPROVED — SCOPE ONLY |
 | DEC-___ |  |  |  |  | OPEN |
 
 ## 8. Implementation gates
