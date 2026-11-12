@@ -52,6 +52,26 @@ Proposed internal roles (permissions must be granular, not role-name-only):
 
 A person may hold multiple scoped roles. High-risk permission grants, financial adjustments, refunds, contract overrides, production release approvals and customer data access must be separately permissioned and audited.
 
+**Owner-approved department access baseline (2026-11-12):**
+
+| Department / role | Default access scope | Explicit boundary |
+|---|---|---|
+| Company Owner / Super Admin | All company departments, records, governance and final decisions | Remains the final company authority; sensitive actions remain auditable |
+| General Manager / Executive | Company-wide management dashboards, department performance, assigned operational records, tasks and escalations | No automatic bypass of financial, security or release approval controls |
+| Product Portfolio | Product catalogue, roadmap, maturity, dependencies and release-readiness evidence | Cannot publish a product as Available without required evidence and authorized approval |
+| Sales & CRM | Leads, prospects, customer organizations, contacts, opportunities and quote preparation | Commercial exceptions and contract commitments follow approval authority |
+| Subscription & Licensing Operations | Plans, seat allowances, trial/subscription visibility and licensing operations within approved scope | Platform remains authoritative; no unapproved lifecycle mutation |
+| Customer Success | Assigned customer accounts, onboarding health, adoption, renewal and success plans | No default access to customer operational data or unrestricted support sessions |
+| Technical Support | Tickets, incidents, approved diagnostics and customer communications | Customer-content access requires a separate approved, time-limited and audited grant |
+| Implementation & Projects | Assigned implementation projects, milestones, imports, training and customer acceptance | Customer data access is limited to approved project scope and controls |
+| Product Development & Engineering | Assigned backlogs, source repositories, branches, commits, PRs, builds and technical diagnostics | Coding access does not itself authorize QA acceptance or Production release |
+| QA & Release Management | Test plans/results, defects, release evidence and release-readiness review | Production promotion remains a separately authorized operation |
+| Finance & Accounting | MALVIA company books, invoices, receipts, expenses, receivables and approved financial reports | No access to customer tenant ledgers by default; live posting requires approved accounting policy |
+| HR & People Operations | Employee directory and assigned people operations | HR-sensitive records are restricted to specifically authorized HR scopes |
+| Audit / Read-only Auditor | Read-only access to authorized audit trails, evidence and reports | No create/update/delete or approval authority by virtue of auditor role |
+
+The owner-approved baseline establishes departmental responsibility and default scope, not an exhaustive field-level permission matrix. Access is least-privilege and limited to assigned departments, products, customers, projects and records as applicable. Employees may receive approved additional individual permissions under the separately approved RBAC policy; every grant, change and revocation is auditable. The exact permission catalogue, scope filters, grant/revoke authority, delegation and separation-of-duties rules remain to be specified before implementation. The Company Owner retains final authority.
+
 ### 3.2 Organizational structure
 
 Support configurable departments, teams, reporting lines, cost centers, work locations and employment status. Do not hard-code a fixed team count or product count. Keep HR employee records distinct from login identities and contractor/vendor contacts.
