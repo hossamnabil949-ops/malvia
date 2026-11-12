@@ -16,6 +16,20 @@ It must coexist with, but remain distinct from:
 
 MCM consumes approved Platform APIs and product telemetry. It must not bypass tenant authorization, directly mutate customer business data, or treat internal company staff as customer tenant users by default. A MALVIA employee account is an internal identity; customer owner/admin/employee accounts are tenant identities. Any support access into a customer tenant is a separate, time-limited, permissioned and audited support session.
 
+### 1.1 Standalone project boundary — owner-approved direction (2026-11-12)
+
+MALVIA Company Management is to be created as a **separate software project**, with its own repository, application/runtime, deployment lifecycle, configuration and data boundary. It is not a new screen or module built inside the existing MALVIA Sales application, and the Sales codebase or database is not its foundation.
+
+The existing MALVIA Sales product remains independently operable and continues on its own release path. MCM must not introduce breaking changes, share credentials/secrets, or directly read/write Sales production storage. The future integration sequence is:
+
+1. Design and build MCM independently against its own approved domain model and internal APIs.
+2. Define explicit, versioned integration contracts for product catalogue/status, customer/account references, commercial handoff and operational telemetry as applicable.
+3. Integrate MALVIA Sales as one independently operated product through authenticated APIs/events/adapters, with least-privilege scopes, idempotency, observability and contract tests.
+4. Keep Sales-owned operational records and customer transactions authoritative in Sales/its product services; MCM stores only the approved company-level references and read models it needs.
+5. Roll out integration incrementally after sandbox verification and explicit approval; no shared-database shortcut or unreviewed production cutover.
+
+The exact repository name, hosting topology, identity federation and integration transport remain design choices for a later project-bootstrap review. This direction authorizes the architectural separation only; it does not authorize repository creation, runtime implementation, database provisioning, credentials, Sales changes, PR merge or Production deployment.
+
 ## 2. Operating principles
 
 - One internal company workspace with role-scoped access and an immutable audit trail for sensitive actions.
