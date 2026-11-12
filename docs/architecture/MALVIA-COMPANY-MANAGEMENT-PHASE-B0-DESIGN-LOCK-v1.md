@@ -76,7 +76,7 @@ Proposed role families:
 
 The capability-level mapping remains in the Traceability Matrix. Role names are not account assignments and do not grant access until an owner-approved resource/action/scope policy exists.
 
-**Required security baseline:** privileged internal roles require MFA; internal identity provider, recovery, session lifetime, device policy and break-glass details remain pending security approval. Do not create production internal credentials as part of B0.
+**Approved security baseline (owner, 2026-11-12):** MFA is mandatory for every MALVIA internal user account, without exception based on role. The identity provider, supported MFA methods/enrollment and recovery controls, session lifetime, device policy and break-glass procedure remain pending security approval. Do not create production internal credentials as part of B0.
 
 ## 6. Source-of-truth contract
 
@@ -99,7 +99,7 @@ Statuses below reflect only decisions explicitly supported by the existing proje
 |---|---|---|---|
 | Phase B scope and exact owner acceptance | **APPROVED — 2026-11-12** | Seven PB capabilities PB-01 through PB-07 and their documented boundaries/exclusions | No further scope acceptance required for this baseline; any added capability or lifecycle/data-access change requires a separately recorded scope change |
 | MCM-DEC-01 internal module/role assignment | OPEN | Role families and proposed capability map only | Owner approves initial modules, role owners and scope rules |
-| MCM-DEC-02 internal identity/security | OPEN | Separate identity realm; MFA required for privileged roles as baseline proposal | Owner + Security approve provider, MFA, recovery, session/device and break-glass policy |
+| MCM-DEC-02 internal identity/security | PARTIALLY RESOLVED | Separate identity realm; **MFA mandatory for all MALVIA internal accounts** (owner-approved 2026-11-12) | Security approval still required for identity provider, MFA methods/enrollment and recovery, session/device and break-glass policy |
 | MCM-DEC-03 commercial authority | OPEN | Owner is escalation point; no numeric thresholds assumed | Owner approves discount/contract/order thresholds, delegation and maker-checker |
 | MCM-DEC-04 support access | OPEN | No standing tenant operational-data access in Phase B | Owner + Security define any future consent, emergency and time-limited access policy |
 | DEC-001 trial duration | PARTIALLY RESOLVED | 14-day duration and server-owned start/end timestamps | Decide tenant-local calendar days vs exactly 336 hours, expiry boundary/timezone/DST |
@@ -121,7 +121,7 @@ B0 can be marked **APPROVED FOR B1 DESIGN/IMPLEMENTATION PLANNING** only when al
 
 - [x] Owner accepted the exact seven-capability Phase B scope and exclusions on 2026-11-12. This does not approve unresolved policies or authorize implementation.
 - [ ] Owner approves initial internal role families, role owners and resource/action/scope boundaries.
-- [ ] Security approves internal identity provider, MFA, recovery, session/device and break-glass policy.
+- [ ] Security approves the internal identity provider, MFA methods/enrollment and recovery, session/device and break-glass policy. (The requirement that MFA applies to every internal account is already owner-approved on 2026-11-12.)
 - [ ] Owner approves commercial approval authority, thresholds, delegation and maker-checker.
 - [ ] Owner and Legal/Security approve the trial clock, expiry, grace, retention and deletion policy.
 - [ ] Owner/Commercial approves trial bundle and any included seat/module quotas.
