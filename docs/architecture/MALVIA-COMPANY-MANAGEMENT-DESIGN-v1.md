@@ -288,3 +288,11 @@ The next approval step is to confirm Phase B scope and resolve MCM-DEC-01 throug
 ## Phase B scope and acceptance criteria
 
 - [MALVIA Company Management — Phase B Scope & Acceptance Criteria](MALVIA-COMPANY-MANAGEMENT-PHASE-B-SCOPE-v1.md) — detailed internal control-plane scope, role/capability proposal, KPI dictionary, CRM/tenant boundaries, seat/trial visibility, acceptance tests and implementation gates. Owner-authorized design elaboration only; runtime implementation remains separately gated.
+
+
+## Phase B technical design artifacts
+
+- [Phase B Logical ERD](MALVIA-COMPANY-MANAGEMENT-PHASE-B-LOGICAL-ERD-v1.md) — internal company bounded-context entities, cardinalities, ownership boundaries and integrity rules.
+- [Phase B API Contracts](MALVIA-COMPANY-MANAGEMENT-PHASE-B-API-CONTRACTS-v1.md) — proposed internal API routes, authorization, request/response envelopes, idempotency, errors, Platform read-only integration and acceptance tests.
+
+Both are design-only. They do not assert that endpoints exist or authorize schema, runtime, tenant lifecycle or Production changes.
