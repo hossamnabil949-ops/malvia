@@ -241,3 +241,7 @@ This matrix does not authorize:
 - PR merge or changes outside the documentation branch.
 
 The next gate is owner review of the traceability and open-decision tables. Implementation planning may begin only after the applicable decisions and B0 design-lock evidence are explicitly approved.
+
+## Phase B0 design lock
+
+- [Phase B0 Design Lock & Decision Closure](MALVIA-COMPANY-MANAGEMENT-PHASE-B0-DESIGN-LOCK-v1.md) is the B0 readiness and decision-closure record for the B1–B5 slices. It distinguishes confirmed requirements from open decisions and does not authorize implementation.
