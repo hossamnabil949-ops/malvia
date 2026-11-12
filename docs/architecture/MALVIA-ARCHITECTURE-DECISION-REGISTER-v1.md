@@ -1,0 +1,106 @@
+# MALVIA Architecture Decision Register & Sign-off v1
+
+**Prepared:** 2026-11-08  
+**Status:** Proposed decisions for explicit review — NONE of the OPEN items below is approved by this document.  
+**Scope:** Decision register for the documentation-only modular-platform package in PR #30. This document does not authorize SQL/DDL, runtime code, data migration, production configuration, merge or deployment.
+
+## 1. How to use this register
+
+Each item records the decision owner, recommended default, alternatives/considerations, implementation impact and approval state. Recommendations are proposals to make review concrete; they are not business, accounting, legal or security approvals.
+
+- **Blocking — DDL:** decide before finalizing relevant schema constraints or migration.
+- **Blocking — implementation:** decide before enabling relevant production behavior.
+- **Blocking — pack launch:** decide before releasing the affected industry pack.
+- **Non-blocking:** may remain configurable until the relevant feature is activated.
+
+Approval must record the approver role, exact selected option, date and conditions. Approval of one row does not approve adjacent rows. Previously confirmed product requirements are marked PARTIALLY RESOLVED where only their remaining implementation semantics still need a decision.
+
+## 2. Product, trial and licensing
+
+| ID | Decision / recommended default | Alternatives / considerations | Owner | Gate | Status |
+|---|---|---|---|---|---|
+| DEC-001 | **Trial duration is already approved as 14 days.** Start the server-recorded trial only after verification and required setup. Store UTC timestamps and tenant timezone; show explicit local expiry. | Counting semantics remain OPEN: 14 tenant-local calendar days vs exactly 336 elapsed hours; define the expiry boundary and daylight-saving behavior. | Owner + Product/Legal | Implementation | PARTIALLY RESOLVED |
+| DEC-002 | Trial offer: use a configurable starter entitlement bundle and configurable seat quota; never hard-code pack or seat counts. | Trial may include all modules, selected industry packs, or restricted features; define quotas and payment-card requirement. | Owner + Commercial | Implementation / launch | OPEN |
+| DEC-003 | Trial expiry: recommend suspend new writes, preserve data, provide owner read-only/export access for a defined grace period, then apply approved retention/deletion policy. Never auto-delete on expiry. | Immediate suspension, longer grace, paid archive or reactivation. Proposed 30-day retention is not approved. Legal hold overrides deletion. | Owner + Legal/Security | Implementation | OPEN |
+| DEC-004 | **User-based licensing and no fixed branch cap are approved. The basic package includes one owner account plus two employee accounts. The owner is included and is not deducted from the employee allowance.** | Larger package tiers, additional-seat pricing/upgrade behavior, and treatment of admins, service accounts, temporary users and inactive users remain OPEN. | Owner + Commercial | DDL + implementation | PARTIALLY RESOLVED |
+| DEC-005 | Sessions/devices: recommend one active session per user by default, with auditable revocation and explicit device policy. | One session per device improves usability but increases credential-sharing risk. Define device/concurrency limits. | Owner + Security | Implementation | OPEN |
+| DEC-006 | Verification/payment: recommend email or phone verification before trial activation; payment method need not be mandatory unless commercially required. Select providers after regional availability, fee and compliance review. | Phone-only, email-only, business verification or card-required trial. | Owner + Legal/Operations | Launch | OPEN |
+
+## 3. Organization, identity and numbering
+
+| ID | Decision / recommended default | Alternatives / considerations | Owner | Gate | Status |
+|---|---|---|---|---|---|
+| DEC-007 | Identifiers: recommend UUID primary identifiers for new relational entities; preserve every legacy text ID as immutable legacy/source reference during migration. | Retaining text IDs as primary keys improves compatibility but complicates global identity. Never rewrite historical document numbers. | Engineering + Owner | DDL | OPEN |
+| DEC-008 | Username normalization: recommend case-insensitive normalized usernames unique within each tenant; preserve entered display form. Define Unicode normalization and allowed characters. | Case-sensitive usernames or email login. Measure existing usernames before choosing migration behavior. | Owner + Security | DDL + implementation | OPEN |
+| DEC-009 | Legal entity/branch mapping: each branch belongs to exactly one legal entity; central warehouse ownership is explicit. Never assign ambiguous legacy records to a default branch; quarantine for owner review. | Tenant may have one or multiple legal entities. Historical ambiguity may need a restricted legacy holding scope. | Owner + Accountant | DDL + migration | OPEN |
+| DEC-010 | Document numbering: recommend configurable sequence scope per document type, defaulting to legal entity + branch + register where operationally needed; allocate server-side. Preserve legacy numbers and use a collision-safe offline provisional namespace. | Legal-entity-only or branch-only numbering; statutory rules may dictate scope and gap handling. | Owner + Accountant + Legal | DDL + implementation | OPEN |
+| DEC-011 | Number gaps/offline numbering: recommend never reuse committed numbers; allow gaps in internal sequences. Offline provisional numbers remain visibly provisional until server reconciliation. | Jurisdiction-specific books may require a different controlled policy. Validate statutory invoice numbering/e-invoice rules. | Accountant + Legal | Implementation / pack launch | OPEN |
+
+## 4. Inventory, procurement and payment operations
+
+| ID | Decision / recommended default | Alternatives / considerations | Owner | Gate | Status |
+|---|---|---|---|---|---|
+| DEC-012 | Inventory costing: recommend weighted-average only as an initial configurable default if confirmed against current practice; retain costing-policy version and never silently recalculate posted history. | FIFO or specific identification may be required for batches/serials, regulated products or existing customer expectations. | Accountant + Owner | DDL + implementation | OPEN |
+| DEC-013 | Negative stock/reservations: recommend block negative available stock for normal sales; allow a separately permissioned override only with audit. Reservations reduce availability but do not issue stock. | Allow backorders/negative stock for selected industries or plans. Define offline concurrency behavior. | Owner + Operations + Accountant | Implementation | OPEN |
+| DEC-014 | Returns/quarantine: recommend receive returned goods into a non-saleable inspection state until disposition (resellable, damaged, supplier return, scrap). Preserve original line and serial/batch traceability. | Immediate restock may suit selected low-risk goods under controlled policy. | Operations + Accountant | DDL + implementation | OPEN |
+| DEC-015 | Procurement timing: recommend support invoice-before-receipt and receipt-before-invoice with unbilled-receipt reconciliation. Only accepted receipt quantities increase stock. | Restrict sequence for simpler customers, but do not collapse invoice and receipt into one entity. | Owner + Accountant + Procurement | DDL + implementation | OPEN |
+| DEC-016 | Landed costs: recommend allocate approved freight/duty/handling to receipt lines using configurable basis, with traceable adjustments and no silent rewrite of closed periods. | Expense immediately or allocate by quantity, value, weight or volume. | Accountant + Procurement | DDL + implementation | OPEN |
+| DEC-017 | Expense split settlement: recommend multiple tenders per expense, each with its own cashbox/bank/instrument and settlement status; expense recognition remains separate from payment settlement. | Simplified plans may restrict to one tender while preserving future-compatible schema. | Accountant + Owner | DDL + implementation | OPEN |
+| DEC-018 | Payment instruments: recommend explicit lifecycle states for cheques, card settlements, bank transfers and chargebacks; distinguish initiation, clearing, settlement, return and reversal. | Exact states depend on provider/bank workflows and local practice. | Accountant + Finance Operations | DDL + implementation | OPEN |
+
+## 5. Accounting, reporting and partner treatment
+
+| ID | Decision / recommended default | Alternatives / considerations | Owner | Gate | Status |
+|---|---|---|---|---|---|
+| DEC-019 | Accounting books: recommend separate statutory and management books only when required; otherwise begin with one approved book while keeping book identity explicit. | One book is simpler; multiple books support differing policies but add reconciliation complexity. | Accountant + Owner | DDL | OPEN |
+| DEC-020 | Chart of accounts/posting templates: no account codes or debit/credit directions are approved here. Require accountant-approved chart, event mapping, tax treatment, effective dates and test examples before GL posting. | Run shadow/proposal mode until sign-off; never represent proposed postings as posted accounting. | Accountant | DDL + implementation | OPEN |
+| DEC-021 | Tax/VAT/e-invoicing: require Egypt-specific tax/legal review of applicable business types, registration, invoice/credit-note formats, integration and retention before statutory issuance. | Rules vary by entity, turnover, industry and current regulations; this register makes no legal determination. | Accountant + Egyptian Tax/Legal Adviser | Pack launch | OPEN |
+| DEC-022 | Currency/FX/precision/rounding: store amounts in exact decimal form with explicit currency; define scale, rate source/time, conversion gain/loss and rounding per approved policy. Never use binary floating-point for authoritative postings. | Functional currency and multi-currency requirements vary by tenant/legal entity. | Accountant + Engineering | DDL | OPEN |
+| DEC-023 | Posting timing: recommend synchronous atomic posting for routine commands when mappings/services are available; use visible pending-posting only for explicitly approved exception classes. Pending is never posted. | Define behavior per command family and failure mode. | Accountant + Engineering | DDL + implementation | OPEN |
+| DEC-024 | Partner transactions: preserve distinct event types for capital contribution, current-account advance/repayment, withdrawal/distribution and exit settlement. No event silently changes another category; accountant defines treatment and approval limits. | Classification depends on legal agreements and tax/accounting treatment. | Accountant + Owner | DDL + implementation | OPEN |
+| DEC-025 | Reports/consolidation: recommend one versioned calculation contract per metric shared by UI, exports and API; group totals reconcile to branch detail, and inter-branch transfers do not inflate revenue/expense. | Statutory and management reports may differ, but differences must be named/versioned. | Accountant + Product | Implementation | OPEN |
+
+## 6. Security, privacy and compliance
+
+| ID | Decision / recommended default | Alternatives / considerations | Owner | Gate | Status |
+|---|---|---|---|---|---|
+| DEC-026 | Database RLS/pooling: recommend tenant-aware roles/policies with transaction-local tenant context safely set for every pooled connection; prove isolation with adversarial tests. | Application-only tenant filtering is insufficient as the sole defense. Exact Neon pooling/RLS design requires engineering review. | Security + Engineering | DDL + implementation | OPEN |
+| DEC-027 | Support/break-glass: recommend no standing unrestricted support access to tenant data. Use time-limited, reason-coded, approved least-privilege access, auditable and revocable. | Support sees operational metadata by default; exceptional content access requires approval. | Owner + Security | Implementation | OPEN |
+| DEC-028 | Exports/audit retention: require authenticated owner/admin session, explicit export permission, authorized branch scope and immutable export audit. Define retention with legal/accountant review. | Tenant-wide export may be a separate elevated permission. | Owner + Security + Legal | Implementation | OPEN |
+| DEC-029 | Industry compliance: before pharmacy launch, obtain specialist review for prescription/controlled-product, batch/expiry, patient and insurance safeguards. Review applicable Egyptian privacy, tax and sector requirements before each industry launch. | Exclude regulated workflows until requirements and controls are approved. | Legal + Security + Industry Owner | Pack launch | OPEN |
+| DEC-030 | **MFA is mandatory for every MALVIA internal user account, regardless of role.** | Identity provider, permitted MFA methods, enrollment, recovery, session lifetime, device policy and break-glass remain subject to security design and approval. | Owner + Security | Internal identity implementation | PARTIALLY RESOLVED |
+| DEC-031 | **Internal access follows job-role RBAC, with additional individual employee permissions allowed above the role baseline; the Company Owner remains the final authority. Permission grants and changes must be auditable.** | Exact permission catalogue/scopes, who may grant/revoke individual permissions, delegation, conflict-of-interest handling and detailed audit controls remain OPEN. | Owner + Security | Internal access implementation | PARTIALLY RESOLVED |
+| DEC-032 | **Approve the MALVIA Company Management departmental responsibility/default-access baseline:** Company Owner; General Manager/Executive; Product Portfolio; Sales & CRM; Subscription Operations; Customer Success; Technical Support; Implementation & Projects; Product Development & Engineering; QA & Release Management; Finance & Accounting; HR & People Operations; and read-only Audit. Each role is limited by least-privilege scope; engineering cannot self-authorize QA/Production release, support has no automatic customer-content access, finance is separate from tenant ledgers, and audit is read-only. | Exact field/action permissions, department/product/customer/project scope filters, assignments, grant/revoke authority, delegation and separation-of-duties rules remain OPEN for detailed design. | Owner + Security + Department Owners | Internal access implementation | PARTIALLY RESOLVED |
+| DEC-033 | **MALVIA Company Management is a standalone software project and bounded context, separate from the existing MALVIA Sales application/repository/runtime/database.** It must be designed and built independently; Sales is integrated later through explicit, versioned APIs/events/adapters after both sides' contracts and security are approved. No copying Sales internals as the foundation, shared-database shortcut, or changes to the live Sales product are implied. | Owner + Platform/Engineering | Project bootstrap + integration | APPROVED — ARCHITECTURAL DIRECTION |
+
+## 7. Approval ledger
+
+No approval is implied by preparing this register. Record approvals only after the authorized person explicitly confirms the exact choice.
+
+| Decision ID | Selected option / approved wording | Approver role | Conditions / evidence | Approval date | State |
+|---|---|---|---|---|---|
+| DEC-001 | Trial duration = 14 days; exact clock semantics remain open. | Product requirement confirmed by owner in prior project discussion; final operational semantics pending. | Do not reset on download, reinstall or device change; server-owned tenant trial. | 2026-11-06 | PARTIALLY RESOLVED |
+| DEC-004 | User-based subscription with no fixed branch-count cap; the basic package includes one owner account plus two employee accounts. The owner is included and does not consume an employee seat. | Explicitly approved by owner on 2026-11-11. Larger package tiers and additional-seat pricing remain open. | Branch count does not determine subscription quantity. Basic package allowance: 2 employees in addition to the owner. | 2026-11-11 | PARTIALLY RESOLVED |
+| MCM-PB-SCOPE | Owner approves the seven-capability MALVIA Company Management Phase B scope (PB-01 through PB-07) and its documented boundaries/exclusions. | Explicitly approved by owner in conversation. | Scope approval only; unresolved identity/security, commercial authority, trial semantics, privacy, KPI and Platform-contract policies remain open. No runtime implementation, DDL, migration, merge or Production release is authorized. | 2026-11-12 | APPROVED — SCOPE ONLY |
+| DEC-030 | MFA is mandatory for all MALVIA internal user accounts, irrespective of role. | Explicitly approved by owner in conversation. | This approves universal MFA requirement only; provider, methods, enrollment, recovery, session/device and break-glass controls remain open for security approval. | 2026-11-12 | PARTIALLY RESOLVED |
+| DEC-031 | Internal permissions are based on job-role RBAC; additional individual employee permissions may be granted above the role baseline; the Company Owner remains the final authority; grants and changes must be auditable. | Explicitly approved by owner in conversation. | Policy direction only. Exact permission catalogue/scopes, grant/revoke authority, delegation, conflict-of-interest handling and detailed audit controls remain open. | 2026-11-12 | PARTIALLY RESOLVED |
+| DEC-032 | Approve the departmental responsibility/default-access baseline and its stated safeguards for the 13 company roles/functions recorded in the Company Management Design and B0 Design Lock. | Explicitly approved by owner in conversation. | Departmental baseline only. Field/action-level permissions, scope filters, assignments, grant/revoke authority, delegation and detailed separation-of-duties remain open. | 2026-11-12 | PARTIALLY RESOLVED |
+| DEC-033 | MALVIA Company Management must be created as a standalone project, independent of MALVIA Sales; the Sales system is integrated later through approved contracts, not used as the foundation. | Explicitly approved by owner in conversation on 2026-11-12. | Separate project/repository, runtime and data boundary; no Sales production changes; integration design and authorization remain separate gates. | 2026-11-12 | APPROVED — ARCHITECTURAL DIRECTION |
+| DEC-___ |  |  |  |  | OPEN |
+
+## 8. Implementation gates
+
+1. **Before DDL:** resolve DEC-007, DEC-009, DEC-010, DEC-012, DEC-014 where represented structurally, DEC-015, DEC-017, DEC-018, DEC-019, DEC-022 and DEC-026, or explicitly model configurable alternatives without irreversible defaults.
+2. **Before financial posting:** DEC-020, DEC-021, DEC-023, DEC-024 and applicable period-close, currency and reconciliation policies require accountant/security approval and executable tests.
+3. **Before trial/paid launch:** approve DEC-001 through DEC-006 and retention/expiry rules.
+4. **Before industry-pack launch:** resolve DEC-011, DEC-013, DEC-014, DEC-021 and DEC-029 for that pack.
+5. **Before production migration:** branch mapping, legacy reconciliation, outbox/journal preservation, export/backup authorization, rollback and cutover acceptance must pass the migration checklist.
+6. **No silent defaults:** unresolved items remain OPEN; implementation may not infer approval from this register, PR review or a successful build.
+
+## 9. Scope and sign-off boundary
+
+This is a decision aid, not a signed approval record, legal/tax opinion, accountant sign-off, security certification or implementation authorization. The architecture package remains Draft until required decisions are approved. SQL/DDL, runtime changes, database migration, merge and Production deployment each require separate explicit authorization.
+
+## Company Management Phase B0
+
+- [Phase B0 Design Lock & Decision Closure](MALVIA-COMPANY-MANAGEMENT-PHASE-B0-DESIGN-LOCK-v1.md) summarizes the Company Management B0 subset and its approval checklist. Existing decision statuses in this register remain authoritative; no OPEN decision is changed to APPROVED by the new summary document.
