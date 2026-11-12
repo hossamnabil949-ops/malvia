@@ -268,3 +268,7 @@ Before translating this logical model into a physical schema:
 10. Complete physical database design, constraints and migration review separately.
 
 **Non-authorization:** This document does not authorize SQL/DDL, migrations, runtime implementation, customer data access, tenant lifecycle commands or Production deployment.
+
+## Phase B traceability
+
+- [Phase B Traceability Matrix](MALVIA-COMPANY-MANAGEMENT-PHASE-B-TRACEABILITY-MATRIX-v1.md) maps each screen and capability to these logical entities, authorization boundaries, proposed APIs and acceptance tests. It is a design aid only and does not authorize physical schema or runtime implementation.
