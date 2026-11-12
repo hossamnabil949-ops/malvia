@@ -425,3 +425,7 @@ Each slice requires contract tests, negative authorization tests, audit verifica
 - Audit retention, tamper evidence and privileged audit-reader access.
 
 **Non-authorization:** This document does not assert that these routes exist. It does not authorize runtime code, database schema, SQL/DDL, migrations, trial/subscription lifecycle changes, tenant provisioning or Production deployment.
+
+## Phase B traceability
+
+- [Phase B Traceability Matrix](MALVIA-COMPANY-MANAGEMENT-PHASE-B-TRACEABILITY-MATRIX-v1.md) provides the screen-to-API-to-permission crosswalk, maps API tests to Phase B acceptance criteria, and defines slice-level DoD and failure handling. Routes remain proposed; this link does not assert implementation or authorize runtime work.
