@@ -296,3 +296,7 @@ The next approval step is to confirm Phase B scope and resolve MCM-DEC-01 throug
 - [Phase B API Contracts](MALVIA-COMPANY-MANAGEMENT-PHASE-B-API-CONTRACTS-v1.md) — proposed internal API routes, authorization, request/response envelopes, idempotency, errors, Platform read-only integration and acceptance tests.
 
 Both are design-only. They do not assert that endpoints exist or authorize schema, runtime, tenant lifecycle or Production changes.
+
+## Phase B delivery traceability
+
+- [Phase B Traceability Matrix](MALVIA-COMPANY-MANAGEMENT-PHASE-B-TRACEABILITY-MATRIX-v1.md) completes the Phase B design chain from scope through logical ERD and proposed API contracts to screen, permission, test and implementation-slice traceability. It remains design-only.
