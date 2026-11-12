@@ -142,6 +142,68 @@ The API test numbers refer to Section 10 of the Phase B API Contracts document.
 | Order accepted | Record commercial commitment and audit | Provision tenant, activate trial, alter entitlement, invoice or collect payment |
 | Client retries after ambiguous network result | Resolve via idempotency receipt/status before resubmitting | Create duplicate business records |
 
+## 6A. Detailed internal permission matrix — proposal v0.1 (owner review required)
+
+**Status:** Proposed design only. This section translates the approved department baseline into resource/action permissions for the first five governance and commercial roles. It is not an approval of numeric thresholds, legal/accounting authority, or production access. All checks are server-side; UI visibility is not authorization.
+
+### Permission semantics
+
+| Action | Meaning | Control |
+|---|---|---|
+| Read | View a resource or report | Scope-filtered; aggregate counts must not reveal out-of-scope records |
+| Create | Create a draft record | Does not imply send, approve, post or activate |
+| Update | Edit a draft or permitted fields | Sent/approved/posted versions are immutable; corrections use a new version or reversal |
+| Submit | Send a record into a workflow | Locks the submitted version where applicable |
+| Approve | Make an approval decision | Requires explicit approval permission and separation-of-duties checks |
+| Execute | Perform the approved business command | Rechecks approval, current state, scope and idempotency on the server |
+| Cancel / Reverse | Cancel a draft or create a compensating event | No hard deletion of commercial/financial history; reason and audit required |
+| Grant access | Assign or revoke permissions | Separate privileged permission; self-grant prohibited; immutable audit event |
+
+### Role-by-role baseline
+
+| Resource / action | Company Owner | General Manager / Executive | Finance & Accounting | Sales & CRM | Subscription Operations |
+|---|---|---|---|---|---|
+| Executive dashboard | Read all company scope | Read company overview; drill-down only within delegated scope | Read finance KPIs and assigned finance drill-down | Read assigned pipeline and sales KPIs | Read subscription/trial operational KPIs |
+| Department and employee directory | Read / manage | Read; manage only if separately delegated | No default access | No default access | No default access |
+| Product catalogue and roadmap | Read / manage | Read; request changes | Read commercial/finance-relevant fields | Read sellable catalogue and approved price versions | Read plan-linked product catalogue |
+| CRM leads, contacts, organizations | Read / create / update / assign | Read company-wide; update only if delegated | Read billing identity fields only when needed | Read / create / update assigned records; submit qualification/conversion | Read verified customer reference only where needed for subscription operations |
+| Opportunities and activities | Read / manage | Read; reassign/escalate if delegated | Read approved commercial values for finance workflow | Read / create / update assigned opportunities and activities | Read opportunity-to-subscription reference only |
+| Quotes and quote versions | Prepare / approve / send / cancel subject to audit | Review and approve only under explicit delegated authority | Read approved quote and tax/finance fields; no commercial edit by default | Create / update draft / submit; send only after required approval | Read approved quote reference for entitlement setup; cannot alter commercial terms |
+| Contracts and amendments | Review / approve / authorize execution | Approve only within written delegation | Read executed terms and payment obligations; flag finance exceptions | Prepare draft / submit; no legal signature authority by default | Read executed subscription terms; cannot amend |
+| Commercial orders | Read / create / approve / cancel within policy | Read; approve within delegated authority | Read accepted orders; no tenant provisioning | Prepare / submit orders; no provisioning | Read accepted order for subscription workflow; no tenant lifecycle mutation |
+| Plan and seat catalogue | Read / prepare / approve / publish | Read; approve only if delegated | Read prices and billing rules | Read current approved offers | Prepare draft versions; submit for approval; cannot publish or change live tenant entitlements |
+| Trial / subscription / entitlement snapshots | Read all metadata | Read delegated company overview | Read billing-relevant metadata | Read assigned customer status summary | Read operational metadata; verify internal-to-tenant reference with evidence if separately authorized |
+| Customer tenant operational data | No standing access through MCM; use separate audited support process | No standing access | No default access | No default access | No default access |
+| Finance: invoices, receipts, expenses, receivables | Read / manage / approve subject to dual-control policy | Read management summaries; approve only by delegation | Read / create / update drafts / submit / post or execute only with separately assigned permissions | Read own commission/quote status only if approved | Read subscription billing status metadata only; no posting |
+| Audit events | Read all; sensitive access audited | Read delegated scope | Read finance-relevant audit events | Read own permitted activity trail | Read subscription-operation audit events |
+| Role and permission grants | Final authority; grant/revoke | No default grant; may request | No default grant | No default grant | No default grant |
+| Sensitive exports | Approve / execute with audit | Only explicitly delegated and scoped | Finance exports within approved scope | CRM exports only with explicit permission and assigned scope | Subscription metadata exports only with explicit permission |
+
+### Mandatory constraints for these roles
+
+1. **Owner:** final company authority does not bypass authentication, audit, legal/accounting controls or immutable history. High-risk actions should use explicit confirmation and, where configured, dual control.
+2. **General Manager:** company-wide management visibility is not blanket edit authority. Every write, approval and delegation must be separately granted and scoped.
+3. **Finance:** MALVIA company books are separate from customer tenant ledgers. Drafting, approval and posting are distinct permissions. No hard delete of posted entries; corrections use approved reversals/adjustments.
+4. **Sales:** may prepare commercial records but cannot independently override approved price lists, discount thresholds, contract terms or approval requirements. Sent versions remain immutable.
+5. **Subscription Operations:** may prepare catalogue changes and operate on approved metadata workflows, but cannot create/reset/extend/suspend trials, alter subscriptions, provision tenants or mutate live entitlements through MCM.
+6. **All roles:** employee-specific additional grants are allowed only under the approved RBAC direction; the grantor must be authorized, cannot grant beyond their own grant ceiling, and cannot grant themselves access. Every grant has a reason, scope, effective period and revocation trail.
+7. **Separation of duties:** a requester cannot approve their own high-risk request where policy requires independent review. Engineering cannot approve its own QA evidence or Production promotion. Finance posting and payment execution must follow separately approved thresholds and dual-control rules.
+8. **Deletion:** prefer archive, cancel or reverse. Physical deletion is unavailable for sent quotes, executed contracts, accepted orders, posted finance events and audit records, except under an approved retention/legal process.
+
+### Items that must be decided before this matrix can become an implementation baseline
+
+| Open item | Safe default until approved |
+|---|---|
+| Monetary approval thresholds, discount limits and contract commitment authority | Route all exceptions to Company Owner; do not invent amounts |
+| Who can delegate General Manager approval and for which duration | Owner-only explicit delegation; no implied delegation |
+| Finance maker-checker, posting and payment execution limits | Separate preparation from approval and execution; owner approval for unconfigured high-risk actions |
+| Who may publish plan catalogue versions and effective-date changes | Owner approval; Subscription Operations prepares only |
+| CRM sensitive fields, export rights and retention | Minimum necessary data; no bulk export without explicit permission |
+| Individual permission grant/revoke authority and expiry | Company Owner only until a delegated permission-administrator policy is approved |
+| Emergency access / break-glass | Disabled until Security defines and tests an audited process |
+
+This proposal must be reviewed role by role. Approval of this section will not approve unrelated identity, accounting, legal, trial-retention or Platform lifecycle decisions.
+
 ## 7. Implementation slices, dependencies and Definition of Done
 
 The order below follows the Phase B delivery sequence. Each slice is a separately reviewable vertical increment; completion of one does not authorize Production deployment.
