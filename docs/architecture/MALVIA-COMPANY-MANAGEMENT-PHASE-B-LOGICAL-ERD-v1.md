@@ -272,3 +272,7 @@ Before translating this logical model into a physical schema:
 ## Phase B traceability
 
 - [Phase B Traceability Matrix](MALVIA-COMPANY-MANAGEMENT-PHASE-B-TRACEABILITY-MATRIX-v1.md) maps each screen and capability to these logical entities, authorization boundaries, proposed APIs and acceptance tests. It is a design aid only and does not authorize physical schema or runtime implementation.
+
+## Phase B0 boundary
+
+- [Phase B0 Design Lock & Decision Closure](MALVIA-COMPANY-MANAGEMENT-PHASE-B0-DESIGN-LOCK-v1.md) records the identity, tenant-data, Platform authority, commercial separation and audit invariants that must be approved before physical design. This logical ERD remains non-physical and non-implementation-authorizing.
