@@ -91,3 +91,7 @@ No approval is implied by preparing this register. Record approvals only after t
 ## 9. Scope and sign-off boundary
 
 This is a decision aid, not a signed approval record, legal/tax opinion, accountant sign-off, security certification or implementation authorization. The architecture package remains Draft until required decisions are approved. SQL/DDL, runtime changes, database migration, merge and Production deployment each require separate explicit authorization.
+
+## Company Management Phase B0
+
+- [Phase B0 Design Lock & Decision Closure](MALVIA-COMPANY-MANAGEMENT-PHASE-B0-DESIGN-LOCK-v1.md) summarizes the Company Management B0 subset and its approval checklist. Existing decision statuses in this register remain authoritative; no OPEN decision is changed to APPROVED by the new summary document.
