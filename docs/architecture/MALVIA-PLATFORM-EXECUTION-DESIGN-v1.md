@@ -325,3 +325,11 @@ The corporate website is the front door to the software company and its portfoli
 ## Related internal company Phase B scope
 
 - [MALVIA Company Management — Phase B Scope & Acceptance Criteria](MALVIA-COMPANY-MANAGEMENT-PHASE-B-SCOPE-v1.md) — defines the first internal control-plane slice and its acceptance gates. It does not authorize runtime code, customer-data writes, trial activation or Production deployment.
+
+
+## Phase B technical design artifacts
+
+- [Phase B Logical ERD](MALVIA-COMPANY-MANAGEMENT-PHASE-B-LOGICAL-ERD-v1.md) — internal company bounded-context entities, cardinalities, ownership boundaries and integrity rules.
+- [Phase B API Contracts](MALVIA-COMPANY-MANAGEMENT-PHASE-B-API-CONTRACTS-v1.md) — proposed internal API routes, authorization, request/response envelopes, idempotency, errors, Platform read-only integration and acceptance tests.
+
+Both are design-only. They do not assert that endpoints exist or authorize schema, runtime, tenant lifecycle or Production changes.
