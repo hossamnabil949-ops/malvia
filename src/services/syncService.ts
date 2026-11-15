@@ -170,6 +170,35 @@ async function api(path: string, init: RequestInit & { headers?: Record<string, 
   };
 }
 
+export interface SyncRejectionNotification {
+  id: number;
+  traceId: string;
+  actor: { employeeId: string; employeeName: string; username: string; role: string };
+  resource: string;
+  recordIds: string[];
+  relatedGroupIds: string[];
+  code: string;
+  message: string;
+  status: string;
+  createdAt: string;
+  readAt: string | null;
+}
+
+export async function fetchSyncRejectionNotifications(licenseKey: string): Promise<{ ok: boolean; notifications: SyncRejectionNotification[] }> {
+  try {
+    const result = await api('/api/sync-notifications?limit=50', {
+      method: 'GET',
+      headers: { 'x-license-key': licenseKey },
+    });
+    return {
+      ok: result.ok,
+      notifications: result.ok && Array.isArray(result.body?.notifications) ? result.body.notifications : [],
+    };
+  } catch {
+    return { ok: false, notifications: [] };
+  }
+}
+
 async function pushResource(tenantId: string, licenseKey: string, res: string): Promise<boolean> {
   for (let attempt = 0; attempt < 4; attempt++) {
     const local = readLocal(tenantId, res);
@@ -237,18 +266,32 @@ async function pushBatch(tenantId: string, licenseKey: string, resources: string
     });
     if (r.ok) {
       const reconciled = r.body?.reconciled && typeof r.body.reconciled === 'object' ? r.body.reconciled : {};
+      const warnings = Array.isArray(r.body?.warnings) ? r.body.warnings : [];
       for (const op of operations) {
-        const acceptedData = Object.prototype.hasOwnProperty.call(reconciled, op.resource)
-          ? reconciled[op.resource]
-          : op.data;
-        if (Object.prototype.hasOwnProperty.call(reconciled, op.resource)) {
-          writeLocal(tenantId, op.resource, acceptedData);
+        const wasRejected = Object.prototype.hasOwnProperty.call(reconciled, op.resource);
+        const acceptedData = wasRejected ? reconciled[op.resource] : op.data;
+        if (wasRejected) {
+          const latestLocal = readLocal(tenantId, op.resource);
+          const rejectedIds = new Set<string>(warnings
+            .filter((warning: any) => warning?.resource === op.resource && Array.isArray(warning.affectedRecordIds))
+            .flatMap((warning: any) => warning.affectedRecordIds.map((id: any) => String(id))));
+          if (hashOf(latestLocal) === hashOf(op.data)) {
+            writeLocal(tenantId, op.resource, acceptedData);
+          } else if (Array.isArray(latestLocal) && Array.isArray(acceptedData) && rejectedIds.size > 0) {
+            // Keep edits made while the request was in flight, but remove only the
+            // rejected records before merging against the server's accepted snapshot.
+            const keptLocal = latestLocal.filter((item: Item) => !rejectedIds.has(String(item?.id)));
+            writeLocal(tenantId, op.resource, mergeArrays(op.resource, keptLocal, acceptedData as Item[], meta.base[op.resource] || {}));
+          } else {
+            // Do not overwrite newer or unidentifiable local changes. Keep them queued
+            // for a safe follow-up instead of silently losing data.
+            queueResource(tenantId, op.resource);
+          }
         }
         meta.versions[op.resource] = Number(r.body?.versions?.[op.resource]);
         meta.base[op.resource] = baseFor(op.resource, acceptedData);
       }
       writeMeta(tenantId, meta);
-      const warnings = Array.isArray(r.body?.warnings) ? r.body.warnings : [];
       return { warnings };
     }
     if (r.status === 409 && r.body?.conflict && r.body?.resource) {
@@ -367,13 +410,17 @@ async function flush() {
       schedule(1500);
     } else {
       const warningText = batchResult.warnings.map((warning: any) =>
-        String(warning?.message || 'تم رفض تعديل تاريخي واستعادة السجل المعتمد.')
+        String(warning?.message || 'تم رفض حركة واستعادة السجل المعتمد.')
         + (warning?.actor?.employeeName ? ` المسؤول عن المحاولة: ${String(warning.actor.employeeName).slice(0, 120)}.` : '')
         + (Array.isArray(warning?.affectedRecordIds) && warning.affectedRecordIds.length
           ? ` أرقام الحركات: ${warning.affectedRecordIds.slice(0, 10).join(', ')}.`
           : '')
       ).join(' ');
-      emitStatus('synced', warningText || 'تم رفع جميع التغييرات المحلية');
+      if (batchResult.warnings.length) {
+        emitStatus('error', `اكتملت مزامنة الحركات السليمة، مع رفض ${batchResult.warnings.length} حركة/مجموعة تحتاج إلى مراجعة المدير العام. ${warningText}`);
+      } else {
+        emitStatus('synced', 'تم رفع جميع التغييرات المحلية');
+      }
     }
   } catch (e: any) {
     emitStatus(navigator.onLine ? 'error' : 'offline', String(e?.message || e));

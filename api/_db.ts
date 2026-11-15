@@ -219,12 +219,24 @@ export async function init() {
         created_at timestamptz not null default now(),
         primary key (tenant, idempotency_key)
       )`;
-      await q`create or replace function malvia_sync_batch(p_tenant text, p_key text, p_hash text, p_ops jsonb)
+      await q`create table if not exists malvia_sync_rejections (
+        id bigserial primary key, tenant text not null, trace_id text not null,
+        actor_id text not null default '', actor_name text not null default '',
+        actor_username text not null default '', actor_role text not null default '',
+        resource text not null, record_ids jsonb not null default '[]'::jsonb,
+        related_group_ids jsonb not null default '[]'::jsonb,
+        error_code text not null, message text not null,
+        status text not null default 'unread', created_at timestamptz not null default now(), read_at timestamptz,
+        unique (tenant, trace_id, resource, error_code)
+      )`;
+      await q`create index if not exists malvia_sync_rejections_tenant_idx on malvia_sync_rejections (tenant, created_at desc)`;
+      await q`create or replace function malvia_sync_batch(p_tenant text, p_key text, p_hash text, p_ops jsonb, p_rejections jsonb)
       returns jsonb language plpgsql as $$
       declare v_op jsonb; v_resource text; v_data jsonb; v_base bigint; v_current jsonb;
-        v_version bigint; v_versions jsonb := '{}'::jsonb; v_result jsonb; v_existing jsonb; v_hash text;
+        v_version bigint; v_versions jsonb := '{}'::jsonb; v_result jsonb; v_existing jsonb; v_hash text; v_rejection jsonb;
       begin
-        if jsonb_typeof(p_ops) <> 'array' or jsonb_array_length(p_ops) = 0 or jsonb_array_length(p_ops) > 40 then
+        if jsonb_typeof(p_ops) <> 'array' or jsonb_array_length(p_ops) > 40
+          or (jsonb_array_length(p_ops) = 0 and jsonb_array_length(coalesce(p_rejections, '[]'::jsonb)) = 0) then
           raise exception 'SYNC_BATCH_INVALID';
         end if;
         perform pg_advisory_xact_lock(hashtext(p_tenant));
@@ -279,8 +291,38 @@ export async function init() {
           end if;
           v_versions := v_versions || jsonb_build_object(v_resource,v_version);
         end loop;
-        v_result := jsonb_build_object('success',true,'versions',v_versions);
+        -- Persist the partial-rejection response inside the idempotency result so a lost
+        -- HTTP response can be replayed without re-applying rejected local records.
+        for v_rejection in select value from jsonb_array_elements(coalesce(p_rejections, '[]'::jsonb)) loop
+          if v_rejection ? 'version' then
+            v_versions := v_versions || jsonb_build_object(v_rejection->>'resource', (v_rejection->>'version')::bigint);
+          end if;
+        end loop;
+        v_result := jsonb_build_object(
+          'success',true,
+          'versions',v_versions,
+          'warnings',coalesce((select jsonb_agg(value->'warning') from jsonb_array_elements(coalesce(p_rejections, '[]'::jsonb)) where value ? 'warning'),'[]'::jsonb),
+          'reconciled',coalesce((select value->'reconciled' from jsonb_array_elements(coalesce(p_rejections, '[]'::jsonb)) where value ? 'reconciled' limit 1),'{}'::jsonb)
+        );
         insert into malvia_sync_ops(tenant,idempotency_key,request_hash,result) values(p_tenant,p_key,p_hash,v_result);
+        if jsonb_typeof(coalesce(p_rejections, '[]'::jsonb)) <> 'array' then raise exception 'SYNC_REJECTIONS_INVALID'; end if;
+        for v_rejection in select value from jsonb_array_elements(coalesce(p_rejections, '[]'::jsonb)) loop
+          insert into malvia_sync_rejections(
+            tenant,trace_id,actor_id,actor_name,actor_username,actor_role,resource,
+            record_ids,related_group_ids,error_code,message
+          ) values (
+            p_tenant,left(coalesce(v_rejection->>'traceId','unavailable'),160),
+            left(coalesce(v_rejection->'actor'->>'employeeId',''),120),
+            left(coalesce(v_rejection->'actor'->>'employeeName',''),120),
+            left(coalesce(v_rejection->'actor'->>'username',''),80),
+            left(coalesce(v_rejection->'actor'->>'role',''),80),
+            left(coalesce(v_rejection->>'resource','unknown'),100),
+            case when jsonb_typeof(v_rejection->'recordIds')='array' then v_rejection->'recordIds' else '[]'::jsonb end,
+            case when jsonb_typeof(v_rejection->'relatedGroupIds')='array' then v_rejection->'relatedGroupIds' else '[]'::jsonb end,
+            left(coalesce(v_rejection->>'code','SYNC_RECORD_REJECTED'),100),
+            left(coalesce(v_rejection->>'message','تم رفض حركة أثناء المزامنة.'),500)
+          ) on conflict (tenant,trace_id,resource,error_code) do nothing;
+        end loop;
         return v_result;
       end $$`;
       await q`create or replace function malvia_put_if_version(p_tenant text, p_resource text, p_data jsonb, p_base_version bigint)
@@ -345,11 +387,28 @@ export async function putIfVersion(tenant: string, resource: string, data: unkno
 }
 
 
-export async function commitSyncBatch(tenant: string, idempotencyKey: string, requestHash: string, operations: Array<{ resource: string; data: unknown; baseVersion: number }>): Promise<any> {
+export async function commitSyncBatch(tenant: string, idempotencyKey: string, requestHash: string, operations: Array<{ resource: string; data: unknown; baseVersion: number }>, rejections: Array<Record<string, unknown>> = []): Promise<any> {
   await init();
   const q = await sql();
-  const rows = await q`select malvia_sync_batch(${tenant},${idempotencyKey},${requestHash},${JSON.stringify(operations)}::jsonb) as result`;
+  const rows = await q`select malvia_sync_batch(${tenant},${idempotencyKey},${requestHash},${JSON.stringify(operations)}::jsonb,${JSON.stringify(rejections)}::jsonb) as result`;
   return (rows as any[])[0]?.result;
+}
+
+export async function listSyncRejections(tenant: string, limit = 50): Promise<any[]> {
+  await init();
+  const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit) || 50));
+  const rows = await (await sql())`
+    select id,trace_id,actor_id,actor_name,actor_username,actor_role,resource,
+      record_ids,related_group_ids,error_code,message,status,created_at,read_at
+    from malvia_sync_rejections where tenant=${tenant}
+    order by created_at desc,id desc limit ${safeLimit}`;
+  return (rows as any[]).map(row => ({
+    id: Number(row.id), traceId: row.trace_id,
+    actor: { employeeId: row.actor_id, employeeName: row.actor_name, username: row.actor_username, role: row.actor_role },
+    resource: row.resource, recordIds: row.record_ids, relatedGroupIds: row.related_group_ids,
+    code: row.error_code, message: row.message, status: row.status,
+    createdAt: new Date(row.created_at).toISOString(), readAt: row.read_at ? new Date(row.read_at).toISOString() : null,
+  }));
 }
 
 export async function createEmployeeSession(tenant: string, employeeId: string, tokenHash: string, expiresAt: Date): Promise<void> {
