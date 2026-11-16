@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   buildBankTransferJournal, buildCustomerReceiptJournal, buildExpenseJournal,
+  buildSalesReturnJournal,
   buildPartnerCurrentAccountJournal, buildPurchaseInvoiceJournal, buildSalesInvoiceJournal,
   buildSupplierPaymentJournal,
   type SourceAccountMap,
@@ -10,7 +11,7 @@ const accounts: SourceAccountMap = {
   sales: 'sales', outputVat: 'vat-output', receivables: 'receivables',
   costOfGoodsSold: 'cogs', inventory: 'inventory', operatingExpenses: 'expenses',
   partnerCurrentAccount: 'partner-current', inputVat: 'vat-input', payables: 'payables',
-  supplierAdvances: 'supplier-advances',
+  supplierAdvances: 'supplier-advances', salesReturns: 'sales-returns',
   settlementAccount: (method, bankId) => {
     if (method.includes('نقد') || method.includes('كاش')) return 'cash';
     if (method.includes('تحويل')) return bankId ? 'bank:' + bankId : undefined;
@@ -53,6 +54,34 @@ assert.equal(buildSalesInvoiceJournal(
   { ...invoice, status: 'ملغاة' },
   context, 'period-1', 'now', 'tester', accounts,
 ).error, 'INVOICE_CANCELLED');
+
+
+const salesReturn: any = {
+  id: 'RET-1', returnNumber: 'SR-001', invoiceId: 'INV-1', invoiceNumber: 'S-001',
+  date: '2026-11-16', time: '11:00', customerName: 'عميل', customerId: 'C-1',
+  items: [{ lineId: 'INV-1:0', partId: 'part-1', partNumber: 'P-1',
+    partName: 'قطعة', quantity: 1, unitPrice: 50, total: 50 }],
+  totalRefundAmount: 51.75, refundMethod: 'نقدي (خصم من الخزنة)',
+  treasuryDeducted: true, recordedBy: 'Test',
+};
+const returnJournal = buildSalesReturnJournal(
+  salesReturn, invoice, context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(returnJournal.error, null);
+assert.equal(returnJournal.input?.source.type, 'sales.return');
+assert.equal(returnJournal.input?.lines.find(line => line.accountId === 'sales-returns')?.debit, 45);
+assert.equal(returnJournal.input?.lines.find(line => line.accountId === 'vat-output')?.debit, 6.75);
+assert.equal(returnJournal.input?.lines.find(line => line.accountId === 'cash')?.credit, 51.75);
+assert.equal(returnJournal.input?.lines.find(line => line.accountId === 'inventory')?.debit, 20);
+assert.equal(returnJournal.input?.lines.find(line => line.accountId === 'cogs')?.credit, 20);
+assert.equal(buildSalesReturnJournal(
+  { ...salesReturn, id: 'RET-2', refundMethod: 'خصم من رصيد العميل الآجل', treasuryDeducted: false },
+  invoice, context, 'period-1', 'now', 'tester', accounts,
+).input?.lines.find(line => line.accountId === 'receivables')?.credit, 51.75);
+assert.equal(buildSalesReturnJournal(
+  salesReturn, { ...invoice, items: [{ ...invoice.items[0], costPrice: undefined }] },
+  context, 'period-1', 'now', 'tester', accounts,
+).error, 'COST_BASIS_MISSING');
 
 const expense: any = {
   id: 'EXP-1', title: 'إيجار', category: 'إيجار المحل والمستودع',
