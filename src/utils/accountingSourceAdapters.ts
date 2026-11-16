@@ -7,11 +7,12 @@ import type {
 } from '../types/autoParts';
 import { paymentAccountOf } from './paymentMethods';
 import type { Cheque } from './chequeLogic';
+import type { VoidPlan } from './saleLogic';
 
 export type SourceAdapterError =
   | 'SOURCE_ID_REQUIRED' | 'SOURCE_DATE_INVALID' | 'SOURCE_AMOUNT_INVALID'
   | 'INVOICE_CANCELLED' | 'INVOICE_TOTAL_MISMATCH' | 'PAYMENT_TOTAL_MISMATCH'
-  | 'PAYMENT_METHOD_UNSUPPORTED' | 'ACCOUNT_MAPPING_MISSING' | 'CHEQUE_LIFECYCLE_INVALID'
+  | 'PAYMENT_METHOD_UNSUPPORTED' | 'ACCOUNT_MAPPING_MISSING' | 'CHEQUE_LIFECYCLE_INVALID' | 'INVOICE_VOID_INVALID'
   | 'COST_BASIS_MISSING' | 'INVOICE_LINES_INVALID' | 'TAX_DETAIL_MISSING';
 
 export interface SourceAdapterResult {
@@ -125,6 +126,87 @@ export function buildSalesInvoiceJournal(
   }
   return ok(baseInput(context, 'sales.invoice', invoice.id, invoice.date, periodId,
     'ترحيل فاتورة بيع ' + invoice.invoiceNumber, lines, createdAt, createdBy));
+}
+
+/**
+ * Reverses a voided sales invoice using the already-computed legacy void plan.
+ * This creates a new journal source; it never edits or deletes the original invoice journal.
+ */
+export function buildInvoiceVoidJournal(
+  invoice: Invoice, plan: VoidPlan, context: AccountingContext, periodId: string,
+  createdAt: string, createdBy: string, accounts: SourceAccountMap,
+): SourceAdapterResult {
+  if (!invoice.id?.trim()) return fail('SOURCE_ID_REQUIRED');
+  const voidDate = invoice.voidedAt?.slice(0, 10) || '';
+  if (!validDate(voidDate)) return fail('SOURCE_DATE_INVALID');
+  if (invoice.status !== 'ملغاة' || !invoice.voidReason?.trim() || !invoice.voidApprovedBy?.trim()) {
+    return fail('INVOICE_VOID_INVALID');
+  }
+  if (![invoice.subtotal, invoice.discount, invoice.tax, invoice.grandTotal, plan.fraction, plan.creditAmount].every(validAmount)
+    || plan.fraction > 1 || plan.creditAmount > invoice.grandTotal + 0.01) return fail('SOURCE_AMOUNT_INVALID');
+  const netSales = r2(invoice.subtotal - invoice.discount);
+  if (netSales < 0 || Math.abs(r2(netSales + invoice.tax) - r2(invoice.grandTotal)) > 0.01) {
+    return fail('INVOICE_TOTAL_MISMATCH');
+  }
+  const refundTotal = r2(plan.creditAmount + plan.refunds.reduce((sum, refund) => sum + refund.amount, 0));
+  const expectedRemaining = r2(invoice.grandTotal - (invoice.returnedAmount || 0));
+  if (Math.abs(refundTotal - expectedRemaining) > 0.01) return fail('INVOICE_VOID_INVALID');
+  if ((invoice.returnedAmount || 0) > 0.005 && invoice.tax > 0.005) {
+    return fail('TAX_DETAIL_MISSING');
+  }
+
+  const expectedRestock = invoice.items.map(item => ({
+    partId: item.partId, partNumber: item.partNumber,
+    qty: Math.max(0, item.quantity - (item.returnedQuantity || 0)),
+  })).filter(item => item.qty > 0);
+  const key = (item: { partId?: string; partNumber: string }) => item.partId ? 'id:' + item.partId : 'number:' + item.partNumber;
+  const aggregate = (items: { partId?: string; partNumber: string; qty: number }[]) => {
+    const map = new Map<string, number>();
+    for (const item of items) map.set(key(item), r2((map.get(key(item)) || 0) + item.qty));
+    return map;
+  };
+  const expectedQty = aggregate(expectedRestock);
+  const plannedQty = aggregate(plan.restock);
+  if (expectedQty.size !== plannedQty.size || [...expectedQty].some(([id, qty]) => Math.abs(qty - (plannedQty.get(id) || 0)) > 0.0001)) {
+    return fail('INVOICE_VOID_INVALID');
+  }
+
+  let restoredCost = 0;
+  for (const item of invoice.items) {
+    const remainingQty = Math.max(0, item.quantity - (item.returnedQuantity || 0));
+    if (remainingQty === 0) continue;
+    if (item.costPrice === undefined || !validAmount(item.costPrice)) return fail('COST_BASIS_MISSING');
+    restoredCost += remainingQty * item.costPrice;
+  }
+
+  const lines: JournalLine[] = [];
+  if (!addLine(lines, accounts.sales, netSales * plan.fraction, 0, 'عكس صافي مبيعات الفاتورة الملغاة ' + invoice.invoiceNumber)
+    || !addLine(lines, accounts.outputVat, invoice.tax * plan.fraction, 0, 'عكس ضريبة مخرجات الفاتورة الملغاة ' + invoice.invoiceNumber)
+    || !addLine(lines, accounts.inventory, r2(restoredCost), 0, 'إعادة تكلفة المخزون للفاتورة الملغاة ' + invoice.invoiceNumber)
+    || !addLine(lines, accounts.costOfGoodsSold, 0, r2(restoredCost), 'عكس تكلفة البضاعة للفاتورة الملغاة ' + invoice.invoiceNumber)) {
+    return fail('ACCOUNT_MAPPING_MISSING');
+  }
+  if (plan.creditAmount > 0 && !addLine(lines, accounts.receivables, 0, plan.creditAmount, 'إلغاء رصيد العميل للفاتورة ' + invoice.invoiceNumber)) {
+    return fail('ACCOUNT_MAPPING_MISSING');
+  }
+  for (const refund of plan.refunds) {
+    if (!Number.isFinite(refund.amount) || refund.amount < 0) return fail('SOURCE_AMOUNT_INVALID');
+    if (refund.amount <= 0) continue;
+    const matchingPayments = (invoice.payments?.length ? invoice.payments : [{ method: invoice.paymentMethod, amount: invoice.grandTotal }])
+      .filter(payment => payment.method === refund.method);
+    if (!matchingPayments.length) return fail('PAYMENT_METHOD_UNSUPPORTED');
+    const bankIds = [...new Set(matchingPayments.map(payment => payment.bankAccountId || ''))];
+    if (bankIds.length > 1) return fail('PAYMENT_METHOD_UNSUPPORTED');
+    let settlement: string | undefined;
+    try { settlement = accounts.settlementAccount(String(refund.method), bankIds[0] || undefined); }
+    catch { return fail('PAYMENT_METHOD_UNSUPPORTED'); }
+    if (!addLine(lines, settlement, 0, refund.amount, 'رد وسيلة الدفع عند إلغاء الفاتورة ' + invoice.invoiceNumber)) {
+      return fail('ACCOUNT_MAPPING_MISSING');
+    }
+  }
+
+  return ok(baseInput(context, 'sales.invoice-void', invoice.id, voidDate, periodId,
+    'قيد عكسي لإلغاء فاتورة بيع ' + invoice.invoiceNumber, lines, createdAt, createdBy));
 }
 
 /** Expenses have no tax breakdown in the legacy Expense record; the full amount stays unsplit. */
