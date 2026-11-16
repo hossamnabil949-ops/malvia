@@ -271,8 +271,8 @@ export function buildBankTransferJournal(
 
 
 /**
- * Sales return reverses the original revenue/tax and restores inventory at the original
- * invoice-line cost. Return value is VAT-inclusive in the legacy SalesReturn record.
+ * Sales return reverses revenue and restores inventory at original invoice-line cost.
+ * Taxable returns are blocked because legacy return records do not preserve a VAT amount.
  */
 export function buildSalesReturnJournal(
   salesReturn: SalesReturn, originalInvoice: Invoice, context: AccountingContext,
@@ -287,6 +287,8 @@ export function buildSalesReturnJournal(
     return fail('SOURCE_AMOUNT_INVALID');
   }
   if (!salesReturn.items.length) return fail('INVOICE_LINES_INVALID');
+  // Legacy return records do not say whether unitPrice includes VAT or carry a return VAT amount.
+  if (!Number.isFinite(originalInvoice.tax) || originalInvoice.tax > 0.005) return fail('TAX_DETAIL_MISSING');
 
   let restoredCost = 0;
   for (const returned of salesReturn.items) {
@@ -304,11 +306,8 @@ export function buildSalesReturnJournal(
     restoredCost += originalLine.costPrice * returned.quantity;
   }
 
-  const taxReversal = r2(originalInvoice.tax * salesReturn.totalRefundAmount / originalInvoice.grandTotal);
-  const netRevenueReversal = r2(salesReturn.totalRefundAmount - taxReversal);
   const lines: JournalLine[] = [];
-  if (!addLine(lines, accounts.salesReturns, netRevenueReversal, 0, 'مردودات مبيعات ' + salesReturn.returnNumber)
-    || !addLine(lines, accounts.outputVat, taxReversal, 0, 'عكس ضريبة مخرجات مرتجع ' + salesReturn.returnNumber)) {
+  if (!addLine(lines, accounts.salesReturns, salesReturn.totalRefundAmount, 0, 'مردودات مبيعات ' + salesReturn.returnNumber)) {
     return fail('ACCOUNT_MAPPING_MISSING');
   }
 
