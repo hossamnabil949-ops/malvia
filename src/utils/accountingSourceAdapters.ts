@@ -12,7 +12,7 @@ import type { VoidPlan } from './saleLogic';
 export type SourceAdapterError =
   | 'SOURCE_ID_REQUIRED' | 'SOURCE_DATE_INVALID' | 'SOURCE_AMOUNT_INVALID'
   | 'INVOICE_CANCELLED' | 'INVOICE_TOTAL_MISMATCH' | 'PAYMENT_TOTAL_MISMATCH'
-  | 'PAYMENT_METHOD_UNSUPPORTED' | 'ACCOUNT_MAPPING_MISSING' | 'CHEQUE_LIFECYCLE_INVALID' | 'INVOICE_VOID_INVALID'
+  | 'PAYMENT_METHOD_UNSUPPORTED' | 'ACCOUNT_MAPPING_MISSING' | 'CHEQUE_LIFECYCLE_INVALID' | 'INVOICE_VOID_INVALID' | 'PURCHASE_INVOICE_VOID_INVALID'
   | 'COST_BASIS_MISSING' | 'INVOICE_LINES_INVALID' | 'TAX_DETAIL_MISSING';
 
 export interface SourceAdapterResult {
@@ -490,6 +490,94 @@ export function buildPurchaseReturnJournal(
     'ترحيل مرتجع مشتريات ' + purchaseReturn.returnNumber, lines, createdAt, createdBy));
 }
 
+
+/**
+ * Purchase-invoice cancellation is driven by an explicit settlement event because legacy
+ * PurchaseInvoice does not retain the cancellation state or the original supplier-credit split.
+ * The event allocations must fully account for the invoice value; returned stock blocks full void.
+ */
+export function buildPurchaseInvoiceVoidJournal(
+  invoice: PurchaseInvoice,
+  cancellation: {
+    id: string; date: string; reason: string; approvedBy: string;
+    cashRefund: number; supplierAdvanceRestored: number; payableReleased: number;
+    refundMethod?: string; refundBankAccountId?: string;
+  },
+  context: AccountingContext, periodId: string, createdAt: string, createdBy: string,
+  accounts: SourceAccountMap,
+): SourceAdapterResult {
+  if (!invoice.id?.trim() || !cancellation.id?.trim()) return fail('SOURCE_ID_REQUIRED');
+  if (!validDate(invoice.date) || !validDate(cancellation.date)) return fail('SOURCE_DATE_INVALID');
+  if (!cancellation.reason?.trim() || !cancellation.approvedBy?.trim()) return fail('PURCHASE_INVOICE_VOID_INVALID');
+  if (![invoice.subtotal, invoice.discount, invoice.tax, invoice.grandTotal, invoice.amountPaid,
+    cancellation.cashRefund, cancellation.supplierAdvanceRestored, cancellation.payableReleased].every(validAmount)) {
+    return fail('SOURCE_AMOUNT_INVALID');
+  }
+  if (invoice.returnedAmount && invoice.returnedAmount > 0.005
+    || invoice.items.some(item => (item.returnedQuantity || 0) > 0.0001)) {
+    return fail('PURCHASE_INVOICE_VOID_INVALID');
+  }
+  const netInventory = r2(invoice.subtotal - invoice.discount);
+  if (netInventory < 0 || Math.abs(r2(netInventory + invoice.tax) - r2(invoice.grandTotal)) > 0.01
+    || invoice.amountPaid > invoice.grandTotal + 0.01) return fail('INVOICE_TOTAL_MISMATCH');
+  const allocated = r2(cancellation.cashRefund + cancellation.supplierAdvanceRestored + cancellation.payableReleased);
+  if (Math.abs(allocated - r2(invoice.grandTotal)) > 0.01
+    || cancellation.cashRefund > invoice.amountPaid + 0.01
+    || cancellation.payableReleased + cancellation.supplierAdvanceRestored > invoice.grandTotal - invoice.amountPaid + 0.01) {
+    return fail('PURCHASE_INVOICE_VOID_INVALID');
+  }
+
+  const lines: JournalLine[] = [];
+  if (cancellation.cashRefund > 0) {
+    if (!cancellation.refundMethod?.trim()) return fail('PAYMENT_METHOD_UNSUPPORTED');
+    let settlement: string | undefined;
+    try { settlement = accounts.settlementAccount(cancellation.refundMethod, cancellation.refundBankAccountId); }
+    catch { return fail('PAYMENT_METHOD_UNSUPPORTED'); }
+    if (!addLine(lines, settlement, cancellation.cashRefund, 0, 'استرداد مدفوعات فاتورة مشتريات ملغاة ' + invoice.invoiceNumber)) {
+      return fail('ACCOUNT_MAPPING_MISSING');
+    }
+  }
+  if (!addLine(lines, accounts.supplierAdvances, cancellation.supplierAdvanceRestored, 0,
+    'استعادة رصيد مقدم المورد بسبب إلغاء فاتورة ' + invoice.invoiceNumber)
+    || !addLine(lines, accounts.payables, cancellation.payableReleased, 0,
+    'إلغاء مستحقات المورد عن الفاتورة ' + invoice.invoiceNumber)
+    || !addLine(lines, accounts.inventory, 0, netInventory, 'عكس مخزون فاتورة مشتريات ملغاة ' + invoice.invoiceNumber)
+    || !addLine(lines, accounts.inputVat, 0, invoice.tax, 'عكس ضريبة مدخلات فاتورة مشتريات ملغاة ' + invoice.invoiceNumber)) {
+    return fail('ACCOUNT_MAPPING_MISSING');
+  }
+  return ok(baseInput(context, 'purchase.invoice-void', invoice.id + ':' + cancellation.id,
+    cancellation.date, periodId, 'إلغاء فاتورة مشتريات ' + invoice.invoiceNumber + ' — ' + cancellation.reason,
+    lines, createdAt, createdBy));
+}
+
+/** Cash deposited to a bank moves assets from cash to bank; withdrawal moves them back. */
+export function buildCashBankMovementJournal(
+  movement: {
+    id: string; date: string; direction: 'deposit' | 'withdrawal';
+    amount: number; bankAccountId: string; reference?: string;
+  },
+  context: AccountingContext, periodId: string, createdAt: string, createdBy: string,
+  cashAccountId: string, bankAccountLedgerId: (bankAccountId: string) => string | undefined,
+): SourceAdapterResult {
+  if (!movement.id?.trim()) return fail('SOURCE_ID_REQUIRED');
+  if (!validDate(movement.date)) return fail('SOURCE_DATE_INVALID');
+  if (!Number.isFinite(movement.amount) || movement.amount <= 0) return fail('SOURCE_AMOUNT_INVALID');
+  if (!movement.bankAccountId || !cashAccountId) return fail('ACCOUNT_MAPPING_MISSING');
+  const bank = bankAccountLedgerId(movement.bankAccountId);
+  if (!bank) return fail('ACCOUNT_MAPPING_MISSING');
+  const lines: JournalLine[] = [];
+  const isDeposit = movement.direction === 'deposit';
+  if (!['deposit', 'withdrawal'].includes(movement.direction)) return fail('SOURCE_AMOUNT_INVALID');
+  if (!addLine(lines, isDeposit ? bank : cashAccountId, movement.amount, 0,
+    isDeposit ? 'إيداع نقدية في البنك ' + movement.bankAccountId : 'سحب نقدية من البنك ' + movement.bankAccountId)
+    || !addLine(lines, isDeposit ? cashAccountId : bank, 0, movement.amount,
+    isDeposit ? 'إخراج نقدية من الخزينة للإيداع البنكي' : 'إضافة النقدية المسحوبة إلى الخزينة')) {
+    return fail('ACCOUNT_MAPPING_MISSING');
+  }
+  return ok(baseInput(context, isDeposit ? 'bank.cash-deposit' : 'bank.cash-withdrawal',
+    movement.id, movement.date, periodId, 'حركة نقدية بين الخزينة والبنك ' + (movement.reference || movement.id),
+    lines, createdAt, createdBy));
+}
 
 /** Card settlement clears gross Visa receivable, books the processor fee, and receives net cash in bank. */
 export function buildCardSettlementJournal(
