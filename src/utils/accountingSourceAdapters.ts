@@ -448,7 +448,15 @@ export function buildChequeRegistrationJournal(
       return fail('ACCOUNT_MAPPING_MISSING');
     }
   } else if (cheque.direction === 'outgoing') {
-    if (!addLine(lines, accounts.payables, cheque.amount, 0, 'تخفيض مستحقات المورد بالشيك ' + cheque.number)
+    const appliedDebt = cheque.appliedDebt;
+    const appliedCredit = cheque.appliedCredit;
+    if (!Number.isFinite(appliedDebt) || !Number.isFinite(appliedCredit)
+      || (appliedDebt as number) < 0 || (appliedCredit as number) < 0
+      || Math.abs(r2((appliedDebt as number) + (appliedCredit as number)) - r2(cheque.amount)) > 0.01) {
+      return fail('CHEQUE_LIFECYCLE_INVALID');
+    }
+    if (!addLine(lines, accounts.payables, appliedDebt as number, 0, 'تخفيض مستحقات المورد بالشيك ' + cheque.number)
+      || !addLine(lines, accounts.supplierAdvances, appliedCredit as number, 0, 'رصيد مقدم لدى المورد بالشيك ' + cheque.number)
       || !addLine(lines, accounts.chequesPayable, 0, cheque.amount, 'شيك صادر غير مصروف ' + cheque.number)) {
       return fail('ACCOUNT_MAPPING_MISSING');
     }
