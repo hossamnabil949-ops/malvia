@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import {
   buildBankTransferJournal, buildCustomerReceiptJournal, buildExpenseJournal,
   buildSalesReturnJournal,
-  buildPartnerCurrentAccountJournal, buildPurchaseInvoiceJournal, buildSalesInvoiceJournal,
+  buildPartnerCurrentAccountJournal, buildPurchaseInvoiceJournal, buildPurchaseReturnJournal,
+  buildSalesInvoiceJournal,
   buildSupplierPaymentJournal,
   type SourceAccountMap,
 } from '../src/utils/accountingSourceAdapters';
@@ -136,6 +137,32 @@ assert.equal(purchaseJournal.input?.lines.find(line => line.accountId === 'suppl
 assert.equal(buildPurchaseInvoiceJournal(
   { ...purchase, amountPaid: 100 }, context, 'period-1', 'now', 'tester', accounts, 10,
 ).error, 'INVOICE_TOTAL_MISMATCH');
+
+
+const untaxedPurchase: any = {
+  ...purchase, id: 'PUR-UNTAXED', invoiceNumber: 'P-002', tax: 0, grandTotal: 90,
+  subtotal: 100, discount: 10, amountPaid: 0,
+  items: [{ ...purchase.items[0], quantity: 2, costPrice: 50, total: 100 }],
+};
+const purchaseReturn: any = {
+  id: 'PRET-1', returnNumber: 'PR-001', purchaseInvoiceId: 'PUR-UNTAXED',
+  purchaseInvoiceNumber: 'P-002', supplierId: 'SUP-1', supplierName: 'Supplier',
+  date: '2026-11-16', time: '12:00',
+  items: [{ partNumber: 'P-1', partName: 'Part', quantity: 1, unitCost: 50, total: 50 }],
+  totalReturnAmount: 50, cashRefundToTreasury: 0, deductedFromDeferredDebt: 35,
+  creditedToStoreBalance: 15, isSettled: true, recordedBy: 'Test',
+};
+const purchaseReturnJournal = buildPurchaseReturnJournal(
+  purchaseReturn, untaxedPurchase, context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(purchaseReturnJournal.error, null);
+assert.equal(purchaseReturnJournal.input?.source.type, 'purchase.return');
+assert.equal(purchaseReturnJournal.input?.lines.find(line => line.accountId === 'payables')?.debit, 35);
+assert.equal(purchaseReturnJournal.input?.lines.find(line => line.accountId === 'supplier-advances')?.debit, 15);
+assert.equal(purchaseReturnJournal.input?.lines.find(line => line.accountId === 'inventory')?.credit, 50);
+assert.equal(buildPurchaseReturnJournal(
+  purchaseReturn, purchase, context, 'period-1', 'now', 'tester', accounts,
+).error, 'TAX_DETAIL_MISSING');
 
 const customerReceipt: any = {
   id: 'RCPT-1', receiptNumber: 'R-001', customerId: 'C-1', customerName: 'Customer',
