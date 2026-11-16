@@ -278,13 +278,18 @@ assert.equal(incomingBounceAfterClear.input?.lines.find(l => l.accountId === 'ba
 const outgoingCheque: any = {
   ...incomingCheque, id: 'CH-OUT-1', number: 'OUT-100', direction: 'outgoing',
   status: 'صادر', partyType: 'supplier', partyId: 'SUP-1', partyName: 'Supplier',
+  appliedDebt: 100, appliedCredit: 20,
 };
 const outgoingRegistration = buildChequeRegistrationJournal(
   outgoingCheque, context, 'period-1', 'now', 'tester', accounts,
 );
 assert.equal(outgoingRegistration.error, null);
-assert.equal(outgoingRegistration.input?.lines.find(l => l.accountId === 'payables')?.debit, 120);
+assert.equal(outgoingRegistration.input?.lines.find(l => l.accountId === 'payables')?.debit, 100);
+assert.equal(outgoingRegistration.input?.lines.find(l => l.accountId === 'supplier-advances')?.debit, 20);
 assert.equal(outgoingRegistration.input?.lines.find(l => l.accountId === 'cheques-payable')?.credit, 120);
+assert.equal(buildChequeRegistrationJournal(
+  { ...outgoingCheque, appliedDebt: undefined }, context, 'period-1', 'now', 'tester', accounts,
+).error, 'CHEQUE_LIFECYCLE_INVALID');
 
 const outgoingClear = buildChequeLifecycleJournal(
   { ...outgoingCheque, clearedBankAccountId: 'BANK-A' }, 'clear', 'صادر', 'CH-OUT-1:clear',
