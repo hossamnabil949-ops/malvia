@@ -156,6 +156,7 @@ const purchaseVoid = buildPurchaseInvoiceVoidJournal(
 );
 assert.equal(purchaseVoid.error, null);
 assert.equal(purchaseVoid.input?.source.type, 'purchase.invoice-void');
+assert.equal(purchaseVoid.input?.source.id, purchase.id, 'purchase invoice void must be idempotent per original invoice');
 assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'cash')?.debit, 40);
 assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'supplier-advances')?.debit, 10);
 assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'payables')?.debit, 53.5);
