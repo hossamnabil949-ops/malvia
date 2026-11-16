@@ -2,7 +2,8 @@ import type {
   AccountingContext, CreateJournalInput, JournalLine,
 } from './accountingCore';
 import type {
-  Expense, Invoice, InvoicePayment, PartnerCurrentAccountTransaction,
+  CustomerPayment, Expense, Invoice, InvoicePayment, PartnerCurrentAccountTransaction,
+  PurchaseInvoice, SupplierPayment,
 } from '../types/autoParts';
 import { paymentAccountOf } from './paymentMethods';
 
@@ -24,6 +25,10 @@ export interface SourceAccountMap {
   costOfGoodsSold: string;
   inventory: string;
   operatingExpenses: string;
+  inputVat: string;
+  payables: string;
+  supplierAdvances: string;
+  salesReturns?: string;
   partnerCurrentAccount: string;
   /** Resolve cash, bank, wallet, InstaPay, card-clearing, or other approved rails. */
   settlementAccount: (method: string, bankAccountId?: string) => string | undefined;
@@ -163,4 +168,103 @@ export function buildPartnerCurrentAccountJournal(
   }
   return ok(baseInput(context, 'partner.current-account', movement.id, movement.date, periodId,
     'حركة جاري الشريك ' + movement.partnerName, lines, createdAt, createdBy));
+}
+
+
+/** Purchase posting separates inventory, recoverable input VAT, paid amount, supplier credit and remaining payable. */
+export function buildPurchaseInvoiceJournal(
+  invoice: PurchaseInvoice, context: AccountingContext, periodId: string, createdAt: string, createdBy: string,
+  accounts: SourceAccountMap, supplierCreditApplied = 0,
+): SourceAdapterResult {
+  if (!invoice.id?.trim()) return fail('SOURCE_ID_REQUIRED');
+  if (!validDate(invoice.date)) return fail('SOURCE_DATE_INVALID');
+  if (!invoice.items?.length || invoice.items.some(item => !Number.isFinite(item.quantity) || item.quantity <= 0
+    || !validAmount(item.costPrice) || !validAmount(item.total))) return fail('INVOICE_LINES_INVALID');
+  if (![invoice.subtotal, invoice.discount, invoice.tax, invoice.grandTotal, invoice.amountPaid, supplierCreditApplied].every(validAmount)) {
+    return fail('SOURCE_AMOUNT_INVALID');
+  }
+  const netInventory = r2(invoice.subtotal - invoice.discount);
+  if (netInventory < 0 || Math.abs(r2(netInventory + invoice.tax) - r2(invoice.grandTotal)) > 0.01
+    || invoice.amountPaid + supplierCreditApplied > invoice.grandTotal + 0.01) return fail('INVOICE_TOTAL_MISMATCH');
+  const lines: JournalLine[] = [];
+  if (!addLine(lines, accounts.inventory, netInventory, 0, 'مخزون فاتورة مشتريات ' + invoice.invoiceNumber)
+    || !addLine(lines, accounts.inputVat, invoice.tax, 0, 'ضريبة مدخلات فاتورة مشتريات ' + invoice.invoiceNumber)) {
+    return fail('ACCOUNT_MAPPING_MISSING');
+  }
+  if (invoice.amountPaid > 0) {
+    let settlement: string | undefined;
+    try { settlement = accounts.settlementAccount(String(invoice.paymentMethod), invoice.bankAccountId); }
+    catch { return fail('PAYMENT_METHOD_UNSUPPORTED'); }
+    if (!addLine(lines, settlement, 0, invoice.amountPaid, 'المدفوع من فاتورة مشتريات ' + invoice.invoiceNumber)) return fail('ACCOUNT_MAPPING_MISSING');
+  }
+  if (!addLine(lines, accounts.supplierAdvances, 0, supplierCreditApplied, 'استخدام رصيد دائن سابق لدى المورد ' + invoice.supplierName)
+    || !addLine(lines, accounts.payables, 0, invoice.grandTotal - invoice.amountPaid - supplierCreditApplied, 'المتبقي للمورد ' + invoice.supplierName)) {
+    return fail('ACCOUNT_MAPPING_MISSING');
+  }
+  return ok(baseInput(context, 'purchase.invoice', invoice.id, invoice.date, periodId,
+    'ترحيل فاتورة مشتريات ' + invoice.invoiceNumber, lines, createdAt, createdBy));
+}
+
+/** Customer receipts reduce receivables; they are not sales revenue. */
+export function buildCustomerReceiptJournal(
+  payment: CustomerPayment, context: AccountingContext, periodId: string, createdAt: string, createdBy: string,
+  accounts: SourceAccountMap,
+): SourceAdapterResult {
+  if (!payment.id?.trim()) return fail('SOURCE_ID_REQUIRED');
+  if (!validDate(payment.paymentDate)) return fail('SOURCE_DATE_INVALID');
+  if (!Number.isFinite(payment.amount) || payment.amount <= 0) return fail('SOURCE_AMOUNT_INVALID');
+  let settlement: string | undefined;
+  try { settlement = accounts.settlementAccount(String(payment.paymentMethod)); }
+  catch { return fail('PAYMENT_METHOD_UNSUPPORTED'); }
+  const lines: JournalLine[] = [];
+  if (!addLine(lines, settlement, payment.amount, 0, 'تحصيل من العميل ' + payment.customerName)
+    || !addLine(lines, accounts.receivables, 0, payment.amount, 'تخفيض مديونية العميل ' + payment.customerName)) {
+    return fail('ACCOUNT_MAPPING_MISSING');
+  }
+  return ok(baseInput(context, 'customer.receipt', payment.id, payment.paymentDate, periodId,
+    'إيصال تحصيل ' + payment.receiptNumber, lines, createdAt, createdBy));
+}
+
+/** Supplier settlements debit payable first; excess payments are supplier advances, never expenses. */
+export function buildSupplierPaymentJournal(
+  payment: SupplierPayment, context: AccountingContext, periodId: string, createdAt: string, createdBy: string,
+  accounts: SourceAccountMap, payableApplied = payment.amount,
+): SourceAdapterResult {
+  if (!payment.id?.trim()) return fail('SOURCE_ID_REQUIRED');
+  if (!validDate(payment.paymentDate)) return fail('SOURCE_DATE_INVALID');
+  if (!Number.isFinite(payment.amount) || payment.amount <= 0 || !Number.isFinite(payableApplied)
+    || payableApplied < 0 || payableApplied > payment.amount) return fail('SOURCE_AMOUNT_INVALID');
+  let settlement: string | undefined;
+  try { settlement = accounts.settlementAccount(String(payment.paymentMethod), payment.bankAccountId); }
+  catch { return fail('PAYMENT_METHOD_UNSUPPORTED'); }
+  const lines: JournalLine[] = [];
+  if (!addLine(lines, accounts.payables, payableApplied, 0, 'تسوية مديونية المورد ' + payment.supplierName)
+    || !addLine(lines, accounts.supplierAdvances, payment.amount - payableApplied, 0, 'رصيد مقدم لدى المورد ' + payment.supplierName)
+    || !addLine(lines, settlement, 0, payment.amount, 'سداد للمورد ' + payment.supplierName)) {
+    return fail('ACCOUNT_MAPPING_MISSING');
+  }
+  return ok(baseInput(context, 'supplier.payment', payment.id, payment.paymentDate, periodId,
+    'سداد مورد ' + payment.supplierName + ' — ' + payment.paymentNumber, lines, createdAt, createdBy));
+}
+
+/** A transfer between owned bank accounts only changes asset subaccounts, not income or expense. */
+export function buildBankTransferJournal(
+  input: { id: string; date: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; reference?: string },
+  context: AccountingContext, periodId: string, createdAt: string, createdBy: string,
+  bankAccountLedgerId: (bankAccountId: string) => string | undefined,
+): SourceAdapterResult {
+  if (!input.id?.trim()) return fail('SOURCE_ID_REQUIRED');
+  if (!validDate(input.date)) return fail('SOURCE_DATE_INVALID');
+  if (!Number.isFinite(input.amount) || input.amount <= 0) return fail('SOURCE_AMOUNT_INVALID');
+  if (!input.sourceBankAccountId || !input.destinationBankAccountId
+    || input.sourceBankAccountId === input.destinationBankAccountId) return fail('ACCOUNT_MAPPING_MISSING');
+  const source = bankAccountLedgerId(input.sourceBankAccountId);
+  const destination = bankAccountLedgerId(input.destinationBankAccountId);
+  const lines: JournalLine[] = [];
+  if (!addLine(lines, destination, input.amount, 0, 'تحويل وارد إلى البنك ' + input.destinationBankAccountId)
+    || !addLine(lines, source, 0, input.amount, 'تحويل صادر من البنك ' + input.sourceBankAccountId)) {
+    return fail('ACCOUNT_MAPPING_MISSING');
+  }
+  return ok(baseInput(context, 'bank.transfer', input.id, input.date, periodId,
+    'تحويل بين حسابين بنكيين ' + (input.reference || input.id), lines, createdAt, createdBy));
 }
