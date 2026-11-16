@@ -50,13 +50,15 @@ export function reconcileBankStatement(
       continue;
     }
 
-    const fingerprint = [line.bankAccountId, line.direction, round2(line.amount), line.date,
-      normalizeReference(line.reference || '')].join('|');
-    if (seenStatement.has(fingerprint)) {
+    const normalizedReference = normalizeReference(line.reference || '');
+    const fingerprint = normalizedReference
+      ? [line.bankAccountId, line.direction, round2(line.amount), line.date, normalizedReference].join('|')
+      : '';
+    if (fingerprint && seenStatement.has(fingerprint)) {
       matches.push({ statementLineId: line.id, status: 'duplicate_statement', candidateLedgerEntryIds: [] });
       continue;
     }
-    seenStatement.add(fingerprint);
+    if (fingerprint) seenStatement.add(fingerprint);
 
     const candidates = eligibleLedger.filter(entry => !usedLedger.has(entry.id)
       && entry.direction === line.direction
