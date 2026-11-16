@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { computeVoidPlan } from '../src/utils/saleLogic';
 import {
   buildBankTransferJournal, buildCardSettlementJournal, buildCustomerReceiptJournal, buildExpenseJournal,
+  buildInvoiceVoidJournal,
   buildChequeRegistrationJournal, buildChequeLifecycleJournal,
   buildSalesReturnJournal,
   buildPartnerCurrentAccountJournal, buildPurchaseInvoiceJournal, buildPurchaseReturnJournal,
@@ -324,3 +326,60 @@ assert.equal(buildChequeLifecycleJournal(
   incomingCheque, 'clear', 'محصّل', 'CH-IN-1:duplicate-clear',
   '2026-11-22', context, 'period-1', 'now', 'tester', accounts,
 ).error, 'CHEQUE_LIFECYCLE_INVALID');
+
+
+// Invoice void is a new reversing journal based on the legacy void plan; it never rewrites the sale.
+const voidedInvoice: any = {
+  ...invoice, status: 'ملغاة', voidedAt: '2026-11-16T12:00:00.000Z',
+  voidedBy: 'Manager', voidApprovedBy: 'General Manager', voidReason: 'Duplicate invoice',
+};
+const fullVoidPlan = computeVoidPlan({
+  grandTotal: voidedInvoice.grandTotal,
+  returnedAmount: 0,
+  items: voidedInvoice.items,
+  payments: voidedInvoice.payments,
+});
+const voidJournal = buildInvoiceVoidJournal(
+  voidedInvoice, fullVoidPlan, context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(voidJournal.error, null);
+assert.equal(voidJournal.input?.source.type, 'sales.invoice-void');
+assert.equal(voidJournal.input?.lines.find(l => l.accountId === 'sales')?.debit, 90);
+assert.equal(voidJournal.input?.lines.find(l => l.accountId === 'vat-output')?.debit, 13.5);
+assert.equal(voidJournal.input?.lines.find(l => l.accountId === 'cash')?.credit, 50);
+assert.equal(voidJournal.input?.lines.find(l => l.accountId === 'receivables')?.credit, 53.5);
+assert.equal(voidJournal.input?.lines.find(l => l.accountId === 'inventory')?.debit, 40);
+assert.equal(voidJournal.input?.lines.find(l => l.accountId === 'cogs')?.credit, 40);
+
+const partiallyReturnedVoidInvoice: any = {
+  ...voidedInvoice, tax: 0, grandTotal: 90, returnedAmount: 30,
+  items: [{ ...invoice.items[0], quantity: 2, returnedQuantity: 1, total: 100 }],
+  payments: [{ method: 'نقدي', amount: 90 }],
+};
+const partialVoidPlan = computeVoidPlan({
+  grandTotal: 90, returnedAmount: 30,
+  items: partiallyReturnedVoidInvoice.items,
+  payments: partiallyReturnedVoidInvoice.payments,
+  priorRefunds: [{ refundMethod: 'نقدي (خصم من الخزنة)', totalRefundAmount: 30 }],
+});
+const partialVoidJournal = buildInvoiceVoidJournal(
+  partiallyReturnedVoidInvoice, partialVoidPlan, context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(partialVoidJournal.error, null);
+assert.equal(partialVoidJournal.input?.lines.find(l => l.accountId === 'sales')?.debit, 60);
+assert.equal(partialVoidJournal.input?.lines.find(l => l.accountId === 'cash')?.credit, 60);
+assert.equal(partialVoidJournal.input?.lines.find(l => l.accountId === 'inventory')?.debit, 20);
+assert.equal(partialVoidJournal.input?.lines.find(l => l.accountId === 'cogs')?.credit, 20);
+assert.equal(buildInvoiceVoidJournal(
+  { ...partiallyReturnedVoidInvoice, tax: 13.5, grandTotal: 103.5 },
+  computeVoidPlan({
+    grandTotal: 103.5, returnedAmount: 30,
+    items: partiallyReturnedVoidInvoice.items, payments: [{ method: 'نقدي', amount: 103.5 }],
+    priorRefunds: [{ refundMethod: 'نقدي (خصم من الخزنة)', totalRefundAmount: 30 }],
+  }),
+  context, 'period-1', 'now', 'tester', accounts,
+).error, 'TAX_DETAIL_MISSING');
+assert.equal(buildInvoiceVoidJournal(
+  { ...voidedInvoice, voidApprovedBy: undefined }, fullVoidPlan,
+  context, 'period-1', 'now', 'tester', accounts,
+).error, 'INVOICE_VOID_INVALID');
