@@ -525,6 +525,9 @@ export function buildChequeRegistrationJournal(
   if (!Number.isFinite(cheque.amount) || cheque.amount <= 0) return fail('SOURCE_AMOUNT_INVALID');
   const lines: JournalLine[] = [];
   if (cheque.direction === 'incoming') {
+    if (!Number.isFinite(cheque.appliedAmount) || Math.abs(r2((cheque.appliedAmount as number) - cheque.amount)) > 0.01) {
+      return fail('CHEQUE_LIFECYCLE_INVALID');
+    }
     if (!addLine(lines, accounts.chequesReceivable, cheque.amount, 0, 'شيك وارد تحت التحصيل ' + cheque.number)
       || !addLine(lines, accounts.receivables, 0, cheque.amount, 'تخفيض مديونية العميل بالشيك ' + cheque.number)) {
       return fail('ACCOUNT_MAPPING_MISSING');
@@ -573,6 +576,14 @@ export function buildChequeLifecycleJournal(
     return fail('CHEQUE_LIFECYCLE_INVALID');
   }
 
+  if (incoming && (!Number.isFinite(cheque.appliedAmount)
+    || Math.abs(r2((cheque.appliedAmount as number) - cheque.amount)) > 0.01)) return fail('CHEQUE_LIFECYCLE_INVALID');
+  if (!incoming && (!Number.isFinite(cheque.appliedDebt) || !Number.isFinite(cheque.appliedCredit)
+    || (cheque.appliedDebt as number) < 0 || (cheque.appliedCredit as number) < 0
+    || Math.abs(r2((cheque.appliedDebt as number) + (cheque.appliedCredit as number) - cheque.amount)) > 0.01)) {
+    return fail('CHEQUE_LIFECYCLE_INVALID');
+  }
+
   const lines: JournalLine[] = [];
   if (action === 'clear') {
     const bankId = cheque.clearedBankAccountId;
@@ -599,10 +610,7 @@ export function buildChequeLifecycleJournal(
         : accounts.chequesPayable;
       const appliedDebt = cheque.appliedDebt;
       const appliedCredit = cheque.appliedCredit;
-      if (!Number.isFinite(appliedDebt) || !Number.isFinite(appliedCredit)
-        || (appliedDebt as number) < 0 || (appliedCredit as number) < 0
-        || Math.abs(r2((appliedDebt as number) + (appliedCredit as number)) - r2(cheque.amount)) > 0.01
-        || !addLine(lines, debitAccount, cheque.amount, 0, 'عكس صرف الشيك ' + cheque.number)
+      if (!addLine(lines, debitAccount, cheque.amount, 0, 'عكس صرف الشيك ' + cheque.number)
         || !addLine(lines, accounts.payables, 0, appliedDebt as number, 'إعادة مستحقات المورد بسبب الشيك ' + cheque.number)
         || !addLine(lines, accounts.supplierAdvances, 0, appliedCredit as number, 'عكس رصيد مقدم المورد بسبب الشيك ' + cheque.number)) return fail('ACCOUNT_MAPPING_MISSING');
     }
