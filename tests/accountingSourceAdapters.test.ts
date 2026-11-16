@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  buildBankTransferJournal, buildCustomerReceiptJournal, buildExpenseJournal,
+  buildBankTransferJournal, buildCardSettlementJournal, buildCustomerReceiptJournal, buildExpenseJournal,
   buildSalesReturnJournal,
   buildPartnerCurrentAccountJournal, buildPurchaseInvoiceJournal, buildPurchaseReturnJournal,
   buildSalesInvoiceJournal,
@@ -13,6 +13,7 @@ const accounts: SourceAccountMap = {
   costOfGoodsSold: 'cogs', inventory: 'inventory', operatingExpenses: 'expenses',
   partnerCurrentAccount: 'partner-current', inputVat: 'vat-input', payables: 'payables',
   supplierAdvances: 'supplier-advances', salesReturns: 'sales-returns',
+  visaClearing: 'visa-clearing', bankFees: 'bank-fees',
   settlementAccount: (method, bankId) => {
     if (method.includes('نقد') || method.includes('كاش')) return 'cash';
     if (method.includes('تحويل')) return bankId ? 'bank:' + bankId : undefined;
@@ -195,6 +196,23 @@ assert.equal(supplierJournal.input?.lines.find(line => line.accountId === 'suppl
 assert.equal(supplierJournal.input?.lines.find(line => line.accountId === 'cash')?.credit, 60);
 assert.equal(buildSupplierPaymentJournal(
   supplierPayment, context, 'period-1', 'now', 'tester', accounts, 70,
+).error, 'SOURCE_AMOUNT_INVALID');
+
+
+const cardSettlement = buildCardSettlementJournal(
+  { id: 'CARD-1', processor: 'Acquirer', grossAmount: 100, feeAmount: 2.5,
+    netAmount: 97.5, settlementDate: '2026-11-16', bankAccountId: 'BANK-A', reference: 'BATCH-1' },
+  context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(cardSettlement.error, null);
+assert.equal(cardSettlement.input?.source.type, 'bank.card-settlement');
+assert.equal(cardSettlement.input?.lines.find(line => line.accountId === 'bank:BANK-A')?.debit, 97.5);
+assert.equal(cardSettlement.input?.lines.find(line => line.accountId === 'bank-fees')?.debit, 2.5);
+assert.equal(cardSettlement.input?.lines.find(line => line.accountId === 'visa-clearing')?.credit, 100);
+assert.equal(buildCardSettlementJournal(
+  { id: 'CARD-2', processor: 'Acquirer', grossAmount: 100, feeAmount: 2.5,
+    netAmount: 96, settlementDate: '2026-11-16', bankAccountId: 'BANK-A', reference: 'BATCH-2' },
+  context, 'period-1', 'now', 'tester', accounts,
 ).error, 'SOURCE_AMOUNT_INVALID');
 
 const transferJournal = buildBankTransferJournal(
