@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { computeVoidPlan } from '../src/utils/saleLogic';
 import {
-  buildBankTransferJournal, buildCardSettlementJournal, buildCustomerReceiptJournal, buildExpenseJournal,
+  buildBankTransferJournal, buildCashBankMovementJournal, buildCardSettlementJournal, buildCustomerReceiptJournal, buildExpenseJournal,
   buildInvoiceVoidJournal,
   buildChequeRegistrationJournal, buildChequeLifecycleJournal,
   buildSalesReturnJournal,
-  buildPartnerCurrentAccountJournal, buildPurchaseInvoiceJournal, buildPurchaseReturnJournal,
+  buildPartnerCurrentAccountJournal, buildPurchaseInvoiceJournal, buildPurchaseInvoiceVoidJournal, buildPurchaseReturnJournal,
   buildSalesInvoiceJournal,
   buildSupplierPaymentJournal,
   type SourceAccountMap,
@@ -147,6 +147,52 @@ assert.equal(purchaseJournal.input?.lines.find(line => line.accountId === 'suppl
 assert.equal(buildPurchaseInvoiceJournal(
   { ...purchase, amountPaid: 100 }, context, 'period-1', 'now', 'tester', accounts, 10,
 ).error, 'INVOICE_TOTAL_MISMATCH');
+
+const purchaseVoid = buildPurchaseInvoiceVoidJournal(
+  purchase,
+  { id: 'PUR-1:VOID-1', date: '2026-11-17', reason: 'فاتورة مكررة', approvedBy: 'GM',
+    cashRefund: 40, supplierAdvanceRestored: 10, payableReleased: 53.5, refundMethod: 'نقدي' },
+  context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(purchaseVoid.error, null);
+assert.equal(purchaseVoid.input?.source.type, 'purchase.invoice-void');
+assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'cash')?.debit, 40);
+assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'supplier-advances')?.debit, 10);
+assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'payables')?.debit, 53.5);
+assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'inventory')?.credit, 90);
+assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'vat-input')?.credit, 13.5);
+assert.equal(buildPurchaseInvoiceVoidJournal(
+  purchase,
+  { id: 'PUR-1:VOID-BAD', date: '2026-11-17', reason: 'مكرر', approvedBy: 'GM',
+    cashRefund: 40, supplierAdvanceRestored: 0, payableReleased: 53.5, refundMethod: 'نقدي' },
+  context, 'period-1', 'now', 'tester', accounts,
+).error, 'PURCHASE_INVOICE_VOID_INVALID');
+assert.equal(buildPurchaseInvoiceVoidJournal(
+  { ...purchase, items: [{ ...purchase.items[0], returnedQuantity: 1 }] },
+  { id: 'PUR-1:VOID-RETURNED', date: '2026-11-17', reason: 'مكرر', approvedBy: 'GM',
+    cashRefund: 40, supplierAdvanceRestored: 10, payableReleased: 53.5, refundMethod: 'نقدي' },
+  context, 'period-1', 'now', 'tester', accounts,
+).error, 'PURCHASE_INVOICE_VOID_INVALID');
+
+const cashDeposit = buildCashBankMovementJournal(
+  { id: 'CASH-BANK-1', date: '2026-11-17', direction: 'deposit', amount: 250, bankAccountId: 'BANK-1', reference: 'DEP-1' },
+  context, 'period-1', 'now', 'tester', 'cash', id => id === 'BANK-1' ? 'bank:BANK-1' : undefined,
+);
+assert.equal(cashDeposit.error, null);
+assert.equal(cashDeposit.input?.source.type, 'bank.cash-deposit');
+assert.equal(cashDeposit.input?.lines.find(line => line.accountId === 'bank:BANK-1')?.debit, 250);
+assert.equal(cashDeposit.input?.lines.find(line => line.accountId === 'cash')?.credit, 250);
+const cashWithdrawal = buildCashBankMovementJournal(
+  { id: 'CASH-BANK-2', date: '2026-11-17', direction: 'withdrawal', amount: 80, bankAccountId: 'BANK-1' },
+  context, 'period-1', 'now', 'tester', 'cash', id => id === 'BANK-1' ? 'bank:BANK-1' : undefined,
+);
+assert.equal(cashWithdrawal.error, null);
+assert.equal(cashWithdrawal.input?.lines.find(line => line.accountId === 'cash')?.debit, 80);
+assert.equal(cashWithdrawal.input?.lines.find(line => line.accountId === 'bank:BANK-1')?.credit, 80);
+assert.equal(buildCashBankMovementJournal(
+  { id: 'CASH-BANK-3', date: '2026-11-17', direction: 'deposit', amount: 250, bankAccountId: 'BANK-UNKNOWN' },
+  context, 'period-1', 'now', 'tester', 'cash', () => undefined,
+).error, 'ACCOUNT_MAPPING_MISSING');
 
 
 const untaxedPurchase: any = {
