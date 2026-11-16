@@ -6,11 +6,12 @@ import type {
   PurchaseInvoice, PurchaseReturn, SalesReturn, SupplierPayment,
 } from '../types/autoParts';
 import { paymentAccountOf } from './paymentMethods';
+import type { Cheque } from './chequeLogic';
 
 export type SourceAdapterError =
   | 'SOURCE_ID_REQUIRED' | 'SOURCE_DATE_INVALID' | 'SOURCE_AMOUNT_INVALID'
   | 'INVOICE_CANCELLED' | 'INVOICE_TOTAL_MISMATCH' | 'PAYMENT_TOTAL_MISMATCH'
-  | 'PAYMENT_METHOD_UNSUPPORTED' | 'ACCOUNT_MAPPING_MISSING'
+  | 'PAYMENT_METHOD_UNSUPPORTED' | 'ACCOUNT_MAPPING_MISSING' | 'CHEQUE_LIFECYCLE_INVALID'
   | 'COST_BASIS_MISSING' | 'INVOICE_LINES_INVALID' | 'TAX_DETAIL_MISSING';
 
 export interface SourceAdapterResult {
@@ -31,6 +32,9 @@ export interface SourceAccountMap {
   payables: string;
   supplierAdvances: string;
   salesReturns?: string;
+  /** Separate balance-sheet accounts for registered but not yet cleared cheques. */
+  chequesReceivable?: string;
+  chequesPayable?: string;
   partnerCurrentAccount: string;
   /** Resolve cash, bank, wallet, InstaPay, card-clearing, or other approved rails. */
   settlementAccount: (method: string, bankAccountId?: string) => string | undefined;
@@ -423,4 +427,94 @@ export function buildCardSettlementJournal(
   }
   return ok(baseInput(context, 'bank.card-settlement', batch.id, batch.settlementDate, periodId,
     'تسوية بطاقة ' + batch.reference, lines, createdAt, createdBy));
+}
+
+
+/**
+ * Registering a cheque changes the party balance immediately in the legacy workflow,
+ * but does not move cash/bank until clearing. Keep the cheque as a separate asset/liability.
+ */
+export function buildChequeRegistrationJournal(
+  cheque: Cheque, context: AccountingContext, periodId: string, createdAt: string, createdBy: string,
+  accounts: SourceAccountMap,
+): SourceAdapterResult {
+  if (!cheque.id?.trim()) return fail('SOURCE_ID_REQUIRED');
+  if (!validDate(cheque.receivedDate)) return fail('SOURCE_DATE_INVALID');
+  if (!Number.isFinite(cheque.amount) || cheque.amount <= 0) return fail('SOURCE_AMOUNT_INVALID');
+  const lines: JournalLine[] = [];
+  if (cheque.direction === 'incoming') {
+    if (!addLine(lines, accounts.chequesReceivable, cheque.amount, 0, 'شيك وارد تحت التحصيل ' + cheque.number)
+      || !addLine(lines, accounts.receivables, 0, cheque.amount, 'تخفيض مديونية العميل بالشيك ' + cheque.number)) {
+      return fail('ACCOUNT_MAPPING_MISSING');
+    }
+  } else if (cheque.direction === 'outgoing') {
+    if (!addLine(lines, accounts.payables, cheque.amount, 0, 'تخفيض مستحقات المورد بالشيك ' + cheque.number)
+      || !addLine(lines, accounts.chequesPayable, 0, cheque.amount, 'شيك صادر غير مصروف ' + cheque.number)) {
+      return fail('ACCOUNT_MAPPING_MISSING');
+    }
+  } else {
+    return fail('CHEQUE_LIFECYCLE_INVALID');
+  }
+  return ok(baseInput(context, 'cheque.register', cheque.id, cheque.receivedDate, periodId,
+    'تسجيل شيك ' + cheque.number, lines, createdAt, createdBy));
+}
+
+/**
+ * Clear/bounce/cancel lifecycle event. eventId is supplied by the caller and must be
+ * stable across retries. Depositing an incoming cheque is memo-only and creates no journal.
+ */
+export function buildChequeLifecycleJournal(
+  cheque: Cheque, action: 'clear' | 'bounce' | 'cancel', previousStatus: Cheque['status'],
+  eventId: string, eventDate: string, context: AccountingContext, periodId: string,
+  createdAt: string, createdBy: string, accounts: SourceAccountMap,
+): SourceAdapterResult {
+  if (!eventId?.trim()) return fail('SOURCE_ID_REQUIRED');
+  if (!validDate(eventDate)) return fail('SOURCE_DATE_INVALID');
+  if (!Number.isFinite(cheque.amount) || cheque.amount <= 0) return fail('SOURCE_AMOUNT_INVALID');
+
+  const incoming = cheque.direction === 'incoming';
+  const wasCleared = incoming ? previousStatus === 'محصّل' : previousStatus === 'مصروف';
+  const wasUncleared = incoming
+    ? previousStatus === 'في الحافظة' || previousStatus === 'مودع بالبنك'
+    : previousStatus === 'صادر';
+  if (action === 'clear' && !wasUncleared) return fail('CHEQUE_LIFECYCLE_INVALID');
+  if (action === 'bounce' && !wasUncleared && !wasCleared) return fail('CHEQUE_LIFECYCLE_INVALID');
+  if (action === 'cancel' && (wasCleared || (incoming ? previousStatus !== 'في الحافظة' : previousStatus !== 'صادر'))) {
+    return fail('CHEQUE_LIFECYCLE_INVALID');
+  }
+
+  const lines: JournalLine[] = [];
+  if (action === 'clear') {
+    const bankId = cheque.clearedBankAccountId;
+    let bank: string | undefined;
+    try { bank = accounts.settlementAccount('تحويل بنكي', bankId); }
+    catch { return fail('PAYMENT_METHOD_UNSUPPORTED'); }
+    if (incoming) {
+      if (!addLine(lines, bank, cheque.amount, 0, 'تحصيل شيك وارد ' + cheque.number)
+        || !addLine(lines, accounts.chequesReceivable, 0, cheque.amount, 'إقفال شيك وارد ' + cheque.number)) return fail('ACCOUNT_MAPPING_MISSING');
+    } else {
+      if (!addLine(lines, accounts.chequesPayable, cheque.amount, 0, 'إقفال شيك صادر ' + cheque.number)
+        || !addLine(lines, bank, 0, cheque.amount, 'صرف شيك صادر ' + cheque.number)) return fail('ACCOUNT_MAPPING_MISSING');
+    }
+  } else if (action === 'bounce' || action === 'cancel') {
+    if (incoming) {
+      const creditAccount = wasCleared
+        ? (() => { try { return accounts.settlementAccount('تحويل بنكي', cheque.clearedBankAccountId); } catch { return undefined; } })()
+        : accounts.chequesReceivable;
+      if (!addLine(lines, accounts.receivables, cheque.amount, 0, 'إعادة مديونية العميل بسبب ' + (action === 'bounce' ? 'ارتداد' : 'إلغاء') + ' الشيك ' + cheque.number)
+        || !addLine(lines, creditAccount, 0, cheque.amount, 'عكس أثر الشيك ' + cheque.number)) return fail('ACCOUNT_MAPPING_MISSING');
+    } else {
+      const debitAccount = wasCleared
+        ? (() => { try { return accounts.settlementAccount('تحويل بنكي', cheque.clearedBankAccountId); } catch { return undefined; } })()
+        : accounts.chequesPayable;
+      if (!addLine(lines, debitAccount, cheque.amount, 0, 'عكس صرف الشيك ' + cheque.number)
+        || !addLine(lines, accounts.payables, 0, cheque.amount, 'إعادة مستحقات المورد بسبب الشيك ' + cheque.number)) return fail('ACCOUNT_MAPPING_MISSING');
+    }
+  } else {
+    return fail('CHEQUE_LIFECYCLE_INVALID');
+  }
+
+  return ok(baseInput(context, 'cheque.lifecycle', eventId, eventDate, periodId,
+    (action === 'clear' ? 'تحصيل / صرف' : action === 'bounce' ? 'ارتداد' : 'إلغاء') + ' شيك ' + cheque.number,
+    lines, createdAt, createdBy));
 }
