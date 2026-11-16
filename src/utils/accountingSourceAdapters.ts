@@ -515,8 +515,14 @@ export function buildChequeLifecycleJournal(
       const debitAccount = wasCleared
         ? (() => { try { return accounts.settlementAccount('تحويل بنكي', cheque.clearedBankAccountId); } catch { return undefined; } })()
         : accounts.chequesPayable;
-      if (!addLine(lines, debitAccount, cheque.amount, 0, 'عكس صرف الشيك ' + cheque.number)
-        || !addLine(lines, accounts.payables, 0, cheque.amount, 'إعادة مستحقات المورد بسبب الشيك ' + cheque.number)) return fail('ACCOUNT_MAPPING_MISSING');
+      const appliedDebt = cheque.appliedDebt;
+      const appliedCredit = cheque.appliedCredit;
+      if (!Number.isFinite(appliedDebt) || !Number.isFinite(appliedCredit)
+        || (appliedDebt as number) < 0 || (appliedCredit as number) < 0
+        || Math.abs(r2((appliedDebt as number) + (appliedCredit as number)) - r2(cheque.amount)) > 0.01
+        || !addLine(lines, debitAccount, cheque.amount, 0, 'عكس صرف الشيك ' + cheque.number)
+        || !addLine(lines, accounts.payables, 0, appliedDebt as number, 'إعادة مستحقات المورد بسبب الشيك ' + cheque.number)
+        || !addLine(lines, accounts.supplierAdvances, 0, appliedCredit as number, 'عكس رصيد مقدم المورد بسبب الشيك ' + cheque.number)) return fail('ACCOUNT_MAPPING_MISSING');
     }
   } else {
     return fail('CHEQUE_LIFECYCLE_INVALID');
