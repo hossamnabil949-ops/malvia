@@ -3,7 +3,7 @@ import type {
 } from './accountingCore';
 import type {
   CustomerPayment, Expense, Invoice, InvoicePayment, PartnerCurrentAccountTransaction,
-  PurchaseInvoice, SalesReturn, SupplierPayment,
+  PurchaseInvoice, PurchaseReturn, SalesReturn, SupplierPayment,
 } from '../types/autoParts';
 import { paymentAccountOf } from './paymentMethods';
 
@@ -332,4 +332,66 @@ export function buildSalesReturnJournal(
   }
   return ok(baseInput(context, 'sales.return', salesReturn.id, salesReturn.date, periodId,
     'ترحيل مرتجع مبيعات ' + salesReturn.returnNumber, lines, createdAt, createdBy));
+}
+
+
+/**
+ * Legacy purchase returns are cost-only (quantity × unitCost); they do not carry a VAT
+ * refund/allocation. Taxable source invoices are therefore rejected until the source
+ * schema can represent the VAT reversal without inventing amounts.
+ */
+export function buildPurchaseReturnJournal(
+  purchaseReturn: PurchaseReturn, originalInvoice: PurchaseInvoice, context: AccountingContext,
+  periodId: string, createdAt: string, createdBy: string, accounts: SourceAccountMap,
+): SourceAdapterResult {
+  if (!purchaseReturn.id?.trim()) return fail('SOURCE_ID_REQUIRED');
+  if (!validDate(purchaseReturn.date) || !validDate(originalInvoice.date)) return fail('SOURCE_DATE_INVALID');
+  if (purchaseReturn.purchaseInvoiceId !== originalInvoice.id) return fail('INVOICE_CANCELLED');
+  if (!validAmount(originalInvoice.tax) || originalInvoice.tax > 0.005) return fail('TAX_DETAIL_MISSING');
+  if (!Number.isFinite(purchaseReturn.totalReturnAmount) || purchaseReturn.totalReturnAmount <= 0
+    || purchaseReturn.totalReturnAmount > originalInvoice.grandTotal - (originalInvoice.returnedAmount || 0) + 0.01
+    || !purchaseReturn.items.length) return fail('SOURCE_AMOUNT_INVALID');
+
+  let itemTotal = 0;
+  for (const returned of purchaseReturn.items) {
+    if (!Number.isFinite(returned.quantity) || returned.quantity <= 0
+      || !Number.isFinite(returned.unitCost) || returned.unitCost < 0
+      || Math.abs(r2(returned.total) - r2(returned.quantity * returned.unitCost)) > 0.01) {
+      return fail('INVOICE_LINES_INVALID');
+    }
+    const originals = originalInvoice.items.filter(item =>
+      item.partNumber === returned.partNumber && item.partName === returned.partName);
+    if (originals.length !== 1) return fail('INVOICE_LINES_INVALID');
+    if ((originals[0].returnedQuantity || 0) + returned.quantity > originals[0].quantity + 0.0001
+      || Math.abs(r2(originals[0].costPrice) - r2(returned.unitCost)) > 0.01) {
+      return fail('INVOICE_LINES_INVALID');
+    }
+    itemTotal += returned.total;
+  }
+  if (Math.abs(r2(itemTotal) - r2(purchaseReturn.totalReturnAmount)) > 0.01) return fail('INVOICE_TOTAL_MISMATCH');
+
+  const cashRefund = r2(purchaseReturn.cashRefundToTreasury || 0);
+  const debtReduction = r2(purchaseReturn.deductedFromDeferredDebt || 0);
+  const supplierCredit = r2(purchaseReturn.creditedToStoreBalance || 0);
+  if ([cashRefund, debtReduction, supplierCredit].some(value => !validAmount(value))
+    || Math.abs(r2(cashRefund + debtReduction + supplierCredit) - r2(purchaseReturn.totalReturnAmount)) > 0.01) {
+    return fail('SOURCE_AMOUNT_INVALID');
+  }
+
+  const lines: JournalLine[] = [];
+  if (!addLine(lines, accounts.inventory, 0, purchaseReturn.totalReturnAmount, 'إخراج مخزون مرتجع مشتريات ' + purchaseReturn.returnNumber)
+    || !addLine(lines, accounts.payables, debtReduction, 0, 'تخفيض مديونية المورد ' + purchaseReturn.supplierName)
+    || !addLine(lines, accounts.supplierAdvances, supplierCredit, 0, 'إثبات رصيد دائن لدى المورد ' + purchaseReturn.supplierName)) {
+    return fail('ACCOUNT_MAPPING_MISSING');
+  }
+  if (cashRefund > 0) {
+    let settlement: string | undefined;
+    try { settlement = accounts.settlementAccount(String(originalInvoice.paymentMethod), originalInvoice.bankAccountId); }
+    catch { return fail('PAYMENT_METHOD_UNSUPPORTED'); }
+    if (!addLine(lines, settlement, cashRefund, 0, 'استرداد نقدي لمرتجع مشتريات ' + purchaseReturn.returnNumber)) {
+      return fail('ACCOUNT_MAPPING_MISSING');
+    }
+  }
+  return ok(baseInput(context, 'purchase.return', purchaseReturn.id, purchaseReturn.date, periodId,
+    'ترحيل مرتجع مشتريات ' + purchaseReturn.returnNumber, lines, createdAt, createdBy));
 }
