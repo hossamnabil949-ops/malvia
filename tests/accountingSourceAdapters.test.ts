@@ -305,7 +305,16 @@ const outgoingBounceAfterClear = buildChequeLifecycleJournal(
 );
 assert.equal(outgoingBounceAfterClear.error, null);
 assert.equal(outgoingBounceAfterClear.input?.lines.find(l => l.accountId === 'bank:BANK-A')?.debit, 120);
-assert.equal(outgoingBounceAfterClear.input?.lines.find(l => l.accountId === 'payables')?.credit, 120);
+assert.equal(outgoingBounceAfterClear.input?.lines.find(l => l.accountId === 'payables')?.credit, 100);
+assert.equal(outgoingBounceAfterClear.input?.lines.find(l => l.accountId === 'supplier-advances')?.credit, 20);
+const outgoingBounceBeforeClear = buildChequeLifecycleJournal(
+  outgoingCheque, 'bounce', 'صادر', 'CH-OUT-1:bounce-before-clear',
+  '2026-11-21', context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(outgoingBounceBeforeClear.error, null);
+assert.equal(outgoingBounceBeforeClear.input?.lines.find(l => l.accountId === 'cheques-payable')?.debit, 120);
+assert.equal(outgoingBounceBeforeClear.input?.lines.find(l => l.accountId === 'payables')?.credit, 100);
+assert.equal(outgoingBounceBeforeClear.input?.lines.find(l => l.accountId === 'supplier-advances')?.credit, 20);
 
 assert.equal(buildChequeLifecycleJournal(
   incomingCheque, 'cancel', 'محصّل', 'CH-IN-1:invalid-cancel',
