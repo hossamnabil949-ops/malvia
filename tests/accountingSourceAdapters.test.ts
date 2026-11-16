@@ -166,7 +166,7 @@ assert.equal(purchaseReturnJournal.input?.lines.find(line => line.accountId === 
 assert.equal(purchaseReturnJournal.input?.lines.find(line => line.accountId === 'supplier-advances')?.debit, 15);
 assert.equal(purchaseReturnJournal.input?.lines.find(line => line.accountId === 'inventory')?.credit, 50);
 assert.equal(buildPurchaseReturnJournal(
-  purchaseReturn, purchase, context, 'period-1', 'now', 'tester', accounts,
+  purchaseReturn, { ...untaxedPurchase, tax: 13.5 }, context, 'period-1', 'now', 'tester', accounts,
 ).error, 'TAX_DETAIL_MISSING');
 
 const customerReceipt: any = {
