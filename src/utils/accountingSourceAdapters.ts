@@ -3,7 +3,7 @@ import type {
 } from './accountingCore';
 import type {
   CustomerPayment, Expense, Invoice, InvoicePayment, PartnerCurrentAccountTransaction,
-  PurchaseInvoice, SupplierPayment,
+  PurchaseInvoice, SalesReturn, SupplierPayment,
 } from '../types/autoParts';
 import { paymentAccountOf } from './paymentMethods';
 
@@ -267,4 +267,69 @@ export function buildBankTransferJournal(
   }
   return ok(baseInput(context, 'bank.transfer', input.id, input.date, periodId,
     'تحويل بين حسابين بنكيين ' + (input.reference || input.id), lines, createdAt, createdBy));
+}
+
+
+/**
+ * Sales return reverses the original revenue/tax and restores inventory at the original
+ * invoice-line cost. Return value is VAT-inclusive in the legacy SalesReturn record.
+ */
+export function buildSalesReturnJournal(
+  salesReturn: SalesReturn, originalInvoice: Invoice, context: AccountingContext,
+  periodId: string, createdAt: string, createdBy: string, accounts: SourceAccountMap,
+): SourceAdapterResult {
+  if (!salesReturn.id?.trim()) return fail('SOURCE_ID_REQUIRED');
+  if (!validDate(salesReturn.date) || !validDate(originalInvoice.date)) return fail('SOURCE_DATE_INVALID');
+  if (salesReturn.invoiceId !== originalInvoice.id || originalInvoice.status === 'ملغاة') return fail('INVOICE_CANCELLED');
+  if (!Number.isFinite(salesReturn.totalRefundAmount) || salesReturn.totalRefundAmount <= 0
+    || !Number.isFinite(originalInvoice.grandTotal) || originalInvoice.grandTotal <= 0
+    || salesReturn.totalRefundAmount > originalInvoice.grandTotal - (originalInvoice.returnedAmount || 0) + 0.01) {
+    return fail('SOURCE_AMOUNT_INVALID');
+  }
+  if (!salesReturn.items.length) return fail('INVOICE_LINES_INVALID');
+
+  let restoredCost = 0;
+  for (const returned of salesReturn.items) {
+    if (!Number.isFinite(returned.quantity) || returned.quantity <= 0) return fail('INVOICE_LINES_INVALID');
+    const candidates = originalInvoice.items.filter((line, index) => {
+      const lineId = line.lineId || originalInvoice.id + ':' + index;
+      if (returned.lineId) return returned.lineId === lineId;
+      if (returned.partId) return returned.partId === line.partId && returned.unitPrice === line.unitPrice;
+      return returned.partNumber === line.partNumber && returned.unitPrice === line.unitPrice;
+    });
+    if (candidates.length !== 1) return fail('INVOICE_LINES_INVALID');
+    const originalLine = candidates[0];
+    if (originalLine.costPrice === undefined || !validAmount(originalLine.costPrice)) return fail('COST_BASIS_MISSING');
+    if ((originalLine.returnedQuantity || 0) + returned.quantity > originalLine.quantity + 0.0001) return fail('INVOICE_LINES_INVALID');
+    restoredCost += originalLine.costPrice * returned.quantity;
+  }
+
+  const taxReversal = r2(originalInvoice.tax * salesReturn.totalRefundAmount / originalInvoice.grandTotal);
+  const netRevenueReversal = r2(salesReturn.totalRefundAmount - taxReversal);
+  const lines: JournalLine[] = [];
+  if (!addLine(lines, accounts.salesReturns, netRevenueReversal, 0, 'مردودات مبيعات ' + salesReturn.returnNumber)
+    || !addLine(lines, accounts.outputVat, taxReversal, 0, 'عكس ضريبة مخرجات مرتجع ' + salesReturn.returnNumber)) {
+    return fail('ACCOUNT_MAPPING_MISSING');
+  }
+
+  if (salesReturn.refundMethod === 'خصم من رصيد العميل الآجل') {
+    if (salesReturn.treasuryDeducted) return fail('SOURCE_AMOUNT_INVALID');
+    if (!addLine(lines, accounts.receivables, 0, salesReturn.totalRefundAmount, 'تخفيض مديونية العميل ' + salesReturn.customerName)) return fail('ACCOUNT_MAPPING_MISSING');
+  } else {
+    if (!salesReturn.treasuryDeducted) return fail('SOURCE_AMOUNT_INVALID');
+    const method = salesReturn.refundMethod === 'نقدي (خصم من الخزنة)' ? 'نقدي' : 'إنستاباي / محفظة';
+    let settlement: string | undefined;
+    try { settlement = accounts.settlementAccount(method); }
+    catch { return fail('PAYMENT_METHOD_UNSUPPORTED'); }
+    if (!addLine(lines, settlement, 0, salesReturn.totalRefundAmount, 'رد قيمة مرتجع للعميل ' + salesReturn.customerName)) {
+      return fail('ACCOUNT_MAPPING_MISSING');
+    }
+  }
+
+  if (!addLine(lines, accounts.inventory, restoredCost, 0, 'إعادة تكلفة مخزون مرتجع ' + salesReturn.returnNumber)
+    || !addLine(lines, accounts.costOfGoodsSold, 0, restoredCost, 'عكس تكلفة بضاعة مرتجعة ' + salesReturn.returnNumber)) {
+    return fail('ACCOUNT_MAPPING_MISSING');
+  }
+  return ok(baseInput(context, 'sales.return', salesReturn.id, salesReturn.date, periodId,
+    'ترحيل مرتجع مبيعات ' + salesReturn.returnNumber, lines, createdAt, createdBy));
 }
