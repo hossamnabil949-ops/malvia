@@ -125,7 +125,7 @@ export function buildExpenseJournal(
   if (!validDate(expense.date)) return fail('SOURCE_DATE_INVALID');
   if (!Number.isFinite(expense.amount) || expense.amount <= 0) return fail('SOURCE_AMOUNT_INVALID');
   let settlement: string | undefined;
-  try { settlement = accounts.settlementAccount(String(expense.paymentMethod)); }
+  try { settlement = accounts.settlementAccount(String(expense.paymentMethod), expense.bankAccountId); }
   catch { return fail('PAYMENT_METHOD_UNSUPPORTED'); }
   const lines: JournalLine[] = [];
   if (!addLine(lines, accounts.operatingExpenses, expense.amount, 0, 'مصروف ' + expense.title)
@@ -158,6 +158,8 @@ export function buildPartnerCurrentAccountJournal(
       || !addLine(lines, settlement, 0, movement.amount, 'صرف جاري شريك ' + movement.partnerName)) {
       return fail('ACCOUNT_MAPPING_MISSING');
     }
+  } else {
+    return fail('SOURCE_AMOUNT_INVALID');
   }
   return ok(baseInput(context, 'partner.current-account', movement.id, movement.date, periodId,
     'حركة جاري الشريك ' + movement.partnerName, lines, createdAt, createdBy));
