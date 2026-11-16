@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   buildBankTransferJournal, buildCardSettlementJournal, buildCustomerReceiptJournal, buildExpenseJournal,
+  buildChequeRegistrationJournal, buildChequeLifecycleJournal,
   buildSalesReturnJournal,
   buildPartnerCurrentAccountJournal, buildPurchaseInvoiceJournal, buildPurchaseReturnJournal,
   buildSalesInvoiceJournal,
@@ -14,6 +15,7 @@ const accounts: SourceAccountMap = {
   partnerCurrentAccount: 'partner-current', inputVat: 'vat-input', payables: 'payables',
   supplierAdvances: 'supplier-advances', salesReturns: 'sales-returns',
   visaClearing: 'visa-clearing', bankFees: 'bank-fees',
+  chequesReceivable: 'cheques-receivable', chequesPayable: 'cheques-payable',
   settlementAccount: (method, bankId) => {
     if (method.includes('نقد') || method.includes('كاش')) return 'cash';
     if (method.includes('تحويل')) return bankId ? 'bank:' + bankId : undefined;
@@ -232,3 +234,79 @@ assert.equal(buildBankTransferJournal(
 ).error, 'ACCOUNT_MAPPING_MISSING');
 
 console.log('Accounting source adapter tests passed');
+
+
+// Cheques affect customer/supplier balances on registration; bank movement waits for clearing.
+const incomingCheque: any = {
+  id: 'CH-IN-1', number: 'IN-100', direction: 'incoming', status: 'في الحافظة',
+  amount: 120, bankName: 'Bank', dueDate: '2026-11-20', receivedDate: '2026-11-16',
+  partyType: 'customer', partyId: 'C-1', partyName: 'Customer', createdBy: 'Test',
+  createdAt: '2026-11-16T10:00:00Z', appliedAmount: 120, history: [],
+};
+const incomingRegistration = buildChequeRegistrationJournal(
+  incomingCheque, context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(incomingRegistration.error, null);
+assert.equal(incomingRegistration.input?.lines.find(l => l.accountId === 'cheques-receivable')?.debit, 120);
+assert.equal(incomingRegistration.input?.lines.find(l => l.accountId === 'receivables')?.credit, 120);
+assert.equal(incomingRegistration.input?.lines.some(l => l.accountId === 'cash'), false);
+
+const incomingClear = buildChequeLifecycleJournal(
+  { ...incomingCheque, clearedBankAccountId: 'BANK-A' }, 'clear', 'في الحافظة', 'CH-IN-1:clear',
+  '2026-11-20', context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(incomingClear.error, null);
+assert.equal(incomingClear.input?.lines.find(l => l.accountId === 'bank:BANK-A')?.debit, 120);
+assert.equal(incomingClear.input?.lines.find(l => l.accountId === 'cheques-receivable')?.credit, 120);
+
+const incomingBounceBeforeClear = buildChequeLifecycleJournal(
+  incomingCheque, 'bounce', 'مودع بالبنك', 'CH-IN-1:bounce',
+  '2026-11-21', context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(incomingBounceBeforeClear.error, null);
+assert.equal(incomingBounceBeforeClear.input?.lines.find(l => l.accountId === 'receivables')?.debit, 120);
+assert.equal(incomingBounceBeforeClear.input?.lines.find(l => l.accountId === 'cheques-receivable')?.credit, 120);
+
+const incomingBounceAfterClear = buildChequeLifecycleJournal(
+  { ...incomingCheque, clearedBankAccountId: 'BANK-A' }, 'bounce', 'محصّل', 'CH-IN-1:bounce-after-clear',
+  '2026-11-22', context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(incomingBounceAfterClear.error, null);
+assert.equal(incomingBounceAfterClear.input?.lines.find(l => l.accountId === 'receivables')?.debit, 120);
+assert.equal(incomingBounceAfterClear.input?.lines.find(l => l.accountId === 'bank:BANK-A')?.credit, 120);
+
+const outgoingCheque: any = {
+  ...incomingCheque, id: 'CH-OUT-1', number: 'OUT-100', direction: 'outgoing',
+  status: 'صادر', partyType: 'supplier', partyId: 'SUP-1', partyName: 'Supplier',
+};
+const outgoingRegistration = buildChequeRegistrationJournal(
+  outgoingCheque, context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(outgoingRegistration.error, null);
+assert.equal(outgoingRegistration.input?.lines.find(l => l.accountId === 'payables')?.debit, 120);
+assert.equal(outgoingRegistration.input?.lines.find(l => l.accountId === 'cheques-payable')?.credit, 120);
+
+const outgoingClear = buildChequeLifecycleJournal(
+  { ...outgoingCheque, clearedBankAccountId: 'BANK-A' }, 'clear', 'صادر', 'CH-OUT-1:clear',
+  '2026-11-20', context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(outgoingClear.error, null);
+assert.equal(outgoingClear.input?.lines.find(l => l.accountId === 'cheques-payable')?.debit, 120);
+assert.equal(outgoingClear.input?.lines.find(l => l.accountId === 'bank:BANK-A')?.credit, 120);
+
+const outgoingBounceAfterClear = buildChequeLifecycleJournal(
+  { ...outgoingCheque, clearedBankAccountId: 'BANK-A' }, 'bounce', 'مصروف', 'CH-OUT-1:bounce',
+  '2026-11-22', context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(outgoingBounceAfterClear.error, null);
+assert.equal(outgoingBounceAfterClear.input?.lines.find(l => l.accountId === 'bank:BANK-A')?.debit, 120);
+assert.equal(outgoingBounceAfterClear.input?.lines.find(l => l.accountId === 'payables')?.credit, 120);
+
+assert.equal(buildChequeLifecycleJournal(
+  incomingCheque, 'cancel', 'محصّل', 'CH-IN-1:invalid-cancel',
+  '2026-11-22', context, 'period-1', 'now', 'tester', accounts,
+).error, 'CHEQUE_LIFECYCLE_INVALID');
+assert.equal(buildChequeLifecycleJournal(
+  incomingCheque, 'clear', 'محصّل', 'CH-IN-1:duplicate-clear',
+  '2026-11-22', context, 'period-1', 'now', 'tester', accounts,
+).error, 'CHEQUE_LIFECYCLE_INVALID');
