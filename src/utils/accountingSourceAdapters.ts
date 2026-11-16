@@ -26,6 +26,8 @@ export interface SourceAccountMap {
   inventory: string;
   operatingExpenses: string;
   inputVat: string;
+  visaClearing: string;
+  bankFees: string;
   payables: string;
   supplierAdvances: string;
   salesReturns?: string;
@@ -393,4 +395,32 @@ export function buildPurchaseReturnJournal(
   }
   return ok(baseInput(context, 'purchase.return', purchaseReturn.id, purchaseReturn.date, periodId,
     'ترحيل مرتجع مشتريات ' + purchaseReturn.returnNumber, lines, createdAt, createdBy));
+}
+
+
+/** Card settlement clears gross Visa receivable, books the processor fee, and receives net cash in bank. */
+export function buildCardSettlementJournal(
+  batch: { id: string; processor: string; grossAmount: number; feeAmount: number; netAmount: number; settlementDate: string; bankAccountId: string; reference: string },
+  context: AccountingContext, periodId: string, createdAt: string, createdBy: string,
+  accounts: SourceAccountMap,
+): SourceAdapterResult {
+  if (!batch.id?.trim()) return fail('SOURCE_ID_REQUIRED');
+  if (!validDate(batch.settlementDate)) return fail('SOURCE_DATE_INVALID');
+  if (!Number.isFinite(batch.grossAmount) || batch.grossAmount <= 0
+    || !Number.isFinite(batch.feeAmount) || batch.feeAmount < 0
+    || !Number.isFinite(batch.netAmount) || batch.netAmount <= 0
+    || batch.feeAmount >= batch.grossAmount
+    || Math.abs(r2(batch.grossAmount - batch.feeAmount) - r2(batch.netAmount)) > 0.01
+    || !batch.bankAccountId || !batch.reference?.trim()) return fail('SOURCE_AMOUNT_INVALID');
+  let bank: string | undefined;
+  try { bank = accounts.settlementAccount('تحويل بنكي', batch.bankAccountId); }
+  catch { return fail('PAYMENT_METHOD_UNSUPPORTED'); }
+  const lines: JournalLine[] = [];
+  if (!addLine(lines, bank, batch.netAmount, 0, 'صافي تسوية فيزا ' + batch.processor)
+    || !addLine(lines, accounts.bankFees, batch.feeAmount, 0, 'عمولة تحصيل فيزا ' + batch.processor)
+    || !addLine(lines, accounts.visaClearing, 0, batch.grossAmount, 'تصفير مستحقات فيزا ' + batch.processor)) {
+    return fail('ACCOUNT_MAPPING_MISSING');
+  }
+  return ok(baseInput(context, 'bank.card-settlement', batch.id, batch.settlementDate, periodId,
+    'تسوية بطاقة ' + batch.reference, lines, createdAt, createdBy));
 }
