@@ -544,7 +544,8 @@ export function buildPurchaseInvoiceVoidJournal(
     || !addLine(lines, accounts.inputVat, 0, invoice.tax, 'عكس ضريبة مدخلات فاتورة مشتريات ملغاة ' + invoice.invoiceNumber)) {
     return fail('ACCOUNT_MAPPING_MISSING');
   }
-  return ok(baseInput(context, 'purchase.invoice-void', invoice.id + ':' + cancellation.id,
+  // One cancellation journal is allowed per original invoice, even if a caller retries with a new event ID.
+  return ok(baseInput(context, 'purchase.invoice-void', invoice.id,
     cancellation.date, periodId, 'إلغاء فاتورة مشتريات ' + invoice.invoiceNumber + ' — ' + cancellation.reason,
     lines, createdAt, createdBy));
 }
