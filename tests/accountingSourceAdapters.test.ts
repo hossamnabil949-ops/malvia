@@ -65,22 +65,27 @@ const salesReturn: any = {
   totalRefundAmount: 51.75, refundMethod: 'نقدي (خصم من الخزنة)',
   treasuryDeducted: true, recordedBy: 'Test',
 };
+const untaxedSale: any = { ...invoice, tax: 0, grandTotal: 90 };
+const untaxedSalesReturn = { ...salesReturn, totalRefundAmount: 45 };
 const returnJournal = buildSalesReturnJournal(
-  salesReturn, invoice, context, 'period-1', 'now', 'tester', accounts,
+  untaxedSalesReturn, untaxedSale, context, 'period-1', 'now', 'tester', accounts,
 );
 assert.equal(returnJournal.error, null);
 assert.equal(returnJournal.input?.source.type, 'sales.return');
 assert.equal(returnJournal.input?.lines.find(line => line.accountId === 'sales-returns')?.debit, 45);
-assert.equal(returnJournal.input?.lines.find(line => line.accountId === 'vat-output')?.debit, 6.75);
-assert.equal(returnJournal.input?.lines.find(line => line.accountId === 'cash')?.credit, 51.75);
+assert.equal(returnJournal.input?.lines.some(line => line.accountId === 'vat-output'), false);
+assert.equal(returnJournal.input?.lines.find(line => line.accountId === 'cash')?.credit, 45);
 assert.equal(returnJournal.input?.lines.find(line => line.accountId === 'inventory')?.debit, 20);
 assert.equal(returnJournal.input?.lines.find(line => line.accountId === 'cogs')?.credit, 20);
 assert.equal(buildSalesReturnJournal(
-  { ...salesReturn, id: 'RET-2', refundMethod: 'خصم من رصيد العميل الآجل', treasuryDeducted: false },
-  invoice, context, 'period-1', 'now', 'tester', accounts,
-).input?.lines.find(line => line.accountId === 'receivables')?.credit, 51.75);
+  { ...untaxedSalesReturn, id: 'RET-2', refundMethod: 'خصم من رصيد العميل الآجل', treasuryDeducted: false },
+  untaxedSale, context, 'period-1', 'now', 'tester', accounts,
+).input?.lines.find(line => line.accountId === 'receivables')?.credit, 45);
 assert.equal(buildSalesReturnJournal(
-  salesReturn, { ...invoice, items: [{ ...invoice.items[0], costPrice: undefined }] },
+  salesReturn, invoice, context, 'period-1', 'now', 'tester', accounts,
+).error, 'TAX_DETAIL_MISSING');
+assert.equal(buildSalesReturnJournal(
+  untaxedSalesReturn, { ...untaxedSale, items: [{ ...invoice.items[0], costPrice: undefined }] },
   context, 'period-1', 'now', 'tester', accounts,
 ).error, 'COST_BASIS_MISSING');
 
