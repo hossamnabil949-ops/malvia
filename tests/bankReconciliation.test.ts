@@ -34,6 +34,11 @@ const uniqueFallback = reconcileBankStatement('BANK-1', [
 ], [ledger[0]]);
 assert.equal(uniqueFallback.matches[0].status, 'matched_amount_date');
 
+const conflictingReference = reconcileBankStatement('BANK-1', [
+  { id: 'S-8', bankAccountId: 'BANK-1', direction: 'in', amount: 100, date: '2026-11-10', reference: 'A-DIFFERENT-REF' },
+], [ledger[0]]);
+assert.equal(conflictingReference.matches[0].status, 'ambiguous_statement');
+
 const invalid = reconcileBankStatement('BANK-1', [
   { id: 'S-7', bankAccountId: 'BANK-2', direction: 'in', amount: 100, date: '2026-11-10' },
 ], ledger);
