@@ -161,6 +161,20 @@ assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'supplier
 assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'payables')?.debit, 53.5);
 assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'inventory')?.credit, 90);
 assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'vat-input')?.credit, 13.5);
+const purchaseVoidStoreCredit = buildPurchaseInvoiceVoidJournal(
+  purchase,
+  { id: 'PUR-1:VOID-STORE-CREDIT', date: '2026-11-17', reason: 'استرداد جزئي نقداً والباقي رصيد', approvedBy: 'GM',
+    cashRefund: 30, supplierAdvanceRestored: 20, payableReleased: 53.5, refundMethod: 'نقدي' },
+  context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(purchaseVoidStoreCredit.error, null);
+assert.equal(purchaseVoidStoreCredit.input?.lines.find(line => line.accountId === 'supplier-advances')?.debit, 20);
+assert.equal(buildPurchaseInvoiceVoidJournal(
+  purchase,
+  { id: 'PUR-1:VOID-OVERREFUND', date: '2026-11-17', reason: 'استرداد زائد', approvedBy: 'GM',
+    cashRefund: 50, supplierAdvanceRestored: 0, payableReleased: 53.5, refundMethod: 'نقدي' },
+  context, 'period-1', 'now', 'tester', accounts,
+).error, 'PURCHASE_INVOICE_VOID_INVALID');
 assert.equal(buildPurchaseInvoiceVoidJournal(
   purchase,
   { id: 'PUR-1:VOID-BAD', date: '2026-11-17', reason: 'مكرر', approvedBy: 'GM',
