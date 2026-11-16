@@ -82,6 +82,13 @@ export function reconcileBankStatement(
       matches.push({ statementLineId: line.id, status: 'ambiguous_statement', candidateLedgerEntryIds: exactReference.map(entry => entry.id) });
       continue;
     }
+    const conflictingReferences = reference
+      ? candidates.filter(entry => normalizeReference(entry.reference || '') && normalizeReference(entry.reference || '') !== reference)
+      : [];
+    if (conflictingReferences.length) {
+      matches.push({ statementLineId: line.id, status: 'ambiguous_statement', candidateLedgerEntryIds: conflictingReferences.map(entry => entry.id) });
+      continue;
+    }
     if (candidates.length === 1) {
       usedLedger.add(candidates[0].id);
       matches.push({ statementLineId: line.id, status: 'matched_amount_date', ledgerEntryId: candidates[0].id });
