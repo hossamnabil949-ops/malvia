@@ -522,8 +522,7 @@ export function buildPurchaseInvoiceVoidJournal(
     || invoice.amountPaid > invoice.grandTotal + 0.01) return fail('INVOICE_TOTAL_MISMATCH');
   const allocated = r2(cancellation.cashRefund + cancellation.supplierAdvanceRestored + cancellation.payableReleased);
   if (Math.abs(allocated - r2(invoice.grandTotal)) > 0.01
-    || cancellation.cashRefund > invoice.amountPaid + 0.01
-    || cancellation.payableReleased + cancellation.supplierAdvanceRestored > invoice.grandTotal - invoice.amountPaid + 0.01) {
+    || cancellation.cashRefund > invoice.amountPaid + 0.01) {
     return fail('PURCHASE_INVOICE_VOID_INVALID');
   }
 
