@@ -142,15 +142,22 @@ export function buildInvoiceVoidJournal(
   if (invoice.status !== 'ملغاة' || !invoice.voidReason?.trim() || !invoice.voidApprovedBy?.trim()) {
     return fail('INVOICE_VOID_INVALID');
   }
-  if (![invoice.subtotal, invoice.discount, invoice.tax, invoice.grandTotal, plan.fraction, plan.creditAmount].every(validAmount)
-    || plan.fraction > 1 || plan.creditAmount > invoice.grandTotal + 0.01) return fail('SOURCE_AMOUNT_INVALID');
+  if (![invoice.subtotal, invoice.discount, invoice.tax, invoice.grandTotal, plan.fraction, plan.creditAmount,
+    invoice.returnedAmount || 0].every(validAmount)
+    || plan.fraction > 1 || plan.creditAmount > invoice.grandTotal + 0.01
+    || !Array.isArray(plan.refunds) || plan.refunds.some(refund => !refund.method?.trim() || !validAmount(refund.amount))
+    || !Array.isArray(plan.restock) || plan.restock.some(item => !item.partNumber?.trim() || !Number.isFinite(item.qty) || item.qty <= 0)) {
+    return fail('SOURCE_AMOUNT_INVALID');
+  }
   const netSales = r2(invoice.subtotal - invoice.discount);
   if (netSales < 0 || Math.abs(r2(netSales + invoice.tax) - r2(invoice.grandTotal)) > 0.01) {
     return fail('INVOICE_TOTAL_MISMATCH');
   }
   const refundTotal = r2(plan.creditAmount + plan.refunds.reduce((sum, refund) => sum + refund.amount, 0));
   const expectedRemaining = r2(invoice.grandTotal - (invoice.returnedAmount || 0));
-  if (Math.abs(refundTotal - expectedRemaining) > 0.01) return fail('INVOICE_VOID_INVALID');
+  const expectedFraction = invoice.grandTotal > 0 ? expectedRemaining / invoice.grandTotal : 0;
+  if (expectedRemaining < 0 || Math.abs(refundTotal - expectedRemaining) > 0.01
+    || Math.abs(plan.fraction - expectedFraction) > 0.0001) return fail('INVOICE_VOID_INVALID');
   if ((invoice.returnedAmount || 0) > 0.005 && invoice.tax > 0.005) {
     return fail('TAX_DETAIL_MISSING');
   }
