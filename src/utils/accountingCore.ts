@@ -33,8 +33,35 @@ export type AccountingError =
   | 'LINES_REQUIRED' | 'ACCOUNT_NOT_FOUND' | 'ACCOUNT_INACTIVE' | 'LINE_AMOUNT_INVALID'
   | 'LINE_SIDE_INVALID' | 'ENTRY_UNBALANCED' | 'DUPLICATE_POSTING'
   | 'REVERSAL_TARGET_NOT_FOUND' | 'REVERSAL_ALREADY_EXISTS'
-  | 'REVERSAL_CONTEXT_MISMATCH' | 'REVERSAL_ID_REQUIRED';
+  | 'REVERSAL_CONTEXT_MISMATCH' | 'REVERSAL_ID_REQUIRED'
+  | 'OPENING_BALANCE_DATE_MISMATCH' | 'OPENING_BALANCE_RECONCILIATION_INCOMPLETE';
 export interface JournalResult { entry: JournalEntry | null; error: AccountingError | null }
+
+/**
+ * Historical preservation policy: legacy source transactions remain untouched.
+ * New accounting postings begin at activationDate; prior balances enter only
+ * through a separately reconciled opening-balance journal on that date.
+ */
+export type OpeningBalanceCategory =
+  | 'cash' | 'banks' | 'inventory' | 'receivables'
+  | 'payables' | 'partnerCurrentAccounts' | 'equity';
+export interface OpeningBalanceReconciliation {
+  category: OpeningBalanceCategory;
+  status: 'matched' | 'unmatched';
+  evidenceRef?: string;
+}
+export interface CreateOpeningBalanceInput extends AccountingContext {
+  batchId: string;
+  activationDate: string;
+  date: string;
+  periodId: string;
+  memo: string;
+  lines: JournalLine[];
+  reconciliation: OpeningBalanceReconciliation[];
+  createdAt: string;
+  createdBy: string;
+}
+
 
 const validDate = (value: string): boolean => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -158,6 +185,47 @@ export function createReversalEntry(
     date, periodId, memo: 'عكس القيد ' + original.id,
     lines: original.lines.map(line => ({ ...line, debit: line.credit, credit: line.debit })),
     reversalOf: original.id, createdAt, createdBy,
+  }, accounts, periods, existingEntries);
+}
+
+
+
+const REQUIRED_OPENING_BALANCE_CATEGORIES: OpeningBalanceCategory[] = [
+  'cash', 'banks', 'inventory', 'receivables',
+  'payables', 'partnerCurrentAccounts', 'equity',
+];
+
+/** Posts one balanced opening batch only after every legacy balance class is reconciled. */
+export function createOpeningBalanceEntry(
+  input: CreateOpeningBalanceInput,
+  accounts: LedgerAccount[],
+  periods: AccountingPeriod[],
+  existingEntries: JournalEntry[] = [],
+): JournalResult {
+  if (!validDate(input.activationDate) || input.date !== input.activationDate) {
+    return { entry: null, error: 'OPENING_BALANCE_DATE_MISMATCH' };
+  }
+  const reconciled = new Set(
+    input.reconciliation.filter(item => item.status === 'matched').map(item => item.category),
+  );
+  if (REQUIRED_OPENING_BALANCE_CATEGORIES.some(category => !reconciled.has(category))) {
+    return { entry: null, error: 'OPENING_BALANCE_RECONCILIATION_INCOMPLETE' };
+  }
+  if (input.reconciliation.some(item => item.status === 'matched' && !item.evidenceRef?.trim())) {
+    return { entry: null, error: 'OPENING_BALANCE_RECONCILIATION_INCOMPLETE' };
+  }
+  return createJournalEntry({
+    tenantId: input.tenantId,
+    branchId: input.branchId,
+    currency: input.currency,
+    postingId: 'opening-balance:' + input.batchId.trim(),
+    source: { type: 'accounting.opening-balance', id: input.batchId.trim() },
+    date: input.date,
+    periodId: input.periodId,
+    memo: input.memo,
+    lines: input.lines,
+    createdAt: input.createdAt,
+    createdBy: input.createdBy,
   }, accounts, periods, existingEntries);
 }
 
