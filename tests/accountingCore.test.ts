@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import {
-  createDefaultChartOfAccounts, createJournalEntry, createReversalEntry,
+  createDefaultChartOfAccounts, createJournalEntry, createReversalEntry, createOpeningBalanceEntry,
   makeSourceKey, roundCurrency,
   type AccountingContext, type AccountingPeriod, type CreateJournalInput,
-  type JournalEntry, type LedgerAccount,
+  type JournalEntry, type LedgerAccount, type OpeningBalanceReconciliation,
 } from '../src/utils/accountingCore.ts';
 
 const context: AccountingContext = { tenantId: 'tenant-a', branchId: 'branch-1', currency: 'EGP' };
@@ -77,6 +77,53 @@ assert.throws(() => roundCurrency(Number.NaN), RangeError);
 assert.notEqual(
   makeSourceKey(context, { type: 'sale', id: '1' }, 'post-1'),
   makeSourceKey({ ...context, branchId: 'branch-2' }, { type: 'sale', id: '1' }, 'post-1'),
+);
+
+
+
+// Opening balances are permitted only on the configured activation date and
+// only after all legacy balance classes have matching reconciliation evidence.
+const reconciledOpeningBalances: OpeningBalanceReconciliation[] = [
+  'cash', 'banks', 'inventory', 'receivables', 'payables',
+  'partnerCurrentAccounts', 'equity',
+].map(category => ({ category: category as OpeningBalanceReconciliation['category'], status: 'matched', evidenceRef: 'recon:' + category }));
+const openingInput = {
+  ...context, batchId: 'activation-batch-1',
+  activationDate: '2026-11-20', date: '2026-11-20',
+  periodId: period.id, memo: 'الأرصدة الافتتاحية بعد المطابقة',
+  lines: [
+    { accountId: cashId, debit: 5000, credit: 0 },
+    { accountId: salesId, debit: 0, credit: 5000 },
+  ],
+  reconciliation: reconciledOpeningBalances,
+  createdAt: '2026-11-20T08:00:00.000Z', createdBy: 'owner',
+};
+assert.equal(createOpeningBalanceEntry(openingInput, accounts, [period]).error, null);
+assert.equal(
+  createOpeningBalanceEntry({ ...openingInput, date: '2026-11-19' }, accounts, [period]).error,
+  'OPENING_BALANCE_DATE_MISMATCH',
+);
+assert.equal(
+  createOpeningBalanceEntry({
+    ...openingInput,
+    reconciliation: reconciledOpeningBalances.filter(item => item.category !== 'inventory'),
+  }, accounts, [period]).error,
+  'OPENING_BALANCE_RECONCILIATION_INCOMPLETE',
+);
+assert.equal(
+  createOpeningBalanceEntry({
+    ...openingInput,
+    reconciliation: reconciledOpeningBalances.map(item =>
+      item.category === 'banks' ? { ...item, evidenceRef: '' } : item),
+  }, accounts, [period]).error,
+  'OPENING_BALANCE_RECONCILIATION_INCOMPLETE',
+);
+assert.equal(
+  createOpeningBalanceEntry({ ...openingInput, batchId: 'unbalanced', lines: [
+    { accountId: cashId, debit: 5000, credit: 0 },
+    { accountId: salesId, debit: 0, credit: 4999 },
+  ] }, accounts, [period]).error,
+  'ENTRY_UNBALANCED',
 );
 
 console.log('accountingCore: all tests passed');
