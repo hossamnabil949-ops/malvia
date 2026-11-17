@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import type { BankStatementLine } from './bankReconciliation';
 
-const normalizeHeader = (value: unknown): string => String(value ?? '').trim().toLocaleLowerCase().replace(/[\\s_\\-./:()]+/g, '');
+const normalizeHeader = (value: unknown): string => String(value ?? '').trim().toLocaleLowerCase().replace(/[\s_\-./:()]+/g, '');
 const digits = (value: string): string => value.replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
 
 const pick = (row: Record<string, unknown>, aliases: string[]): unknown => {
@@ -19,14 +19,14 @@ const parseDate = (value: unknown): string | null => {
     if (parsed) return [parsed.y, String(parsed.m).padStart(2, '0'), String(parsed.d).padStart(2, '0')].join('-');
   }
   const text = digits(String(value ?? '').trim());
-  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(text)) return text;
-  const match = text.match(/^(\\d{1,2})[\\/-](\\d{1,2})[\\/-](\\d{4})$/);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const match = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
   if (match) return [match[3], match[2].padStart(2, '0'), match[1].padStart(2, '0')].join('-');
   return null;
 };
 
 const parseAmount = (value: unknown): number => {
-  const text = digits(String(value ?? '')).replace(/[٬,\\sج.مEGP]/gi, '');
+  const text = digits(String(value ?? '')).replace(/[٬,\sج.مEGP]/gi, '').replace(/٫/g, '.');
   if (!text) return 0;
   const parsed = Number(text);
   return Number.isFinite(parsed) ? Math.round((parsed + Number.EPSILON) * 100) / 100 : NaN;
