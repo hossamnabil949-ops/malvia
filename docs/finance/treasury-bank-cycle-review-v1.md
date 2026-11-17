@@ -88,3 +88,12 @@ The two UI gaps identified in the source review have now been implemented on `fi
 **Validation on commit `4596f8c42d0cfca3165727508c1525db9dbb340c`:** TypeScript check passed, financial/regression tests passed, Production build passed, and the Vercel Preview deployment reached READY. GitHub Actions run: https://github.com/hossamnabil949-ops/malvia/actions/runs/44080674929
 
 The remaining release gates are general-ledger bank-account mapping, customer bank-receipt source mapping, end-to-end sync/retry/reversal tests, opening-balance evidence reconciliation, and explicit approval before live journal posting. No migration, live journal posting, or Production deployment was performed.
+
+
+## Follow-up — bank GL mapping and receipt provenance
+
+- Added a strict resolver from a bank subledger ID to one active general-ledger asset account, scoped by tenant, branch, and currency. Missing or duplicate mappings, inactive bank accounts, missing/inactive GL accounts, and non-asset GL accounts are rejected.
+- Customer collections now retain the selected bankAccountId in each invoice settlement allocation as well as the treasury record; the customer-receipt journal adapter resolves the same bank-specific settlement account.
+- Added adapter-level tests proving that card settlement and customer receipt journal inputs use the mapped GL bank account, and that missing/inactive/wrong-scope mappings are rejected.
+- **Important boundary:** the resolver is a tested domain capability, not yet an end-user chart-of-accounts setup screen or a persisted GL configuration workflow. No live journals are posted. Operational mapping UI/persistence and sync replay tests remain release gates.
+- Latest source commit under review: 28e9facb5281cf8561bebc731b41c944df8920b8. Vercel Preview build was still BUILDING at the last status check; do not treat it as validated until READY and CI tests are green.
