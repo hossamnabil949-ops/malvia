@@ -438,6 +438,8 @@ export interface SupplierPayment {
   supplierId: string;
   supplierName: string;
   amount: number;
+  /** Portion of this payment applied to an existing payable; excess is supplier advance. */
+  payableApplied?: number;
   paymentDate: string;
   paymentMethod: PaymentMethod | string;
   bankAccountId?: string;
@@ -496,6 +498,8 @@ export interface PurchaseInvoice {
   originalGrandTotal?: number;
   paymentStatus: 'مدفوعة نقداً' | 'آجل' | 'مسددة جزئياً' | 'مرتجع جزئي' | 'مرتجع كلي';
   amountPaid: number;
+  /** Supplier store credit consumed when this invoice was recorded; absent on legacy invoices. */
+  supplierCreditApplied?: number;
   remainingBalance?: number;
   paymentMethod: PaymentMethod | string;
   bankAccountId?: string;
