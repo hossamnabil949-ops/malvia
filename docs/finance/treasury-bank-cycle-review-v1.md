@@ -97,3 +97,11 @@ The remaining release gates are general-ledger bank-account mapping, customer ba
 - Added adapter-level tests proving that card settlement and customer receipt journal inputs use the mapped GL bank account, and that missing/inactive/wrong-scope mappings are rejected.
 - **Important boundary:** the resolver is a tested domain capability, not yet an end-user chart-of-accounts setup screen or a persisted GL configuration workflow. No live journals are posted. Operational mapping UI/persistence and sync replay tests remain release gates.
 - Latest source commit under review: 28e9facb5281cf8561bebc731b41c944df8920b8. Vercel Preview build was still BUILDING at the last status check; do not treat it as validated until READY and CI tests are green.
+
+
+## Cloud sync correction — cash/bank vouchers
+
+- Found that the bank-ledger sync policy did not recognize the cash-bank entry ID prefix, even though the UI saved the paired treasury voucher and bank entry in one local transaction. This could reject a valid deposit/withdrawal during cloud validation.
+- Added source validation for cash-bank entries: voucher ID/reference, direction, receipt/payment type, active bank account, amount, date, and bank account ID must agree. Existing bank-ledger history remains immutable.
+- Added regression tests for valid deposit and withdrawal, mismatched direction, inactive bank account, and attempted historical modification. Added the test to the package test command.
+- Preview/build and test-suite status for the newest commit must be checked before treating this correction as verified. No production or database changes.
