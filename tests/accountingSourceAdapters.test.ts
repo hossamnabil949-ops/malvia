@@ -27,6 +27,19 @@ const accounts: SourceAccountMap = {
   },
 };
 const context = { tenantId: 'tenant-1', branchId: 'branch-1', currency: 'EGP' };
+const bankContext = { tenantId: 'tenant-1', branchId: 'branch-1', currency: 'EGP' };
+const bankAccounts: any[] = [{ id: 'BANK-01', name: 'حساب جاري', bankName: 'بنك', openingBalance: 0, openingDate: '2026-11-01', active: true }];
+const bankGlAccounts: any[] = [{ ...bankContext, id: 'GL-BANK-01', code: '1010', name: 'بنك 1', type: 'asset', normalBalance: 'debit', active: true }];
+const bankMappings: any[] = [{ ...bankContext, bankAccountId: 'BANK-01', ledgerAccountId: 'GL-BANK-01' }];
+const mappedBankAccount = (bankId?: string) => bankId
+  ? resolveBankGeneralLedgerAccount(bankId, bankContext, bankAccounts, bankMappings, bankGlAccounts).accountId || undefined
+  : undefined;
+const mappedAccounts: SourceAccountMap = {
+  ...accounts,
+  settlementAccount: (method, bankId) => method.includes('تحويل')
+    ? mappedBankAccount(bankId)
+    : accounts.settlementAccount(method, bankId),
+};
 
 const invoice: any = {
   id: 'INV-1', invoiceNumber: 'S-001', date: '2026-11-16',
@@ -282,11 +295,11 @@ assert.equal(buildSupplierPaymentJournal(
 const cardSettlement = buildCardSettlementJournal(
   { id: 'CARD-1', processor: 'Acquirer', grossAmount: 100, feeAmount: 2.5,
     netAmount: 97.5, settlementDate: '2026-11-16', bankAccountId: 'BANK-A', reference: 'BATCH-1' },
-  context, 'period-1', 'now', 'tester', accounts,
+  context, 'period-1', 'now', 'tester', mappedAccounts,
 );
 assert.equal(cardSettlement.error, null);
 assert.equal(cardSettlement.input?.source.type, 'bank.card-settlement');
-assert.equal(cardSettlement.input?.lines.find(line => line.accountId === 'bank:BANK-A')?.debit, 97.5);
+assert.equal(cardSettlement.input?.lines.find(line => line.accountId === 'GL-BANK-01')?.debit, 97.5);
 assert.equal(cardSettlement.input?.lines.find(line => line.accountId === 'bank-fees')?.debit, 2.5);
 assert.equal(cardSettlement.input?.lines.find(line => line.accountId === 'visa-clearing')?.credit, 100);
 assert.equal(buildCardSettlementJournal(
@@ -460,10 +473,6 @@ assert.equal(buildInvoiceVoidJournal(
   context, 'period-1', 'now', 'tester', accounts,
 ).error, 'INVOICE_VOID_INVALID');
 
-const bankContext = { tenantId: 'tenant-1', branchId: 'branch-1', currency: 'EGP' };
-const bankAccounts: any[] = [{ id: 'BANK-01', name: 'حساب جاري', bankName: 'بنك', openingBalance: 0, openingDate: '2026-11-01', active: true }];
-const bankGlAccounts: any[] = [{ ...bankContext, id: 'GL-BANK-01', code: '1010', name: 'بنك 1', type: 'asset', normalBalance: 'debit', active: true }];
-const bankMappings: any[] = [{ ...bankContext, bankAccountId: 'BANK-01', ledgerAccountId: 'GL-BANK-01' }];
 assert.deepEqual(resolveBankGeneralLedgerAccount('BANK-01', bankContext, bankAccounts, bankMappings, bankGlAccounts),
   { accountId: 'GL-BANK-01', error: null });
 assert.equal(resolveBankGeneralLedgerAccount('BANK-01', bankContext, bankAccounts, [], bankGlAccounts).error,
@@ -474,3 +483,21 @@ assert.equal(resolveBankGeneralLedgerAccount('BANK-01', bankContext, bankAccount
   bankMappings, [{ ...bankGlAccounts[0], type: 'expense' }]).error, 'BANK_GL_ACCOUNT_NOT_ASSET');
 assert.equal(resolveBankGeneralLedgerAccount('BANK-01', { ...bankContext, branchId: 'branch-2' },
   bankAccounts, bankMappings, bankGlAccounts).error, 'BANK_GL_MAPPING_MISSING');
+
+const noBankMappingAccounts: SourceAccountMap = {
+  ...accounts,
+  settlementAccount: (method, bankId) => method.includes('تحويل')
+    ? resolveBankGeneralLedgerAccount(bankId || '', bankContext, bankAccounts, [], bankGlAccounts).accountId || undefined
+    : accounts.settlementAccount(method, bankId),
+};
+assert.equal(buildCardSettlementJournal(
+  { id: 'CARD-NOMAP', processor: 'Acquirer', grossAmount: 100, feeAmount: 2,
+    netAmount: 98, settlementDate: '2026-11-16', bankAccountId: 'BANK-01', reference: 'BATCH-NOMAP' },
+  context, 'period-1', 'now', 'tester', noBankMappingAccounts,
+).error, 'ACCOUNT_MAPPING_MISSING');
+assert.equal(resolveBankGeneralLedgerAccount('BANK-01', bankContext,
+  [{ ...bankAccounts[0], active: false }], bankMappings, bankGlAccounts).error, 'BANK_ACCOUNT_INACTIVE');
+assert.equal(resolveBankGeneralLedgerAccount('BANK-01', bankContext, bankAccounts, bankMappings,
+  [{ ...bankGlAccounts[0], active: false }]).error, 'BANK_GL_ACCOUNT_INACTIVE');
+assert.equal(resolveBankGeneralLedgerAccount('BANK-01', bankContext, bankAccounts, bankMappings,
+  [{ ...bankGlAccounts[0], branchId: 'branch-2' }]).error, 'BANK_GL_ACCOUNT_NOT_FOUND');
