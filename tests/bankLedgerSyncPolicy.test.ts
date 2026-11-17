@@ -12,7 +12,7 @@ const voucher = (direction: 'deposit' | 'withdrawal') => ({
   referenceId: 'V-001',
   date: '2026-11-17',
   type: direction === 'deposit' ? 'صرف' : 'قبض',
-  category: direction === 'deposit' ? 'تحويل من الخزينة إلى البنك' : 'تحويل من البنك إلى الخزنة',
+  category: direction === 'deposit' ? 'تحويل من الخزينة إلى البنك' : 'تحويل من البنك إلى الخزينة',
   amount: 250,
   paymentMethod: 'نقدي',
   bankAccountId: 'BANK-01',
