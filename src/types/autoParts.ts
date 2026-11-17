@@ -150,6 +150,8 @@ export interface InvoiceSettlement {
   date: string;
   time: string;
   paymentMethod: PaymentMethod | string;
+  /** Exact bank account selected when this customer collection was received. */
+  bankAccountId?: string;
   receiptNumber: string;
 }
 
