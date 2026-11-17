@@ -26,7 +26,7 @@ const parseDate = (value: unknown): string | null => {
 };
 
 const parseAmount = (value: unknown): number => {
-  const text = digits(String(value ?? '')).replace(/[٬,\sج.مEGP]/gi, '').replace(/٫/g, '.');
+  const text = digits(String(value ?? '')).replace(/ج\.م|EGP|٬|,|\s/gi, '').replace(/٫/g, '.');
   if (!text) return 0;
   const parsed = Number(text);
   return Number.isFinite(parsed) ? Math.round((parsed + Number.EPSILON) * 100) / 100 : NaN;
