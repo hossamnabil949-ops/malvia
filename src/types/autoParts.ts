@@ -457,6 +457,8 @@ export interface CustomerPayment {
   amount: number;
   paymentDate: string;
   paymentMethod: PaymentMethod | string;
+  /** Exact bank account selected for bank-routed customer receipts. */
+  bankAccountId?: string;
   treasuryTarget: string;
   notes?: string;
   recordedBy: string;
