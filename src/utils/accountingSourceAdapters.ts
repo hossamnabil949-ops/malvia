@@ -269,7 +269,7 @@ export function buildPartnerCurrentAccountJournal(
 /** Purchase posting separates inventory, recoverable input VAT, paid amount, supplier credit and remaining payable. */
 export function buildPurchaseInvoiceJournal(
   invoice: PurchaseInvoice, context: AccountingContext, periodId: string, createdAt: string, createdBy: string,
-  accounts: SourceAccountMap, supplierCreditApplied = 0,
+  accounts: SourceAccountMap, supplierCreditApplied = invoice.supplierCreditApplied ?? 0,
 ): SourceAdapterResult {
   if (!invoice.id?.trim()) return fail('SOURCE_ID_REQUIRED');
   if (!validDate(invoice.date)) return fail('SOURCE_DATE_INVALID');
@@ -323,7 +323,7 @@ export function buildCustomerReceiptJournal(
 /** Supplier settlements debit payable first; excess payments are supplier advances, never expenses. */
 export function buildSupplierPaymentJournal(
   payment: SupplierPayment, context: AccountingContext, periodId: string, createdAt: string, createdBy: string,
-  accounts: SourceAccountMap, payableApplied = payment.amount,
+  accounts: SourceAccountMap, payableApplied = payment.payableApplied ?? payment.amount,
 ): SourceAdapterResult {
   if (!payment.id?.trim()) return fail('SOURCE_ID_REQUIRED');
   if (!validDate(payment.paymentDate)) return fail('SOURCE_DATE_INVALID');
