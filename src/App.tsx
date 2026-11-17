@@ -3087,7 +3087,9 @@ export default function App() {
                   if (outstanding <= 0.005) continue;
                   const applied = Math.min(remaining, outstanding);
                   const settlementPayments = [...(invoice.settlementPayments || []), {
-                    amount: applied, date: collectedDate, time: collectedTime, paymentMethod, receiptNumber,
+                    amount: applied, date: collectedDate, time: collectedTime, paymentMethod,
+                    bankAccountId: requiresSpecificBankAccount(paymentMethod) ? bankAccountId : undefined,
+                    receiptNumber,
                   }];
                   const newOutstanding = Math.max(0, outstanding - applied);
                   const paymentStatus = newOutstanding <= 0.005 ? 'مسددة' as const
