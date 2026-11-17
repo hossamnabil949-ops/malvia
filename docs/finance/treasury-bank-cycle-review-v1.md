@@ -74,3 +74,17 @@ These are pure unit tests. They do not prove the operational UI workflow, cloud 
 ## Review conclusion
 
 The accounting direction is viable, and most core bank movement primitives already exist. The cycle is **not yet ready for live accounting activation** because cash↔bank has no operational source flow, statement reconciliation has no user-facing workflow, and several integration controls still need end-to-end verification. Keep the PR draft and unmerged until these gates are completed.
+
+
+## Implementation follow-up — 2026-11-17
+
+The two UI gaps identified in the source review have now been implemented on `finance/accounting-foundation-v1`:
+
+- Cash↔bank vouchers: deposit and withdrawal forms are available in the bank-ledger screen. The application validates active bank account, positive amount, available source balance, and duplicate source IDs; then persists the paired bank-ledger and cash-treasury records together. The movement is classified as an asset transfer, not income or expense.
+- Bank statement review: CSV/XLS/XLSX files can be imported into a client-side preview. Arabic/English headers, date formats, debit/credit columns, and decimal amounts are parsed. The existing reference-aware matcher displays matched, ambiguous, duplicate, unmatched statement, and unmatched ledger results. Invalid rows are reported.
+- Imported statements are not saved. Matching remains read-only and cannot create adjustments or journals.
+- Added workbook parser tests alongside existing reconciliation tests.
+
+**Validation on commit `4596f8c42d0cfca3165727508c1525db9dbb340c`:** TypeScript check passed, financial/regression tests passed, Production build passed, and the Vercel Preview deployment reached READY. GitHub Actions run: https://github.com/hossamnabil949-ops/malvia/actions/runs/44080674929
+
+The remaining release gates are general-ledger bank-account mapping, customer bank-receipt source mapping, end-to-end sync/retry/reversal tests, opening-balance evidence reconciliation, and explicit approval before live journal posting. No migration, live journal posting, or Production deployment was performed.
