@@ -1835,8 +1835,14 @@ export default function App() {
       return false;
     }
 
+    // Freeze supplier-credit usage on the invoice; never infer it from a mutable balance later.
+    const supplierAtPurchase = suppliers.find(s => s.id === invoice.supplierId);
+    const remainingBeforeCredit = Math.max(0, invoice.grandTotal - invoice.amountPaid);
+    const supplierCreditApplied = Math.min(supplierAtPurchase?.storeCredit || 0, remainingBeforeCredit);
+    const invoiceWithAllocation: PurchaseInvoice = { ...invoice, supplierCreditApplied };
+
     setPurchaseInvoices(prev => {
-      const updated = [invoice, ...prev];
+      const updated = [invoiceWithAllocation, ...prev];
       persistChanges({ purchaseInvoices: updated });
       return updated;
     });
@@ -1845,9 +1851,9 @@ export default function App() {
     setSuppliers(prev => {
       const updated = prev.map(s => {
         if (s.id !== invoice.supplierId) return s;
-        const remaining = Math.max(0, invoice.grandTotal - invoice.amountPaid);
+        const remaining = remainingBeforeCredit;
         const credit = s.storeCredit || 0;
-        const usedCredit = Math.min(credit, remaining);
+        const usedCredit = supplierCreditApplied;
         const debtNow = Math.max(0, (s.deferredDebt ?? s.balance ?? 0) + remaining - usedCredit);
         return {
           ...s,
@@ -3129,10 +3135,11 @@ export default function App() {
                 if (posting.error || !posting.entry) { window.alert('اختر حساباً بنكياً نشطاً قبل اعتماد السداد.'); return; }
               }
               const debt = supplier.deferredDebt ?? supplier.balance ?? 0;
-              const newDebt = Math.max(0, debt - amount);
-              const overpaid = Math.max(0, amount - debt);
+              const payableApplied = Math.min(amount, Math.max(0, debt));
+              const newDebt = Math.max(0, debt - payableApplied);
+              const overpaid = Math.max(0, amount - payableApplied);
               const updatedSuppliers = suppliers.map(s => s.id === supplierId ? { ...s, balance: newDebt, deferredDebt: newDebt, storeCredit: (s.storeCredit || 0) + overpaid, totalPaid: (s.totalPaid || 0) + amount, lastPaymentDate: paymentDate } : s);
-              const paymentRecord: import('./types/autoParts').SupplierPayment = { id: paymentId, paymentNumber: paymentId.slice(-6), supplierId, supplierName: supplier.name, amount, paymentDate, paymentMethod, treasurySource: _treasurySource, bankAccountId, notes, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات', scheduleId };
+              const paymentRecord: import('./types/autoParts').SupplierPayment = { id: paymentId, paymentNumber: paymentId.slice(-6), supplierId, supplierName: supplier.name, amount, payableApplied, paymentDate, paymentMethod, treasurySource: _treasurySource, bankAccountId, notes, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات', scheduleId };
               const tx: TreasuryTransaction = { id: txId, txNumber: uniqueTransactionNumber('TX-S'), date: paymentDate, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), type: 'صرف', category: 'سداد دفعة لمورد', amount, paymentMethod: paymentMethod as PaymentMethod, balanceAfter: treasuryBalance - amount, referenceId: paymentId, bankAccountId, description: `سداد مورد #${supplierId}: ${notes}`, recordedBy: currentUser?.employeeName || 'مسؤول المشتريات' };
               const updatedPayments = [paymentRecord, ...supplierPayments];
               const updatedTreasury = [tx, ...treasury];
