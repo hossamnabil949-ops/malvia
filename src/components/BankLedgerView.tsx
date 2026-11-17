@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { todayISO } from '../utils/dateRange';
+import { parseBankStatementWorkbook } from '../utils/bankStatementImport';
+import { reconcileBankStatement, type BankStatementLine } from '../utils/bankReconciliation';
 import { BankAccount, CardSettlementBatch, BankLedgerEntry, validateBankAccount, summarizeBankAccount } from '../utils/bankLedger';
 
 interface BankLedgerViewProps {
@@ -10,6 +12,8 @@ interface BankLedgerViewProps {
   onAddBankAccount: (account: BankAccount) => void;
   onSettleVisa: (batch: CardSettlementBatch) => { ok: boolean; message?: string };
   onTransferBank?: (input: { id: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; date: string; reference: string }) => { ok: boolean; message?: string };
+  cashBalance: number;
+  onCashBankMovement?: (input: { id: string; direction: 'deposit' | 'withdrawal'; bankAccountId: string; amount: number; date: string; reference: string; notes?: string }) => { ok: boolean; message?: string };
 }
 
 const today = () => todayISO();
@@ -17,7 +21,7 @@ const money = (n: number) => `${n.toLocaleString('ar-EG', { maximumFractionDigit
 const inputClass = 'w-full h-10 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-xs';
 
 export const BankLedgerView: React.FC<BankLedgerViewProps> = ({
-  accounts, settlements, entries, outstandingVisaBalance, onAddBankAccount, onSettleVisa, onTransferBank,
+  accounts, settlements, entries, outstandingVisaBalance, onAddBankAccount, onSettleVisa, onTransferBank, cashBalance, onCashBankMovement,
 }) => {
   const [accountName, setAccountName] = useState('');
   const [bankName, setBankName] = useState('');
@@ -35,6 +39,17 @@ export const BankLedgerView: React.FC<BankLedgerViewProps> = ({
   const [transferAmount, setTransferAmount] = useState('');
   const [transferDate, setTransferDate] = useState(today());
   const [transferReference, setTransferReference] = useState('');
+  const [cashBankDirection, setCashBankDirection] = useState<'deposit' | 'withdrawal'>('deposit');
+  const [cashBankAccountId, setCashBankAccountId] = useState(accounts.find(a => a.active)?.id || '');
+  const [cashBankAmount, setCashBankAmount] = useState('');
+  const [cashBankDate, setCashBankDate] = useState(today());
+  const [cashBankReference, setCashBankReference] = useState('');
+  const [cashBankNotes, setCashBankNotes] = useState('');
+  const [statementAccountId, setStatementAccountId] = useState(accounts.find(a => a.active)?.id || '');
+  const [statementLines, setStatementLines] = useState<BankStatementLine[]>([]);
+  const [statementFileName, setStatementFileName] = useState('');
+  const [statementErrors, setStatementErrors] = useState<string[]>([]);
+  const [statementError, setStatementError] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -46,6 +61,7 @@ export const BankLedgerView: React.FC<BankLedgerViewProps> = ({
   const grossAmount = Number(gross) || 0;
   const feeAmount = Number(fee) || 0;
   const netAmount = Math.round((grossAmount - feeAmount + Number.EPSILON) * 100) / 100;
+  const reconciliation = useMemo(() => statementAccountId && statementLines.length ? reconcileBankStatement(statementAccountId, statementLines, entries) : null, [statementAccountId, statementLines, entries]);
 
   const addAccount = (event: React.FormEvent) => {
     event.preventDefault();
@@ -96,6 +112,55 @@ export const BankLedgerView: React.FC<BankLedgerViewProps> = ({
     if (!result.ok) { setError(result.message || 'تعذّر تسجيل التسوية.'); return; }
     setGross(''); setFee('0'); setReference('');
     setNotice('تم تسجيل التسوية وربط صافي المبلغ بالحساب البنكي المحدد.');
+  };
+
+
+  const submitCashBankMovement = (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(''); setNotice('');
+    if (!onCashBankMovement) { setError('وظيفة التحويل بين الخزينة والبنك غير متاحة حالياً.'); return; }
+    const amount = Number(cashBankAmount);
+    const account = activeAccounts.find(item => item.id === cashBankAccountId);
+    if (!account || !Number.isFinite(amount) || amount <= 0 || !cashBankDate || !cashBankReference.trim()) {
+      setError('اختر حساباً بنكياً نشطاً وأدخل مبلغاً وتاريخاً ومرجعاً صحيحاً.'); return;
+    }
+    if (cashBankDirection === 'deposit' && amount > cashBalance + 0.005) {
+      setError('رصيد الخزينة النقدي غير كافٍ. المتاح: ' + money(cashBalance)); return;
+    }
+    const bankBalance = summarizeBankAccount(account, entries);
+    if (cashBankDirection === 'withdrawal' && amount > bankBalance + 0.005) {
+      setError('رصيد الحساب البنكي غير كافٍ. المتاح: ' + money(bankBalance)); return;
+    }
+    const result = onCashBankMovement({
+      id: 'CASH-BANK-' + Date.now(), direction: cashBankDirection, bankAccountId: cashBankAccountId,
+      amount, date: cashBankDate, reference: cashBankReference.trim(), notes: cashBankNotes.trim() || undefined,
+    });
+    if (!result.ok) { setError(result.message || 'تعذّر تسجيل التحويل.'); return; }
+    setCashBankAmount(''); setCashBankReference(''); setCashBankNotes('');
+    setNotice(cashBankDirection === 'deposit' ? 'تم تسجيل إيداع نقدي من الخزينة إلى البنك.' : 'تم تسجيل سحب نقدي من البنك إلى الخزينة.');
+  };
+
+  const importStatement = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setStatementError(''); setStatementErrors([]); setStatementLines([]); setStatementFileName('');
+    if (!statementAccountId || !activeAccounts.some(account => account.id === statementAccountId)) {
+      setStatementError('اختر الحساب البنكي المطابق لكشف الحساب أولاً.');
+      event.target.value = '';
+      return;
+    }
+    try {
+      const parsed = parseBankStatementWorkbook(await file.arrayBuffer(), statementAccountId);
+      if (!parsed.lines.length) setStatementError(parsed.errors[0] || 'لم يتم العثور على حركات صالحة في الملف.');
+      else {
+        setStatementLines(parsed.lines);
+        setStatementFileName(file.name);
+        setStatementErrors(parsed.errors);
+      }
+    } catch {
+      setStatementError('تعذرت قراءة الملف. استخدم كشف Excel أو CSV واضح الأعمدة.');
+    }
+    event.target.value = '';
   };
 
   const submitTransfer = (event: React.FormEvent) => {
@@ -185,6 +250,75 @@ export const BankLedgerView: React.FC<BankLedgerViewProps> = ({
         </div>
         <button className="h-10 px-4 rounded-xl bg-sky-500 text-black text-xs font-black disabled:opacity-40" type="submit" disabled={activeAccounts.length < 2}>تسجيل التحويل البنكي</button>
       </form>
+
+
+      <form onSubmit={submitCashBankMovement} className="p-4 rounded-2xl bg-surface-2 border border-emerald-500/30 space-y-3">
+        <div>
+          <h3 className="font-black text-white text-sm">سند إيداع / سحب بين الخزينة والبنك</h3>
+          <p className="text-[10px] text-neutral-400 mt-1">تحويل بين أصلين فقط؛ لا يُسجل كإيراد أو مصروف. ينشئ النظام حركة خزينة وحركة بنك مرتبطتين برقم سند واحد.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2">
+          <select className={inputClass} value={cashBankDirection} onChange={e => setCashBankDirection(e.target.value as 'deposit' | 'withdrawal')}>
+            <option value="deposit">إيداع نقدية بالبنك</option>
+            <option value="withdrawal">سحب نقدية من البنك</option>
+          </select>
+          <select className={inputClass} value={cashBankAccountId} onChange={e => setCashBankAccountId(e.target.value)} required>
+            <option value="">اختر الحساب البنكي</option>
+            {activeAccounts.map(a => <option key={a.id} value={a.id}>{a.bankName} — {a.name}</option>)}
+          </select>
+          <input className={inputClass} type="number" min="0.01" step="0.01" value={cashBankAmount} onChange={e => setCashBankAmount(e.target.value)} placeholder="المبلغ" required />
+          <input className={inputClass} type="date" value={cashBankDate} onChange={e => setCashBankDate(e.target.value)} required />
+          <input className={inputClass} value={cashBankReference} onChange={e => setCashBankReference(e.target.value)} placeholder="رقم إيصال / مرجع" required />
+          <input className={inputClass} value={cashBankNotes} onChange={e => setCashBankNotes(e.target.value)} placeholder="ملاحظات (اختياري)" />
+        </div>
+        <div className="flex flex-wrap gap-4 text-[11px] text-neutral-300">
+          <span>رصيد الخزينة النقدي: <b className="text-emerald-300 font-mono">{money(cashBalance)}</b></span>
+          {cashBankAccountId && accounts.some(a => a.id === cashBankAccountId) && <span>رصيد البنك المحدد: <b className="text-sky-300 font-mono">{money(summarizeBankAccount(accounts.find(a => a.id === cashBankAccountId)!, entries))}</b></span>}
+        </div>
+        <button className="h-10 px-4 rounded-xl bg-emerald-500 text-black text-xs font-black disabled:opacity-40" type="submit" disabled={!activeAccounts.length || !onCashBankMovement}>تسجيل سند التحويل</button>
+      </form>
+
+      <section className="p-4 rounded-2xl bg-surface-2 border border-violet-500/30 space-y-3">
+        <div>
+          <h3 className="font-black text-white text-sm">مطابقة كشف الحساب البنكي</h3>
+          <p className="text-[10px] text-neutral-400 mt-1">استيراد CSV أو Excel للمراجعة فقط. لا يتم تعديل دفتر البنك أو إنشاء قيود تسوية من هذه الشاشة.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <select className={inputClass} value={statementAccountId} onChange={e => { setStatementAccountId(e.target.value); setStatementLines([]); setStatementFileName(''); setStatementErrors([]); }} required>
+            <option value="">اختر الحساب البنكي</option>
+            {activeAccounts.map(a => <option key={a.id} value={a.id}>{a.bankName} — {a.name}</option>)}
+          </select>
+          <input className={inputClass} type="file" accept=".csv,.xlsx,.xls" onChange={importStatement} disabled={!statementAccountId} />
+        </div>
+        {statementError && <p role="alert" className="text-xs text-rose-300">{statementError}</p>}
+        {statementFileName && <p className="text-[10px] text-neutral-400">الملف: {statementFileName} — {statementLines.length} حركة مستوردة للمعاينة فقط.</p>}
+        {statementErrors.length > 0 && <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-2 text-[10px] text-amber-200">تم استبعاد {statementErrors.length} صفوف غير صالحة: {statementErrors.slice(0, 5).join('؛ ')}</div>}
+        {reconciliation && (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-[11px]">
+              <div className="rounded-lg bg-surface-1 p-2">متطابق<br/><b className="text-emerald-300">{reconciliation.matchedCount}</b></div>
+              <div className="rounded-lg bg-surface-1 p-2">غير مطابق<br/><b className="text-rose-300">{reconciliation.unmatchedStatementCount}</b></div>
+              <div className="rounded-lg bg-surface-1 p-2">ملتبس<br/><b className="text-amber-300">{reconciliation.ambiguousCount}</b></div>
+              <div className="rounded-lg bg-surface-1 p-2">مكرر<br/><b className="text-amber-300">{reconciliation.duplicateStatementCount}</b></div>
+              <div className="rounded-lg bg-surface-1 p-2">حركات دفتر غير موجودة بالكشف<br/><b className="text-sky-300">{reconciliation.unmatchedLedgerEntryIds.length}</b></div>
+            </div>
+            <div className="overflow-x-auto rounded-xl border border-neutral-800">
+              <table className="w-full min-w-[720px] text-right text-[11px]">
+                <thead className="bg-surface-1 text-neutral-400"><tr><th className="p-2">التاريخ</th><th className="p-2">المرجع</th><th className="p-2">الاتجاه</th><th className="p-2">المبلغ</th><th className="p-2">الحالة</th><th className="p-2">الحركة المقابلة</th></tr></thead>
+                <tbody className="divide-y divide-neutral-800">
+                  {reconciliation.matches.map((match, index) => {
+                    const line = statementLines[index];
+                    const status = match.status === 'matched_reference' ? 'متطابق بالمرجع' : match.status === 'matched_amount_date' ? 'متطابق بالمبلغ والتاريخ' : match.status === 'ambiguous_statement' ? 'يحتاج مراجعة' : match.status === 'duplicate_statement' ? 'صف مكرر' : 'غير موجود بدفتر البنك';
+                    return <tr key={line.id}><td className="p-2 font-mono">{line.date}</td><td className="p-2 font-mono">{line.reference || '—'}</td><td className="p-2">{line.direction === 'in' ? 'إيداع' : 'سحب'}</td><td className="p-2 font-mono">{money(line.amount)}</td><td className="p-2">{status}</td><td className="p-2 font-mono">{'ledgerEntryId' in match ? match.ledgerEntryId : match.candidateLedgerEntryIds.join('، ') || '—'}</td></tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[10px] text-amber-200">نتيجة المطابقة استرشادية فقط. لا تعتمد فروقاً أو تسويات من دون مراجعة المستندات والموافقة المنفصلة.</p>
+            <button type="button" className="text-xs text-neutral-300 underline" onClick={() => { setStatementLines([]); setStatementFileName(''); setStatementErrors([]); }}>مسح معاينة الكشف</button>
+          </>
+        )}
+      </section>
 
       <section className="space-y-2">
         <h3 className="font-black text-white text-sm">أرصدة الحسابات البنكية</h3>
