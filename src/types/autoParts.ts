@@ -150,6 +150,8 @@ export interface InvoiceSettlement {
   date: string;
   time: string;
   paymentMethod: PaymentMethod | string;
+  /** Exact bank account selected when this customer collection was received. */
+  bankAccountId?: string;
   receiptNumber: string;
 }
 
@@ -159,7 +161,7 @@ export type AuditAction =
   | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
   | 'stock.adjust' | 'part.restock' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'cheque.create' | 'cheque.action' | 'batch.create' | 'batch.writeoff' | 'serial.register' | 'serial.scrap' | 'stock.transfer' | 'supplier.payment'
   | 'shift.open' | 'shift.close' | 'shift.variance' | 'part.delete'
-  | 'partner.add' | 'partner.share.update' | 'partner.capital.add' | 'partner.profit.reinvest' | 'partner.profile.update' | 'partner.withdrawal' | 'partner.advance' | 'partner.exit' | 'partner.settlement.payment' | 'partner.current_account' | 'bank.settlement' | 'bank.transfer' | 'capital.opening.create'
+  | 'partner.add' | 'partner.share.update' | 'partner.capital.add' | 'partner.profit.reinvest' | 'partner.profile.update' | 'partner.withdrawal' | 'partner.advance' | 'partner.exit' | 'partner.settlement.payment' | 'partner.current_account' | 'bank.settlement' | 'bank.transfer' | 'bank.cash_movement' | 'capital.opening.create'
   | 'treasury.income' | 'expense.update' | 'expense.delete';
 
 export interface AuditEntry {
@@ -438,6 +440,8 @@ export interface SupplierPayment {
   supplierId: string;
   supplierName: string;
   amount: number;
+  /** Portion of this payment applied to an existing payable; excess is supplier advance. */
+  payableApplied?: number;
   paymentDate: string;
   paymentMethod: PaymentMethod | string;
   bankAccountId?: string;
@@ -455,6 +459,8 @@ export interface CustomerPayment {
   amount: number;
   paymentDate: string;
   paymentMethod: PaymentMethod | string;
+  /** Exact bank account selected for bank-routed customer receipts. */
+  bankAccountId?: string;
   treasuryTarget: string;
   notes?: string;
   recordedBy: string;
@@ -496,6 +502,8 @@ export interface PurchaseInvoice {
   originalGrandTotal?: number;
   paymentStatus: 'مدفوعة نقداً' | 'آجل' | 'مسددة جزئياً' | 'مرتجع جزئي' | 'مرتجع كلي';
   amountPaid: number;
+  /** Supplier store credit consumed when this invoice was recorded; absent on legacy invoices. */
+  supplierCreditApplied?: number;
   remainingBalance?: number;
   paymentMethod: PaymentMethod | string;
   bankAccountId?: string;
@@ -604,6 +612,8 @@ export interface TreasuryTransaction {
     | 'ارتداد شيك صادر'
     | 'تسوية مستحقات الفيزا'
     | 'إيداع صافي تسوية الفيزا بالبنك'
+    | 'تحويل من الخزينة إلى البنك'
+    | 'تحويل من البنك إلى الخزينة'
     | 'إيرادات أخرى'
     | 'عكس مصروفات تشغيلية';
   amount: number;
