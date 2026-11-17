@@ -1,3 +1,4 @@
+import { resolveBankGeneralLedgerAccount } from '../src/utils/bankGeneralLedgerMapping';
 import assert from 'node:assert/strict';
 import { computeVoidPlan } from '../src/utils/saleLogic';
 import {
@@ -458,3 +459,18 @@ assert.equal(buildInvoiceVoidJournal(
   { ...voidedInvoice, voidApprovedBy: undefined }, fullVoidPlan,
   context, 'period-1', 'now', 'tester', accounts,
 ).error, 'INVOICE_VOID_INVALID');
+
+const bankContext = { tenantId: 'tenant-1', branchId: 'branch-1', currency: 'EGP' };
+const bankAccounts: any[] = [{ id: 'BANK-01', name: 'حساب جاري', bankName: 'بنك', openingBalance: 0, openingDate: '2026-11-01', active: true }];
+const bankGlAccounts: any[] = [{ ...bankContext, id: 'GL-BANK-01', code: '1010', name: 'بنك 1', type: 'asset', normalBalance: 'debit', active: true }];
+const bankMappings: any[] = [{ ...bankContext, bankAccountId: 'BANK-01', ledgerAccountId: 'GL-BANK-01' }];
+assert.deepEqual(resolveBankGeneralLedgerAccount('BANK-01', bankContext, bankAccounts, bankMappings, bankGlAccounts),
+  { accountId: 'GL-BANK-01', error: null });
+assert.equal(resolveBankGeneralLedgerAccount('BANK-01', bankContext, bankAccounts, [], bankGlAccounts).error,
+  'BANK_GL_MAPPING_MISSING');
+assert.equal(resolveBankGeneralLedgerAccount('BANK-01', bankContext, bankAccounts,
+  [...bankMappings, ...bankMappings], bankGlAccounts).error, 'BANK_GL_MAPPING_AMBIGUOUS');
+assert.equal(resolveBankGeneralLedgerAccount('BANK-01', bankContext, bankAccounts,
+  bankMappings, [{ ...bankGlAccounts[0], type: 'expense' }]).error, 'BANK_GL_ACCOUNT_NOT_ASSET');
+assert.equal(resolveBankGeneralLedgerAccount('BANK-01', { ...bankContext, branchId: 'branch-2' },
+  bankAccounts, bankMappings, bankGlAccounts).error, 'BANK_GL_MAPPING_MISSING');
