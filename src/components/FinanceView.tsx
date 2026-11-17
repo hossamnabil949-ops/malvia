@@ -98,6 +98,7 @@ interface FinanceViewProps {
   auditLog?: import('../types/autoParts').AuditEntry[];
   stockMovements?: import('../types/autoParts').StockMovement[];
   treasuryBalance?: number;
+  cashBalance?: number;
   bankAccounts?: BankAccount[];
   cardSettlements?: CardSettlementBatch[];
   bankLedgerEntries?: BankLedgerEntry[];
@@ -105,6 +106,7 @@ interface FinanceViewProps {
   onAddBankAccount?: (account: BankAccount) => void;
   onSettleVisa?: (batch: CardSettlementBatch) => { ok: boolean; message?: string };
   onTransferBank?: (input: { id: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; date: string; reference: string }) => { ok: boolean; message?: string };
+  onCashBankMovement?: (input: { id: string; direction: 'deposit' | 'withdrawal'; bankAccountId: string; amount: number; date: string; reference: string; notes?: string }) => { ok: boolean; message?: string };
   canManageExpenses?: boolean;
   canManageTreasury?: boolean;
   canManagePartners?: boolean;
@@ -168,8 +170,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   onUpdatePartnerShare,
   onInjectCapital,
   onReinvestProfit,
-  bankAccounts = [], cardSettlements = [], bankLedgerEntries = [], outstandingVisaBalance = 0,
-  onAddBankAccount, onSettleVisa, onTransferBank,
+  bankAccounts = [], cardSettlements = [], bankLedgerEntries = [], outstandingVisaBalance = 0, cashBalance = 0,
+  onAddBankAccount, onSettleVisa, onTransferBank, onCashBankMovement,
   canManageExpenses = true, canManageTreasury = true, canManagePartners = true,
   partnerWithdrawals = [], partnerExitSettlements = [], partnerSettlementPayments = [],
   partnerCurrentAccountTransactions = [], onRecordPartnerCurrentAccount,
@@ -749,7 +751,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       )}
 
       {activeFinanceTab === 'bankLedger' && canManageTreasury && onAddBankAccount && onSettleVisa && (
-        <BankLedgerView accounts={bankAccounts} settlements={cardSettlements} entries={bankLedgerEntries} outstandingVisaBalance={outstandingVisaBalance} onAddBankAccount={onAddBankAccount} onSettleVisa={onSettleVisa} onTransferBank={onTransferBank} />
+        <BankLedgerView accounts={bankAccounts} settlements={cardSettlements} entries={bankLedgerEntries} outstandingVisaBalance={outstandingVisaBalance} cashBalance={cashBalance} onAddBankAccount={onAddBankAccount} onSettleVisa={onSettleVisa} onTransferBank={onTransferBank} onCashBankMovement={onCashBankMovement} />
       )}
 
       {activeFinanceTab === 'equity' && canManagePartners && (
