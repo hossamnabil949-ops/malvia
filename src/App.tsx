@@ -2555,6 +2555,57 @@ export default function App() {
     persistChanges({ bankAccounts: updated });
   };
 
+  const handleCashBankMovement = (input: { id: string; direction: 'deposit' | 'withdrawal'; bankAccountId: string; amount: number; date: string; reference: string; notes?: string }): { ok: boolean; message?: string } => {
+    const allowed = effectiveRole === 'مدير عام' || effectiveRole === 'محاسب مالي' || Boolean(effectivePermissions?.canManageTreasury);
+    if (!allowed) return { ok: false, message: 'لا تملك صلاحية إدارة الخزينة والبنوك.' };
+    if (!input.id?.trim() || !input.reference?.trim() || !Number.isFinite(input.amount) || input.amount <= 0
+      || treasury.some(tx => tx.id === 'TX-CB-' + input.id)
+      || bankLedgerEntries.some(entry => entry.id === 'cash-bank:' + input.id)) {
+      return { ok: false, message: 'بيانات السند غير صالحة أو تم تسجيله من قبل.' };
+    }
+    const account = bankAccounts.find(item => item.id === input.bankAccountId && item.active);
+    if (!account) return { ok: false, message: 'اختر حساباً بنكياً نشطاً.' };
+    const cashBalance = summarizeTreasury(treasury).accounts.find(item => item.key === 'cash')?.balance || 0;
+    const bankBalance = summarizeBankAccount(account, bankLedgerEntries);
+    if (input.direction === 'deposit' && input.amount > cashBalance + 0.005) {
+      return { ok: false, message: 'رصيد الخزينة النقدي غير كافٍ.' };
+    }
+    if (input.direction === 'withdrawal' && input.amount > bankBalance + 0.005) {
+      return { ok: false, message: 'رصيد الحساب البنكي غير كافٍ.' };
+    }
+    const bankPosting = createBankMovementEntry({
+      id: 'cash-bank:' + input.id, batchId: input.id, bankAccountId: account.id,
+      direction: input.direction === 'deposit' ? 'in' : 'out', amount: input.amount,
+      date: input.date, reference: input.reference.trim(),
+      description: input.direction === 'deposit' ? 'إيداع نقدي من الخزينة إلى البنك' : 'سحب نقدي من البنك إلى الخزينة',
+    }, bankAccounts, bankLedgerEntries);
+    if (bankPosting.error || !bankPosting.entry) return { ok: false, message: 'تعذر التحقق من حركة البنك؛ لم يتم حفظ السند.' };
+
+    const now = new Date();
+    const txId = 'TX-CB-' + input.id;
+    const treasuryTx: TreasuryTransaction = {
+      id: txId, txNumber: uniqueTransactionNumber('TX-CB'), date: input.date,
+      time: now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+      type: input.direction === 'deposit' ? 'صرف' : 'قبض',
+      category: input.direction === 'deposit' ? 'تحويل من الخزينة إلى البنك' : 'تحويل من البنك إلى الخزينة',
+      amount: Math.round((input.amount + Number.EPSILON) * 100) / 100,
+      paymentMethod: 'نقدي',
+      balanceAfter: cashBalance + (input.direction === 'deposit' ? -input.amount : input.amount),
+      referenceId: input.id, bankAccountId: account.id,
+      description: (input.direction === 'deposit' ? 'إيداع نقدي بالبنك' : 'سحب نقدي من البنك') + ' — ' + input.reference.trim() + (input.notes ? ' — ' + input.notes.trim() : ''),
+      recordedBy: currentUser?.employeeName || 'المحاسب',
+      at: now.toISOString(),
+    };
+    const nextTreasury = [treasuryTx, ...treasury];
+    const nextBankEntries = [bankPosting.entry, ...bankLedgerEntries];
+    knownTreasuryIds.current.add(treasuryTx.id);
+    setTreasury(nextTreasury);
+    setBankLedgerEntries(nextBankEntries);
+    persistChanges({ treasuryTransactions: nextTreasury, bankLedgerEntries: nextBankEntries });
+    logAudit('bank.cash_movement', (input.direction === 'deposit' ? 'إيداع من الخزينة إلى البنك' : 'سحب من البنك إلى الخزينة') + ' بقيمة ' + input.amount + ' ج.م — ' + account.name, input.id, input.amount);
+    return { ok: true };
+  };
+
   const handleBankTransfer = (input: { id: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; date: string; reference: string }): { ok: boolean; message?: string } => {
     const result = createBankTransferEntries(input, bankAccounts, bankLedgerEntries);
     if (result.error) {
@@ -3249,6 +3300,8 @@ export default function App() {
             onAddBankAccount={handleAddBankAccount}
             onSettleVisa={handleSettleVisa}
             onTransferBank={handleBankTransfer}
+            cashBalance={summarizeTreasury(treasury).accounts.find(account => account.key === 'cash')?.balance || 0}
+            onCashBankMovement={handleCashBankMovement}
             canManageExpenses={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury)}
             canManageTreasury={effectiveRole === 'مدير عام' || effectiveRole === 'محاسب مالي' || Boolean(effectivePermissions?.canManageTreasury)}
             canManagePartners={canManageCapital}
