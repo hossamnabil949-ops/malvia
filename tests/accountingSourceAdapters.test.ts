@@ -94,6 +94,20 @@ assert.equal(buildSalesReturnJournal(
   context, 'period-1', 'now', 'tester', accounts,
 ).error, 'COST_BASIS_MISSING');
 
+const customerReceipt: any = {
+  id: 'CR-1', receiptNumber: 'R-001', customerId: 'C-1', customerName: 'عميل',
+  amount: 125, paymentDate: '2026-11-16', paymentMethod: 'تحويل بنكي',
+  bankAccountId: 'BANK-01', treasuryTarget: 'BANK-01', recordedBy: 'Test',
+};
+const customerReceiptJournal = buildCustomerReceiptJournal(
+  customerReceipt, context, 'period-1', 'now', 'tester', accounts,
+);
+assert.equal(customerReceiptJournal.error, null);
+assert.equal(customerReceiptJournal.input?.lines[0].accountId, 'bank:BANK-01');
+assert.equal(customerReceiptJournal.input?.lines[0].debit, 125);
+assert.equal(customerReceiptJournal.input?.lines[1].accountId, 'receivables');
+assert.equal(customerReceiptJournal.input?.lines[1].credit, 125);
+
 const expense: any = {
   id: 'EXP-1', title: 'إيجار', category: 'إيجار المحل والمستودع',
   amount: 25, date: '2026-11-16', paymentMethod: 'نقدي', recordedBy: 'Test',
