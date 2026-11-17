@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import * as XLSX from 'xlsx';
+import { parseBankStatementWorkbook } from '../src/utils/bankStatementImport';
 import { reconcileBankStatement } from '../src/utils/bankReconciliation';
 import type { BankLedgerEntry } from '../src/utils/bankLedger';
 
@@ -43,3 +45,22 @@ const invalid = reconcileBankStatement('BANK-1', [
   { id: 'S-7', bankAccountId: 'BANK-2', direction: 'in', amount: 100, date: '2026-11-10' },
 ], ledger);
 assert.equal(invalid.matches[0].status, 'unmatched_statement');
+
+const statementBook = XLSX.utils.book_new();
+const statementSheet = XLSX.utils.json_to_sheet([
+  { التاريخ: '2026-11-10', الاتجاه: 'إيداع', المبلغ: 125.5, المرجع: 'DEP-101' },
+  { التاريخ: '11/11/2026', الاتجاه: 'سحب', المبلغ: 40, المرجع: 'WDR-102' },
+  { التاريخ: 'bad-date', الاتجاه: 'إيداع', المبلغ: 20, المرجع: 'INVALID' },
+]);
+XLSX.utils.book_append_sheet(statementBook, statementSheet, 'كشف البنك');
+const statementBuffer = XLSX.write(statementBook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+const parsedStatement = parseBankStatementWorkbook(statementBuffer, 'BANK-1');
+assert.equal(parsedStatement.lines.length, 2);
+assert.deepEqual(parsedStatement.lines[0], {
+  id: 'statement-row-2', bankAccountId: 'BANK-1', direction: 'in', amount: 125.5,
+  date: '2026-11-10', reference: 'DEP-101',
+});
+assert.equal(parsedStatement.lines[1].direction, 'out');
+assert.equal(parsedStatement.lines[1].date, '2026-11-11');
+assert.equal(parsedStatement.errors.length, 1);
+assert.equal(parseBankStatementWorkbook(statementBuffer, '').lines.length, 0);
