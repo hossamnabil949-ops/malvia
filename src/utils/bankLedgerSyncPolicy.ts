@@ -113,6 +113,19 @@ export function validateBankLedgerSync(input: {
       const tx = treasury.find(item => item.id === entry.batchId && item.category === 'توزيع أرباح');
       matched = Boolean(tx && directBank(tx.paymentMethod) && tx.bankAccountId === entry.bankAccountId
         && Number(tx.amount) === Number(entry.amount) && tx.date === entry.date && tx.type === 'صرف' && entry.direction === 'out');
+    } else if (entry.id.startsWith('cash-bank:')) {
+      const voucher = treasury.find(tx => tx.id === 'TX-CB-' + entry.batchId
+        || (tx.referenceId === entry.batchId
+          && (tx.category === 'تحويل من الخزينة إلى البنك' || tx.category === 'تحويل من البنك إلى الخزينة')));
+      const deposit = voucher?.category === 'تحويل من الخزينة إلى البنك';
+      const withdrawal = voucher?.category === 'تحويل من البنك إلى الخزينة';
+      matched = Boolean(voucher && (deposit || withdrawal)
+        && voucher.bankAccountId === entry.bankAccountId
+        && Number(voucher.amount) === Number(entry.amount)
+        && voucher.date === entry.date
+        && voucher.type === (deposit ? 'صرف' : 'قبض')
+        && entry.direction === (deposit ? 'in' : 'out')
+        && entry.accountKind === 'bank');
     } else if (entry.id.startsWith('bank-transfer:')) {
       matched = true;
     } else {
