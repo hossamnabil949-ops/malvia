@@ -114,10 +114,10 @@ const customerReceipt: any = {
   bankAccountId: 'BANK-01', treasuryTarget: 'BANK-01', recordedBy: 'Test',
 };
 const customerReceiptJournal = buildCustomerReceiptJournal(
-  customerReceipt, context, 'period-1', 'now', 'tester', accounts,
+  customerReceipt, context, 'period-1', 'now', 'tester', mappedAccounts,
 );
 assert.equal(customerReceiptJournal.error, null);
-assert.equal(customerReceiptJournal.input?.lines[0].accountId, 'bank:BANK-01');
+assert.equal(customerReceiptJournal.input?.lines[0].accountId, 'GL-BANK-01');
 assert.equal(customerReceiptJournal.input?.lines[0].debit, 125);
 assert.equal(customerReceiptJournal.input?.lines[1].accountId, 'receivables');
 assert.equal(customerReceiptJournal.input?.lines[1].credit, 125);
