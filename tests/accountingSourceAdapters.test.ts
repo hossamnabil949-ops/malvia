@@ -133,10 +133,10 @@ const purchase: any = {
   id: 'PUR-1', invoiceNumber: 'P-001', date: '2026-11-16', supplierId: 'sup-1',
   supplierName: 'Supplier', items: [{ partNumber: 'P-1', partName: 'Part', category: 'ميكانيكا',
     quantity: 2, costPrice: 50, salePrice: 80, total: 100, taxAmount: 13.5 }],
-  subtotal: 100, tax: 13.5, discount: 10, grandTotal: 103.5,
+  subtotal: 100, tax: 13.5, discount: 10, grandTotal: 103.5, supplierCreditApplied: 10,
   paymentStatus: 'مسددة جزئياً', amountPaid: 40, paymentMethod: 'نقدي', receivedBy: 'Test',
 };
-const purchaseJournal = buildPurchaseInvoiceJournal(purchase, context, 'period-1', 'now', 'tester', accounts, 10);
+const purchaseJournal = buildPurchaseInvoiceJournal(purchase, context, 'period-1', 'now', 'tester', accounts);
 assert.equal(purchaseJournal.error, null);
 assert.equal(purchaseJournal.input?.source.type, 'purchase.invoice');
 assert.equal(purchaseJournal.input?.lines.reduce((s, line) => s + line.debit, 0), 103.5);
@@ -163,7 +163,7 @@ assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'payables
 assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'inventory')?.credit, 90);
 assert.equal(purchaseVoid.input?.lines.find(line => line.accountId === 'vat-input')?.credit, 13.5);
 const purchaseVoidStoreCredit = buildPurchaseInvoiceVoidJournal(
-  purchase,
+  { ...purchase, amountPaid: 30, supplierCreditApplied: 20 },
   { id: 'PUR-1:VOID-STORE-CREDIT', date: '2026-11-17', reason: 'استرداد جزئي نقداً والباقي رصيد', approvedBy: 'GM',
     cashRefund: 30, supplierAdvanceRestored: 20, payableReleased: 53.5, refundMethod: 'نقدي' },
   context, 'period-1', 'now', 'tester', accounts,
@@ -249,11 +249,11 @@ assert.equal(receiptJournal.input?.lines.find(line => line.accountId === 'receiv
 
 const supplierPayment: any = {
   id: 'SP-1', paymentNumber: 'SP001', supplierId: 'SUP-1', supplierName: 'Supplier',
-  amount: 60, paymentDate: '2026-11-16', paymentMethod: 'نقدي',
+  amount: 60, payableApplied: 45, paymentDate: '2026-11-16', paymentMethod: 'نقدي',
   treasurySource: 'الخزنة', recordedBy: 'Test',
 };
 const supplierJournal = buildSupplierPaymentJournal(
-  supplierPayment, context, 'period-1', 'now', 'tester', accounts, 45,
+  supplierPayment, context, 'period-1', 'now', 'tester', accounts,
 );
 assert.equal(supplierJournal.error, null);
 assert.equal(supplierJournal.input?.lines.find(line => line.accountId === 'payables')?.debit, 45);
