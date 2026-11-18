@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { executeAgentOperation } from '../_db.js';
-import { ApiError, clientIp, findLicense, rateLimit, sendError } from '../_security.js';
+import { ApiError, clientIp, findLicense, rateLimit, sendError, isLicenseFeatureEnabled } from '../_security.js';
 
 const ALLOWED = new Set(['EXECUTE_SALE', 'ADD_EXPENSE', 'RESTOCK_ITEM', 'SETTLE_SUPPLIER', 'COLLECT_CUSTOMER', 'ADD_PURCHASE']);
 export default async function handler(req: any, res: any) {
@@ -15,6 +15,7 @@ export default async function handler(req: any, res: any) {
     const license = await findLicense(licenseKey);
     if (!license) throw new ApiError('LICENSE_INVALID');
     if (license.status === 'معلق مؤقتاً') throw new ApiError('LICENSE_SUSPENDED');
+    if (!isLicenseFeatureEnabled(license, 'canUseAI')) throw new ApiError('FEATURE_NOT_INCLUDED');
     const action = String(req.body?.action || '');
     if (!ALLOWED.has(action)) return res.status(400).json({ code: 'AGENT_ACTION_NOT_ALLOWED', error: 'نوع العملية غير مسموح.' });
     const idempotencyKey = String(req.headers['idempotency-key'] || req.body?.idempotencyKey || '');
