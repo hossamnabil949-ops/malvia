@@ -2,6 +2,18 @@
 import { getOne, putIfVersion } from './_db.js';
 import { ApiError, clientIp, rateLimit, safeEqual, sendError } from './_security.js';
 
+async function appendOwnerAudit(entriesToAdd: any[]): Promise<boolean> {
+  if (!entriesToAdd.length) return true;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const audit = await getOne('_registry', 'owner_audit');
+    const existing = Array.isArray(audit?.data) ? audit.data : [];
+    const next = [...existing, ...entriesToAdd].slice(-2000);
+    const saved = await putIfVersion('_registry', 'owner_audit', next, Number(audit?.version) || 0);
+    if (saved !== null) return true;
+  }
+  return false;
+}
+
 export default async function handler(req: any, res: any) {
   try {
     const token = String(req.headers['x-admin-token'] || '');
@@ -19,27 +31,31 @@ export default async function handler(req: any, res: any) {
       if (resource === 'plans') {
         if (!Array.isArray(plans) || plans.length > 100) throw new ApiError('INVALID_BODY');
         const ids = new Set<string>();
+        const names = new Set<string>();
         for (const plan of plans) {
           if (!plan || typeof plan !== 'object' || !String(plan.id || '').trim() ||
               !String(plan.name || '').trim() || ids.has(String(plan.id))) throw new ApiError('INVALID_BODY');
           ids.add(String(plan.id));
+          const normalizedName = String(plan.name).trim().toLocaleLowerCase();
+          if (names.has(normalizedName)) throw new ApiError('INVALID_BODY');
+          names.add(normalizedName);
           for (const field of ['monthlyPrice','annualPrice','maxEmployees','devicesLimit']) {
             if (!Number.isFinite(Number(plan[field])) || Number(plan[field]) < 0) throw new ApiError('INVALID_BODY');
           }
-          if (!Number.isInteger(Number(plan.maxEmployees)) || !Number.isInteger(Number(plan.devicesLimit))) throw new ApiError('INVALID_BODY');
-          if (typeof plan.active !== 'boolean') throw new ApiError('INVALID_BODY');
+          if (!Number.isInteger(Number(plan.maxEmployees)) || Number(plan.maxEmployees) < 1 ||
+              !Number.isInteger(Number(plan.devicesLimit)) || Number(plan.devicesLimit) < 1) throw new ApiError('INVALID_BODY');
+          if (typeof plan.active !== 'boolean' || !plan.allowedFeatures || typeof plan.allowedFeatures !== 'object' || Array.isArray(plan.allowedFeatures)) throw new ApiError('INVALID_BODY');
+          if (Object.values(plan.allowedFeatures).some(value => typeof value !== 'boolean')) throw new ApiError('INVALID_BODY');
         }
         const current = await getOne('_registry', 'plans');
         const version = await putIfVersion('_registry', 'plans', plans, Number(baseVersion) || 0);
         if (version === null) return res.status(409).json({ conflict: true });
-        const audit = await getOne('_registry', 'owner_audit');
-        const entries = [...(Array.isArray(audit?.data) ? audit.data : []), {
+        const auditSaved = await appendOwnerAudit([{
           at: new Date().toISOString(), action: 'PLAN_CATALOG_UPDATED',
           actor: 'OWNER_ADMIN', planCount: plans.length,
           previousVersion: current?.version || 0, newVersion: version,
-        }].slice(-2000);
-        await putIfVersion('_registry', 'owner_audit', entries, Number(audit?.version) || 0);
-        return res.status(200).json({ version });
+        }]);
+        return res.status(200).json({ version, auditSaved });
       }
       if (resource !== 'licenses') throw new ApiError('INVALID_BODY');
       if (!Array.isArray(licenses) || licenses.length > 10000) throw new ApiError('INVALID_BODY');
@@ -101,12 +117,8 @@ export default async function handler(req: any, res: any) {
 
       const v = await putIfVersion('_registry', 'licenses', licenses, Number(baseVersion) || 0);
       if (v === null) return res.status(409).json({ conflict: true });
-      if (changes.length) {
-        const audit = await getOne('_registry', 'owner_audit');
-        const entries = [...(Array.isArray(audit?.data) ? audit.data : []), ...changes].slice(-2000);
-        await putIfVersion('_registry', 'owner_audit', entries, Number(audit?.version) || 0);
-      }
-      return res.status(200).json({ version: v, auditedChanges: changes.length });
+      const auditSaved = await appendOwnerAudit(changes);
+      return res.status(200).json({ version: v, auditedChanges: changes.length, auditSaved });
     }
     throw new ApiError('METHOD_NOT_ALLOWED');
   } catch (e) {
