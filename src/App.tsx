@@ -2785,7 +2785,7 @@ export default function App() {
         onOpenVoiceAssistant={() => { if (canUseVoiceAssistant) setShowVoiceAssistant(true); }}
         onOpenDeploymentGuide={() => setShowDeploymentGuide(true)}
         onOpenInventoryAudit={() => setShowBarcodeStocktake(true)}
-        onOpenInventoryErrors={() => setShowInventoryErrors(true)}
+        onOpenInventoryErrors={() => { if (canManageStockMonitoringNow) setShowInventoryErrors(true); }}
         onOpenCarModels={() => setShowCarModels(true)}
         onOpenPhotoSharing={() => setShowPhotoSharing(true)}
         onOpenExcelModal={() => setShowExcelModal(true)}
@@ -2816,7 +2816,7 @@ export default function App() {
               setCurrentTab('pos');
             }}
             onOpenNotifications={() => setShowNotifications(true)}
-            onOpenVoiceAssistant={() => setShowVoiceAssistant(true)}
+            onOpenVoiceAssistant={() => { if (canUseVoiceAssistant) setShowVoiceAssistant(true); }}
                 onOpenInventoryErrors={() => setShowInventoryErrors(true)}
             onOpenPhotoSharing={() => setShowPhotoSharing(true)}
             onOpenExcelModal={() => setShowExcelModal(true)}
@@ -2854,7 +2854,7 @@ export default function App() {
             stockBatches={stockBatches}
             cashierName={currentUser?.employeeName}
             cashierId={currentUser?.employeeId}
-            onOpenVoiceAssistant={simpleMode ? undefined : () => setShowVoiceAssistant(true)}
+            onOpenVoiceAssistant={simpleMode || !canUseVoiceAssistant ? undefined : () => setShowVoiceAssistant(true)}
             onOpenReturns={() => setCurrentTab('invoices')}
             shiftOpen={Boolean(openShift)}
             shiftRequired={Boolean(settings.requireShiftForSales)}
