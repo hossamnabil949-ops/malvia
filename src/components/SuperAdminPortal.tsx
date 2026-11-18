@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ShieldCheck, 
   Key, 
@@ -32,6 +32,7 @@ import { TenantLicense, TenantPlan, TenantStatus } from '../types/autoParts';
 import { TenantBackupsModal } from './TenantBackupsModal';
 import { OwnerLicenseEditorModal } from './OwnerLicenseEditorModal';
 import { OwnerCatalogAuditModal } from './OwnerCatalogAuditModal';
+import { getAdminToken } from '../services/syncService';
 
 interface SuperAdminPortalProps {
   isOpen: boolean;
@@ -80,12 +81,28 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
     canUseVoiceAI: true,
   });
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const token = getAdminToken();
+    if (!token) return;
+    fetch('/api/registry?resource=plans', { headers: { 'x-admin-token': token } })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        const names = Array.isArray(data?.plans)
+          ? data.plans.filter((plan: any) => plan?.active !== false).map((plan: any) => String(plan.name || '').trim()).filter(Boolean)
+          : [];
+        setCatalogPlanNames(names);
+      })
+      .catch(() => setCatalogPlanNames([]));
+  }, [isAuthenticated]);
+
   const MASTER_PIN_KEY = 'malvia_master_owner_pin_v1';
 
   const [showChangePinModal, setShowChangePinModal] = useState(false);
   const [backupLicense, setBackupLicense] = useState<TenantLicense | null>(null);
   const [editingLicense, setEditingLicense] = useState<TenantLicense | null>(null);
   const [showCatalogAudit, setShowCatalogAudit] = useState(false);
+  const [catalogPlanNames, setCatalogPlanNames] = useState<string[]>([]);
   const [newMasterPin, setNewMasterPin] = useState('');
   const [pinChangeSuccess, setPinChangeSuccess] = useState(false);
 
@@ -684,11 +701,7 @@ ${window.location.origin}`;
                       onChange={(e) => setNewPlan(e.target.value as any)}
                       className="w-full h-10 px-2 rounded-xl bg-surface-1 border border-neutral-700 text-white font-bold"
                     >
-                      <option value="باقة سنوية PRO">باقة سنوية PRO</option>
-                      <option value="باقة VIP شاملة الفروع">باقة VIP شاملة الفروع</option>
-                      <option value="اشتراك شهري">اشتراك شهري</option>
-                      <option value="تجريبي مجاني (14 يوم)">تجريبي (14 يوم)</option>
-                      <option value="ترخيص دائم مدى الحياة">ترخيص دائم</option>
+                      {[...new Set([...catalogPlanNames, 'باقة سنوية PRO', 'باقة VIP شاملة الفروع', 'اشتراك شهري', 'تجريبي مجاني (14 يوم)', 'ترخيص دائم مدى الحياة'])].map(name => <option key={name} value={name}>{name}</option>)}
                     </select>
                   </div>
 
