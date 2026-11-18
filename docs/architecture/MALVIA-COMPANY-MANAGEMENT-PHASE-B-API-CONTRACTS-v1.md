@@ -23,7 +23,8 @@ Proposed base namespace: `/internal/api/v1`. This is a design convention only; r
 - Authenticate through the separately approved MALVIA internal identity provider.
 - Validate issuer, audience, signature, expiry, not-before, session state and internal realm membership.
 - Customer tenant tokens must be rejected, even if the user has a similar email address.
-- Privileged roles should require MFA; exact provider and recovery policy remain pending approval.
+- Internal authorization follows the owner-approved job-role RBAC baseline; additional employee-specific permissions may be granted above the role baseline, with auditable grants/changes and the Company Owner as final authority. Exact resource/action/scope permissions and grant/revoke authority remain pending detailed approval.
+- MFA is mandatory for every MALVIA internal user account, regardless of role. The identity provider, supported MFA methods, enrollment, recovery, session lifetime, device policy and break-glass procedure remain pending security approval.
 - Do not accept user IDs, roles, tenant IDs or scope claims from request bodies as proof of authority.
 
 ### 2.2 Authorization model
