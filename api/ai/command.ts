@@ -1,5 +1,5 @@
 
-import { ApiError, clientIp, findLicense, rateLimit, sendError } from '../_security.js';
+import { ApiError, clientIp, findLicense, rateLimit, sendError, isLicenseFeatureEnabled } from '../_security.js';
 
 // =========================================================
 // MALVIA AI ASSISTANT — GEMINI COMMAND API
@@ -213,6 +213,7 @@ export default async function handler(req: any, res: any) {
     if (lic.status === 'معلق مؤقتاً') {
       throw new ApiError('LICENSE_SUSPENDED');
     }
+    if (!isLicenseFeatureEnabled(lic, 'canUseAI')) throw new ApiError('FEATURE_NOT_INCLUDED');
 
     rateLimit(`ai-tenant:${lic.tenantId}`, 120, 60 * 60_000);
 
