@@ -48,14 +48,42 @@ export default async function handler(req: any, res: any) {
           if (Object.values(plan.allowedFeatures).some(value => typeof value !== 'boolean')) throw new ApiError('INVALID_BODY');
         }
         const current = await getOne('_registry', 'plans');
+        const oldPlans = Array.isArray(current?.data) ? current.data : [];
+        const oldById = new Map(oldPlans.map((item: any) => [String(item.id), item]));
+        const planChanges: any[] = [];
+        for (const plan of plans) {
+          const before: any = oldById.get(String(plan.id));
+          if (!before) {
+            planChanges.push({ action: 'PLAN_CREATED', planId: plan.id, planName: plan.name });
+            continue;
+          }
+          const fields = ['name','monthlyPrice','annualPrice','maxEmployees','devicesLimit','active'];
+          const changed = fields.filter(key => (before[key] ?? null) !== (plan[key] ?? null));
+          const oldFeatures = before.allowedFeatures || {};
+          const newFeatures = plan.allowedFeatures || {};
+          const featureKeys = Array.from(new Set([...Object.keys(oldFeatures), ...Object.keys(newFeatures)]));
+          const featureChanges = featureKeys.filter(key => oldFeatures[key] !== newFeatures[key]);
+          if (changed.length || featureChanges.length) {
+            planChanges.push({
+              action: 'PLAN_UPDATED', planId: plan.id, planName: plan.name,
+              fields: [...changed, ...featureChanges.map(key => 'allowedFeatures.' + key)],
+              before: Object.fromEntries(changed.map(key => [key, before[key] ?? null])),
+              after: Object.fromEntries(changed.map(key => [key, plan[key] ?? null])),
+              featureChanges: featureChanges.map(key => ({ feature: key, from: oldFeatures[key] ?? null, to: newFeatures[key] ?? null })),
+            });
+          }
+        }
+        const newIds = new Set(plans.map((plan: any) => String(plan.id)));
+        for (const before of oldPlans) {
+          if (!newIds.has(String(before.id))) planChanges.push({ action: 'PLAN_REMOVED', planId: before.id, planName: before.name });
+        }
         const version = await putIfVersion('_registry', 'plans', plans, Number(baseVersion) || 0);
         if (version === null) return res.status(409).json({ conflict: true });
-        const auditSaved = await appendOwnerAudit([{
-          at: new Date().toISOString(), action: 'PLAN_CATALOG_UPDATED',
-          actor: 'OWNER_ADMIN', planCount: plans.length,
+        const auditSaved = await appendOwnerAudit(planChanges.map(change => ({
+          at: new Date().toISOString(), actor: 'OWNER_ADMIN', ...change,
           previousVersion: current?.version || 0, newVersion: version,
-        }]);
-        return res.status(200).json({ version, auditSaved });
+        })));
+        return res.status(200).json({ version, auditSaved, auditedChanges: planChanges.length });
       }
       if (resource !== 'licenses') throw new ApiError('INVALID_BODY');
       if (!Array.isArray(licenses) || licenses.length > 10000) throw new ApiError('INVALID_BODY');
@@ -99,6 +127,7 @@ export default async function handler(req: any, res: any) {
         }
         const fields = ['companyName','ownerName','phone','city','plan','startDate','expiryDate','maxEmployees','devicesLimit','customPrice','status','notes'];
         const changed = fields.filter(key => (before[key] ?? null) !== (lic[key] ?? null));
+        if (String(before.licenseKey || '') !== String(lic.licenseKey || '')) changed.push('licenseKey');
         const oldFeatures = before.allowedFeatures || {};
         const newFeatures = lic.allowedFeatures || {};
         const featureKeys = Array.from(new Set([...Object.keys(oldFeatures), ...Object.keys(newFeatures)]));
@@ -108,8 +137,8 @@ export default async function handler(req: any, res: any) {
             at: now, action: 'LICENSE_UPDATED', tenantId: lic.tenantId,
             companyName: lic.companyName, actor: 'OWNER_ADMIN',
             fields: [...changed, ...featureChanges.map(key => 'allowedFeatures.' + key)],
-            before: Object.fromEntries(changed.map(key => [key, before[key] ?? null])),
-            after: Object.fromEntries(changed.map(key => [key, lic[key] ?? null])),
+            before: Object.fromEntries(changed.filter(key => key !== 'licenseKey').map(key => [key, before[key] ?? null])),
+            after: Object.fromEntries(changed.filter(key => key !== 'licenseKey').map(key => [key, lic[key] ?? null])),
             featureChanges: featureChanges.map(key => ({ feature: key, from: oldFeatures[key] ?? null, to: newFeatures[key] ?? null })),
           });
         }
