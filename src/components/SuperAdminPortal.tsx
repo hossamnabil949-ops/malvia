@@ -31,6 +31,7 @@ import {
 import { TenantLicense, TenantPlan, TenantStatus } from '../types/autoParts';
 import { TenantBackupsModal } from './TenantBackupsModal';
 import { OwnerLicenseEditorModal } from './OwnerLicenseEditorModal';
+import { OwnerCatalogAuditModal } from './OwnerCatalogAuditModal';
 
 interface SuperAdminPortalProps {
   isOpen: boolean;
@@ -84,6 +85,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   const [showChangePinModal, setShowChangePinModal] = useState(false);
   const [backupLicense, setBackupLicense] = useState<TenantLicense | null>(null);
   const [editingLicense, setEditingLicense] = useState<TenantLicense | null>(null);
+  const [showCatalogAudit, setShowCatalogAudit] = useState(false);
   const [newMasterPin, setNewMasterPin] = useState('');
   const [pinChangeSuccess, setPinChangeSuccess] = useState(false);
 
@@ -406,6 +408,14 @@ ${window.location.origin}`;
                 >
                   <Key className="w-3.5 h-3.5 text-amber-400" />
                   <span>تغيير كلمة سر المالك</span>
+                </button>
+
+                <button
+                  onClick={() => setShowCatalogAudit(true)}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-sky-300 font-bold text-xs border border-sky-500/30 transition shadow-sm"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>الباقات وسجل العمليات</span>
                 </button>
 
                 <button
@@ -891,6 +901,10 @@ ${window.location.origin}`;
             onSave={handleSaveLicense}
             onClose={() => setEditingLicense(null)}
           />
+        )}
+
+        {showCatalogAudit && (
+          <OwnerCatalogAuditModal onClose={() => setShowCatalogAudit(false)} />
         )}
 
         {backupLicense && (
