@@ -331,8 +331,8 @@ Each slice requires code review, automated tests, QA evidence and owner acceptan
 
 | Decision | Phase B treatment | Approval still required |
 |---|---|---|
-| MCM-DEC-01 — Initial internal modules | This document defines the Phase B scope above | Owner acceptance of this exact scope before implementation |
-| MCM-DEC-02 — Internal employee accounts | Separate internal identity realm; MFA for privileged roles is proposed | Security/owner approval of provider, MFA and recovery policy |
+| MCM-DEC-01 — Initial internal modules / Phase B scope | The seven-capability Phase B scope (PB-01 through PB-07), including its boundaries and exclusions, was approved by the owner on 2026-11-12 | Scope approval is complete for this baseline; any added capability or changed boundary requires a separately recorded scope approval |
+| MCM-DEC-02 — Internal employee accounts and access | Separate internal identity realm; MFA is mandatory for every MALVIA internal account; job-role RBAC with additional auditable individual permissions and Company Owner as final authority | Security approval remains required for identity provider, MFA methods/enrollment/recovery, session/device/break-glass policy; detailed permission catalogue/scopes, grant/revoke authority and delegation remain open |
 | MCM-DEC-03 — Commercial authority | Owner approval required for price exceptions, contract deviations and high-risk commitments | Exact thresholds, delegation and dual-control rules |
 | MCM-DEC-04 — Support access | No standing customer-data access; any future access is time-limited, reason-coded, approved and audited | Consent, emergency access and approval workflow details |
 | Trial seat allowance | Configurable, no fixed value assumed | Owner/commercial approval |
@@ -354,14 +354,14 @@ Phase B does not authorize:
 - E-signature, legal contract execution or legally binding document workflows.
 - Full support desk, implementation delivery, engineering release automation, internal HR or company accounting (later phases).
 
-Before implementation starts, approve the Phase B scope, internal identity/security policy, role/permission matrix, CRM/tenant relationship rules and all external read API contracts. Implementation, migration and deployment each require separate explicit authorization.
+The Phase B scope is owner-approved for the seven-capability baseline only. Before implementation starts, approve the remaining internal identity/security policy, detailed role/permission matrix, CRM/tenant relationship rules and all external read API contracts. Implementation, migration and deployment each require separate explicit authorization.
 
 ## 13. Definition of done
 
 Phase B design is ready for implementation planning when:
-- This scope and its exclusions are accepted.
+- This seven-capability scope and its exclusions are owner-approved (2026-11-12); any expansion requires separate approval.
 - Logical ERD and API read/command contracts are reviewed.
-- MCM-DEC-01 through MCM-DEC-04 have explicit dispositions.
+- MCM-DEC-01 is approved as scope only; MCM-DEC-02 through MCM-DEC-04 have explicit dispositions and their remaining policies are approved before the relevant implementation slice.
 - KPI definitions and data-source ownership are agreed.
 - Role/permission matrix and threat model are reviewed.
 - Acceptance and negative-security test cases are traceable to requirements.
@@ -382,4 +382,4 @@ Both are design-only. They do not assert that endpoints exist or authorize schem
 
 ## Phase B0 design lock
 
-- [Phase B0 Design Lock & Decision Closure](MALVIA-COMPANY-MANAGEMENT-PHASE-B0-DESIGN-LOCK-v1.md) records the proposed seven-capability scope, confirmed product requirements, unresolved policies and explicit B0 acceptance checklist. Scope is not marked approved until the owner confirms the exact baseline.
+- [Phase B0 Design Lock & Decision Closure](MALVIA-COMPANY-MANAGEMENT-PHASE-B0-DESIGN-LOCK-v1.md) records the owner-approved seven-capability scope (2026-11-12), confirmed product requirements, unresolved policies and explicit B0 acceptance checklist. Scope approval does not approve unresolved policies or authorize implementation.
