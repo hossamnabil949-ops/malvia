@@ -381,6 +381,13 @@ async function flush() {
       window.dispatchEvent(new CustomEvent('malvia-sync-warning', { detail: { warnings: batchResult.warnings } }));
     }
     for (const res of list) {
+      // Keep excluded feature data locally, but do not retry it every few seconds.
+      // The normal resource scan will queue it again if the owner re-enables the feature.
+      if (!isTenantResourceEnabled(tenantId, res)) {
+        dirty.delete(res);
+        writePending(tenantId);
+        continue;
+      }
       const latest = readLocal(tenantId, res);
       const latestMeta = readMeta(tenantId);
       if (latest === undefined || !hasLocalChanges(res, latest, latestMeta.base[res])) {
