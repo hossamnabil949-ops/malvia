@@ -71,15 +71,17 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   const [newNotes, setNewNotes] = useState('');
 
   const [features, setFeatures] = useState({
-    canUsePos: true,
-    canUseInventory: true,
-    canUsePurchases: true,
-    canUseSuppliers: true,
-    canUseCustomers: true,
-    canUseTreasury: true,
-    canUseReports: true,
-    canUseVoiceAI: true,
+    canUsePos: true, canUseInventory: true, canUseStockMonitoring: true,
+    canUsePurchases: true, canUseSuppliers: true, canUseCustomers: true,
+    canUseTreasury: true, canUseReports: true, canUseAdvancedReports: true,
+    canUseAI: true, canUseVoiceAI: true, canUseWorkshops: false, canUseHR: false,
   });
+  const [catalogPlans, setCatalogPlans] = useState<Array<{
+    id: string; name: string; monthlyPrice: number; annualPrice: number;
+    maxEmployees: number; devicesLimit: number; active: boolean;
+    allowedFeatures: Record<string, boolean>;
+  }>>([]);
+
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -91,9 +93,10 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
         const names = Array.isArray(data?.plans)
           ? data.plans.filter((plan: any) => plan?.active !== false).map((plan: any) => String(plan.name || '').trim()).filter(Boolean)
           : [];
+        setCatalogPlans(Array.isArray(data?.plans) ? data.plans : []);
         setCatalogPlanNames(names);
       })
-      .catch(() => setCatalogPlanNames([]));
+      .catch(() => { setCatalogPlanNames([]); setCatalogPlans([]); });
   }, [isAuthenticated]);
 
   const MASTER_PIN_KEY = 'malvia_master_owner_pin_v1';
@@ -178,6 +181,14 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
     return `${prefix}-${cityCode}-${randomHex}-${randomSec}`;
   };
 
+  const applySelectedPlan = (planName: string) => {
+    setNewPlan(planName);
+    const selected = catalogPlans.find(plan => plan.name === planName && plan.active !== false);
+    if (!selected) return;
+    setNewMaxEmployees(Math.max(1, Number(selected.maxEmployees) || 1));
+    setFeatures(current => ({ ...current, ...selected.allowedFeatures }));
+  };
+
   const handleCreateLicense = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCompanyName.trim() || !newOwnerName.trim() || !newPhone.trim()) return;
@@ -201,6 +212,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
       startDate: startDate.toISOString().split('T')[0],
       expiryDate: expiryDate.toISOString().split('T')[0],
       maxEmployees: newMaxEmployees,
+      devicesLimit: catalogPlans.find(plan => plan.name === newPlan && plan.active !== false)?.devicesLimit || 1,
       status: 'نشط',
       devicesCount: 1,
       lastActiveDate: 'تم الإنشاء للتو',
@@ -698,7 +710,7 @@ ${window.location.origin}`;
                     <label className="text-neutral-300 font-bold block mb-1">نوع الباقة</label>
                     <select
                       value={newPlan}
-                      onChange={(e) => setNewPlan(e.target.value as any)}
+                      onChange={(e) => applySelectedPlan(e.target.value)}
                       className="w-full h-10 px-2 rounded-xl bg-surface-1 border border-neutral-700 text-white font-bold"
                     >
                       {[...new Set([...catalogPlanNames, 'باقة سنوية PRO', 'باقة VIP شاملة الفروع', 'اشتراك شهري', 'تجريبي مجاني (14 يوم)', 'ترخيص دائم مدى الحياة'])].map(name => <option key={name} value={name}>{name}</option>)}
@@ -807,6 +819,14 @@ ${window.location.origin}`;
                         className="rounded text-amber-500" 
                       />
                       <span>المساعد الصوتي AI</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" checked={features.canUseAI} onChange={(e) => setFeatures({ ...features, canUseAI: e.target.checked })} className="rounded text-amber-500" />
+                      <span>الذكاء الاصطناعي AI</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" checked={features.canUseStockMonitoring} onChange={(e) => setFeatures({ ...features, canUseStockMonitoring: e.target.checked })} className="rounded text-amber-500" />
+                      <span>مراقبة المخزون والتنبيهات</span>
                     </label>
                   </div>
                 </div>
