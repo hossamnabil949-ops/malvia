@@ -104,3 +104,4 @@ This is a decision aid, not a signed approval record, legal/tax opinion, account
 ## Company Management Phase B0
 
 - [Phase B0 Design Lock & Decision Closure](MALVIA-COMPANY-MANAGEMENT-PHASE-B0-DESIGN-LOCK-v1.md) summarizes the Company Management B0 subset and its approval checklist. Existing decision statuses in this register remain authoritative; no OPEN decision is changed to APPROVED by the new summary document.
+- [B0 Remaining Decision Review Packet](MALVIA-COMPANY-MANAGEMENT-B0-DECISION-REVIEW-PACKET-v1.md) consolidates proposals, decision owners and acceptance evidence for remaining B0 blockers. It is not an approval record; every OPEN/PARTIALLY RESOLVED status remains unchanged until explicit approval is recorded.
