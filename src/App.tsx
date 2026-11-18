@@ -190,7 +190,12 @@ export default function App() {
     const employeeAllows = !currentUser || (hasTabAccess(effectiveRole, effectivePermissions, tab) && (!simpleMode || SIMPLE_MODE_TABS.includes(tab)));
     return subscriptionAllows && employeeAllows;
   };
-  const canManageInventoryNow = !currentUser || hasTabAccess(effectiveRole, effectivePermissions, 'inventory');
+  const canManageInventoryNow = (!currentUser || hasTabAccess(effectiveRole, effectivePermissions, 'inventory')) &&
+    hasSubscriptionFeature(activeTenant, 'canUseInventory');
+  const canManageStockMonitoringNow = canManageInventoryNow &&
+    hasSubscriptionFeature(activeTenant, 'canUseStockMonitoring');
+  const canUseVoiceAssistant = hasSubscriptionFeature(activeTenant, 'canUseAI') &&
+    hasSubscriptionFeature(activeTenant, 'canUseVoiceAI');
   const viewTab: ActiveTab | null = canAccessTab(currentTab) ? currentTab : null;
   useEffect(() => {
     // أي تحويل برمجي (بحث صوتي، أزرار سريعة...) لشاشة ممنوعة يرجع لأول شاشة مسموحة
@@ -2777,7 +2782,7 @@ export default function App() {
         onTabChange={setCurrentTab}
         activeNotificationsCount={activeNotificationsCount}
         onOpenNotifications={() => setShowNotifications(true)}
-        onOpenVoiceAssistant={() => setShowVoiceAssistant(true)}
+        onOpenVoiceAssistant={() => { if (canUseVoiceAssistant) setShowVoiceAssistant(true); }}
         onOpenDeploymentGuide={() => setShowDeploymentGuide(true)}
         onOpenInventoryAudit={() => setShowBarcodeStocktake(true)}
         onOpenInventoryErrors={() => setShowInventoryErrors(true)}
@@ -3672,7 +3677,7 @@ export default function App() {
       {/* ===================== MODALS ===================== */}
 
       {/* 1. Inventory Errors & Discrepancies Modal */}
-      {showInventoryErrors && (
+      {showInventoryErrors && canManageStockMonitoringNow && (
         <InventoryErrorsModal
           isOpen={showInventoryErrors}
           onClose={() => setShowInventoryErrors(false)}
@@ -3784,7 +3789,7 @@ export default function App() {
       )}
 
       {/* 9. Voice Assistant Modal */}
-      {showVoiceAssistant && (
+      {showVoiceAssistant && canUseVoiceAssistant && (
         <VoiceAssistantModal
           isOpen={showVoiceAssistant}
           onClose={() => setShowVoiceAssistant(false)}
