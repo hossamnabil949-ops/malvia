@@ -751,7 +751,16 @@ export interface TenantLicense {
     canUseTreasury: boolean;
     canUseReports: boolean;
     canUseVoiceAI: boolean;
+    canUseAI?: boolean;
+    canUseStockMonitoring?: boolean;
+    canUseWorkshops?: boolean;
+    canUseHR?: boolean;
+    canUseAdvancedReports?: boolean;
   };
+  /** Optional customer-specific negotiated price in EGP; does not mutate the shared plan. */
+  customPrice?: number;
+  /** Maximum registered devices allowed for this tenant. */
+  devicesLimit?: number;
   notes?: string;
   devicesCount?: number;
   lastActiveDate?: string;
