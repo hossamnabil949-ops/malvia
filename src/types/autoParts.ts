@@ -725,7 +725,7 @@ export type TenantPlan =
   | 'اشتراك شهري' 
   | 'باقة سنوية PRO' 
   | 'باقة VIP شاملة الفروع' 
-  | 'ترخيص دائم مدى الحياة';
+  |export type TenantPlan = string; // يسمح بباقات MALVIA القياسية والباقات المخصصة لكل نشاط
 
 export type TenantStatus = 'نشط' | 'معلق مؤقتاً' | 'منتهي الصلاحية' | 'في انتظار التفعيل';
 
