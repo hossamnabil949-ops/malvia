@@ -2,7 +2,7 @@
 
 **Status:** B0 design baseline prepared; **NOT APPROVED FOR IMPLEMENTATION**.  
 **Branch:** `docs/malvia-platform-design-package-v1`  
-**Related:** [Company Management Design](MALVIA-COMPANY-MANAGEMENT-DESIGN-v1.md) · [Phase B Scope](MALVIA-COMPANY-MANAGEMENT-PHASE-B-SCOPE-v1.md) · [Logical ERD](MALVIA-COMPANY-MANAGEMENT-PHASE-B-LOGICAL-ERD-v1.md) · [API Contracts](MALVIA-COMPANY-MANAGEMENT-PHASE-B-API-CONTRACTS-v1.md) · [Traceability Matrix](MALVIA-COMPANY-MANAGEMENT-PHASE-B-TRACEABILITY-MATRIX-v1.md) · [Architecture Decision Register](MALVIA-ARCHITECTURE-DECISION-REGISTER-v1.md)
+**Related:** [Company Management Design](MALVIA-COMPANY-MANAGEMENT-DESIGN-v1.md) · [Phase B Scope](MALVIA-COMPANY-MANAGEMENT-PHASE-B-SCOPE-v1.md) · [Logical ERD](MALVIA-COMPANY-MANAGEMENT-PHASE-B-LOGICAL-ERD-v1.md) · [API Contracts](MALVIA-COMPANY-MANAGEMENT-PHASE-B-API-CONTRACTS-v1.md) · [Traceability Matrix](MALVIA-COMPANY-MANAGEMENT-PHASE-B-TRACEABILITY-MATRIX-v1.md) · [B0 Remaining Decision Review Packet](MALVIA-COMPANY-MANAGEMENT-B0-DECISION-REVIEW-PACKET-v1.md) · [Architecture Decision Register](MALVIA-ARCHITECTURE-DECISION-REGISTER-v1.md)
 
 ## 1. Purpose
 
@@ -142,7 +142,11 @@ B0 can be marked **APPROVED FOR B1 DESIGN/IMPLEMENTATION PLANNING** only when al
 
 A checkbox is not considered complete based on discussion, recommendation or PR review alone. The approver must explicitly confirm the exact policy.
 
-## 9. Implementation gates after B0
+## 9. B0 remaining decision review packet
+
+The [B0 Remaining Decision Review Packet](MALVIA-COMPANY-MANAGEMENT-B0-DECISION-REVIEW-PACKET-v1.md) translates the remaining role/scope, identity/MFA/session, commercial approval, support access, trial/expiry/retention, CRM privacy, audit, KPI, product maturity and Platform integration decisions into explicit proposals with owners and acceptance evidence. **It is a review aid only; none of its recommendations closes an approval checkbox or changes an OPEN decision to APPROVED.** The existing approval checklist remains authoritative.
+
+## 10. Implementation gates after B0
 
 - **B1:** internal identity and workspace shell only after identity/security and role policies are approved.
 - **B2:** portfolio and CRM only after data classification, privacy, maturity evidence and CRM retention are approved.
@@ -152,7 +156,7 @@ A checkbox is not considered complete based on discussion, recommendation or PR 
 
 Every slice requires code review, automated authorization/negative tests, audit verification, QA evidence and owner acceptance. Production is a separate approval.
 
-## 10. Explicit boundary
+## 11. Explicit boundary
 
 This document authorizes documentation and review only. It does not authorize:
 - runtime code or API implementation;
