@@ -124,6 +124,32 @@ function emitStatus(s: SyncStatus, detail?: string) {
 }
 
 let active: { tenantId: string; licenseKey: string } | null = null;
+// Updated from the authenticated /api/sync response. Missing legacy flags remain enabled.
+const tenantFeatureCache = new Map<string, Record<string, boolean> | null>();
+const RESOURCE_FEATURES: Record<string, string[]> = {
+  parts: ['canUsePos', 'canUseInventory', 'canUsePurchases'],
+  invoices: ['canUsePos'], salesReturns: ['canUsePos'], loyaltyLedger: ['canUsePos'],
+  customers: ['canUseCustomers', 'canUsePos'],
+  suppliers: ['canUseSuppliers', 'canUsePurchases'],
+  supplierPayments: ['canUsePurchases'], supplierPaymentSchedules: ['canUsePurchases'],
+  purchaseInvoices: ['canUsePurchases'], purchaseReturns: ['canUsePurchases'],
+  inventoryErrors: ['canUseStockMonitoring'],
+  stockTransfers: ['canUseInventory'], warehouses: ['canUseInventory'],
+  stockLevels: ['canUseInventory', 'canUsePos', 'canUsePurchases'],
+  stockBatches: ['canUseInventory', 'canUsePos', 'canUsePurchases'],
+  serialUnits: ['canUseInventory', 'canUsePos', 'canUsePurchases'],
+  stockMovements: ['canUseInventory', 'canUsePos', 'canUsePurchases'],
+  carModels: ['canUseInventory'],
+  treasury: ['canUseTreasury'], expenses: ['canUseTreasury'],
+  bankAccounts: ['canUseTreasury'], cardSettlements: ['canUseTreasury'],
+  bankLedgerEntries: ['canUseTreasury'], cheques: ['canUseTreasury'],
+};
+function isTenantResourceEnabled(tenantId: string, resource: string): boolean {
+  const flags = tenantFeatureCache.get(tenantId);
+  const required = RESOURCE_FEATURES[resource];
+  if (!flags || !required) return true;
+  return required.some(feature => flags[feature] === undefined || flags[feature] === true);
+}
 let timer: ReturnType<typeof setTimeout> | null = null;
 let poll: ReturnType<typeof setInterval> | null = null;
 let busy = false;
@@ -171,6 +197,7 @@ async function api(path: string, init: RequestInit & { headers?: Record<string, 
 }
 
 async function pushResource(tenantId: string, licenseKey: string, res: string): Promise<boolean> {
+  if (!isTenantResourceEnabled(tenantId, res)) return true;
   for (let attempt = 0; attempt < 4; attempt++) {
     const local = readLocal(tenantId, res);
     if (local === undefined) return true;
@@ -221,7 +248,7 @@ async function sha256Hex(value: string): Promise<string> {
 async function pushBatch(tenantId: string, licenseKey: string, resources: string[]): Promise<{ warnings: any[] }> {
   for (let attempt = 0; attempt < 4; attempt++) {
     const meta = readMeta(tenantId);
-    const operations = resources.flatMap(resource => {
+    const operations = resources.filter(resource => isTenantResourceEnabled(tenantId, resource)).flatMap(resource => {
       const data = readLocal(tenantId, resource);
       if (data === undefined) return [];
       if (!hasLocalChanges(resource, data, meta.base[resource]) && meta.versions[resource] !== undefined) return [];
@@ -300,6 +327,7 @@ export async function pullAll(tenantId: string, licenseKey: string, serverToken?
   if (serverToken) headers.Authorization = `Bearer ${serverToken}`;
   const r = await api('/api/sync', { method: 'GET', headers });
   if (!r.ok) throw Object.assign(new Error(r.body?.error || `HTTP ${r.status}`), { status: r.status });
+  tenantFeatureCache.set(tenantId, r.body.tenant?.allowedFeatures && typeof r.body.tenant.allowedFeatures === 'object' ? r.body.tenant.allowedFeatures : null);
   const docs: Record<string, { data: unknown; version: number }> = r.body.docs || {};
   const meta = readMeta(tenantId);
   let changed = false;
