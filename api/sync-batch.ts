@@ -43,7 +43,7 @@ export default async function handler(req: any, res: any) {
     ApiErrorClass = security.ApiError;
     sendErrorFn = security.sendError;
     const { commitSyncBatch, getAuthenticatedEmployee, getOne } = db;
-    const { clientIp, findLicense, rateLimit } = security;
+    const { clientIp, findLicense, rateLimit, assertLicenseResourceEnabled } = security;
     const { createHash } = crypto;
     const {
       validateChequeAuditSync, validateChequeAuxiliarySync,
@@ -84,6 +84,8 @@ export default async function handler(req: any, res: any) {
     if (new Set(operations.map((op: any) => op.resource)).size !== operations.length) {
       return res.status(400).json({ code: 'SYNC_BATCH_DUPLICATE_RESOURCE', error: 'لا يمكن تكرار المورد داخل دفعة واحدة.', diagnostic: { traceId, phase, resource: operationResources.join(','), operationCount: operationResources.length, errorName: 'SyncValidationError', errorCode: 'SYNC_BATCH_DUPLICATE_RESOURCE' } });
     }
+    phase = 'subscription_validation';
+    for (const op of operations) assertLicenseResourceEnabled(lic, op.resource);
     phase = 'permission_validation';
     const role = String(employee.role || '').trim();
     // Support both legacy array permissions (including ["*"]) and the current
