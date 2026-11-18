@@ -69,6 +69,8 @@ interface NavigationProps {
   canAccessTab?: (tab: string) => boolean;
   /** صلاحية أدوات المخزون (إكسيل، جرد، موديلات، أخطاء المخزون) */
   canManageInventory?: boolean;
+  canManageStockMonitoring?: boolean;
+  canUseVoiceAI?: boolean;
   /** وضع الكاشير المبسط: شريط علوي صغير بدل القوائم والأدوات */
   simpleMode?: boolean;
   /** Page content: rendered next to the sidebar, below the top bar. */
@@ -267,6 +269,8 @@ export const Navigation: React.FC<NavigationProps> = ({
   shopName,
   canAccessTab = () => true,
   canManageInventory = true,
+  canManageStockMonitoring = true,
+  canUseVoiceAI = true,
   simpleMode = false,
   children,
 }) => {
@@ -443,7 +447,7 @@ export const Navigation: React.FC<NavigationProps> = ({
 
             {/* End side: quick actions */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {canManageInventory && (
+              {canManageInventory && canManageStockMonitoring && (
               <button
                 onClick={onOpenInventoryErrors}
                 title="أخطاء وتصحيح المخزون"
@@ -512,13 +516,13 @@ export const Navigation: React.FC<NavigationProps> = ({
                 )}
               </button>
 
-              <button
+              {canUseVoiceAI && <button
                 onClick={onOpenVoiceAssistant}
                 title="المساعد الصوتي الذكي"
                 className="p-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-bold hover:scale-105 transition shadow-lg shadow-amber-500/20"
               >
                 <Mic className="w-4 h-4" />
-              </button>
+              </button>}
 
               {/* User + logout */}
               <div className="flex items-center gap-1 ps-2 ms-0.5 border-s border-slate-800">
