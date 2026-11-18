@@ -62,6 +62,7 @@ export default async function handler(req: any, res: any) {
 
       // Validate the complete registry before writing anything.
       const ids = new Set<string>();
+      const tenantIds = new Set<string>();
       const keys = new Set<string>();
       for (const lic of licenses) {
         if (!lic || typeof lic !== 'object' || !String(lic.id || '').trim() ||
@@ -70,14 +71,16 @@ export default async function handler(req: any, res: any) {
           throw new ApiError('INVALID_BODY');
         }
         const id = String(lic.id);
+        const tenantId = String(lic.tenantId).trim();
         const key = String(lic.licenseKey).trim().toUpperCase();
-        if (ids.has(id) || keys.has(key)) throw new ApiError('INVALID_BODY');
-        ids.add(id); keys.add(key);
+        if (ids.has(id) || tenantIds.has(tenantId) || keys.has(key)) throw new ApiError('INVALID_BODY');
+        ids.add(id); tenantIds.add(tenantId); keys.add(key);
         const start = String(lic.startDate || '');
         const end = String(lic.expiryDate || '');
-        if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(start) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(end) ||
-            Number.isNaN(Date.parse(start + 'T00:00:00Z')) || Number.isNaN(Date.parse(end + 'T00:00:00Z')) ||
-            end < start) throw new ApiError('INVALID_BODY');
+        const validDate = (value: string) => /^\\d{4}-\\d{2}-\\d{2}$/.test(value) &&
+          !Number.isNaN(Date.parse(value + 'T00:00:00Z')) &&
+          new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
+        if (!validDate(start) || !validDate(end) || end < start) throw new ApiError('INVALID_BODY');
         if (!Number.isInteger(Number(lic.maxEmployees)) || Number(lic.maxEmployees) < 1) throw new ApiError('INVALID_BODY');
         if (lic.customPrice != null && (!Number.isFinite(Number(lic.customPrice)) || Number(lic.customPrice) < 0)) throw new ApiError('INVALID_BODY');
         if (lic.devicesLimit != null && (!Number.isInteger(Number(lic.devicesLimit)) || Number(lic.devicesLimit) < 1)) throw new ApiError('INVALID_BODY');
