@@ -258,7 +258,7 @@ Every metric needs an owner, definition, source, time basis, filters, refresh ca
 ## 9. Security and governance
 
 - Separate internal identity realm from customer tenant authentication.
-- Enforce MFA for privileged internal roles and sensitive operations.
+- Enforce MFA for every MALVIA internal user account, regardless of role. The identity provider, supported methods, enrollment, recovery, session lifetime, device policy and break-glass procedure remain subject to separate security approval.
 - Use least privilege, scoped roles, approval thresholds and periodic access reviews.
 - Separate duties for pricing override, refund, finance posting, support access and Production release.
 - Encrypt secrets and sensitive files; never put credentials in GitHub documents.
@@ -283,7 +283,7 @@ Do not build every module at once. Deliver vertical slices with acceptance tests
 
 ## 11. Acceptance gates before implementation
 
-1. Owner approves internal operating model and initial module scope.
+1. The seven-capability Phase B scope (PB-01 through PB-07) is owner-approved on 2026-11-12; any added capability or boundary change requires a separately recorded scope approval.
 2. Internal roles/permissions matrix and separation from tenant identities is reviewed.
 3. CRM/customer/tenant/product/contract/subscription relationship model is validated.
 4. Seat, trial, pricing, renewal, suspension and retention policies are approved.
@@ -298,8 +298,8 @@ Do not build every module at once. Deliver vertical slices with acceptance tests
 
 | ID | Decision | Recommended starting point | State |
 |---|---|---|---|
-| MCM-DEC-01 | Initial internal modules for first release | Portfolio + CRM + Customer/Tenant Registry + Subscription visibility + Executive dashboard | OPEN |
-| MCM-DEC-02 | Internal employee accounts | Separate internal identity realm; MFA for privileged roles | OPEN |
+| MCM-DEC-01 | Initial internal modules / Phase B scope | The seven-capability Phase B scope (PB-01 through PB-07), including its boundaries and exclusions, is owner-approved on 2026-11-12; any scope expansion requires a separately recorded approval | APPROVED — SCOPE ONLY |
+| MCM-DEC-02 | Internal employee accounts and access | Separate internal identity realm; MFA is mandatory for every internal account; job-role RBAC with additional auditable individual permissions and Company Owner as final authority | PARTIALLY RESOLVED — identity provider, MFA methods/enrollment/recovery, session/device/break-glass policy and detailed permission catalogue/scopes remain open |
 | MCM-DEC-03 | Commercial authority | Owner approves price exceptions, contract deviations and refunds above configurable limits | OPEN |
 | MCM-DEC-04 | Support access | No standing customer-data access; time-limited, reason-coded and audited grant | OPEN |
 | MCM-DEC-05 | Billing/payment integration | Select provider only after fees, Egypt availability, reconciliation and legal review | OPEN |
@@ -316,7 +316,7 @@ This document does not authorize:
 - Customer-data access, support impersonation or credential configuration.
 - Payment collection, legal contracts, tax filings or statutory accounting postings.
 
-The next approval step is to confirm Phase B scope and resolve MCM-DEC-01 through MCM-DEC-04. Only then should the logical ERD and API contract for MCM be prepared. All implementation remains separately gated.
+The Phase B scope, Logical ERD and API contracts are now documented, and the seven-capability scope is owner-approved (scope only). The next approval work is to close the remaining identity/security, detailed role/scope permissions, commercial authority and support-access policies (MCM-DEC-02 through MCM-DEC-04 and related B0 decisions). This does not authorize implementation; each implementation slice, migration and Production release remains separately gated.
 
 
 ## Phase B scope and acceptance criteria
@@ -337,4 +337,4 @@ Both are design-only. They do not assert that endpoints exist or authorize schem
 
 ## Phase B0 design lock
 
-- [Phase B0 Design Lock & Decision Closure](MALVIA-COMPANY-MANAGEMENT-PHASE-B0-DESIGN-LOCK-v1.md) consolidates confirmed requirements, architectural invariants, source-of-truth boundaries, role baseline, open decisions and approval gates. Status: prepared; owner/security/legal/commercial/platform decisions remain pending. No implementation authorization.
+- [Phase B0 Design Lock & Decision Closure](MALVIA-COMPANY-MANAGEMENT-PHASE-B0-DESIGN-LOCK-v1.md) consolidates confirmed requirements, architectural invariants, source-of-truth boundaries, role baseline, open decisions and approval gates. Status: prepared; Phase B scope is owner-approved (scope only), while the remaining owner/security/legal/commercial/platform decisions remain pending. No implementation authorization.
