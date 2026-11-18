@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { TenantLicense, TenantPlan, TenantStatus } from '../types/autoParts';
 import { TenantBackupsModal } from './TenantBackupsModal';
+import { OwnerLicenseEditorModal } from './OwnerLicenseEditorModal';
 
 interface SuperAdminPortalProps {
   isOpen: boolean;
@@ -82,6 +83,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
 
   const [showChangePinModal, setShowChangePinModal] = useState(false);
   const [backupLicense, setBackupLicense] = useState<TenantLicense | null>(null);
+  const [editingLicense, setEditingLicense] = useState<TenantLicense | null>(null);
   const [newMasterPin, setNewMasterPin] = useState('');
   const [pinChangeSuccess, setPinChangeSuccess] = useState(false);
 
@@ -222,6 +224,20 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
       return l;
     });
     onUpdateLicenses(updated);
+  };
+
+  const handleSaveLicense = (updatedLicense: TenantLicense) => {
+    const duplicateKey = licenses.some(item =>
+      item.id !== updatedLicense.id &&
+      item.licenseKey.trim().toUpperCase() === updatedLicense.licenseKey.trim().toUpperCase()
+    );
+    if (duplicateKey) {
+      window.alert('مفتاح الترخيص مستخدم بالفعل لعميل آخر. اختر مفتاحاً مختلفاً.');
+      return;
+    }
+    const updated = licenses.map(item => item.id === updatedLicense.id ? updatedLicense : item);
+    onUpdateLicenses(updated);
+    setEditingLicense(null);
   };
 
   const handleCopyKey = (key: string, lic: TenantLicense) => {
@@ -504,6 +520,14 @@ ${window.location.origin}`;
 
                         <td className="p-3.5">
                           <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => setEditingLicense(lic)}
+                              className="p-1.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-300 text-[11px]"
+                              title="تعديل بيانات العميل والباقة والفترة والسعر والخصائص"
+                            >
+                              <Sliders className="w-3.5 h-3.5" />
+                            </button>
+
                             <button
                               onClick={() => handleToggleStatus(lic.id)}
                               className={`p-1.5 rounded-xl border text-[11px] font-bold transition-all ${
@@ -859,6 +883,14 @@ ${window.location.origin}`;
               )}
             </div>
           </div>
+        )}
+
+        {editingLicense && (
+          <OwnerLicenseEditorModal
+            license={editingLicense}
+            onSave={handleSaveLicense}
+            onClose={() => setEditingLicense(null)}
+          />
         )}
 
         {backupLicense && (
