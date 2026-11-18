@@ -62,7 +62,7 @@ import { cairoDateKey } from './utils/reportsLogic';
 import type { AuditEntry, StockMovement, InvoicePayment, Warehouse, StockLevel, StockTransfer } from './types/autoParts';
 import { MAIN_WAREHOUSE_ID, normalizeWarehouseId, availableIn, adjustLevels, validateTransfer, applyTransfer, TransferError } from './utils/warehouseLogic';
 import { WarehousesView } from './components/WarehousesView';
-import { hasTabAccess, firstAllowedTab, isSimpleCashier, SIMPLE_MODE_TABS } from './utils/permissions';
+import { hasTabAccess, firstAllowedTab, isSimpleCashier, SIMPLE_MODE_TABS, TAB_SUBSCRIPTION_FEATURE, hasSubscriptionFeature } from './utils/permissions';
 import { resolveLoyalty, earnedPoints, loyaltyAfterReturn, addMonths, availableBalances, pendingExpiryEntries } from './utils/loyaltyLogic';
 import type { LoyaltyEntry, LoyaltyEntryType } from './utils/loyaltyLogic';
 import { ChequesView, NewChequeInput } from './components/ChequesView';
@@ -185,8 +185,11 @@ export default function App() {
   const canManageCapital = effectiveRole === 'مدير عام' || effectiveRole === 'محاسب مالي';
   const effectivePermissions = liveEmployee?.permissions ?? currentUser?.permissions;
   const simpleMode = Boolean(currentUser) && isSimpleCashier(effectiveRole, effectivePermissions);
-  const canAccessTab = (tab: string): boolean =>
-    !currentUser || (hasTabAccess(effectiveRole, effectivePermissions, tab) && (!simpleMode || SIMPLE_MODE_TABS.includes(tab)));
+  const canAccessTab = (tab: string): boolean => {
+    const subscriptionAllows = hasSubscriptionFeature(activeTenant, TAB_SUBSCRIPTION_FEATURE[tab]);
+    const employeeAllows = !currentUser || (hasTabAccess(effectiveRole, effectivePermissions, tab) && (!simpleMode || SIMPLE_MODE_TABS.includes(tab)));
+    return subscriptionAllows && employeeAllows;
+  };
   const canManageInventoryNow = !currentUser || hasTabAccess(effectiveRole, effectivePermissions, 'inventory');
   const viewTab: ActiveTab | null = canAccessTab(currentTab) ? currentTab : null;
   useEffect(() => {
@@ -194,7 +197,7 @@ export default function App() {
     if (currentUser && !canAccessTab(currentTab)) {
       const next = simpleMode
         ? (SIMPLE_MODE_TABS.find(t => canAccessTab(t)) ?? 'pos')
-        : firstAllowedTab(effectiveRole, effectivePermissions);
+        : (['dashboard', 'pos', 'shifts', 'invoices', 'customers', 'inventory', 'lowstock', 'warehouses', 'tracking', 'purchases', 'suppliers', 'finance', 'cheques', 'reports', 'settings'].find(canAccessTab) ?? 'dashboard');
       setCurrentTab(next as ActiveTab);
     }
   }, [currentTab, currentUser, effectiveRole, effectivePermissions, simpleMode]);
