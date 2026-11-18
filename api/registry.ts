@@ -8,11 +8,40 @@ export default async function handler(req: any, res: any) {
     rateLimit(`admin:${clientIp(req)}`, 30, 10 * 60_000);
     if (!process.env.ADMIN_TOKEN || !safeEqual(token, process.env.ADMIN_TOKEN)) throw new ApiError('ADMIN_UNAUTHORIZED');
     if (req.method === 'GET') {
-      const cur = await getOne('_registry', 'licenses');
-      return res.status(200).json({ licenses: cur?.data || [], version: cur?.version || 0 });
+      const resource = String(req.query?.resource || 'licenses');
+      if (!['licenses', 'owner_audit', 'plans'].includes(resource)) throw new ApiError('INVALID_BODY');
+      const cur = await getOne('_registry', resource);
+      const data = cur?.data || (resource === 'licenses' ? [] : []);
+      return res.status(200).json({ [resource]: data, version: cur?.version || 0 });
     }
     if (req.method === 'POST') {
-      const { licenses, baseVersion } = req.body || {};
+      const { resource = 'licenses', licenses, plans, baseVersion } = req.body || {};
+      if (resource === 'plans') {
+        if (!Array.isArray(plans) || plans.length > 100) throw new ApiError('INVALID_BODY');
+        const ids = new Set<string>();
+        for (const plan of plans) {
+          if (!plan || typeof plan !== 'object' || !String(plan.id || '').trim() ||
+              !String(plan.name || '').trim() || ids.has(String(plan.id))) throw new ApiError('INVALID_BODY');
+          ids.add(String(plan.id));
+          for (const field of ['monthlyPrice','annualPrice','maxEmployees','devicesLimit']) {
+            if (!Number.isFinite(Number(plan[field])) || Number(plan[field]) < 0) throw new ApiError('INVALID_BODY');
+          }
+          if (!Number.isInteger(Number(plan.maxEmployees)) || !Number.isInteger(Number(plan.devicesLimit))) throw new ApiError('INVALID_BODY');
+          if (typeof plan.active !== 'boolean') throw new ApiError('INVALID_BODY');
+        }
+        const current = await getOne('_registry', 'plans');
+        const version = await putIfVersion('_registry', 'plans', plans, Number(baseVersion) || 0);
+        if (version === null) return res.status(409).json({ conflict: true });
+        const audit = await getOne('_registry', 'owner_audit');
+        const entries = [...(Array.isArray(audit?.data) ? audit.data : []), {
+          at: new Date().toISOString(), action: 'PLAN_CATALOG_UPDATED',
+          actor: 'OWNER_ADMIN', planCount: plans.length,
+          previousVersion: current?.version || 0, newVersion: version,
+        }].slice(-2000);
+        await putIfVersion('_registry', 'owner_audit', entries, Number(audit?.version) || 0);
+        return res.status(200).json({ version });
+      }
+      if (resource !== 'licenses') throw new ApiError('INVALID_BODY');
       if (!Array.isArray(licenses) || licenses.length > 10000) throw new ApiError('INVALID_BODY');
 
       // Validate the complete registry before writing anything.
