@@ -143,6 +143,10 @@ const RESOURCE_FEATURES: Record<string, string[]> = {
   treasury: ['canUseTreasury'], expenses: ['canUseTreasury'],
   bankAccounts: ['canUseTreasury'], cardSettlements: ['canUseTreasury'],
   bankLedgerEntries: ['canUseTreasury'], cheques: ['canUseTreasury'],
+  partners: ['canUseTreasury'], partnerWithdrawals: ['canUseTreasury'],
+  partnerCurrentAccountTransactions: ['canUseTreasury'], partnerExitSettlements: ['canUseTreasury'],
+  partnerSettlementPayments: ['canUseTreasury'], openingBalances: ['canUseTreasury'],
+  shifts: ['canUsePos'], reservations: ['canUseCustomers'],
 };
 function isTenantResourceEnabled(tenantId: string, resource: string): boolean {
   const flags = tenantFeatureCache.get(tenantId);
