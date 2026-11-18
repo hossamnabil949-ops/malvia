@@ -28,7 +28,11 @@ No real internal account or production credential is created during this design 
 ## 3. B1 work packages
 
 ### B1.1 — Identity architecture decision
-Compare supported identity-provider options without selecting or configuring one prematurely. Evaluate OIDC/OAuth support, issuer/audience isolation, MFA enforcement, recovery controls, session/device management, audit/export capabilities, regional availability, vendor risk, portability and exit strategy.
+**Research complete; provider not selected.** See [B1.1 Identity Provider Evaluation](MALVIA-COMPANY-MANAGEMENT-B1-IDENTITY-PROVIDER-EVALUATION-v1.md). ZITADEL is the preferred candidate for proof-of-fit, Keycloak is the self-hosted fallback, and WorkOS remains conditional because its hosted AuthKit MFA requirement does not apply to SSO users. This is a recommendation only, not an approval.
+
+Next: define a provider-neutral identity boundary and run identical synthetic-account tests for realm isolation, universal MFA, recovery, session revocation, signing-key rotation and audit export.
+
+Compare OIDC/OAuth support, issuer/audience isolation, MFA enforcement, recovery controls, session/device management, audit/export capabilities, regional availability, vendor risk, portability and exit strategy.
 
 **Approval gate:** Owner + Security select the provider and approve the identity architecture, MFA methods, enrollment, recovery, session/device and break-glass policies.
 
