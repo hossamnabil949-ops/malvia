@@ -7,6 +7,8 @@ export type PermKey = keyof EmployeePermissions;
 /** Tenant subscription gates. Missing legacy flags remain enabled for backward compatibility. */
 export const TAB_SUBSCRIPTION_FEATURE: Record<string, keyof TenantLicense['allowedFeatures']> = {
   pos: 'canUsePos',
+  invoices: 'canUsePos',
+  shifts: 'canUsePos',
   inventory: 'canUseInventory',
   lowstock: 'canUseStockMonitoring',
   warehouses: 'canUseInventory',
