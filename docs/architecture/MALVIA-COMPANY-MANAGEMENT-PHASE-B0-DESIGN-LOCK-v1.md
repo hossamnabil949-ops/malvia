@@ -1,6 +1,6 @@
 # MALVIA Company Management — Phase B0 Design Lock & Decision Closure v1
 
-**Status:** B0 design baseline prepared; **NOT APPROVED FOR IMPLEMENTATION**.  
+**Status:** **B0 DESIGN PHASE CLOSED — OWNER ACCEPTED on 2026-11-19.** Specialist policy approvals and implementation gates remain explicitly open; this closure does not authorize implementation.  
 **Branch:** `docs/malvia-platform-design-package-v1`  
 **Related:** [Company Management Design](MALVIA-COMPANY-MANAGEMENT-DESIGN-v1.md) · [Phase B Scope](MALVIA-COMPANY-MANAGEMENT-PHASE-B-SCOPE-v1.md) · [Logical ERD](MALVIA-COMPANY-MANAGEMENT-PHASE-B-LOGICAL-ERD-v1.md) · [API Contracts](MALVIA-COMPANY-MANAGEMENT-PHASE-B-API-CONTRACTS-v1.md) · [Traceability Matrix](MALVIA-COMPANY-MANAGEMENT-PHASE-B-TRACEABILITY-MATRIX-v1.md) · [B0 Remaining Decision Review Packet](MALVIA-COMPANY-MANAGEMENT-B0-DECISION-REVIEW-PACKET-v1.md) · [Architecture Decision Register](MALVIA-ARCHITECTURE-DECISION-REGISTER-v1.md)
 
@@ -12,7 +12,7 @@ This document consolidates the B0 design-lock baseline for MALVIA Company Manage
 - policies that still require an explicit owner, accountant, legal or security decision;
 - evidence required before any implementation authorization.
 
-**“B0 prepared” is not “B0 approved.”** The user's instruction to proceed authorizes preparation of this design record, not approval of every unresolved policy listed below.
+**B0 closure record (Owner, 2026-11-19):** The Owner explicitly approved closing B0 and proceeding to B1. This accepts the B0 design baseline and closes the B0 design-review phase. It does not convert unresolved Security, Legal/Privacy, Commercial, Finance, Product/QA or Platform Engineering decisions into approvals, and it does not authorize implementation or Production activity. Those items remain explicit B1 implementation prerequisites where applicable.
 
 ## 2. B0 outcome
 
@@ -121,7 +121,7 @@ Statuses below reflect only decisions explicitly supported by the existing proje
 | Idempotency/audit/attachment retention | OPEN | Stable idempotency and auditable sensitive actions are required | Engineering + Security + Legal approve retention, tamper evidence, storage and classification |
 | B1–B5 implementation and Production release | NOT AUTHORIZED | Sequence and DoD are specified | Separate owner approval per implementation slice and separate Production release approval |
 
-## 8. B0 acceptance checklist
+## 8. B0 closure and outstanding specialist sign-offs
 
 B0 can be marked **APPROVED FOR B1 DESIGN/IMPLEMENTATION PLANNING** only when all required rows below are explicitly accepted and evidence is recorded:
 
@@ -140,7 +140,7 @@ B0 can be marked **APPROVED FOR B1 DESIGN/IMPLEMENTATION PLANNING** only when al
 - [ ] Engineering/Security approves audit, idempotency, attachment and observability retention.
 - [ ] All approvals are entered into the decision register with exact selected wording, approver role, date and conditions.
 
-A checkbox is not considered complete based on discussion, recommendation or PR review alone. The approver must explicitly confirm the exact policy.
+The Owner's B0 design-phase closure is recorded separately from this checklist. These checkboxes track specialist policy approvals and evidence required before the affected B1 implementation slices; they are not a condition for recording the Owner's B0 design-phase closure. A checkbox is not complete based on discussion, recommendation or PR review alone. The accountable approver must explicitly confirm the exact policy.
 
 ## 9. B0 remaining decision review packet
 
@@ -168,4 +168,4 @@ This document authorizes documentation and review only. It does not authorize:
 - public product publication, downloads, payments or e-signature;
 - merge, deployment or any change to MALVIA Sales/Restaurant production.
 
-**B0 disposition: PREPARED — OWNER / SECURITY / LEGAL / COMMERCIAL / PLATFORM DECISIONS PENDING.**
+**B0 disposition: CLOSED — OWNER ACCEPTED DESIGN BASELINE on 2026-11-19. Specialist approvals remain pending as listed above; B1 design/preparation may proceed, while implementation remains gated.**
