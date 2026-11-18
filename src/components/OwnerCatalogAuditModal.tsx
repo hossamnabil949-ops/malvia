@@ -10,7 +10,7 @@ type AuditEntry = {
   at: string; action: string; tenantId?: string; companyName?: string;
   actor?: string; fields?: string[]; before?: Record<string, unknown>;
   after?: Record<string, unknown>; featureChanges?: Array<{feature:string;from:unknown;to:unknown}>;
-  planCount?: number;
+  planCount?: number; planId?: string; planName?: string; previousVersion?: number; newVersion?: number;
 };
 
 const DEFAULT_FEATURES: Record<string, boolean> = {
@@ -106,9 +106,14 @@ export const OwnerCatalogAuditModal: React.FC<{onClose:()=>void}> = ({onClose}) 
           {audit.length===0&&<p className="py-8 text-center text-sm text-neutral-400">لا توجد عمليات مسجلة حتى الآن.</p>}
           {audit.map((entry,i)=><article key={i} className="rounded-xl border border-neutral-800 bg-surface-1 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">{entry.companyName||'إدارة الباقات'}</strong><time className="text-[10px] text-neutral-500" dir="ltr">{new Date(entry.at).toLocaleString('ar-EG')}</time></div>
-            <p className="mt-1 text-xs text-amber-300">{entry.action==='LICENSE_CREATED'?'إصدار ترخيص':entry.action==='LICENSE_UPDATED'?'تعديل بيانات الترخيص':entry.action==='LICENSE_REMOVED'?'حذف ترخيص':'تحديث كتالوج الباقات'}</p>
+            <p className="mt-1 text-xs text-amber-300">{entry.action==='LICENSE_CREATED'?'إصدار ترخيص':entry.action==='LICENSE_UPDATED'?'تعديل بيانات الترخيص':entry.action==='LICENSE_REMOVED'?'حذف ترخيص':entry.action==='PLAN_CREATED'?'إضافة باقة':entry.action==='PLAN_UPDATED'?'تعديل باقة':entry.action==='PLAN_REMOVED'?'إيقاف/حذف باقة':'تحديث كتالوج الباقات'}</p>
             {entry.fields?.length?<p className="mt-1 break-words text-xs text-neutral-400">الحقول المعدلة: {entry.fields.join('، ')}</p>:null}
             {entry.featureChanges?.length?<p className="mt-1 text-xs text-neutral-400">تغييرات الخصائص: {entry.featureChanges.map(x=>FEATURE_LABELS[x.feature]||x.feature).join('، ')}</p>:null}
+            {entry.planName?<p className="mt-1 text-xs text-neutral-300">{entry.planName}</p>:null}
+            {entry.fields?.length?<div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+              <div className="rounded-lg bg-neutral-900 p-2"><span className="text-neutral-500">قبل التعديل</span><pre className="mt-1 whitespace-pre-wrap break-words text-neutral-300">{JSON.stringify(entry.before||{},null,2)}</pre></div>
+              <div className="rounded-lg bg-neutral-900 p-2"><span className="text-neutral-500">بعد التعديل</span><pre className="mt-1 whitespace-pre-wrap break-words text-neutral-300">{JSON.stringify(entry.after||{},null,2)}</pre></div>
+            </div>:null}
             {entry.tenantId?<p className="mt-1 font-mono text-[10px] text-neutral-500" dir="ltr">{entry.tenantId}</p>:null}
           </article>)}
         </div>}
