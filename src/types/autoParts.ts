@@ -720,12 +720,7 @@ export interface ShopSettings {
   loyalty?: import('../utils/loyaltyLogic').LoyaltySettings; // برنامج الولاء (مغلق افتراضياً)
 }
 
-export type TenantPlan = 
-  | 'تجريبي مجاني (14 يوم)' 
-  | 'اشتراك شهري' 
-  | 'باقة سنوية PRO' 
-  | 'باقة VIP شاملة الفروع' 
-  |export type TenantPlan = string; // يسمح بباقات MALVIA القياسية والباقات المخصصة لكل نشاط
+export type TenantPlan = string; // يسمح بباقات MALVIA القياسية والباقات المخصصة لكل نشاط
 
 export type TenantStatus = 'نشط' | 'معلق مؤقتاً' | 'منتهي الصلاحية' | 'في انتظار التفعيل';
 
