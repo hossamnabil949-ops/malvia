@@ -230,3 +230,38 @@ export async function handleAdminAuth(req: any, res: any) {
   }
   return res.status(400).json({ code: 'ADMIN_ACTION_INVALID' });
 }
+
+
+export async function handleAdminPasswordRecovery(req: any, res: any) {
+  const ip = String(req.headers?.['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
+  if (process.env.VERCEL_ENV !== 'preview' || process.env.VERCEL_GIT_COMMIT_REF !== 'feature/owner-control-center-v1') {
+    return res.status(404).json({ code: 'NOT_FOUND' });
+  }
+  if (req.method !== 'POST') return res.status(405).json({ code: 'METHOD_NOT_ALLOWED' });
+  assertSameOrigin(req);
+  await persistentLimit('admin-recovery:' + ip, 5, 60 * 60 * 1000);
+  const configured = String(process.env.MALVIA_ADMIN_RECOVERY_TOKEN || '');
+  const supplied = String(req.body?.recoveryToken || '');
+  if (configured.length < 40 || !equal(configured, supplied)) {
+    return res.status(401).json({ code: 'ADMIN_RECOVERY_UNAUTHORIZED', error: 'بيانات الاسترداد غير صحيحة.' });
+  }
+  const username = String(req.body?.username || '').trim().toLowerCase();
+  const password = String(req.body?.newPassword || '');
+  if (!/^[a-z0-9._-]{3,40}$/.test(username) || password.length < 14 || password.length > 200) {
+    return res.status(400).json({ code: 'ADMIN_RECOVERY_INVALID', error: 'اسم المستخدم أو كلمة المرور الجديدة غير صالحة.' });
+  }
+  const used = (await readDoc<boolean>('_admin_recovery_used', false)).data;
+  if (used) return res.status(410).json({ code: 'ADMIN_RECOVERY_ALREADY_USED', error: 'تم استخدام إجراء الاسترداد بالفعل.' });
+  const users = (await readDoc<AdminUser[]>('_admin_users', [])).data;
+  const matches = users.filter(item => item.username === username && item.role === 'SUPER_ADMIN' && !item.disabled);
+  if (matches.length !== 1) return res.status(404).json({ code: 'ADMIN_RECOVERY_ACCOUNT_NOT_FOUND', error: 'لم يتم العثور على حساب المسؤول المطلوب.' });
+  await mutateDoc<AdminUser[]>('_admin_users', [], rows => rows.map(item =>
+    item.username === username ? { ...item, passwordHash: makePasswordHash(password) } : item
+  ));
+  await mutateDoc<any[]>('_admin_sessions', [], rows => rows.map(item =>
+    item.username === username ? { ...item, revokedAt: Date.now() } : item
+  ));
+  await mutateDoc<boolean>('_admin_recovery_used', false, () => true);
+  await appendAudit(username, 'ADMIN_PASSWORD_RECOVERED_PREVIEW', { sessionsRevoked: true, totpPreserved: true });
+  return res.status(200).json({ success: true, message: 'تم تحديث كلمة المرور وإلغاء الجلسات السابقة. المصادقة الثنائية ما زالت مفعلة.' });
+}
