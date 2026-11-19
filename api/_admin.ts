@@ -237,6 +237,10 @@ export async function handleAdminPasswordRecovery(req: any, res: any) {
   if (process.env.VERCEL_ENV !== 'preview' || process.env.VERCEL_GIT_COMMIT_REF !== 'feature/owner-control-center-v1') {
     return res.status(404).json({ code: 'NOT_FOUND' });
   }
+  // Fail closed until Preview is confirmed to use an isolated Neon branch/database.
+  if (process.env.MALVIA_ADMIN_RECOVERY_DB_ISOLATED !== 'true') {
+    return res.status(503).json({ code: 'ADMIN_RECOVERY_REQUIRES_ISOLATED_PREVIEW_DB', error: 'يلزم عزل قاعدة Preview عن Production قبل الاسترداد.' });
+  }
   if (req.method !== 'POST') return res.status(405).json({ code: 'METHOD_NOT_ALLOWED' });
   assertSameOrigin(req);
   await persistentLimit('admin-recovery:' + ip, 5, 60 * 60 * 1000);
