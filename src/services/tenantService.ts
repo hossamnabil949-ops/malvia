@@ -73,6 +73,10 @@ const THEME_META_COLORS: Record<AppTheme, string> = {
   light: '#0F172A',
 };
 
+export function hasStoredTenantLicenses(): boolean {
+  try { return localStorage.getItem(LICENSES_KEY) !== null; } catch { return false; }
+}
+
 export function loadTenantLicenses(): TenantLicense[] {
   try {
     const raw = localStorage.getItem(LICENSES_KEY);
