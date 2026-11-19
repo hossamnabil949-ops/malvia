@@ -54,6 +54,11 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   onSelectTenant,
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [credentialLicense, setCredentialLicense] = useState<TenantLicense | null>(null);
+  const [credentialEmployees, setCredentialEmployees] = useState<Array<{id:string;name:string;username:string;status:string}>>([]);
+  const [credentialEmployeeId, setCredentialEmployeeId] = useState('');
+  const [credentialVersion, setCredentialVersion] = useState(0);
+  const [credentialBusy, setCredentialBusy] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | TenantStatus>('all');
@@ -112,6 +117,61 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
     } catch (error: any) {
       setIsAuthenticated(false);
       window.alert(String(error?.message || 'تعذر تحميل سجل الشركات.'));
+    }
+  };
+
+  const openCredentialReconciliation = async (lic: TenantLicense) => {
+    setCredentialBusy(true);
+    try {
+      const query = new URLSearchParams({ licenseId: lic.id, tenantId: lic.tenantId });
+      const response = await fetch('/api/admin/reconcile-employee-credential?' + query.toString(), { credentials: 'include' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || 'تعذر تحميل حسابات الموظفين من السحابة.');
+      setCredentialLicense(lic);
+      setCredentialEmployees(Array.isArray(data.employees) ? data.employees : []);
+      setCredentialVersion(Number(data.version) || 0);
+      setCredentialEmployeeId('');
+    } catch (error: any) {
+      window.alert(String(error?.message || 'تعذر فتح أداة المصالحة.'));
+    } finally {
+      setCredentialBusy(false);
+    }
+  };
+
+  const reconcileSelectedCredential = async () => {
+    if (!credentialLicense || !credentialEmployeeId) return;
+    const confirmed = window.confirm('سيتم تحديث تجزئة كلمة مرور موظف واحد فقط في السحابة، مع الحفاظ على بقية بياناته. هل تريد المتابعة؟');
+    if (!confirmed) return;
+    setCredentialBusy(true);
+    try {
+      const raw = localStorage.getItem('malvia_' + credentialLicense.tenantId + '_employees');
+      const localEmployees = raw ? JSON.parse(raw) : [];
+      const localEmployee = Array.isArray(localEmployees)
+        ? localEmployees.find((item: any) => String(item?.id) === credentialEmployeeId)
+        : null;
+      if (!localEmployee || typeof localEmployee.passwordHash !== 'string' ||
+          !/^pbkdf2\$\d+\$[A-Za-z0-9+/]+=*\$[A-Za-z0-9+/]+=*$/.test(localEmployee.passwordHash)) {
+        throw new Error('لا توجد تجزئة كلمة مرور صالحة لهذا الموظف على هذا الجهاز. لم يتم تغيير أي بيانات.');
+      }
+      const response = await fetch('/api/admin/reconcile-employee-credential', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          licenseId: credentialLicense.id, tenantId: credentialLicense.tenantId,
+          employeeId: credentialEmployeeId, passwordHash: localEmployee.passwordHash,
+          baseVersion: credentialVersion,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || (response.status === 409
+        ? 'تغير سجل الموظفين. أغلق النافذة وأعد فتحها ثم حاول مرة أخرى.'
+        : 'تعذر تحديث بيانات المصادقة.'));
+      window.alert('تمت مصالحة بيانات اعتماد الموظف المحدد. اطلب منه تسجيل الدخول مجدداً؛ لن يتم تجاوز التحقق المعتاد.');
+      setCredentialLicense(null);
+    } catch (error: any) {
+      window.alert(String(error?.message || 'تعذر إتمام المصالحة.'));
+    } finally {
+      setCredentialBusy(false);
     }
   };
 
@@ -533,6 +593,15 @@ ${window.location.origin}`;
                             </button>
 
                             <button
+                              onClick={() => openCredentialReconciliation(lic)}
+                              disabled={credentialBusy}
+                              className="p-1.5 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-300 text-[11px] disabled:opacity-50"
+                              title="مصالحة تجزئة كلمة مرور موظف محدد مع السحابة"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
                               onClick={() => setBackupLicense(lic)}
                               className="p-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 text-[11px]"
                               title="النسخ الاحتياطية واسترجاع بيانات المحل"
@@ -574,6 +643,27 @@ ${window.location.origin}`;
                 <p>
                   3. بمجرد انتهاء فترة اشتراكه، يُقفل السيستم تلقائياً لديه ولا يمكنه استخدامه حتى تقوم بتجديده أو تمديده من هذه اللوحة.
                 </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {credentialLicense && (
+          <div className="fixed inset-0 z-[70] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-lg rounded-2xl border border-violet-500/40 bg-surface-2 p-5 text-white space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-black text-sm">مصالحة اعتماد موظف واحد مع السحابة</h3>
+                <button onClick={() => setCredentialLicense(null)} className="text-neutral-400 hover:text-white"><X className="w-4 h-4" /></button>
+              </div>
+              <p className="text-xs text-neutral-400">الشركة: {credentialLicense.companyName}. تتم مطابقة سجل السحابة مع التجزئة المحلية على هذا الجهاز. لا تُرسل كلمة المرور نفسها.</p>
+              <select value={credentialEmployeeId} onChange={e => setCredentialEmployeeId(e.target.value)} className="w-full h-11 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-sm">
+                <option value="">اختر الموظف المطلوب إصلاح دخوله</option>
+                {credentialEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.name} {employee.username ? '(' + employee.username + ')' : ''} {employee.status === 'معلق' ? '— موقوف' : ''}</option>)}
+              </select>
+              <p className="text-[11px] text-amber-300">سيتم تحديث passwordHash للموظف المختار فقط، مع إبقاء باقي الحقول كما هي. العملية محمية بإصدار السجل وتُسجل في سجل تدقيق الإدارة.</p>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setCredentialLicense(null)} className="px-4 py-2 rounded-xl bg-neutral-800 text-xs">إلغاء</button>
+                <button onClick={reconcileSelectedCredential} disabled={!credentialEmployeeId || credentialBusy} className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-bold disabled:opacity-50">{credentialBusy ? 'جارٍ التنفيذ...' : 'مصالحة الموظف المحدد'}</button>
               </div>
             </div>
           </div>
