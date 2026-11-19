@@ -7,7 +7,12 @@ let ready: Promise<void> | null = null;
 let client: any = null;
 async function sql() {
   if (client) return client;
-  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING;
+  // Isolate the owner-control-center preview branch from shared Preview/Production storage.
+  const isOwnerPreview =
+    process.env.VERCEL_ENV === 'preview' &&
+    process.env.VERCEL_GIT_COMMIT_REF === 'feature/owner-control-center-v1';
+  const url = (isOwnerPreview ? process.env.MALVIA_PREVIEW_DATABASE_URL : '') ||
+    process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING;
   if (!url) throw new Error('قاعدة البيانات غير مربوطة: DATABASE_URL غير موجود (اربط Neon من Storage ثم Redeploy)');
   let mod: any;
   try { mod = await import('@neondatabase/serverless'); }
