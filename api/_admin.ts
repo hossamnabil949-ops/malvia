@@ -210,10 +210,13 @@ export async function handleAdminAuth(req: any, res: any) {
     const users = (await readDoc<AdminUser[]>('_admin_users', [])).data;
     const user = users.find(item => item.username === username && !item.disabled);
     const validPassword = user ? checkPassword(password, user.passwordHash) : false;
-    const validCode = user?.totpEnabled ? verifyTotp(decryptSecret(user.totpSecretEnc), code) : false;
+    const validCode = user?.totpEnabled && validPassword ? verifyTotp(decryptSecret(user.totpSecretEnc), code) : false;
     if (!user || !validPassword || !validCode) {
-      await appendAudit(username || 'UNKNOWN', 'ADMIN_LOGIN_REJECTED');
-      return res.status(401).json({ code: 'ADMIN_INVALID_CREDENTIALS', error: 'بيانات الدخول أو رمز التحقق غير صحيحة.' });
+      const outcome = !user ? 'admin_not_found' : !validPassword ? 'password_mismatch' : !user.totpEnabled ? 'totp_not_enabled' : 'totp_mismatch';
+      const traceId = randomBytes(8).toString('hex');
+      console.warn('[MALVIA_ADMIN_LOGIN_DIAGNOSTIC]', { traceId, outcome });
+      await appendAudit(username || 'UNKNOWN', 'ADMIN_LOGIN_REJECTED', { traceId, outcome });
+      return res.status(401).json({ code: 'ADMIN_INVALID_CREDENTIALS', traceId, error: 'بيانات الدخول أو رمز التحقق غير صحيحة.' });
     }
     const expiresAt = await issueSession(username, res);
     await appendAudit(username, 'ADMIN_LOGIN_SUCCEEDED');
