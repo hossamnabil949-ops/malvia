@@ -13,7 +13,7 @@ import {
   clearTenantDemoData,
   updateOwnerPassword
 } from './services/tenantService';
-import { startSync, stopSync, SYNC_EVENT, pushRegistry } from './services/syncService';
+import { startSync, stopSync, SYNC_EVENT, pushRegistry, activateFromCloud } from './services/syncService';
 import * as syncSvc from './services/syncService';
 import { INITIAL_TENANT_LICENSES } from './data/autoPartsData';
 import { SyncBadge } from './components/SyncBadge';
@@ -2693,6 +2693,14 @@ export default function App() {
           setLicenses(newLicenses); saveTenantLicenses(newLicenses);
           pushRegistry(newLicenses).then(r => { if (!r.ok) window.alert('تعذر حفظ التراخيص في السحابة: ' + (r.error || '')); });
         }}
+        onLoadLicenses={(cloudLicenses) => {
+          if (cloudLicenses.length === 0 && licenses.length > 0) {
+            window.alert('سجل التراخيص السحابي فارغ حالياً. احتفظنا بالسجل المحلي دون حذفه؛ راجع الاستيراد قبل أي تعديل.');
+            return;
+          }
+          setLicenses(cloudLicenses);
+          saveTenantLicenses(cloudLicenses);
+        }}
         onSelectTenant={(tenantId) => { setActiveTenantId(tenantId); setActiveTenantIdState(tenantId); window.location.replace('/'); }}
       />
     );
@@ -2706,17 +2714,21 @@ export default function App() {
         isOpen={true}
         licenses={licenses}
         currentLicense={activeTenant}
-        onActivateKey={(key: string) => {
-          const found = licenses.find(l => l.licenseKey.toUpperCase() === key.trim().toUpperCase());
-          if (found) {
-            saveDeviceLicenseKey(found.licenseKey);
-            setActiveTenantId(found.tenantId);
-            setActiveTenantIdState(found.tenantId);
-            reloadTenantData(found);
-            setShowActivationGateway(false);
-            return { success: true, message: 'تم تفعيل المحل بنجاح', license: found };
+        onActivateKey={async (key: string) => {
+          const result = await activateFromCloud(key);
+          if (!result.ok || !result.tenant) {
+            return { success: false, message: result.error || (result.offline ? 'تعذر الاتصال بالسحابة. تحقق من الإنترنت وحاول مرة أخرى.' : 'مفتاح الترخيص غير صالح.') };
           }
-          return { success: false, message: 'مفتاح الترخيص غير صحيح' };
+          const found = result.tenant as TenantLicense;
+          const updatedLicenses = [found, ...licenses.filter(item => item.tenantId !== found.tenantId && item.licenseKey.toUpperCase() !== found.licenseKey.toUpperCase())];
+          setLicenses(updatedLicenses);
+          saveTenantLicenses(updatedLicenses);
+          saveDeviceLicenseKey(found.licenseKey);
+          setActiveTenantId(found.tenantId);
+          setActiveTenantIdState(found.tenantId);
+          reloadTenantData(found);
+          setShowActivationGateway(false);
+          return { success: true, message: 'تم التحقق من الترخيص السحابي وتفعيل المحل بنجاح', license: found };
         }}
       />
     );
