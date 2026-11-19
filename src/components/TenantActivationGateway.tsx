@@ -21,7 +21,7 @@ interface TenantActivationGatewayProps {
   onClose?: () => void;
   licenses: TenantLicense[];
   currentLicense: TenantLicense | null;
-  onActivateKey: (key: string) => { success: boolean; message: string; license?: TenantLicense };
+  onActivateKey: (key: string) => Promise<{ success: boolean; message: string; license?: TenantLicense }>;
   onOpenDeploymentGuide?: () => void;
 }
 
@@ -38,6 +38,7 @@ export const TenantActivationGateway: React.FC<TenantActivationGatewayProps> = (
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [previewLicense, setPreviewLicense] = useState<TenantLicense | null>(null);
   const [activatedSuccess, setActivatedSuccess] = useState(false);
+  const [isActivating, setIsActivating] = useState(false);
 
   if (!isOpen) return null;
 
@@ -54,20 +55,26 @@ export const TenantActivationGateway: React.FC<TenantActivationGatewayProps> = (
     }
   };
 
-  const handleActivate = (e: React.FormEvent) => {
+  const handleActivate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputKey.trim()) return;
-
-    const result = onActivateKey(inputKey.trim());
-    if (result.success) {
-      setActivatedSuccess(true);
-      setErrorMsg(null);
-      setTimeout(() => {
-        setActivatedSuccess(false);
-        if (onClose) onClose();
-      }, 1500);
-    } else {
-      setErrorMsg(result.message);
+    if (!inputKey.trim() || isActivating) return;
+    setIsActivating(true);
+    setErrorMsg(null);
+    try {
+      const result = await onActivateKey(inputKey.trim());
+      if (result.success) {
+        setActivatedSuccess(true);
+        setTimeout(() => {
+          setActivatedSuccess(false);
+          if (onClose) onClose();
+        }, 1500);
+      } else {
+        setErrorMsg(result.message);
+      }
+    } catch {
+      setErrorMsg('تعذر التحقق من الترخيص حالياً. تحقق من الاتصال وحاول مرة أخرى.');
+    } finally {
+      setIsActivating(false);
     }
   };
 
@@ -160,10 +167,10 @@ export const TenantActivationGateway: React.FC<TenantActivationGatewayProps> = (
 
           <button
             type="submit"
-            disabled={activatedSuccess || !inputKey.trim()}
+            disabled={activatedSuccess || isActivating || !inputKey.trim()}
             className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all disabled:opacity-50"
           >
-            تفعيل وتشغيل نظام المحل الآن
+            {isActivating ? 'جارٍ التحقق من الترخيص في السحابة...' : 'تفعيل وتشغيل نظام المحل الآن'}
           </button>
         </form>
 
