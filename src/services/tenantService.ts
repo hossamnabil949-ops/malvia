@@ -599,6 +599,8 @@ export async function authenticateShopUser(
         // License, authorization, rate-limit and server errors must still fail closed.
         if (authResponse.status === 401 && authBody.code === 'EMPLOYEE_INVALID_CREDENTIALS') {
           localOnlyLogin = true;
+          const traceId = typeof authBody?.diagnostic?.traceId === 'string' ? authBody.diagnostic.traceId : '';
+          if (traceId) console.warn('[MALVIA_LOCAL_ONLY_LOGIN]', { traceId, code: 'EMPLOYEE_INVALID_CREDENTIALS' });
         } else {
           return {
             success: false,
