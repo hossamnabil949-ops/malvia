@@ -20,9 +20,28 @@ function isValidPasswordHash(value: unknown): value is string {
 
 export default async function handler(req: any, res: any) {
   try {
-    if (req.method !== 'POST') throw new ApiError('METHOD_NOT_ALLOWED');
+    if (req.method !== 'GET' && req.method !== 'POST') throw new ApiError('METHOD_NOT_ALLOWED');
     const admin = await requireAdminIdentity(req);
     if (admin.role !== 'SUPER_ADMIN') throw new ApiError('ADMIN_UNAUTHORIZED');
+
+    if (req.method === 'GET') {
+      const licenseId = String(req.query?.licenseId || '');
+      const tenantId = String(req.query?.tenantId || '');
+      if (!licenseId || !tenantId) throw new ApiError('INVALID_BODY');
+      const registry = await getOne('_registry', 'licenses');
+      const licenses = Array.isArray(registry?.data) ? registry.data : [];
+      const license = licenses.find((item: any) => String(item.id) === licenseId && String(item.tenantId) === tenantId);
+      if (!license) throw new ApiError('LICENSE_INVALID');
+      const current = await getOne(tenantId, 'employees');
+      const employees = Array.isArray(current?.data) ? current.data : [];
+      return res.status(200).json({
+        version: Number(current?.version || 0),
+        employees: employees.map((item: any) => ({
+          id: String(item?.id || ''), name: String(item?.name || ''),
+          username: String(item?.username || ''), status: String(item?.status || 'نشط'),
+        })).filter((item: any) => item.id),
+      });
+    }
 
     const { licenseId, tenantId, employeeId, passwordHash, baseVersion } = req.body || {};
     if (typeof licenseId !== 'string' || !licenseId.trim() ||
