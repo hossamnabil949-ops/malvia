@@ -32,7 +32,7 @@ import { TenantLicense, TenantPlan, TenantStatus } from '../types/autoParts';
 import { TenantBackupsModal } from './TenantBackupsModal';
 import { OwnerLicenseEditorModal } from './OwnerLicenseEditorModal';
 import { OwnerCatalogAuditModal } from './OwnerCatalogAuditModal';
-import { getAdminToken } from '../services/syncService';
+import { AdminAuthPanel } from './AdminAuthPanel';
 
 interface SuperAdminPortalProps {
   isOpen: boolean;
@@ -52,8 +52,6 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   onSelectTenant,
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [pinCode, setPinCode] = useState('');
-  const [pinError, setPinError] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | TenantStatus>('all');
@@ -85,9 +83,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    const token = getAdminToken();
-    if (!token) return;
-    fetch('/api/registry?resource=plans', { headers: { 'x-admin-token': token } })
+    fetch('/api/registry?resource=plans', { credentials: 'include' })
       .then(response => response.ok ? response.json() : null)
       .then(data => {
         const names = Array.isArray(data?.plans)
@@ -99,43 +95,31 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
       .catch(() => { setCatalogPlanNames([]); setCatalogPlans([]); });
   }, [isAuthenticated]);
 
-  const MASTER_PIN_KEY = 'malvia_master_owner_pin_v1';
-
-  const [showChangePinModal, setShowChangePinModal] = useState(false);
   const [backupLicense, setBackupLicense] = useState<TenantLicense | null>(null);
   const [editingLicense, setEditingLicense] = useState<TenantLicense | null>(null);
   const [showCatalogAudit, setShowCatalogAudit] = useState(false);
   const [catalogPlanNames, setCatalogPlanNames] = useState<string[]>([]);
-  const [newMasterPin, setNewMasterPin] = useState('');
-  const [pinChangeSuccess, setPinChangeSuccess] = useState(false);
 
-  const handleVerifyPin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const storedPin = localStorage.getItem(MASTER_PIN_KEY) || '';
-    if (!storedPin || ['2026', 'malvia', 'admin'].includes(storedPin.toLowerCase())) {
-      if (pinCode.trim().length < 12) { setPinError(true); return; }
-      localStorage.setItem(MASTER_PIN_KEY, pinCode.trim());
-      setIsAuthenticated(true); setPinError(false); setPinCode(''); return;
-    }
-    if (pinCode.trim() === storedPin) {
-      setIsAuthenticated(true);
-      setPinError(false);
-      setPinCode('');
-    } else {
-      setPinError(true);
+  const handleAuthenticated = async () => {
+    setIsAuthenticated(true);
+    try {
+      const response = await fetch('/api/registry?resource=licenses', { credentials: 'include' });
+      if (!response.ok) throw new Error('تعذر تحميل سجل الشركات من الخادم.');
+      const data = await response.json();
+      if (Array.isArray(data?.licenses)) onUpdateLicenses(data.licenses);
+    } catch (error: any) {
+      setIsAuthenticated(false);
+      window.alert(String(error?.message || 'تعذر تحميل سجل الشركات.'));
     }
   };
 
-  const handleSaveNewPin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMasterPin.trim()) return;
-    localStorage.setItem(MASTER_PIN_KEY, newMasterPin.trim());
-    setPinChangeSuccess(true);
-    setTimeout(() => {
-      setPinChangeSuccess(false);
-      setShowChangePinModal(false);
-      setNewMasterPin('');
-    }, 1500);
+  const handleAdminLogout = async () => {
+    await fetch('/api/admin/auth', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'logout' }),
+    }).catch(() => undefined);
+    setIsAuthenticated(false);
   };
 
   const filteredLicenses = useMemo(() => {
@@ -322,48 +306,7 @@ ${window.location.origin}`;
         </div>
 
         {!isAuthenticated ? (
-          <div className="p-8 sm:p-12 flex flex-col items-center justify-center text-center space-y-4 flex-1">
-            <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-lg">
-              <Lock className="w-8 h-8" />
-            </div>
-            
-            <div className="max-w-md space-y-1.5">
-              <h3 className="text-lg font-black text-white">المنطقة مقيدة لمالك النظام فقط</h3>
-              <p className="text-xs text-neutral-400">
-                أدخل رمز المالك. عند أول استخدام، أنشئ رمزًا قويًا لا يقل عن 12 حرفًا أو رقمًا.
-              </p>
-            </div>
-
-            <form onSubmit={handleVerifyPin} className="w-full max-w-xs space-y-3 pt-2">
-              <input
-                type="password"
-                autoFocus
-                value={pinCode}
-                onChange={(e) => {
-                  setPinCode(e.target.value);
-                  setPinError(false);
-                }}
-                placeholder="أدخل رمز المالك أو أنشئه أول مرة (12 خانة على الأقل)"
-                className="w-full h-12 text-center text-lg tracking-widest font-mono rounded-2xl bg-surface-2 border border-neutral-700 text-amber-400 placeholder:text-neutral-600 focus:outline-none focus:border-amber-500"
-              />
-
-              {pinError && (
-                <div className="text-xs text-rose-400 flex items-center justify-center gap-1 font-bold">
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  <span>رمز الأمان غير صحيح. يرجى التأكد من كتابة رمز المالك المعتمد.</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
-              >
-                تأكيد الدخول للوحة المالك
-              </button>
-            </form>
-
-            <span className="text-[11px] text-neutral-500 font-mono">MALVIA Enterprise Multi-Tenant Engine</span>
-          </div>
+          <AdminAuthPanel onAuthenticated={handleAuthenticated} />
         ) : (
           <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
@@ -431,12 +374,12 @@ ${window.location.origin}`;
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowChangePinModal(true)}
+                  onClick={handleAdminLogout}
                   className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-amber-300 font-bold text-xs border border-amber-500/30 transition shadow-sm"
-                  title="تغيير كلمة مرور المالك الرئيسية"
+                  title="تسجيل الخروج من حساب الإدارة"
                 >
                   <Key className="w-3.5 h-3.5 text-amber-400" />
-                  <span>تغيير كلمة سر المالك</span>
+                  <span>تسجيل الخروج</span>
                 </button>
 
                 <button
@@ -849,81 +792,6 @@ ${window.location.origin}`;
                   توليد كود التفعيل واعتماد الترخيص
                 </button>
               </form>
-            </div>
-          </div>
-        )}
-
-        {/* Change Master PIN Modal */}
-        {showChangePinModal && (
-          <div 
-            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
-            onClick={() => setShowChangePinModal(false)}
-          >
-            <div 
-              className="w-full max-w-md bg-surface-2 rounded-3xl border border-amber-500/40 p-6 text-white shadow-2xl space-y-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
-                    <Key className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-white">تغيير رمز مرور المالك (Master PIN)</h3>
-                    <p className="text-[11px] text-neutral-400">الرمز الخاص بك للدخول إلى لوحة المالك المركزية</p>
-                  </div>
-                </div>
-                <button onClick={() => setShowChangePinModal(false)} className="text-neutral-400 hover:text-white">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {pinChangeSuccess ? (
-                <div className="p-6 text-center space-y-2">
-                  <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <h4 className="font-bold text-white text-sm">تم حفظ رمز المرور الجديد بنجاح!</h4>
-                  <p className="text-xs text-neutral-400">احتفظ برمزك الجديد لاستخدامه في المرات القادمة.</p>
-                </div>
-              ) : (
-                <form onSubmit={handleSaveNewPin} className="space-y-4 text-xs">
-                  <div>
-                    <label className="text-neutral-300 font-bold block mb-1">
-                      رمز المرور الجديد <span className="text-amber-400">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      autoFocus
-                      placeholder="أدخل رمز مرور جديد قوي (أرقام أو حروف)"
-                      value={newMasterPin}
-                      onChange={(e) => setNewMasterPin(e.target.value)}
-                      className="w-full h-11 px-3.5 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono text-center tracking-widest text-sm focus:outline-none focus:border-amber-500"
-                    />
-                    <p className="text-[10px] text-neutral-400 mt-1">
-                      هذا الرمز خاص بك وحدك كصاحب النظام ولا يظهر لأي عميل أو موظف.
-                    </p>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-800">
-                    <button
-                      type="button"
-                      onClick={() => setShowChangePinModal(false)}
-                      className="px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold"
-                    >
-                      إلغاء
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black shadow-lg shadow-amber-500/20 active:scale-95 transition"
-                    >
-                      <Check className="w-4 h-4 stroke-[3]" />
-                      <span>حفظ الرمز الجديد</span>
-                    </button>
-                  </div>
-                </form>
-              )}
             </div>
           </div>
         )}
