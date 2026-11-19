@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { getAdminToken } from '../services/syncService';
 
 type Plan = {
   id: string; name: string; monthlyPrice: number; annualPrice: number;
@@ -37,15 +36,13 @@ export const OwnerCatalogAuditModal: React.FC<{onClose:()=>void}> = ({onClose}) 
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState('');
   const [dirty,setDirty]=useState(false);
-  const token=getAdminToken();
 
   const load=async()=>{
     setLoading(true); setError('');
     try {
-      if(!token) throw new Error('رمز الإدارة السحابي غير متاح. أعد تسجيل الدخول إلى لوحة المالك.');
       const [p,a]=await Promise.all([
-        fetch('/api/registry?resource=plans',{headers:{'x-admin-token':token}}),
-        fetch('/api/registry?resource=owner_audit',{headers:{'x-admin-token':token}}),
+        fetch('/api/registry?resource=plans',{credentials:'include'}),
+        fetch('/api/registry?resource=owner_audit',{credentials:'include'}),
       ]);
       if(!p.ok||!a.ok) throw new Error('تعذر تحميل الباقات أو سجل التدقيق من السحابة.');
       const pj=await p.json(), aj=await a.json();
@@ -69,7 +66,7 @@ export const OwnerCatalogAuditModal: React.FC<{onClose:()=>void}> = ({onClose}) 
   const save=async()=>{
     setSaving(true);setError('');
     try{
-      const res=await fetch('/api/registry',{method:'POST',headers:{'content-type':'application/json','x-admin-token':token},body:JSON.stringify({resource:'plans',plans,baseVersion:version})});
+      const res=await fetch('/api/registry',{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({resource:'plans',plans,baseVersion:version})});
       if(res.status===409) throw new Error('تم تعديل الباقات من جلسة أخرى. أعد تحميل البيانات قبل الحفظ.');
       if(!res.ok) throw new Error('فشل حفظ الباقات على السحابة.');
       const data=await res.json();setVersion(Number(data.version)||version);setDirty(false);await load();setTab('audit');
