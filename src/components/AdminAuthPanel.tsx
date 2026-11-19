@@ -4,13 +4,15 @@ import { Lock, ShieldCheck } from 'lucide-react';
 type Props = { onAuthenticated: () => void };
 
 export const AdminAuthPanel: React.FC<Props> = ({ onAuthenticated }) => {
-  const [mode, setMode] = useState<'loading' | 'login' | 'bootstrap' | 'setup'>('loading');
+  const [mode, setMode] = useState<'loading' | 'login' | 'bootstrap' | 'setup' | 'recovery'>('loading');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [bootstrapToken, setBootstrapToken] = useState('');
   const [setupSecret, setSetupSecret] = useState('');
   const [setupCode, setSetupCode] = useState('');
+  const [recoveryToken, setRecoveryToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -25,8 +27,8 @@ export const AdminAuthPanel: React.FC<Props> = ({ onAuthenticated }) => {
       .catch(() => { setError('تعذر الاتصال بخدمة دخول مسؤولي MALVIA.'); setMode('login'); });
   }, []);
 
-  const post = async (body: Record<string, string>) => {
-    const response = await fetch('/api/admin/auth', {
+  const post = async (body: Record<string, string>, endpoint = '/api/admin/auth') => {
+    const response = await fetch(endpoint, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -47,6 +49,11 @@ export const AdminAuthPanel: React.FC<Props> = ({ onAuthenticated }) => {
         setSetupSecret(String(data.totpSecret || ''));
         setUsername(String(data.username || username));
         setBootstrapToken(''); setPassword(''); setMode('setup');
+      } else if (mode === 'recovery') {
+        await post({ username, recoveryToken, newPassword }, '/api/admin/recover-password');
+        setRecoveryToken(''); setNewPassword(''); setPassword(''); setTotpCode('');
+        setMode('login');
+        setError('تم تغيير كلمة المرور. سجّل الدخول بكلمة المرور الجديدة ورمز المصادقة الحالي.');
       } else if (mode === 'setup') {
         await post({ action: 'confirm-setup', username, code: setupCode });
         setSetupSecret(''); onAuthenticated();
@@ -79,7 +86,14 @@ export const AdminAuthPanel: React.FC<Props> = ({ onAuthenticated }) => {
         {mode !== 'setup' && (
           <>
             <input value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" placeholder="اسم المستخدم الإداري" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white" />
-            <input value={password} onChange={e => setPassword(e.target.value)} type="password" autoComplete={mode === 'bootstrap' ? 'new-password' : 'current-password'} placeholder={mode === 'bootstrap' ? 'كلمة مرور قوية (14 حرفاً على الأقل)' : 'كلمة المرور'} className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white" />
+            <input value={password} onChange={e => setPassword(e.target.value)} type="password" autoComplete={mode === 'bootstrap' || mode === 'recovery' ? 'new-password' : 'current-password'} placeholder={mode === 'bootstrap' ? 'كلمة مرور قوية (14 حرفاً على الأقل)' : mode === 'recovery' ? 'كلمة المرور الجديدة (14 حرفاً على الأقل)' : 'كلمة المرور'} className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white" />
+          </>
+        )}
+        {mode === 'recovery' && (
+          <>
+            <p className="text-xs text-amber-300">استرداد طارئ لحساب المسؤول على Preview فقط. الإجراء يُستخدم مرة واحدة ويُبقي المصادقة الثنائية كما هي.</p>
+            <input value={recoveryToken} onChange={e => setRecoveryToken(e.target.value)} type="password" autoComplete="off" placeholder="رمز الاسترداد المؤقت" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white" />
+            <input value={newPassword} onChange={e => setNewPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="كلمة المرور الجديدة (14 حرفاً على الأقل)" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white" />
           </>
         )}
         {mode === 'setup' && (
@@ -92,9 +106,11 @@ export const AdminAuthPanel: React.FC<Props> = ({ onAuthenticated }) => {
         {mode === 'login' && (
           <input value={totpCode} onChange={e => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="رمز التحقق من التطبيق" className="w-full h-11 px-3 text-center tracking-[0.35em] font-mono rounded-xl bg-surface-2 border border-neutral-700 text-white" />
         )}
-        <button disabled={busy || (mode === 'bootstrap' && (!bootstrapToken || username.length < 3 || password.length < 14)) || (mode === 'login' && (!username || !password || totpCode.length !== 6)) || (mode === 'setup' && setupCode.length !== 6)} className="w-full py-3 rounded-xl bg-amber-500 text-neutral-950 font-black text-xs disabled:opacity-50">
-          {busy ? 'جارٍ التحقق...' : mode === 'bootstrap' ? 'إنشاء حساب المسؤول الأول' : mode === 'setup' ? 'تفعيل المصادقة الثنائية' : 'تسجيل الدخول الآمن'}
+        <button disabled={busy || (mode === 'bootstrap' && (!bootstrapToken || username.length < 3 || password.length < 14)) || (mode === 'login' && (!username || !password || totpCode.length !== 6) || (mode === 'recovery' && (!username || recoveryToken.length < 40 || newPassword.length < 14))) || (mode === 'setup' && setupCode.length !== 6)} className="w-full py-3 rounded-xl bg-amber-500 text-neutral-950 font-black text-xs disabled:opacity-50">
+          {busy ? 'جارٍ التحقق...' : mode === 'bootstrap' ? 'إنشاء حساب المسؤول الأول' : mode === 'setup' ? 'تفعيل المصادقة الثنائية' : mode === 'recovery' ? 'تحديث كلمة المرور مرة واحدة' : 'تسجيل الدخول الآمن'}
         </button>
+        {mode === 'login' && <button type="button" onClick={() => { setError(''); setMode('recovery'); }} className="w-full py-2 text-xs text-amber-300 hover:text-amber-200">نسيت كلمة المرور؟ استرداد آمن على Preview</button>}
+        {mode === 'recovery' && <button type="button" onClick={() => { setError(''); setMode('login'); }} className="w-full py-2 text-xs text-neutral-400">العودة لتسجيل الدخول</button>}
       </form>
       {error && <p className="text-xs text-rose-400 max-w-sm">{error}</p>}
       <span className="text-[11px] text-neutral-500 font-mono">MALVIA Secure Administration</span>
