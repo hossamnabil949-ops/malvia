@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   loadTenantLicenses, 
-  saveTenantLicenses, 
+  saveTenantLicenses,
+  hasStoredTenantLicenses, 
   getActiveTenantId, 
   setActiveTenantId, 
   loadTenantStoreData, 
@@ -133,6 +134,30 @@ export default function App() {
   const activeTenant = useMemo(() => {
     return licenses.find(l => l.tenantId === activeTenantId) || licenses[0];
   }, [licenses, activeTenantId]);
+
+  useEffect(() => {
+    const savedKey = getDeviceSavedLicenseKey();
+    if (!savedKey) return;
+    let cancelled = false;
+    activateFromCloud(savedKey).then(result => {
+      if (cancelled) return;
+      if (result.ok && result.tenant) {
+        const cloudLicense = result.tenant as TenantLicense;
+        setLicenses(current => {
+          const next = [cloudLicense, ...current.filter(item => item.tenantId !== cloudLicense.tenantId && item.licenseKey.toUpperCase() !== cloudLicense.licenseKey.toUpperCase())];
+          saveTenantLicenses(next);
+          return next;
+        });
+      } else if (result.error === 'الترخيص معلق') {
+        setLicenses(current => {
+          const next = current.map(item => item.licenseKey.toUpperCase() === savedKey.toUpperCase() ? { ...item, status: 'معلق مؤقتاً' as const } : item);
+          saveTenantLicenses(next);
+          return next;
+        });
+      }
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   // Store data state
   const [parts, setParts] = useState<AutoPart[]>([]);
@@ -2694,7 +2719,7 @@ export default function App() {
           pushRegistry(newLicenses).then(r => { if (!r.ok) window.alert('تعذر حفظ التراخيص في السحابة: ' + (r.error || '')); });
         }}
         onLoadLicenses={(cloudLicenses) => {
-          if (cloudLicenses.length === 0 && licenses.length > 0) {
+          if (cloudLicenses.length === 0 && hasStoredTenantLicenses() && licenses.length > 0) {
             window.alert('سجل التراخيص السحابي فارغ حالياً. احتفظنا بالسجل المحلي دون حذفه؛ راجع الاستيراد قبل أي تعديل.');
             return;
           }
