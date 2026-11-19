@@ -31,8 +31,11 @@ export const AdminAuthPanel: React.FC<Props> = ({ onAuthenticated }) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data?.error || 'تعذر إتمام العملية.');
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const details = [data?.error || 'تعذر إتمام العملية.', data?.code ? 'Code: ' + data.code : '', data?.traceId ? 'Trace: ' + data.traceId : ''].filter(Boolean).join(' — ');
+      throw new Error(details);
+    }
     return data;
   };
 
