@@ -250,11 +250,18 @@ export async function handleAdminPasswordRecovery(req: any, res: any) {
   if (!/^[a-z0-9._-]{3,40}$/.test(username) || password.length < 14 || password.length > 200) {
     return res.status(400).json({ code: 'ADMIN_RECOVERY_INVALID', error: 'اسم المستخدم أو كلمة المرور الجديدة غير صالحة.' });
   }
-  const used = (await readDoc<boolean>('_admin_recovery_used', false)).data;
-  if (used) return res.status(410).json({ code: 'ADMIN_RECOVERY_ALREADY_USED', error: 'تم استخدام إجراء الاسترداد بالفعل.' });
   const users = (await readDoc<AdminUser[]>('_admin_users', [])).data;
   const matches = users.filter(item => item.username === username && item.role === 'SUPER_ADMIN' && !item.disabled);
   if (matches.length !== 1) return res.status(404).json({ code: 'ADMIN_RECOVERY_ACCOUNT_NOT_FOUND', error: 'لم يتم العثور على حساب المسؤول المطلوب.' });
+  try {
+    await mutateDoc<boolean>('_admin_recovery_used', false, current => {
+      if (current) throw new Error('ADMIN_RECOVERY_ALREADY_USED');
+      return true;
+    });
+  } catch (error: any) {
+    if (error?.message === 'ADMIN_RECOVERY_ALREADY_USED') return res.status(410).json({ code: 'ADMIN_RECOVERY_ALREADY_USED', error: 'تم استخدام إجراء الاسترداد بالفعل.' });
+    throw error;
+  }
   await mutateDoc<AdminUser[]>('_admin_users', [], rows => rows.map(item =>
     item.username === username ? { ...item, passwordHash: makePasswordHash(password) } : item
   ));
