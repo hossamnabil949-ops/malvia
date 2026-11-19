@@ -1,6 +1,6 @@
-import { getOne, putIfVersion } from './_db.js';
-import { ApiError, sendError } from './_security.js';
-import { requireAdminIdentity, writeAdminAudit } from './_admin.js';
+import { getOne, putIfVersion } from '../_db.js';
+import { ApiError, sendError } from '../_security.js';
+import { requireAdminIdentity, writeAdminAudit } from '../_admin.js';
 import { Buffer } from 'node:buffer';
 
 function isValidPasswordHash(value: unknown): value is string {
