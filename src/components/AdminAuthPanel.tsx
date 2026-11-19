@@ -86,7 +86,7 @@ export const AdminAuthPanel: React.FC<Props> = ({ onAuthenticated }) => {
         {mode !== 'setup' && (
           <>
             <input value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" placeholder="اسم المستخدم الإداري" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white" />
-            <input value={password} onChange={e => setPassword(e.target.value)} type="password" autoComplete={mode === 'bootstrap' || mode === 'recovery' ? 'new-password' : 'current-password'} placeholder={mode === 'bootstrap' ? 'كلمة مرور قوية (14 حرفاً على الأقل)' : mode === 'recovery' ? 'كلمة المرور الجديدة (14 حرفاً على الأقل)' : 'كلمة المرور'} className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white" />
+            {mode !== 'recovery' && <input value={password} onChange={e => setPassword(e.target.value)} type="password" autoComplete={mode === 'bootstrap' ? 'new-password' : 'current-password'} placeholder={mode === 'bootstrap' ? 'كلمة مرور قوية (14 حرفاً على الأقل)' : 'كلمة المرور'} className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white" />}
           </>
         )}
         {mode === 'recovery' && (
