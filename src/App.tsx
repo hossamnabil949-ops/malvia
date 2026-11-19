@@ -13,7 +13,7 @@ import {
   clearTenantDemoData,
   updateOwnerPassword
 } from './services/tenantService';
-import { startSync, stopSync, SYNC_EVENT, fetchRegistry, pushRegistry, getAdminToken, setAdminToken, clearAdminToken } from './services/syncService';
+import { startSync, stopSync, SYNC_EVENT, pushRegistry } from './services/syncService';
 import * as syncSvc from './services/syncService';
 import { INITIAL_TENANT_LICENSES } from './data/autoPartsData';
 import { SyncBadge } from './components/SyncBadge';
@@ -332,28 +332,7 @@ export default function App() {
     return () => window.removeEventListener('malvia-sync-warning', onSyncWarning);
   }, []);
 
-  // لوحة المالك: اقرأ سجل المحلات من السحابة (يتطلب رمز الإدارة)
-  useEffect(() => {
-    if (window.location.pathname.replace(/\/$/, '') !== '/owner') return;
-    (async () => {
-      if (!getAdminToken()) {
-        const t = window.prompt('أدخل رمز الإدارة السحابي (ADMIN_TOKEN) لربط لوحة المالك بالسحابة، أو اتركه فارغاً للعمل محلياً فقط');
-        if (t && t.trim()) setAdminToken(t); else return;
-      }
-      const remote = await fetchRegistry();
-      if (remote && remote.length > 0) {
-        setLicenses(remote as TenantLicense[]); saveTenantLicenses(remote as TenantLicense[]);
-      } else if (remote && remote.length === 0) {
-        const demoKeys = new Set(INITIAL_TENANT_LICENSES.map(l => l.licenseKey.toUpperCase()));
-        const mine = loadTenantLicenses().filter(l => !demoKeys.has(l.licenseKey.toUpperCase()));
-        if (mine.length) pushRegistry(mine);
-      } else {
-        const why = syncSvc.lastRegistryError;
-        if (why === 'bad-token') { clearAdminToken(); window.alert('رمز الإدارة غير صحيح أو غير مضبوط في Vercel (ADMIN_TOKEN). أعد فتح الصفحة لإدخاله من جديد.'); }
-        else window.alert('تعذر الاتصال بسجل السحابة: ' + why);
-      }
-    })();
-  }, []);
+  // يتم تحميل سجل الشركات بعد نجاح مصادقة مسؤول MALVIA داخل لوحة الإدارة.
 
   // Handle URL Query Parameters (Direct links: admin, store, cashier, specific modules)
   useEffect(() => {
@@ -2712,7 +2691,7 @@ export default function App() {
         activeTenantId={activeTenantId}
         onUpdateLicenses={(newLicenses) => {
           setLicenses(newLicenses); saveTenantLicenses(newLicenses);
-          if (getAdminToken()) pushRegistry(newLicenses).then(r => { if (!r.ok) window.alert('تعذر حفظ التراخيص في السحابة: ' + (r.error || '')); });
+          pushRegistry(newLicenses).then(r => { if (!r.ok) window.alert('تعذر حفظ التراخيص في السحابة: ' + (r.error || '')); });
         }}
         onSelectTenant={(tenantId) => { setActiveTenantId(tenantId); setActiveTenantIdState(tenantId); window.location.replace('/'); }}
       />
