@@ -511,57 +511,37 @@ export async function activateFromCloud(licenseKey: string, username?: string, p
   }
 }
 
-// ------------------------------------------------------------------ سجل المحلات (لصاحب المنظومة فقط)
-const ADMIN_TOKEN_KEY = 'malvia_admin_token_v1';
-export const getAdminToken = () => { try { return localStorage.getItem(ADMIN_TOKEN_KEY) || ''; } catch { return ''; } };
-export const setAdminToken = (t: string) => { try { localStorage.setItem(ADMIN_TOKEN_KEY, t.trim()); } catch { /* ignore */ } };
-
+// ------------------------------------------------------------------ سجل المحلات (لمسؤولي MALVIA عبر جلسة خادمية HttpOnly)
 export let lastRegistryError = '';
-export function clearAdminToken() { try { localStorage.removeItem(ADMIN_TOKEN_KEY); } catch { /* ignore */ } }
 
 export async function fetchRegistry(): Promise<any[] | null> {
-  const token = getAdminToken();
   lastRegistryError = '';
-  if (!token) { lastRegistryError = 'no-token'; return null; }
   try {
-    const r = await api('/api/registry', { method: 'GET', headers: { 'x-admin-token': token } });
+    const r = await api('/api/registry', { method: 'GET', credentials: 'include' });
     if (r.ok) return r.body.licenses;
-    lastRegistryError = r.status === 401 && r.body?.error
-      ? 'bad-token'
+    lastRegistryError = r.status === 401 ? 'not-authenticated'
       : r.status === 404 ? 'الـ API غير موجود (HTTP 404): تأكد أن مجلد api مرفوع'
-      : r.status === 401 || r.status === 403 ? 'Vercel يحجب الطلب (HTTP ' + r.status + '): استخدم رابط الإنتاج أو عطّل Deployment Protection'
       : (r.body?.error || 'HTTP ' + r.status);
     return null;
   } catch (e: any) { lastRegistryError = 'لا يوجد اتصال: ' + String(e?.message || e); return null; }
 }
 
 export async function pushRegistry(licenses: unknown[]): Promise<{ ok: boolean; error?: string }> {
-  const token = getAdminToken();
-  if (!token) return { ok: false, error: 'no-token' };
   try {
-    const cur = await api('/api/registry', { method: 'GET', headers: { 'x-admin-token': token } });
-    if (!cur.ok) return { ok: false, error: cur.body?.error || `HTTP ${cur.status}` };
+    const cur = await api('/api/registry', { method: 'GET', credentials: 'include' });
+    if (!cur.ok) return { ok: false, error: cur.body?.error || (cur.status === 401 ? 'يجب تسجيل الدخول لمسؤول MALVIA أولاً.' : 'HTTP ' + cur.status) };
     const r = await api('/api/registry', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ licenses, baseVersion: cur.body.version }),
     });
-    return r.ok ? { ok: true } : { ok: false, error: r.body?.error || `HTTP ${r.status}` };
+    if (r.ok) return { ok: true };
+    return { ok: false, error: r.body?.error || 'HTTP ' + r.status };
   } catch (e: any) { return { ok: false, error: String(e?.message || e) }; }
 }
 
-// ------------------------------------------------------------------ النسخ الاحتياطي
-export interface BackupFile {
-  app: 'MALVIA';
-  format: number;
-  exportedAt: string;
-  company?: string;
-  tenantId?: string;
-  source: 'server' | 'device';
-  docs: Record<string, { data: unknown; version?: number }>;
-}
+export interface BackupFile { app: string; format: number; exportedAt: string; company?: string; tenantId: string; source?: 'server' | 'device'; docs: Record<string, { data: any; version?: number }>; }
 
-/** نسخة من بيانات المحل: من السيرفر (الأحدث)، وإن تعذر الاتصال من النسخة المحفوظة على هذا الجهاز. */
 export async function exportShopBackup(tenantId: string, licenseKey: string, company?: string): Promise<{ ok: boolean; file?: BackupFile; error?: string }> {
   try {
     const r = await api('/api/backup?action=export', { method: 'GET', headers: { 'x-license-key': licenseKey.trim().toUpperCase() } });
@@ -580,12 +560,9 @@ export async function exportShopBackup(tenantId: string, licenseKey: string, com
 export interface BackupMeta { id: number; kind: string; created_at: string; size_bytes: number; resources: number }
 
 async function adminCall(path: string, init: RequestInit & { headers?: Record<string, string> } = {}) {
-  const token = getAdminToken();
-  if (!token) return { ok: false as const, error: 'لا يوجد رمز إدارة (ADMIN_TOKEN)' };
   try {
-    const headers: Record<string, string> = { ...((init.headers as Record<string, string>) || {}), 'x-admin-token': token };
-    const r = await api(path, { ...init, headers });
-    return r.ok ? { ok: true as const, body: r.body } : { ok: false as const, error: r.body?.error || `HTTP ${r.status}` };
+    const r = await api(path, { ...init, credentials: 'include' });
+    return r.ok ? { ok: true as const, body: r.body } : { ok: false as const, error: r.body?.error || 'HTTP ' + r.status };
   } catch (e: any) { return { ok: false as const, error: 'لا يوجد اتصال: ' + String(e?.message || e) }; }
 }
 
