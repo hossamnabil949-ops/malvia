@@ -40,6 +40,7 @@ interface SuperAdminPortalProps {
   licenses: TenantLicense[];
   activeTenantId: string;
   onUpdateLicenses: (newLicenses: TenantLicense[]) => void;
+  onLoadLicenses: (cloudLicenses: TenantLicense[]) => void;
   onSelectTenant: (tenantId: string) => void;
 }
 
@@ -49,6 +50,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   licenses,
   activeTenantId,
   onUpdateLicenses,
+  onLoadLicenses,
   onSelectTenant,
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -106,7 +108,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
       const response = await fetch('/api/registry?resource=licenses', { credentials: 'include' });
       if (!response.ok) throw new Error('تعذر تحميل سجل الشركات من الخادم.');
       const data = await response.json();
-      if (Array.isArray(data?.licenses)) onUpdateLicenses(data.licenses);
+      if (Array.isArray(data?.licenses)) onLoadLicenses(data.licenses);
     } catch (error: any) {
       setIsAuthenticated(false);
       window.alert(String(error?.message || 'تعذر تحميل سجل الشركات.'));
