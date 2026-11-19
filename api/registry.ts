@@ -1,6 +1,7 @@
-// سجل المحلات (التراخيص). القراءة/الكتابة الكاملة لصاحب المنظومة فقط عبر ADMIN_TOKEN.
+// سجل المحلات (التراخيص). القراءة والكتابة تتطلب جلسة مسؤول MALVIA موثقة.
 import { getOne, putIfVersion } from './_db.js';
-import { ApiError, clientIp, rateLimit, safeEqual, sendError } from './_security.js';
+import { ApiError, sendError } from './_security.js';
+import { requireAdminIdentity } from './_admin.js';
 
 async function appendOwnerAudit(entriesToAdd: any[]): Promise<boolean> {
   if (!entriesToAdd.length) return true;
@@ -16,9 +17,7 @@ async function appendOwnerAudit(entriesToAdd: any[]): Promise<boolean> {
 
 export default async function handler(req: any, res: any) {
   try {
-    const token = String(req.headers['x-admin-token'] || '');
-    rateLimit(`admin:${clientIp(req)}`, 30, 10 * 60_000);
-    if (!process.env.ADMIN_TOKEN || !safeEqual(token, process.env.ADMIN_TOKEN)) throw new ApiError('ADMIN_UNAUTHORIZED');
+    const admin = await requireAdminIdentity(req);
     if (req.method === 'GET') {
       const resource = String(req.query?.resource || 'licenses');
       if (!['licenses', 'owner_audit', 'plans'].includes(resource)) throw new ApiError('INVALID_BODY');
@@ -80,7 +79,7 @@ export default async function handler(req: any, res: any) {
         const version = await putIfVersion('_registry', 'plans', plans, Number(baseVersion) || 0);
         if (version === null) return res.status(409).json({ conflict: true });
         const auditSaved = await appendOwnerAudit(planChanges.map(change => ({
-          at: new Date().toISOString(), actor: 'OWNER_ADMIN', ...change,
+          at: new Date().toISOString(), actor: admin.username, ...change,
           previousVersion: current?.version || 0, newVersion: version,
         })));
         return res.status(200).json({ version, auditSaved, auditedChanges: planChanges.length });
@@ -122,7 +121,7 @@ export default async function handler(req: any, res: any) {
       for (const lic of licenses) {
         const before: any = oldById.get(String(lic.id));
         if (!before) {
-          changes.push({ at: now, action: 'LICENSE_CREATED', tenantId: lic.tenantId, companyName: lic.companyName, actor: 'OWNER_ADMIN' });
+          changes.push({ at: now, action: 'LICENSE_CREATED', tenantId: lic.tenantId, companyName: lic.companyName, actor: admin.username });
           continue;
         }
         const fields = ['companyName','ownerName','phone','city','plan','startDate','expiryDate','maxEmployees','devicesLimit','customPrice','status','notes'];
@@ -135,7 +134,7 @@ export default async function handler(req: any, res: any) {
         if (changed.length || featureChanges.length) {
           changes.push({
             at: now, action: 'LICENSE_UPDATED', tenantId: lic.tenantId,
-            companyName: lic.companyName, actor: 'OWNER_ADMIN',
+            companyName: lic.companyName, actor: admin.username,
             fields: [...changed, ...featureChanges.map(key => 'allowedFeatures.' + key)],
             before: Object.fromEntries(changed.filter(key => key !== 'licenseKey').map(key => [key, before[key] ?? null])),
             after: Object.fromEntries(changed.filter(key => key !== 'licenseKey').map(key => [key, lic[key] ?? null])),
@@ -144,7 +143,7 @@ export default async function handler(req: any, res: any) {
         }
       }
       for (const before of oldLicenses) {
-        if (!ids.has(String(before.id))) changes.push({ at: now, action: 'LICENSE_REMOVED', tenantId: before.tenantId, companyName: before.companyName, actor: 'OWNER_ADMIN' });
+        if (!ids.has(String(before.id))) changes.push({ at: now, action: 'LICENSE_REMOVED', tenantId: before.tenantId, companyName: before.companyName, actor: admin.username });
       }
 
       const v = await putIfVersion('_registry', 'licenses', licenses, Number(baseVersion) || 0);
