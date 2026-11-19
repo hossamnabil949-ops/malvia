@@ -104,7 +104,7 @@ export default async function handler(req: any, res: any) {
         ids.add(id); tenantIds.add(tenantId); keys.add(key);
         const start = String(lic.startDate || '');
         const end = String(lic.expiryDate || '');
-        const validDate = (value: string) => /^\\d{4}-\\d{2}-\\d{2}$/.test(value) &&
+        const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) &&
           !Number.isNaN(Date.parse(value + 'T00:00:00Z')) &&
           new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
         if (!validDate(start) || !validDate(end) || end < start) throw new ApiError('INVALID_BODY');
