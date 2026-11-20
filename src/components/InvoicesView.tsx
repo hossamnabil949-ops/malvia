@@ -601,11 +601,11 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       {/* SALES RETURN MODAL */}
       {returnInvoice && (
         <div 
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
           onClick={() => setReturnInvoice(null)}
         >
           <div 
-            className="w-full max-w-2xl bg-surface-2 text-white rounded-3xl p-6 shadow-2xl border border-neutral-800 space-y-5"
+            className="w-full max-w-2xl max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain bg-surface-2 text-white rounded-3xl p-4 sm:p-6 shadow-2xl border border-neutral-800 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -641,7 +641,72 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
             <form onSubmit={handleConfirmReturn} className="space-y-4">
               <div className="space-y-2">
                 <span className="text-xs font-bold text-neutral-300 block">حدد القطع والكميات المراد إرجاعها:</span>
-                <div className="border border-neutral-800 rounded-2xl overflow-hidden">
+                <div className="space-y-3 sm:hidden">
+                  {returnInvoice.items.map((it, idx) => {
+                    const rowKey = String(idx);
+                    const maxReturnable = Math.max(0, it.quantity - (it.returnedQuantity || 0));
+                    const currentReturnQty = returnItems[rowKey] || 0;
+                    const itemSubtotal = currentReturnQty * it.unitPrice;
+                    return (
+                      <div key={rowKey} className="rounded-2xl border border-neutral-700 bg-surface-1 p-3 space-y-3">
+                        <div className="min-w-0">
+                          <div className="font-bold text-white text-sm break-words">{it.partName}</div>
+                          <div className="font-mono text-[10px] text-amber-400">{it.partNumber}</div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="rounded-xl bg-surface-2 p-2">
+                            <div className="text-neutral-400">الكمية المباعة</div>
+                            <div className="font-mono font-bold text-white">{it.quantity}</div>
+                            {(it.returnedQuantity || 0) > 0 && <div className="text-[10px] text-rose-400">مرتجع سابقاً: {it.returnedQuantity}</div>}
+                          </div>
+                          <div className="rounded-xl bg-surface-2 p-2">
+                            <div className="text-neutral-400">سعر البيع</div>
+                            <div className="font-mono font-bold text-emerald-400">{it.unitPrice} ج.م</div>
+                          </div>
+                        </div>
+                        {it.serials && it.serials.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            <span className="w-full text-[10px] text-neutral-400">اختر السيريال المرتجع:</span>
+                            {it.serials.filter((s) => !(it.returnedSerials || []).includes(s)).map((s) => {
+                              const on = (returnSerials[rowKey] || []).includes(s);
+                              return (
+                                <button key={s} type="button" onClick={() => toggleReturnSerial(rowKey, s, maxReturnable)}
+                                  className={`px-2 h-8 rounded-lg font-mono text-[10px] border ${on ? 'bg-rose-500/25 border-rose-500 text-rose-200' : 'bg-surface-2 border-neutral-700 text-neutral-300'}`}>
+                                  {s}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-3 space-y-2">
+                          <div className="text-xs font-black text-rose-300">كمية المرتجع</div>
+                          <div className="flex items-center gap-3">
+                            <button type="button" aria-label="تقليل كمية المرتجع"
+                              onClick={() => setReturnItems(prev => ({ ...prev, [rowKey]: Math.max(0, (prev[rowKey] || 0) - 1) }))}
+                              className="w-10 h-10 shrink-0 rounded-xl bg-neutral-800 text-white text-lg">−</button>
+                            <input type="number" min="0" max={maxReturnable} inputMode="numeric"
+                              aria-label={`كمية المرتجع من ${it.partName}`}
+                              value={currentReturnQty}
+                              onChange={(e) => {
+                                const val = Math.min(maxReturnable, Math.max(0, parseInt(e.target.value) || 0));
+                                setReturnItems(prev => ({ ...prev, [rowKey]: val }));
+                              }}
+                              className="min-w-0 flex-1 h-10 text-center rounded-xl bg-surface-2 border border-rose-500/50 text-white font-mono text-base font-black" />
+                            <button type="button" aria-label="زيادة كمية المرتجع"
+                              onClick={() => setReturnItems(prev => ({ ...prev, [rowKey]: Math.min(maxReturnable, (prev[rowKey] || 0) + 1) }))}
+                              className="w-10 h-10 shrink-0 rounded-xl bg-neutral-800 text-white text-lg">+</button>
+                            <div className="text-left shrink-0">
+                              <div className="text-[10px] text-neutral-400">قيمة المرتجع</div>
+                              <div className="font-mono font-black text-rose-400">{itemSubtotal.toFixed(2)} ج.م</div>
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-neutral-500">الحد الأقصى المسموح: {maxReturnable}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="hidden sm:block border border-neutral-800 rounded-2xl overflow-hidden">
                   <table className="w-full text-right text-xs">
                     <thead className="bg-surface-1 text-neutral-400 text-[11px] border-b border-neutral-800">
                       <tr>
