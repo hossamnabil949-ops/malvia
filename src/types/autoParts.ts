@@ -720,12 +720,7 @@ export interface ShopSettings {
   loyalty?: import('../utils/loyaltyLogic').LoyaltySettings; // برنامج الولاء (مغلق افتراضياً)
 }
 
-export type TenantPlan = 
-  | 'تجريبي مجاني (14 يوم)' 
-  | 'اشتراك شهري' 
-  | 'باقة سنوية PRO' 
-  | 'باقة VIP شاملة الفروع' 
-  | 'ترخيص دائم مدى الحياة';
+export type TenantPlan = string; // يسمح بباقات MALVIA القياسية والباقات المخصصة لكل نشاط
 
 export type TenantStatus = 'نشط' | 'معلق مؤقتاً' | 'منتهي الصلاحية' | 'في انتظار التفعيل';
 
@@ -751,7 +746,16 @@ export interface TenantLicense {
     canUseTreasury: boolean;
     canUseReports: boolean;
     canUseVoiceAI: boolean;
+    canUseAI?: boolean;
+    canUseStockMonitoring?: boolean;
+    canUseWorkshops?: boolean;
+    canUseHR?: boolean;
+    canUseAdvancedReports?: boolean;
   };
+  /** Optional customer-specific negotiated price in EGP; does not mutate the shared plan. */
+  customPrice?: number;
+  /** Maximum registered devices allowed for this tenant. */
+  devicesLimit?: number;
   notes?: string;
   devicesCount?: number;
   lastActiveDate?: string;

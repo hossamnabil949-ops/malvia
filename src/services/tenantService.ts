@@ -62,7 +62,6 @@ const ACTIVE_TENANT_KEY = 'malvia_active_tenant_id_v1';
 const SESSION_KEY = 'malvia_user_session_v1';
 const SAVED_LICENSE_KEY = 'malvia_device_saved_license_key_v1';
 const THEME_KEY = 'malvia_app_theme_v1';
-export const MASTER_OWNER_PIN_KEY = 'malvia_master_owner_pin_v1';
 
 export type AppTheme = 'blue' | 'graphite' | 'light';
 
@@ -73,6 +72,10 @@ const THEME_META_COLORS: Record<AppTheme, string> = {
   graphite: '#0E0E10',
   light: '#0F172A',
 };
+
+export function hasStoredTenantLicenses(): boolean {
+  try { return localStorage.getItem(LICENSES_KEY) !== null; } catch { return false; }
+}
 
 export function loadTenantLicenses(): TenantLicense[] {
   try {
@@ -599,6 +602,8 @@ export async function authenticateShopUser(
         // License, authorization, rate-limit and server errors must still fail closed.
         if (authResponse.status === 401 && authBody.code === 'EMPLOYEE_INVALID_CREDENTIALS') {
           localOnlyLogin = true;
+          const traceId = typeof authBody?.diagnostic?.traceId === 'string' ? authBody.diagnostic.traceId : '';
+          if (traceId) console.warn('[MALVIA_LOCAL_ONLY_LOGIN]', { traceId, code: 'EMPLOYEE_INVALID_CREDENTIALS' });
         } else {
           return {
             success: false,
@@ -649,24 +654,6 @@ export async function authenticateShopUser(
 }
 
 export const authenticateShopStaff = authenticateShopUser;
-
-export function getMasterOwnerPin(): string {
-  try {
-    return localStorage.getItem(MASTER_OWNER_PIN_KEY) || '2026';
-  } catch {
-    return '2026';
-  }
-}
-
-export function setMasterOwnerPin(newPin: string): boolean {
-  try {
-    if (!newPin || newPin.trim().length < 3) return false;
-    localStorage.setItem(MASTER_OWNER_PIN_KEY, newPin.trim());
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /** يضيف/يحدّث ترخيص محل جاء من السحابة في القائمة المحلية. */
 export function upsertTenantLicense(license: TenantLicense): void {

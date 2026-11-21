@@ -124,6 +124,36 @@ function emitStatus(s: SyncStatus, detail?: string) {
 }
 
 let active: { tenantId: string; licenseKey: string } | null = null;
+// Updated from the authenticated /api/sync response. Missing legacy flags remain enabled.
+const tenantFeatureCache = new Map<string, Record<string, boolean> | null>();
+const RESOURCE_FEATURES: Record<string, string[]> = {
+  parts: ['canUsePos', 'canUseInventory', 'canUsePurchases'],
+  invoices: ['canUsePos'], salesReturns: ['canUsePos'], loyaltyLedger: ['canUsePos'],
+  customers: ['canUseCustomers', 'canUsePos'],
+  suppliers: ['canUseSuppliers', 'canUsePurchases'],
+  supplierPayments: ['canUsePurchases'], supplierPaymentSchedules: ['canUsePurchases'],
+  purchaseInvoices: ['canUsePurchases'], purchaseReturns: ['canUsePurchases'],
+  inventoryErrors: ['canUseStockMonitoring'],
+  stockTransfers: ['canUseInventory'], warehouses: ['canUseInventory'],
+  stockLevels: ['canUseInventory', 'canUsePos', 'canUsePurchases'],
+  stockBatches: ['canUseInventory', 'canUsePos', 'canUsePurchases'],
+  serialUnits: ['canUseInventory', 'canUsePos', 'canUsePurchases'],
+  stockMovements: ['canUseInventory', 'canUsePos', 'canUsePurchases'],
+  carModels: ['canUseInventory'],
+  treasury: ['canUseTreasury'], expenses: ['canUseTreasury'],
+  bankAccounts: ['canUseTreasury'], cardSettlements: ['canUseTreasury'],
+  bankLedgerEntries: ['canUseTreasury'], cheques: ['canUseTreasury'],
+  partners: ['canUseTreasury'], partnerWithdrawals: ['canUseTreasury'],
+  partnerCurrentAccountTransactions: ['canUseTreasury'], partnerExitSettlements: ['canUseTreasury'],
+  partnerSettlementPayments: ['canUseTreasury'], openingBalances: ['canUseTreasury'],
+  shifts: ['canUsePos'], reservations: ['canUseCustomers'],
+};
+function isTenantResourceEnabled(tenantId: string, resource: string): boolean {
+  const flags = tenantFeatureCache.get(tenantId);
+  const required = RESOURCE_FEATURES[resource];
+  if (!flags || !required) return true;
+  return required.some(feature => flags[feature] === undefined || flags[feature] === true);
+}
 let timer: ReturnType<typeof setTimeout> | null = null;
 let poll: ReturnType<typeof setInterval> | null = null;
 let busy = false;
@@ -171,6 +201,7 @@ async function api(path: string, init: RequestInit & { headers?: Record<string, 
 }
 
 async function pushResource(tenantId: string, licenseKey: string, res: string): Promise<boolean> {
+  if (!isTenantResourceEnabled(tenantId, res)) return true;
   for (let attempt = 0; attempt < 4; attempt++) {
     const local = readLocal(tenantId, res);
     if (local === undefined) return true;
@@ -221,7 +252,7 @@ async function sha256Hex(value: string): Promise<string> {
 async function pushBatch(tenantId: string, licenseKey: string, resources: string[]): Promise<{ warnings: any[] }> {
   for (let attempt = 0; attempt < 4; attempt++) {
     const meta = readMeta(tenantId);
-    const operations = resources.flatMap(resource => {
+    const operations = resources.filter(resource => isTenantResourceEnabled(tenantId, resource)).flatMap(resource => {
       const data = readLocal(tenantId, resource);
       if (data === undefined) return [];
       if (!hasLocalChanges(resource, data, meta.base[resource]) && meta.versions[resource] !== undefined) return [];
@@ -300,6 +331,7 @@ export async function pullAll(tenantId: string, licenseKey: string, serverToken?
   if (serverToken) headers.Authorization = `Bearer ${serverToken}`;
   const r = await api('/api/sync', { method: 'GET', headers });
   if (!r.ok) throw Object.assign(new Error(r.body?.error || `HTTP ${r.status}`), { status: r.status });
+  tenantFeatureCache.set(tenantId, r.body.tenant?.allowedFeatures && typeof r.body.tenant.allowedFeatures === 'object' ? r.body.tenant.allowedFeatures : null);
   const docs: Record<string, { data: unknown; version: number }> = r.body.docs || {};
   const meta = readMeta(tenantId);
   let changed = false;
@@ -353,6 +385,13 @@ async function flush() {
       window.dispatchEvent(new CustomEvent('malvia-sync-warning', { detail: { warnings: batchResult.warnings } }));
     }
     for (const res of list) {
+      // Keep excluded feature data locally, but do not retry it every few seconds.
+      // The normal resource scan will queue it again if the owner re-enables the feature.
+      if (!isTenantResourceEnabled(tenantId, res)) {
+        dirty.delete(res);
+        writePending(tenantId);
+        continue;
+      }
       const latest = readLocal(tenantId, res);
       const latestMeta = readMeta(tenantId);
       if (latest === undefined || !hasLocalChanges(res, latest, latestMeta.base[res])) {
@@ -472,57 +511,37 @@ export async function activateFromCloud(licenseKey: string, username?: string, p
   }
 }
 
-// ------------------------------------------------------------------ سجل المحلات (لصاحب المنظومة فقط)
-const ADMIN_TOKEN_KEY = 'malvia_admin_token_v1';
-export const getAdminToken = () => { try { return localStorage.getItem(ADMIN_TOKEN_KEY) || ''; } catch { return ''; } };
-export const setAdminToken = (t: string) => { try { localStorage.setItem(ADMIN_TOKEN_KEY, t.trim()); } catch { /* ignore */ } };
-
+// ------------------------------------------------------------------ سجل المحلات (لمسؤولي MALVIA عبر جلسة خادمية HttpOnly)
 export let lastRegistryError = '';
-export function clearAdminToken() { try { localStorage.removeItem(ADMIN_TOKEN_KEY); } catch { /* ignore */ } }
 
 export async function fetchRegistry(): Promise<any[] | null> {
-  const token = getAdminToken();
   lastRegistryError = '';
-  if (!token) { lastRegistryError = 'no-token'; return null; }
   try {
-    const r = await api('/api/registry', { method: 'GET', headers: { 'x-admin-token': token } });
+    const r = await api('/api/registry', { method: 'GET', credentials: 'include' });
     if (r.ok) return r.body.licenses;
-    lastRegistryError = r.status === 401 && r.body?.error
-      ? 'bad-token'
+    lastRegistryError = r.status === 401 ? 'not-authenticated'
       : r.status === 404 ? 'الـ API غير موجود (HTTP 404): تأكد أن مجلد api مرفوع'
-      : r.status === 401 || r.status === 403 ? 'Vercel يحجب الطلب (HTTP ' + r.status + '): استخدم رابط الإنتاج أو عطّل Deployment Protection'
       : (r.body?.error || 'HTTP ' + r.status);
     return null;
   } catch (e: any) { lastRegistryError = 'لا يوجد اتصال: ' + String(e?.message || e); return null; }
 }
 
 export async function pushRegistry(licenses: unknown[]): Promise<{ ok: boolean; error?: string }> {
-  const token = getAdminToken();
-  if (!token) return { ok: false, error: 'no-token' };
   try {
-    const cur = await api('/api/registry', { method: 'GET', headers: { 'x-admin-token': token } });
-    if (!cur.ok) return { ok: false, error: cur.body?.error || `HTTP ${cur.status}` };
+    const cur = await api('/api/registry', { method: 'GET', credentials: 'include' });
+    if (!cur.ok) return { ok: false, error: cur.body?.error || (cur.status === 401 ? 'يجب تسجيل الدخول لمسؤول MALVIA أولاً.' : 'HTTP ' + cur.status) };
     const r = await api('/api/registry', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ licenses, baseVersion: cur.body.version }),
     });
-    return r.ok ? { ok: true } : { ok: false, error: r.body?.error || `HTTP ${r.status}` };
+    if (r.ok) return { ok: true };
+    return { ok: false, error: r.body?.error || 'HTTP ' + r.status };
   } catch (e: any) { return { ok: false, error: String(e?.message || e) }; }
 }
 
-// ------------------------------------------------------------------ النسخ الاحتياطي
-export interface BackupFile {
-  app: 'MALVIA';
-  format: number;
-  exportedAt: string;
-  company?: string;
-  tenantId?: string;
-  source: 'server' | 'device';
-  docs: Record<string, { data: unknown; version?: number }>;
-}
+export interface BackupFile { app: string; format: number; exportedAt: string; company?: string; tenantId: string; source?: 'server' | 'device'; docs: Record<string, { data: any; version?: number }>; }
 
-/** نسخة من بيانات المحل: من السيرفر (الأحدث)، وإن تعذر الاتصال من النسخة المحفوظة على هذا الجهاز. */
 export async function exportShopBackup(tenantId: string, licenseKey: string, company?: string): Promise<{ ok: boolean; file?: BackupFile; error?: string }> {
   try {
     const r = await api('/api/backup?action=export', { method: 'GET', headers: { 'x-license-key': licenseKey.trim().toUpperCase() } });
@@ -541,12 +560,9 @@ export async function exportShopBackup(tenantId: string, licenseKey: string, com
 export interface BackupMeta { id: number; kind: string; created_at: string; size_bytes: number; resources: number }
 
 async function adminCall(path: string, init: RequestInit & { headers?: Record<string, string> } = {}) {
-  const token = getAdminToken();
-  if (!token) return { ok: false as const, error: 'لا يوجد رمز إدارة (ADMIN_TOKEN)' };
   try {
-    const headers: Record<string, string> = { ...((init.headers as Record<string, string>) || {}), 'x-admin-token': token };
-    const r = await api(path, { ...init, headers });
-    return r.ok ? { ok: true as const, body: r.body } : { ok: false as const, error: r.body?.error || `HTTP ${r.status}` };
+    const r = await api(path, { ...init, credentials: 'include' });
+    return r.ok ? { ok: true as const, body: r.body } : { ok: false as const, error: r.body?.error || 'HTTP ' + r.status };
   } catch (e: any) { return { ok: false as const, error: 'لا يوجد اتصال: ' + String(e?.message || e) }; }
 }
 

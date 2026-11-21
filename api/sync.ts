@@ -3,7 +3,7 @@
 // التحقق من المدخلات وحد المعدل وأكواد الأخطاء في _security.ts.
 import { getAll, getOne, putIfVersion, getAuthenticatedEmployee } from './_db.js';
 import { createHash } from 'node:crypto';
-import { ApiError, clientIp, findLicense, rateLimit, sendError, validateSyncBody } from './_security.js';
+import { ApiError, clientIp, findLicense, rateLimit, sendError, validateSyncBody, assertLicenseResourceEnabled, isLicenseResourceEnabled } from './_security.js';
 
 export default async function handler(req: any, res: any) {
   let phase = 'start';
@@ -27,12 +27,15 @@ export default async function handler(req: any, res: any) {
       const tokenHash = createHash('sha256').update(bearer).digest('hex');
       const employee = await getAuthenticatedEmployee(tenant, tokenHash);
       if (!employee) return res.status(401).json({ code: 'EMPLOYEE_SESSION_INVALID', error: 'جلسة الموظف غير صالحة أو انتهت.' });
-      return res.status(200).json({ tenant: lic, docs: await getAll(tenant) });
+      const allDocs = await getAll(tenant);
+      const docs = Object.fromEntries(Object.entries(allDocs).filter(([name]) => isLicenseResourceEnabled(lic, name)));
+      return res.status(200).json({ tenant: lic, docs });
     }
     if (req.method === 'POST') {
       phase = 'validate_body';
       const body = validateSyncBody(req.body);
       resource = body.resource;
+      assertLicenseResourceEnabled(lic, resource);
       const { data, baseVersion } = body;
       phase = 'authenticate_employee';
       const bearer = String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1] || '';

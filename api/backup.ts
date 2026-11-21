@@ -1,10 +1,11 @@
 // النسخ الاحتياطي واسترجاع بيانات المحلات.
 //  - النسخة اليومية التلقائية: ملف api/cron-backup.ts (Vercel Cron)
 //  - العميل (ترخيصه):    GET  /api/backup?action=export     (x-license-key)  ملف نسخة لبياناته الحالية
-//  - صاحب المنظومة:      (x-admin-token)  GET ?tenant=ID قائمة النسخ | GET ?id=N تفاصيل النسخة (تنزيل)
+//  - مسؤول MALVIA:       جلسة HttpOnly موثقة  GET ?tenant=ID قائمة النسخ | GET ?id=N تفاصيل النسخة
 //                        POST {action:'create', tenant} نسخة الآن | POST {action:'restore', tenant, id} استرجاع
 import { backupAllChanged, createBackup, getAll, getBackup, getOne, listBackups, restoreBackup } from './_db.js';
-import { ApiError, clientIp, findLicense, rateLimit, safeEqual, sendError } from './_security.js';
+import { ApiError, clientIp, findLicense, rateLimit, sendError } from './_security.js';
+import { requireAdminIdentity, writeAdminAudit } from './_admin.js';
 
 // رسائل الاسترجاع المقصودة للمالك (أي خطأ آخر لا يُسرَّب)
 const SAFE_MESSAGES = new Set(['النسخة غير موجودة', 'هذه النسخة تخص محلاً آخر']);
@@ -28,9 +29,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // ---- 3) صاحب المنظومة فقط ----
-    const token = String(req.headers['x-admin-token'] || '');
-    rateLimit(`admin:${clientIp(req)}`, 30, 10 * 60_000);
-    if (!process.env.ADMIN_TOKEN || !safeEqual(token, process.env.ADMIN_TOKEN)) throw new ApiError('ADMIN_UNAUTHORIZED');
+    const admin = await requireAdminIdentity(req);
 
     if (req.method === 'GET') {
       if (q.id) {
@@ -51,12 +50,14 @@ export default async function handler(req: any, res: any) {
       if (!tenant || typeof tenant !== 'string') return res.status(400).json({ error: 'tenant مطلوب' });
       if (action === 'create') {
         const newId = await createBackup(tenant, 'manual');
+        if (newId !== null) await writeAdminAudit(admin.username, 'TENANT_BACKUP_CREATED', { tenantId: tenant, backupId: newId });
         if (newId === null) return res.status(404).json({ error: 'لا توجد بيانات لهذا المحل' });
         return res.status(200).json({ ok: true, id: newId });
       }
       if (action === 'restore') {
         if (!id) return res.status(400).json({ error: 'id مطلوب' });
         const r = await restoreBackup(Number(id), tenant);
+        await writeAdminAudit(admin.username, 'TENANT_BACKUP_RESTORED', { tenantId: tenant, backupId: Number(id) });
         return res.status(200).json({ ok: true, ...r });
       }
       return res.status(400).json({ error: 'إجراء غير معروف' });
