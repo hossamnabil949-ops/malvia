@@ -126,12 +126,19 @@ function clearCookie(res: any) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
   res.setHeader('Set-Cookie', COOKIE + '=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0' + secure);
 }
-function assertSameOrigin(req: any) {
+function assertSameOrigin(req: any, required = false) {
   const origin = String(req.headers?.origin || '');
-  if (!origin) return;
+  if (!origin) {
+    if (required) throw new ApiError('ADMIN_UNAUTHORIZED');
+    return;
+  }
   try {
-    if (new URL(origin).host !== String(req.headers?.host || '')) throw new Error('ADMIN_CROSS_ORIGIN');
-  } catch { throw new Error('ADMIN_CROSS_ORIGIN'); }
+    const parsed = new URL(origin);
+    const host = String(req.headers?.host || '');
+    if (!host || parsed.host.toLowerCase() !== host.toLowerCase() || !['https:', 'http:'].includes(parsed.protocol)) {
+      throw new Error('ADMIN_CROSS_ORIGIN');
+    }
+  } catch { throw new ApiError('ADMIN_UNAUTHORIZED'); }
 }
 async function issueSession(username: string, res: any): Promise<string> {
   const token = randomBytes(32).toString('base64url');
@@ -160,6 +167,16 @@ export async function requireAdminIdentity(req: any): Promise<AdminIdentity> {
   const identity = await getAdminIdentity(req);
   if (!identity) throw new ApiError('ADMIN_UNAUTHORIZED');
   return identity;
+}
+
+export function assertSuperAdmin(identity: AdminIdentity): AdminIdentity {
+  if (!identity || identity.role !== 'SUPER_ADMIN') throw new ApiError('ADMIN_UNAUTHORIZED');
+  return identity;
+}
+
+export async function requireSuperAdminIdentity(req: any): Promise<AdminIdentity> {
+  if (String(req.method || '').toUpperCase() === 'POST') assertSameOrigin(req, true);
+  return assertSuperAdmin(await requireAdminIdentity(req));
 }
 export async function writeAdminAudit(actor: string, action: string, metadata: Record<string, unknown> = {}) {
   await appendAudit(actor, action, metadata);
