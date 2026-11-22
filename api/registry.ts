@@ -17,9 +17,7 @@ async function appendOwnerAudit(entriesToAdd: any[]): Promise<boolean> {
 
 export default async function handler(req: any, res: any) {
   try {
-    const admin = req.method === 'POST'
-      ? await requireSuperAdminIdentity(req)
-      : await requireAdminIdentity(req);
+    const admin = await requireSuperAdminIdentity(req);
     if (req.method === 'GET') {
       const resource = String(req.query?.resource || 'licenses');
       if (!['licenses', 'owner_audit', 'plans'].includes(resource)) throw new ApiError('INVALID_BODY');
