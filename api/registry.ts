@@ -1,7 +1,7 @@
 // سجل المحلات (التراخيص). القراءة والكتابة تتطلب جلسة مسؤول MALVIA موثقة.
 import { getOne, putIfVersion } from './_db.js';
 import { ApiError, sendError } from './_security.js';
-import { requireAdminIdentity } from './_admin.js';
+import { requireAdminIdentity, requireSuperAdminIdentity } from './_admin.js';
 
 async function appendOwnerAudit(entriesToAdd: any[]): Promise<boolean> {
   if (!entriesToAdd.length) return true;
@@ -17,7 +17,9 @@ async function appendOwnerAudit(entriesToAdd: any[]): Promise<boolean> {
 
 export default async function handler(req: any, res: any) {
   try {
-    const admin = await requireAdminIdentity(req);
+    const admin = req.method === 'POST'
+      ? await requireSuperAdminIdentity(req)
+      : await requireAdminIdentity(req);
     if (req.method === 'GET') {
       const resource = String(req.query?.resource || 'licenses');
       if (!['licenses', 'owner_audit', 'plans'].includes(resource)) throw new ApiError('INVALID_BODY');
