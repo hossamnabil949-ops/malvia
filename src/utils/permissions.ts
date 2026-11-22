@@ -1,8 +1,36 @@
 // قواعد الصلاحيات كدوال نقية. المدير العام يملك كل شيء دائماً (لا يمكن حبسه خارج النظام).
 // أي مفتاح من قائمة الشاشة يكفي لفتحها. القائمة الفارغة = متاحة للجميع.
-import type { Employee, EmployeePermissions } from '../types/autoParts';
+import type { Employee, EmployeePermissions, TenantLicense } from '../types/autoParts';
 
 export type PermKey = keyof EmployeePermissions;
+
+/** Tenant subscription gates. Missing legacy flags remain enabled for backward compatibility. */
+export const TAB_SUBSCRIPTION_FEATURE: Record<string, keyof TenantLicense['allowedFeatures']> = {
+  pos: 'canUsePos',
+  invoices: 'canUsePos',
+  shifts: 'canUsePos',
+  inventory: 'canUseInventory',
+  lowstock: 'canUseStockMonitoring',
+  warehouses: 'canUseInventory',
+  tracking: 'canUseInventory',
+  purchases: 'canUsePurchases',
+  suppliers: 'canUseSuppliers',
+  customers: 'canUseCustomers',
+  finance: 'canUseTreasury',
+  cheques: 'canUseTreasury',
+  reports: 'canUseReports',
+};
+
+export function hasSubscriptionFeature(
+  license: Pick<TenantLicense, 'allowedFeatures'> | null | undefined,
+  feature: keyof TenantLicense['allowedFeatures'] | undefined,
+): boolean {
+  if (!feature || !license) return true;
+  const configured = license.allowedFeatures?.[feature];
+  return configured === undefined ? true : Boolean(configured);
+}
+
+
 export const OWNER_ROLE: Employee['role'] = 'مدير عام';
 
 export const TAB_ACCESS: Record<string, PermKey[]> = {

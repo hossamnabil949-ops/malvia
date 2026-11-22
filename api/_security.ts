@@ -7,12 +7,12 @@ import { getOne } from './_db.js';
 export type ApiErrorCode =
   | 'LICENSE_REQUIRED' | 'LICENSE_INVALID' | 'LICENSE_SUSPENDED' | 'ADMIN_UNAUTHORIZED'
   | 'RESOURCE_NOT_ALLOWED' | 'INVALID_BODY' | 'PAYLOAD_TOO_LARGE' | 'RATE_LIMITED'
-  | 'VERSION_CONFLICT' | 'METHOD_NOT_ALLOWED' | 'INTERNAL';
+  | 'VERSION_CONFLICT' | 'FEATURE_NOT_INCLUDED' | 'METHOD_NOT_ALLOWED' | 'INTERNAL';
 
 const STATUS: Record<ApiErrorCode, number> = {
   LICENSE_REQUIRED: 401, LICENSE_INVALID: 403, LICENSE_SUSPENDED: 403, ADMIN_UNAUTHORIZED: 401,
   RESOURCE_NOT_ALLOWED: 400, INVALID_BODY: 400, PAYLOAD_TOO_LARGE: 413, RATE_LIMITED: 429,
-  VERSION_CONFLICT: 409, METHOD_NOT_ALLOWED: 405, INTERNAL: 500,
+  VERSION_CONFLICT: 409, FEATURE_NOT_INCLUDED: 403, METHOD_NOT_ALLOWED: 405, INTERNAL: 500,
 };
 
 export class ApiError extends Error {
@@ -25,7 +25,7 @@ const MESSAGES: Record<ApiErrorCode, string> = {
   LICENSE_REQUIRED: 'مفتاح الترخيص مطلوب', LICENSE_INVALID: 'مفتاح غير مسجل', LICENSE_SUSPENDED: 'الترخيص معلق',
   ADMIN_UNAUTHORIZED: 'غير مصرح', RESOURCE_NOT_ALLOWED: 'مورد غير مسموح', INVALID_BODY: 'بيانات غير صالحة',
   PAYLOAD_TOO_LARGE: 'حجم البيانات كبير جداً', RATE_LIMITED: 'محاولات كثيرة، حاول بعد قليل',
-  VERSION_CONFLICT: 'تعارض في الإصدار', METHOD_NOT_ALLOWED: 'method not allowed', INTERNAL: 'خطأ داخلي في الخادم',
+  VERSION_CONFLICT: 'تعارض في الإصدار', FEATURE_NOT_INCLUDED: 'هذه الخاصية غير مشمولة في اشتراك العميل', METHOD_NOT_ALLOWED: 'method not allowed', INTERNAL: 'خطأ داخلي في الخادم',
 };
 
 export function sendError(res: any, e: unknown) {
@@ -54,6 +54,46 @@ export async function findLicense(key: string): Promise<any | null> {
   const reg = await getOne('_registry', 'licenses');
   const list = (reg?.data as any[]) || [];
   return list.find(l => safeEqual(String(l.licenseKey).toUpperCase(), key.toUpperCase())) || null;
+}
+
+
+/** Resource-to-subscription mapping. Legacy licenses without a flag remain compatible. */
+const RESOURCE_FEATURES: Record<string, string[]> = {
+  parts: ['canUsePos', 'canUseInventory', 'canUsePurchases'],
+  invoices: ['canUsePos'], salesReturns: ['canUsePos'], loyaltyLedger: ['canUsePos'],
+  customers: ['canUseCustomers', 'canUsePos'],
+  suppliers: ['canUseSuppliers', 'canUsePurchases'],
+  supplierPayments: ['canUsePurchases'], supplierPaymentSchedules: ['canUsePurchases'],
+  purchaseInvoices: ['canUsePurchases'], purchaseReturns: ['canUsePurchases'],
+  inventoryErrors: ['canUseStockMonitoring'],
+  stockTransfers: ['canUseInventory'], warehouses: ['canUseInventory'],
+  stockLevels: ['canUseInventory', 'canUsePos', 'canUsePurchases'],
+  stockBatches: ['canUseInventory', 'canUsePos', 'canUsePurchases'],
+  serialUnits: ['canUseInventory', 'canUsePos', 'canUsePurchases'],
+  stockMovements: ['canUseInventory', 'canUsePos', 'canUsePurchases'],
+  carModels: ['canUseInventory'],
+  treasury: ['canUseTreasury'], expenses: ['canUseTreasury'],
+  bankAccounts: ['canUseTreasury'], cardSettlements: ['canUseTreasury'],
+  bankLedgerEntries: ['canUseTreasury'], cheques: ['canUseTreasury'],
+  partners: ['canUseTreasury'], partnerWithdrawals: ['canUseTreasury'],
+  partnerCurrentAccountTransactions: ['canUseTreasury'], partnerExitSettlements: ['canUseTreasury'],
+  partnerSettlementPayments: ['canUseTreasury'], openingBalances: ['canUseTreasury'],
+  shifts: ['canUsePos'], reservations: ['canUseCustomers'],
+};
+
+export function isLicenseFeatureEnabled(license: any, feature: string): boolean {
+  const flags = license?.allowedFeatures;
+  if (!flags || typeof flags !== 'object') return true;
+  return flags[feature] === undefined ? true : flags[feature] === true;
+}
+
+export function isLicenseResourceEnabled(license: any, resource: string): boolean {
+  const features = RESOURCE_FEATURES[resource];
+  return !features || features.some(feature => isLicenseFeatureEnabled(license, feature));
+}
+
+export function assertLicenseResourceEnabled(license: any, resource: string): void {
+  if (!isLicenseResourceEnabled(license, resource)) throw new ApiError('FEATURE_NOT_INCLUDED');
 }
 
 export function clientIp(req: any): string {

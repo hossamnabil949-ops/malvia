@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   loadTenantLicenses, 
-  saveTenantLicenses, 
+  saveTenantLicenses,
+  hasStoredTenantLicenses, 
   getActiveTenantId, 
   setActiveTenantId, 
   loadTenantStoreData, 
@@ -13,7 +14,7 @@ import {
   clearTenantDemoData,
   updateOwnerPassword
 } from './services/tenantService';
-import { startSync, stopSync, SYNC_EVENT, fetchRegistry, pushRegistry, getAdminToken, setAdminToken, clearAdminToken } from './services/syncService';
+import { startSync, stopSync, SYNC_EVENT, pushRegistry, activateFromCloud } from './services/syncService';
 import * as syncSvc from './services/syncService';
 import { INITIAL_TENANT_LICENSES } from './data/autoPartsData';
 import { SyncBadge } from './components/SyncBadge';
@@ -62,7 +63,7 @@ import { cairoDateKey } from './utils/reportsLogic';
 import type { AuditEntry, StockMovement, InvoicePayment, Warehouse, StockLevel, StockTransfer } from './types/autoParts';
 import { MAIN_WAREHOUSE_ID, normalizeWarehouseId, availableIn, adjustLevels, validateTransfer, applyTransfer, TransferError } from './utils/warehouseLogic';
 import { WarehousesView } from './components/WarehousesView';
-import { hasTabAccess, firstAllowedTab, isSimpleCashier, SIMPLE_MODE_TABS } from './utils/permissions';
+import { hasTabAccess, firstAllowedTab, isSimpleCashier, SIMPLE_MODE_TABS, TAB_SUBSCRIPTION_FEATURE, hasSubscriptionFeature } from './utils/permissions';
 import { resolveLoyalty, earnedPoints, loyaltyAfterReturn, addMonths, availableBalances, pendingExpiryEntries } from './utils/loyaltyLogic';
 import type { LoyaltyEntry, LoyaltyEntryType } from './utils/loyaltyLogic';
 import { ChequesView, NewChequeInput } from './components/ChequesView';
@@ -134,6 +135,30 @@ export default function App() {
     return licenses.find(l => l.tenantId === activeTenantId) || licenses[0];
   }, [licenses, activeTenantId]);
 
+  useEffect(() => {
+    const savedKey = getDeviceSavedLicenseKey();
+    if (!savedKey) return;
+    let cancelled = false;
+    activateFromCloud(savedKey).then(result => {
+      if (cancelled) return;
+      if (result.ok && result.tenant) {
+        const cloudLicense = result.tenant as TenantLicense;
+        setLicenses(current => {
+          const next = [cloudLicense, ...current.filter(item => item.tenantId !== cloudLicense.tenantId && item.licenseKey.toUpperCase() !== cloudLicense.licenseKey.toUpperCase())];
+          saveTenantLicenses(next);
+          return next;
+        });
+      } else if (result.error === 'الترخيص معلق') {
+        setLicenses(current => {
+          const next = current.map(item => item.licenseKey.toUpperCase() === savedKey.toUpperCase() ? { ...item, status: 'معلق مؤقتاً' as const } : item);
+          saveTenantLicenses(next);
+          return next;
+        });
+      }
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+
   // Store data state
   const [parts, setParts] = useState<AutoPart[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -185,16 +210,24 @@ export default function App() {
   const canManageCapital = effectiveRole === 'مدير عام' || effectiveRole === 'محاسب مالي';
   const effectivePermissions = liveEmployee?.permissions ?? currentUser?.permissions;
   const simpleMode = Boolean(currentUser) && isSimpleCashier(effectiveRole, effectivePermissions);
-  const canAccessTab = (tab: string): boolean =>
-    !currentUser || (hasTabAccess(effectiveRole, effectivePermissions, tab) && (!simpleMode || SIMPLE_MODE_TABS.includes(tab)));
-  const canManageInventoryNow = !currentUser || hasTabAccess(effectiveRole, effectivePermissions, 'inventory');
+  const canAccessTab = (tab: string): boolean => {
+    const subscriptionAllows = hasSubscriptionFeature(activeTenant, TAB_SUBSCRIPTION_FEATURE[tab]);
+    const employeeAllows = !currentUser || (hasTabAccess(effectiveRole, effectivePermissions, tab) && (!simpleMode || SIMPLE_MODE_TABS.includes(tab)));
+    return subscriptionAllows && employeeAllows;
+  };
+  const canManageInventoryNow = (!currentUser || hasTabAccess(effectiveRole, effectivePermissions, 'inventory')) &&
+    hasSubscriptionFeature(activeTenant, 'canUseInventory');
+  const canManageStockMonitoringNow = canManageInventoryNow &&
+    hasSubscriptionFeature(activeTenant, 'canUseStockMonitoring');
+  const canUseVoiceAssistant = hasSubscriptionFeature(activeTenant, 'canUseAI') &&
+    hasSubscriptionFeature(activeTenant, 'canUseVoiceAI');
   const viewTab: ActiveTab | null = canAccessTab(currentTab) ? currentTab : null;
   useEffect(() => {
     // أي تحويل برمجي (بحث صوتي، أزرار سريعة...) لشاشة ممنوعة يرجع لأول شاشة مسموحة
     if (currentUser && !canAccessTab(currentTab)) {
       const next = simpleMode
         ? (SIMPLE_MODE_TABS.find(t => canAccessTab(t)) ?? 'pos')
-        : firstAllowedTab(effectiveRole, effectivePermissions);
+        : (['dashboard', 'pos', 'shifts', 'invoices', 'customers', 'inventory', 'lowstock', 'warehouses', 'tracking', 'purchases', 'suppliers', 'finance', 'cheques', 'reports', 'settings'].find(canAccessTab) ?? 'dashboard');
       setCurrentTab(next as ActiveTab);
     }
   }, [currentTab, currentUser, effectiveRole, effectivePermissions, simpleMode]);
@@ -324,28 +357,7 @@ export default function App() {
     return () => window.removeEventListener('malvia-sync-warning', onSyncWarning);
   }, []);
 
-  // لوحة المالك: اقرأ سجل المحلات من السحابة (يتطلب رمز الإدارة)
-  useEffect(() => {
-    if (window.location.pathname.replace(/\/$/, '') !== '/owner') return;
-    (async () => {
-      if (!getAdminToken()) {
-        const t = window.prompt('أدخل رمز الإدارة السحابي (ADMIN_TOKEN) لربط لوحة المالك بالسحابة، أو اتركه فارغاً للعمل محلياً فقط');
-        if (t && t.trim()) setAdminToken(t); else return;
-      }
-      const remote = await fetchRegistry();
-      if (remote && remote.length > 0) {
-        setLicenses(remote as TenantLicense[]); saveTenantLicenses(remote as TenantLicense[]);
-      } else if (remote && remote.length === 0) {
-        const demoKeys = new Set(INITIAL_TENANT_LICENSES.map(l => l.licenseKey.toUpperCase()));
-        const mine = loadTenantLicenses().filter(l => !demoKeys.has(l.licenseKey.toUpperCase()));
-        if (mine.length) pushRegistry(mine);
-      } else {
-        const why = syncSvc.lastRegistryError;
-        if (why === 'bad-token') { clearAdminToken(); window.alert('رمز الإدارة غير صحيح أو غير مضبوط في Vercel (ADMIN_TOKEN). أعد فتح الصفحة لإدخاله من جديد.'); }
-        else window.alert('تعذر الاتصال بسجل السحابة: ' + why);
-      }
-    })();
-  }, []);
+  // يتم تحميل سجل الشركات بعد نجاح مصادقة مسؤول MALVIA داخل لوحة الإدارة.
 
   // Handle URL Query Parameters (Direct links: admin, store, cashier, specific modules)
   useEffect(() => {
@@ -2704,7 +2716,15 @@ export default function App() {
         activeTenantId={activeTenantId}
         onUpdateLicenses={(newLicenses) => {
           setLicenses(newLicenses); saveTenantLicenses(newLicenses);
-          if (getAdminToken()) pushRegistry(newLicenses).then(r => { if (!r.ok) window.alert('تعذر حفظ التراخيص في السحابة: ' + (r.error || '')); });
+          pushRegistry(newLicenses).then(r => { if (!r.ok) window.alert('تعذر حفظ التراخيص في السحابة: ' + (r.error || '')); });
+        }}
+        onLoadLicenses={(cloudLicenses) => {
+          if (cloudLicenses.length === 0 && hasStoredTenantLicenses() && licenses.length > 0) {
+            window.alert('سجل التراخيص السحابي فارغ حالياً. احتفظنا بالسجل المحلي دون حذفه؛ راجع الاستيراد قبل أي تعديل.');
+            return;
+          }
+          setLicenses(cloudLicenses);
+          saveTenantLicenses(cloudLicenses);
         }}
         onSelectTenant={(tenantId) => { setActiveTenantId(tenantId); setActiveTenantIdState(tenantId); window.location.replace('/'); }}
       />
@@ -2719,17 +2739,21 @@ export default function App() {
         isOpen={true}
         licenses={licenses}
         currentLicense={activeTenant}
-        onActivateKey={(key: string) => {
-          const found = licenses.find(l => l.licenseKey.toUpperCase() === key.trim().toUpperCase());
-          if (found) {
-            saveDeviceLicenseKey(found.licenseKey);
-            setActiveTenantId(found.tenantId);
-            setActiveTenantIdState(found.tenantId);
-            reloadTenantData(found);
-            setShowActivationGateway(false);
-            return { success: true, message: 'تم تفعيل المحل بنجاح', license: found };
+        onActivateKey={async (key: string) => {
+          const result = await activateFromCloud(key);
+          if (!result.ok || !result.tenant) {
+            return { success: false, message: result.error || (result.offline ? 'تعذر الاتصال بالسحابة. تحقق من الإنترنت وحاول مرة أخرى.' : 'مفتاح الترخيص غير صالح.') };
           }
-          return { success: false, message: 'مفتاح الترخيص غير صحيح' };
+          const found = result.tenant as TenantLicense;
+          const updatedLicenses = [found, ...licenses.filter(item => item.tenantId !== found.tenantId && item.licenseKey.toUpperCase() !== found.licenseKey.toUpperCase())];
+          setLicenses(updatedLicenses);
+          saveTenantLicenses(updatedLicenses);
+          saveDeviceLicenseKey(found.licenseKey);
+          setActiveTenantId(found.tenantId);
+          setActiveTenantIdState(found.tenantId);
+          reloadTenantData(found);
+          setShowActivationGateway(false);
+          return { success: true, message: 'تم التحقق من الترخيص السحابي وتفعيل المحل بنجاح', license: found };
         }}
       />
     );
@@ -2774,10 +2798,10 @@ export default function App() {
         onTabChange={setCurrentTab}
         activeNotificationsCount={activeNotificationsCount}
         onOpenNotifications={() => setShowNotifications(true)}
-        onOpenVoiceAssistant={() => setShowVoiceAssistant(true)}
+        onOpenVoiceAssistant={() => { if (canUseVoiceAssistant) setShowVoiceAssistant(true); }}
         onOpenDeploymentGuide={() => setShowDeploymentGuide(true)}
         onOpenInventoryAudit={() => setShowBarcodeStocktake(true)}
-        onOpenInventoryErrors={() => setShowInventoryErrors(true)}
+        onOpenInventoryErrors={() => { if (canManageStockMonitoringNow) setShowInventoryErrors(true); }}
         onOpenCarModels={() => setShowCarModels(true)}
         onOpenPhotoSharing={() => setShowPhotoSharing(true)}
         onOpenExcelModal={() => setShowExcelModal(true)}
@@ -2808,7 +2832,7 @@ export default function App() {
               setCurrentTab('pos');
             }}
             onOpenNotifications={() => setShowNotifications(true)}
-            onOpenVoiceAssistant={() => setShowVoiceAssistant(true)}
+            onOpenVoiceAssistant={() => { if (canUseVoiceAssistant) setShowVoiceAssistant(true); }}
                 onOpenInventoryErrors={() => setShowInventoryErrors(true)}
             onOpenPhotoSharing={() => setShowPhotoSharing(true)}
             onOpenExcelModal={() => setShowExcelModal(true)}
@@ -2846,7 +2870,7 @@ export default function App() {
             stockBatches={stockBatches}
             cashierName={currentUser?.employeeName}
             cashierId={currentUser?.employeeId}
-            onOpenVoiceAssistant={simpleMode ? undefined : () => setShowVoiceAssistant(true)}
+            onOpenVoiceAssistant={simpleMode || !canUseVoiceAssistant ? undefined : () => setShowVoiceAssistant(true)}
             onOpenReturns={() => setCurrentTab('invoices')}
             shiftOpen={Boolean(openShift)}
             shiftRequired={Boolean(settings.requireShiftForSales)}
@@ -3669,7 +3693,7 @@ export default function App() {
       {/* ===================== MODALS ===================== */}
 
       {/* 1. Inventory Errors & Discrepancies Modal */}
-      {showInventoryErrors && (
+      {showInventoryErrors && canManageStockMonitoringNow && (
         <InventoryErrorsModal
           isOpen={showInventoryErrors}
           onClose={() => setShowInventoryErrors(false)}
@@ -3781,7 +3805,7 @@ export default function App() {
       )}
 
       {/* 9. Voice Assistant Modal */}
-      {showVoiceAssistant && (
+      {showVoiceAssistant && canUseVoiceAssistant && (
         <VoiceAssistantModal
           isOpen={showVoiceAssistant}
           onClose={() => setShowVoiceAssistant(false)}

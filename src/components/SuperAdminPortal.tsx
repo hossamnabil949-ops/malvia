@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ShieldCheck, 
   Key, 
@@ -30,6 +30,9 @@ import {
 } from 'lucide-react';
 import { TenantLicense, TenantPlan, TenantStatus } from '../types/autoParts';
 import { TenantBackupsModal } from './TenantBackupsModal';
+import { OwnerLicenseEditorModal } from './OwnerLicenseEditorModal';
+import { OwnerCatalogAuditModal } from './OwnerCatalogAuditModal';
+import { AdminAuthPanel } from './AdminAuthPanel';
 
 interface SuperAdminPortalProps {
   isOpen: boolean;
@@ -37,6 +40,7 @@ interface SuperAdminPortalProps {
   licenses: TenantLicense[];
   activeTenantId: string;
   onUpdateLicenses: (newLicenses: TenantLicense[]) => void;
+  onLoadLicenses: (cloudLicenses: TenantLicense[]) => void;
   onSelectTenant: (tenantId: string) => void;
 }
 
@@ -46,11 +50,15 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   licenses,
   activeTenantId,
   onUpdateLicenses,
+  onLoadLicenses,
   onSelectTenant,
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [pinCode, setPinCode] = useState('');
-  const [pinError, setPinError] = useState(false);
+  const [credentialLicense, setCredentialLicense] = useState<TenantLicense | null>(null);
+  const [credentialEmployees, setCredentialEmployees] = useState<Array<{id:string;name:string;username:string;status:string}>>([]);
+  const [credentialEmployeeId, setCredentialEmployeeId] = useState('');
+  const [credentialVersion, setCredentialVersion] = useState(0);
+  const [credentialBusy, setCredentialBusy] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | TenantStatus>('all');
@@ -68,50 +76,112 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   const [newNotes, setNewNotes] = useState('');
 
   const [features, setFeatures] = useState({
-    canUsePos: true,
-    canUseInventory: true,
-    canUsePurchases: true,
-    canUseSuppliers: true,
-    canUseCustomers: true,
-    canUseTreasury: true,
-    canUseReports: true,
-    canUseVoiceAI: true,
+    canUsePos: true, canUseInventory: true, canUseStockMonitoring: true,
+    canUsePurchases: true, canUseSuppliers: true, canUseCustomers: true,
+    canUseTreasury: true, canUseReports: true, canUseAdvancedReports: true,
+    canUseAI: true, canUseVoiceAI: true, canUseWorkshops: false, canUseHR: false,
   });
+  const [catalogPlans, setCatalogPlans] = useState<Array<{
+    id: string; name: string; monthlyPrice: number; annualPrice: number;
+    maxEmployees: number; devicesLimit: number; active: boolean;
+    allowedFeatures: Record<string, boolean>;
+  }>>([]);
 
-  const MASTER_PIN_KEY = 'malvia_master_owner_pin_v1';
 
-  const [showChangePinModal, setShowChangePinModal] = useState(false);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetch('/api/registry?resource=plans', { credentials: 'include' })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        const names = Array.isArray(data?.plans)
+          ? data.plans.filter((plan: any) => plan?.active !== false).map((plan: any) => String(plan.name || '').trim()).filter(Boolean)
+          : [];
+        setCatalogPlans(Array.isArray(data?.plans) ? data.plans : []);
+        setCatalogPlanNames(names);
+      })
+      .catch(() => { setCatalogPlanNames([]); setCatalogPlans([]); });
+  }, [isAuthenticated]);
+
   const [backupLicense, setBackupLicense] = useState<TenantLicense | null>(null);
-  const [newMasterPin, setNewMasterPin] = useState('');
-  const [pinChangeSuccess, setPinChangeSuccess] = useState(false);
+  const [editingLicense, setEditingLicense] = useState<TenantLicense | null>(null);
+  const [showCatalogAudit, setShowCatalogAudit] = useState(false);
+  const [catalogPlanNames, setCatalogPlanNames] = useState<string[]>([]);
 
-  const handleVerifyPin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const storedPin = localStorage.getItem(MASTER_PIN_KEY) || '';
-    if (!storedPin || ['2026', 'malvia', 'admin'].includes(storedPin.toLowerCase())) {
-      if (pinCode.trim().length < 12) { setPinError(true); return; }
-      localStorage.setItem(MASTER_PIN_KEY, pinCode.trim());
-      setIsAuthenticated(true); setPinError(false); setPinCode(''); return;
-    }
-    if (pinCode.trim() === storedPin) {
-      setIsAuthenticated(true);
-      setPinError(false);
-      setPinCode('');
-    } else {
-      setPinError(true);
+  const handleAuthenticated = async () => {
+    setIsAuthenticated(true);
+    try {
+      const response = await fetch('/api/registry?resource=licenses', { credentials: 'include' });
+      if (!response.ok) throw new Error('تعذر تحميل سجل الشركات من الخادم.');
+      const data = await response.json();
+      if (Array.isArray(data?.licenses)) onLoadLicenses(data.licenses);
+    } catch (error: any) {
+      setIsAuthenticated(false);
+      window.alert(String(error?.message || 'تعذر تحميل سجل الشركات.'));
     }
   };
 
-  const handleSaveNewPin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMasterPin.trim()) return;
-    localStorage.setItem(MASTER_PIN_KEY, newMasterPin.trim());
-    setPinChangeSuccess(true);
-    setTimeout(() => {
-      setPinChangeSuccess(false);
-      setShowChangePinModal(false);
-      setNewMasterPin('');
-    }, 1500);
+  const openCredentialReconciliation = async (lic: TenantLicense) => {
+    setCredentialBusy(true);
+    try {
+      const query = new URLSearchParams({ licenseId: lic.id, tenantId: lic.tenantId });
+      const response = await fetch('/api/admin/reconcile-employee-credential?' + query.toString(), { credentials: 'include' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || 'تعذر تحميل حسابات الموظفين من السحابة.');
+      setCredentialLicense(lic);
+      setCredentialEmployees(Array.isArray(data.employees) ? data.employees : []);
+      setCredentialVersion(Number(data.version) || 0);
+      setCredentialEmployeeId('');
+    } catch (error: any) {
+      window.alert(String(error?.message || 'تعذر فتح أداة المصالحة.'));
+    } finally {
+      setCredentialBusy(false);
+    }
+  };
+
+  const reconcileSelectedCredential = async () => {
+    if (!credentialLicense || !credentialEmployeeId) return;
+    const confirmed = window.confirm('سيتم تحديث تجزئة كلمة مرور موظف واحد فقط في السحابة، مع الحفاظ على بقية بياناته. هل تريد المتابعة؟');
+    if (!confirmed) return;
+    setCredentialBusy(true);
+    try {
+      const raw = localStorage.getItem('malvia_' + credentialLicense.tenantId + '_employees');
+      const localEmployees = raw ? JSON.parse(raw) : [];
+      const localEmployee = Array.isArray(localEmployees)
+        ? localEmployees.find((item: any) => String(item?.id) === credentialEmployeeId)
+        : null;
+      if (!localEmployee || typeof localEmployee.passwordHash !== 'string' ||
+          !/^pbkdf2\$\d+\$[A-Za-z0-9+/]+=*\$[A-Za-z0-9+/]+=*$/.test(localEmployee.passwordHash)) {
+        throw new Error('لا توجد تجزئة كلمة مرور صالحة لهذا الموظف على هذا الجهاز. لم يتم تغيير أي بيانات.');
+      }
+      const response = await fetch('/api/admin/reconcile-employee-credential', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          licenseId: credentialLicense.id, tenantId: credentialLicense.tenantId,
+          employeeId: credentialEmployeeId, passwordHash: localEmployee.passwordHash,
+          baseVersion: credentialVersion,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || (response.status === 409
+        ? 'تغير سجل الموظفين. أغلق النافذة وأعد فتحها ثم حاول مرة أخرى.'
+        : 'تعذر تحديث بيانات المصادقة.'));
+      window.alert('تمت مصالحة بيانات اعتماد الموظف المحدد. اطلب منه تسجيل الدخول مجدداً؛ لن يتم تجاوز التحقق المعتاد.');
+      setCredentialLicense(null);
+    } catch (error: any) {
+      window.alert(String(error?.message || 'تعذر إتمام المصالحة.'));
+    } finally {
+      setCredentialBusy(false);
+    }
+  };
+
+  const handleAdminLogout = async () => {
+    await fetch('/api/admin/auth', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'logout' }),
+    }).catch(() => undefined);
+    setIsAuthenticated(false);
   };
 
   const filteredLicenses = useMemo(() => {
@@ -157,6 +227,14 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
     return `${prefix}-${cityCode}-${randomHex}-${randomSec}`;
   };
 
+  const applySelectedPlan = (planName: string) => {
+    setNewPlan(planName);
+    const selected = catalogPlans.find(plan => plan.name === planName && plan.active !== false);
+    if (!selected) return;
+    setNewMaxEmployees(Math.max(1, Number(selected.maxEmployees) || 1));
+    setFeatures(current => ({ ...current, ...selected.allowedFeatures }));
+  };
+
   const handleCreateLicense = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCompanyName.trim() || !newOwnerName.trim() || !newPhone.trim()) return;
@@ -180,6 +258,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
       startDate: startDate.toISOString().split('T')[0],
       expiryDate: expiryDate.toISOString().split('T')[0],
       maxEmployees: newMaxEmployees,
+      devicesLimit: catalogPlans.find(plan => plan.name === newPlan && plan.active !== false)?.devicesLimit || 1,
       status: 'نشط',
       devicesCount: 1,
       lastActiveDate: 'تم الإنشاء للتو',
@@ -222,6 +301,20 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
       return l;
     });
     onUpdateLicenses(updated);
+  };
+
+  const handleSaveLicense = (updatedLicense: TenantLicense) => {
+    const duplicateKey = licenses.some(item =>
+      item.id !== updatedLicense.id &&
+      item.licenseKey.trim().toUpperCase() === updatedLicense.licenseKey.trim().toUpperCase()
+    );
+    if (duplicateKey) {
+      window.alert('مفتاح الترخيص مستخدم بالفعل لعميل آخر. اختر مفتاحاً مختلفاً.');
+      return;
+    }
+    const updated = licenses.map(item => item.id === updatedLicense.id ? updatedLicense : item);
+    onUpdateLicenses(updated);
+    setEditingLicense(null);
   };
 
   const handleCopyKey = (key: string, lic: TenantLicense) => {
@@ -275,48 +368,7 @@ ${window.location.origin}`;
         </div>
 
         {!isAuthenticated ? (
-          <div className="p-8 sm:p-12 flex flex-col items-center justify-center text-center space-y-4 flex-1">
-            <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-lg">
-              <Lock className="w-8 h-8" />
-            </div>
-            
-            <div className="max-w-md space-y-1.5">
-              <h3 className="text-lg font-black text-white">المنطقة مقيدة لمالك النظام فقط</h3>
-              <p className="text-xs text-neutral-400">
-                أدخل رمز المالك. عند أول استخدام، أنشئ رمزًا قويًا لا يقل عن 12 حرفًا أو رقمًا.
-              </p>
-            </div>
-
-            <form onSubmit={handleVerifyPin} className="w-full max-w-xs space-y-3 pt-2">
-              <input
-                type="password"
-                autoFocus
-                value={pinCode}
-                onChange={(e) => {
-                  setPinCode(e.target.value);
-                  setPinError(false);
-                }}
-                placeholder="أدخل رمز المالك أو أنشئه أول مرة (12 خانة على الأقل)"
-                className="w-full h-12 text-center text-lg tracking-widest font-mono rounded-2xl bg-surface-2 border border-neutral-700 text-amber-400 placeholder:text-neutral-600 focus:outline-none focus:border-amber-500"
-              />
-
-              {pinError && (
-                <div className="text-xs text-rose-400 flex items-center justify-center gap-1 font-bold">
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  <span>رمز الأمان غير صحيح. يرجى التأكد من كتابة رمز المالك المعتمد.</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
-              >
-                تأكيد الدخول للوحة المالك
-              </button>
-            </form>
-
-            <span className="text-[11px] text-neutral-500 font-mono">MALVIA Enterprise Multi-Tenant Engine</span>
-          </div>
+          <AdminAuthPanel onAuthenticated={handleAuthenticated} />
         ) : (
           <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
@@ -384,12 +436,20 @@ ${window.location.origin}`;
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowChangePinModal(true)}
+                  onClick={handleAdminLogout}
                   className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-amber-300 font-bold text-xs border border-amber-500/30 transition shadow-sm"
-                  title="تغيير كلمة مرور المالك الرئيسية"
+                  title="تسجيل الخروج من حساب الإدارة"
                 >
                   <Key className="w-3.5 h-3.5 text-amber-400" />
-                  <span>تغيير كلمة سر المالك</span>
+                  <span>تسجيل الخروج</span>
+                </button>
+
+                <button
+                  onClick={() => setShowCatalogAudit(true)}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-sky-300 font-bold text-xs border border-sky-500/30 transition shadow-sm"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>الباقات وسجل العمليات</span>
                 </button>
 
                 <button
@@ -505,6 +565,14 @@ ${window.location.origin}`;
                         <td className="p-3.5">
                           <div className="flex items-center justify-center gap-1.5">
                             <button
+                              onClick={() => setEditingLicense(lic)}
+                              className="p-1.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-300 text-[11px]"
+                              title="تعديل بيانات العميل والباقة والفترة والسعر والخصائص"
+                            >
+                              <Sliders className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
                               onClick={() => handleToggleStatus(lic.id)}
                               className={`p-1.5 rounded-xl border text-[11px] font-bold transition-all ${
                                 lic.status === 'نشط'
@@ -522,6 +590,15 @@ ${window.location.origin}`;
                               title="تمديد الاشتراك لمدة سنة إضافية"
                             >
                               +سنة
+                            </button>
+
+                            <button
+                              onClick={() => openCredentialReconciliation(lic)}
+                              disabled={credentialBusy}
+                              className="p-1.5 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-300 text-[11px] disabled:opacity-50"
+                              title="مصالحة تجزئة كلمة مرور موظف محدد مع السحابة"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
                             </button>
 
                             <button
@@ -566,6 +643,27 @@ ${window.location.origin}`;
                 <p>
                   3. بمجرد انتهاء فترة اشتراكه، يُقفل السيستم تلقائياً لديه ولا يمكنه استخدامه حتى تقوم بتجديده أو تمديده من هذه اللوحة.
                 </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {credentialLicense && (
+          <div className="fixed inset-0 z-[70] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-lg rounded-2xl border border-violet-500/40 bg-surface-2 p-5 text-white space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-black text-sm">مصالحة اعتماد موظف واحد مع السحابة</h3>
+                <button onClick={() => setCredentialLicense(null)} className="text-neutral-400 hover:text-white"><X className="w-4 h-4" /></button>
+              </div>
+              <p className="text-xs text-neutral-400">الشركة: {credentialLicense.companyName}. تتم مطابقة سجل السحابة مع التجزئة المحلية على هذا الجهاز. لا تُرسل كلمة المرور نفسها.</p>
+              <select value={credentialEmployeeId} onChange={e => setCredentialEmployeeId(e.target.value)} className="w-full h-11 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-sm">
+                <option value="">اختر الموظف المطلوب إصلاح دخوله</option>
+                {credentialEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.name} {employee.username ? '(' + employee.username + ')' : ''} {employee.status === 'معلق' ? '— موقوف' : ''}</option>)}
+              </select>
+              <p className="text-[11px] text-amber-300">سيتم تحديث passwordHash للموظف المختار فقط، مع إبقاء باقي الحقول كما هي. العملية محمية بإصدار السجل وتُسجل في سجل تدقيق الإدارة.</p>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setCredentialLicense(null)} className="px-4 py-2 rounded-xl bg-neutral-800 text-xs">إلغاء</button>
+                <button onClick={reconcileSelectedCredential} disabled={!credentialEmployeeId || credentialBusy} className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-bold disabled:opacity-50">{credentialBusy ? 'جارٍ التنفيذ...' : 'مصالحة الموظف المحدد'}</button>
               </div>
             </div>
           </div>
@@ -647,14 +745,10 @@ ${window.location.origin}`;
                     <label className="text-neutral-300 font-bold block mb-1">نوع الباقة</label>
                     <select
                       value={newPlan}
-                      onChange={(e) => setNewPlan(e.target.value as any)}
+                      onChange={(e) => applySelectedPlan(e.target.value)}
                       className="w-full h-10 px-2 rounded-xl bg-surface-1 border border-neutral-700 text-white font-bold"
                     >
-                      <option value="باقة سنوية PRO">باقة سنوية PRO</option>
-                      <option value="باقة VIP شاملة الفروع">باقة VIP شاملة الفروع</option>
-                      <option value="اشتراك شهري">اشتراك شهري</option>
-                      <option value="تجريبي مجاني (14 يوم)">تجريبي (14 يوم)</option>
-                      <option value="ترخيص دائم مدى الحياة">ترخيص دائم</option>
+                      {[...new Set([...catalogPlanNames, 'باقة سنوية PRO', 'باقة VIP شاملة الفروع', 'اشتراك شهري', 'تجريبي مجاني (14 يوم)', 'ترخيص دائم مدى الحياة'])].map(name => <option key={name} value={name}>{name}</option>)}
                     </select>
                   </div>
 
@@ -761,6 +855,14 @@ ${window.location.origin}`;
                       />
                       <span>المساعد الصوتي AI</span>
                     </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" checked={features.canUseAI} onChange={(e) => setFeatures({ ...features, canUseAI: e.target.checked })} className="rounded text-amber-500" />
+                      <span>الذكاء الاصطناعي AI</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" checked={features.canUseStockMonitoring} onChange={(e) => setFeatures({ ...features, canUseStockMonitoring: e.target.checked })} className="rounded text-amber-500" />
+                      <span>مراقبة المخزون والتنبيهات</span>
+                    </label>
                   </div>
                 </div>
 
@@ -786,79 +888,16 @@ ${window.location.origin}`;
           </div>
         )}
 
-        {/* Change Master PIN Modal */}
-        {showChangePinModal && (
-          <div 
-            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
-            onClick={() => setShowChangePinModal(false)}
-          >
-            <div 
-              className="w-full max-w-md bg-surface-2 rounded-3xl border border-amber-500/40 p-6 text-white shadow-2xl space-y-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
-                    <Key className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-white">تغيير رمز مرور المالك (Master PIN)</h3>
-                    <p className="text-[11px] text-neutral-400">الرمز الخاص بك للدخول إلى لوحة المالك المركزية</p>
-                  </div>
-                </div>
-                <button onClick={() => setShowChangePinModal(false)} className="text-neutral-400 hover:text-white">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+        {editingLicense && (
+          <OwnerLicenseEditorModal
+            license={editingLicense}
+            onSave={handleSaveLicense}
+            onClose={() => setEditingLicense(null)}
+          />
+        )}
 
-              {pinChangeSuccess ? (
-                <div className="p-6 text-center space-y-2">
-                  <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <h4 className="font-bold text-white text-sm">تم حفظ رمز المرور الجديد بنجاح!</h4>
-                  <p className="text-xs text-neutral-400">احتفظ برمزك الجديد لاستخدامه في المرات القادمة.</p>
-                </div>
-              ) : (
-                <form onSubmit={handleSaveNewPin} className="space-y-4 text-xs">
-                  <div>
-                    <label className="text-neutral-300 font-bold block mb-1">
-                      رمز المرور الجديد <span className="text-amber-400">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      autoFocus
-                      placeholder="أدخل رمز مرور جديد قوي (أرقام أو حروف)"
-                      value={newMasterPin}
-                      onChange={(e) => setNewMasterPin(e.target.value)}
-                      className="w-full h-11 px-3.5 rounded-xl bg-surface-1 border border-neutral-700 text-white font-mono text-center tracking-widest text-sm focus:outline-none focus:border-amber-500"
-                    />
-                    <p className="text-[10px] text-neutral-400 mt-1">
-                      هذا الرمز خاص بك وحدك كصاحب النظام ولا يظهر لأي عميل أو موظف.
-                    </p>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-800">
-                    <button
-                      type="button"
-                      onClick={() => setShowChangePinModal(false)}
-                      className="px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold"
-                    >
-                      إلغاء
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black shadow-lg shadow-amber-500/20 active:scale-95 transition"
-                    >
-                      <Check className="w-4 h-4 stroke-[3]" />
-                      <span>حفظ الرمز الجديد</span>
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
+        {showCatalogAudit && (
+          <OwnerCatalogAuditModal onClose={() => setShowCatalogAudit(false)} />
         )}
 
         {backupLicense && (

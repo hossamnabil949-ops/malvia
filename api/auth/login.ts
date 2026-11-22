@@ -20,6 +20,8 @@ function verifyStoredPassword(password: string, employee: any): boolean {
 }
 
 export default async function handler(req: any, res: any) {
+  const traceId = randomBytes(8).toString('hex');
+  res.setHeader?.('x-malvia-trace-id', traceId);
   if (req.method !== 'POST') return res.status(405).json({ code: 'METHOD_NOT_ALLOWED', error: 'method not allowed' });
   try {
     const ip = clientIp(req);
@@ -43,7 +45,16 @@ export default async function handler(req: any, res: any) {
     ));
     if (!employee || !verifyStoredPassword(password, employee)) {
       rateLimit(`employee-login-fail:${ip}`, 8, 10 * 60_000);
-      return res.status(401).json({ code: 'EMPLOYEE_INVALID_CREDENTIALS', error: 'اسم المستخدم أو كلمة المرور غير صحيحة، أو أن بيانات الموظف غير متاحة على الخادم.' });
+      // Safe server-side diagnosis: never log username, password, employee data, or license key.
+      console.warn('[MALVIA_EMPLOYEE_LOGIN_DIAGNOSTIC]', {
+        traceId,
+        outcome: employee ? 'password_mismatch' : 'employee_not_found',
+      });
+      return res.status(401).json({
+        code: 'EMPLOYEE_INVALID_CREDENTIALS',
+        error: 'اسم المستخدم أو كلمة المرور غير صحيحة، أو أن بيانات الموظف غير متاحة على الخادم.',
+        diagnostic: { traceId, phase: 'employee_credentials', outcome: 'credentials_not_accepted' },
+      });
     }
     const token = randomBytes(32).toString('base64url');
     const tokenHash = createHash('sha256').update(token).digest('hex');
