@@ -189,7 +189,7 @@ export async function handleAdminAuth(req: any, res: any) {
     return res.status(200).json({ authenticated: !!identity, admin: identity, bootstrapAvailable: users.length === 0 });
   }
   if (req.method !== 'POST') return res.status(405).json({ code: 'METHOD_NOT_ALLOWED' });
-  assertSameOrigin(req);
+  assertSameOrigin(req, true);
   const action = String(req.body?.action || '');
   await persistentLimit('admin-auth:' + ip, 25, 10 * 60 * 1000);
   if (action === 'bootstrap') {
