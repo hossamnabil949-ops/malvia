@@ -29,9 +29,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // ---- 3) صاحب المنظومة فقط ----
-    const admin = req.method === 'POST'
-      ? await requireSuperAdminIdentity(req)
-      : await requireAdminIdentity(req);
+    const admin = await requireSuperAdminIdentity(req);
 
     if (req.method === 'GET') {
       if (q.id) {
