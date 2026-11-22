@@ -5,7 +5,7 @@
 //                        POST {action:'create', tenant} نسخة الآن | POST {action:'restore', tenant, id} استرجاع
 import { backupAllChanged, createBackup, getAll, getBackup, getOne, listBackups, restoreBackup } from './_db.js';
 import { ApiError, clientIp, findLicense, rateLimit, sendError } from './_security.js';
-import { requireAdminIdentity, writeAdminAudit } from './_admin.js';
+import { requireAdminIdentity, requireSuperAdminIdentity, writeAdminAudit } from './_admin.js';
 
 // رسائل الاسترجاع المقصودة للمالك (أي خطأ آخر لا يُسرَّب)
 const SAFE_MESSAGES = new Set(['النسخة غير موجودة', 'هذه النسخة تخص محلاً آخر']);
@@ -29,7 +29,9 @@ export default async function handler(req: any, res: any) {
     }
 
     // ---- 3) صاحب المنظومة فقط ----
-    const admin = await requireAdminIdentity(req);
+    const admin = req.method === 'POST'
+      ? await requireSuperAdminIdentity(req)
+      : await requireAdminIdentity(req);
 
     if (req.method === 'GET') {
       if (q.id) {
@@ -45,7 +47,11 @@ export default async function handler(req: any, res: any) {
     if (req.method === 'POST') {
       const { action, tenant, id } = req.body || {};
       if (action === 'create_all') {
-        return res.status(200).json({ ok: true, backedUp: await backupAllChanged() });
+        const backedUp = await backupAllChanged();
+        await writeAdminAudit(admin.username, 'ALL_TENANT_BACKUPS_CREATED', {
+          resultCount: Array.isArray(backedUp) ? backedUp.length : null,
+        });
+        return res.status(200).json({ ok: true, backedUp });
       }
       if (!tenant || typeof tenant !== 'string') return res.status(400).json({ error: 'tenant مطلوب' });
       if (action === 'create') {
