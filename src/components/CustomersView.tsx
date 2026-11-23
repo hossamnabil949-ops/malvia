@@ -11,6 +11,8 @@ import {
   Crown, 
   TrendingUp, 
   BarChart3,
+  Pencil,
+  Trash2,
   PieChart as PieIcon,
   Medal,
   Calendar
@@ -41,6 +43,8 @@ interface CustomersViewProps {
   onSettleBalance: (customerId: string, amount: number, paymentMethod?: string, bankAccountId?: string) => void;
   bankAccounts?: BankAccount[];
   onUpdateCreditLimit?: (customerId: string, limit: number) => void;
+  onUpdateCustomer?: (customer: Customer) => void;
+  onArchiveCustomer?: (customerId: string) => void;
   loyaltyEnabled?: boolean;
   canAdjustLoyalty?: boolean;            // التعديل اليدوي للنقاط: المدير العام فقط
   loyaltyEntries?: LoyaltyEntry[];       // سجل حركات النقاط
@@ -56,6 +60,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   onSettleBalance,
   bankAccounts = [],
   onUpdateCreditLimit,
+  onUpdateCustomer,
+  onArchiveCustomer,
   loyaltyEnabled = false,
   canAdjustLoyalty = false,
   loyaltyEntries = [],
@@ -73,6 +79,11 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [newCreditLimit, setNewCreditLimit] = useState('5000');
   const [limitModalCustomer, setLimitModalCustomer] = useState<Customer | null>(null);
   const [limitValue, setLimitValue] = useState('');
+  const [editModalCustomer, setEditModalCustomer] = useState<Customer | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editType, setEditType] = useState<Customer['type']>('ورشة فنية');
+  const [editCreditLimit, setEditCreditLimit] = useState('');
   const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
   const [pointsModalCustomer, setPointsModalCustomer] = useState<Customer | null>(null);
   const [pointsDelta, setPointsDelta] = useState('');
@@ -110,6 +121,23 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     setPointsReason('');
   };
 
+  const openEditCustomer = (customer: Customer) => {
+    setEditModalCustomer(customer);
+    setEditName(customer.name);
+    setEditPhone(customer.phone);
+    setEditType(customer.type);
+    setEditCreditLimit(String(customer.creditLimit ?? 5000));
+  };
+
+  const handleSaveCustomerEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editModalCustomer || !onUpdateCustomer) return;
+    const creditLimit = Number(editCreditLimit);
+    if (!editName.trim() || !editPhone.trim() || !Number.isFinite(creditLimit) || creditLimit < 0) return;
+    onUpdateCustomer({ ...editModalCustomer, name: editName.trim(), phone: editPhone.trim(), type: editType, creditLimit });
+    setEditModalCustomer(null);
+  };
+
   const handleConfirmLimit = () => {
     if (!limitModalCustomer || !onUpdateCreditLimit) return;
     onUpdateCreditLimit(limitModalCustomer.id, Math.max(0, Number(limitValue) || 0));
@@ -125,7 +153,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   };
 
   const currentMonth = cairoDateKey(new Date()).slice(0, 7);
-  const customerRows = customers.map(customer => {
+  const customerRows = customers.filter(customer => !customer.isArchived).map(customer => {
     const ownInvoices = invoices.filter(invoice => invoice.status !== 'ملغاة' && invoice.customerId === customer.id);
     const currentMonthInvoices = ownInvoices.filter(invoice => (invoice.date || '').slice(0, 7) === currentMonth);
     const lastVisit = ownInvoices.map(invoice => invoice.date).sort().at(-1) || customer.lastVisit;
@@ -427,8 +455,20 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       {c.type}
                     </span>
                   </div>
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
-                    <Wrench className="w-4 h-4" />
+                  <div className="flex items-center gap-1.5">
+                    {onUpdateCustomer && (
+                      <button type="button" title="تعديل بيانات العميل" onClick={() => openEditCustomer(c)} className="w-8 h-8 rounded-xl bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 flex items-center justify-center">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
+                    {onArchiveCustomer && (
+                      <button type="button" title="حذف / أرشفة الحساب" onClick={() => onArchiveCustomer(c.id)} className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 flex items-center justify-center">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+                      <Wrench className="w-4 h-4" />
+                    </div>
                   </div>
                 </div>
 
@@ -677,6 +717,35 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               </button>
             </form>
           </div>
+        </div>
+      )}
+
+      {editModalCustomer && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setEditModalCustomer(null)}>
+          <form onSubmit={handleSaveCustomerEdit} className="w-full max-w-md rounded-2xl bg-surface-1 border border-neutral-700 p-5 space-y-3 text-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h4 className="font-black text-white text-sm">تعديل بيانات — {editModalCustomer.name}</h4>
+              <button type="button" onClick={() => setEditModalCustomer(null)} className="text-neutral-400 hover:text-white"><X className="w-4 h-4" /></button>
+            </div>
+            <label className="block text-neutral-300 font-bold">اسم العميل / الورشة
+              <input required value={editName} onChange={e => setEditName(e.target.value)} className="mt-1 w-full h-10 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white" />
+            </label>
+            <label className="block text-neutral-300 font-bold">رقم الهاتف
+              <input required value={editPhone} onChange={e => setEditPhone(e.target.value)} className="mt-1 w-full h-10 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white font-mono" />
+            </label>
+            <label className="block text-neutral-300 font-bold">نوع الحساب
+              <select value={editType} onChange={e => setEditType(e.target.value as Customer['type'])} className="mt-1 w-full h-10 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white">
+                <option value="ورشة فنية">ورشة فنية</option><option value="عميل تجزئة">عميل تجزئة</option><option value="أسطول شركات">أسطول شركات</option>
+              </select>
+            </label>
+            <label className="block text-neutral-300 font-bold">حد الائتمان (ج.م) — صفر = غير محدود
+              <input required type="number" min="0" step="0.01" value={editCreditLimit} onChange={e => setEditCreditLimit(e.target.value)} className="mt-1 w-full h-10 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white font-mono" />
+            </label>
+            <div className="flex gap-2 pt-1">
+              <button type="submit" className="flex-1 h-10 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black">حفظ التعديلات</button>
+              <button type="button" onClick={() => setEditModalCustomer(null)} className="px-5 h-10 rounded-xl bg-neutral-800 text-neutral-300 font-bold">إلغاء</button>
+            </div>
+          </form>
         </div>
       )}
 

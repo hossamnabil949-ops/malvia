@@ -3023,6 +3023,31 @@ export default function App() {
             canAdjustLoyalty={effectiveRole === 'مدير عام'}
             loyaltyEntries={loyaltyLedger}
             onAdjustLoyalty={handleAdjustLoyalty}
+            onUpdateCustomer={(updatedCustomer: Customer) => {
+              const previous = customers.find(c => c.id === updatedCustomer.id);
+              if (!previous) return;
+              logAudit('customer.update', `تعديل بيانات العميل/الورشة: ${previous.name} ← ${updatedCustomer.name}`, updatedCustomer.id, { name: updatedCustomer.name, phone: updatedCustomer.phone, type: updatedCustomer.type, creditLimit: updatedCustomer.creditLimit });
+              setCustomers(prev => {
+                const updated = prev.map(c => c.id === updatedCustomer.id ? { ...c, name: updatedCustomer.name, phone: updatedCustomer.phone, type: updatedCustomer.type, creditLimit: updatedCustomer.creditLimit } : c);
+                persistChanges({ customers: updated });
+                return updated;
+              });
+            }}
+            onArchiveCustomer={(customerId: string) => {
+              const customer = customers.find(c => c.id === customerId);
+              if (!customer) return;
+              if (customer.balance > 0.005 || (customer.chequesPending ?? 0) > 0.005) {
+                window.alert('لا يمكن حذف الحساب لوجود مديونية أو شيكات تحت التحصيل. قم بتسوية الرصيد أولاً.');
+                return;
+              }
+              if (!window.confirm(`تأكيد حذف/أرشفة «${customer.name}»؟ سيتم إخفاء الحساب من البيع مع الاحتفاظ بالفواتير والسجلات السابقة.`)) return;
+              logAudit('customer.archive', `أرشفة حساب العميل/الورشة: ${customer.name}`, customerId);
+              setCustomers(prev => {
+                const updated = prev.map(c => c.id === customerId ? { ...c, isArchived: true } : c);
+                persistChanges({ customers: updated });
+                return updated;
+              });
+            }}
             onUpdateCreditLimit={(customerId: string, limit: number) => {
               const cust = customers.find(c => c.id === customerId);
               logAudit('customer.credit_limit', `حد ائتمان ${cust?.name || customerId}: ${limit > 0 ? limit + ' ج.م' : 'غير محدود'}`, customerId, limit);
