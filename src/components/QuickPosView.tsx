@@ -778,7 +778,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
                 className="bg-surface-1 border border-neutral-700 text-neutral-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-amber-400"
               >
                 <option value="cash">زبون نقدي / قطاعي</option>
-                {customers.map((c) => (
+                {customers.filter((c) => !c.isArchived).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} ({c.type})
                   </option>
