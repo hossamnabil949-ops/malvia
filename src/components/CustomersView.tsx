@@ -503,7 +503,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     <span className="font-mono font-bold text-sky-300">
                       {c.creditLimit && c.creditLimit > 0
                         ? `${c.creditLimit.toLocaleString()} ج.م (المتاح ${Math.max(0, c.creditLimit - Math.max(0, c.balance) - (c.chequesPending ?? 0)).toLocaleString()})`
-                        : 'غير محدود'}
+                        : 'الحد الافتراضي 5,000 ج.م'}
                     </span>
                     {onUpdateCreditLimit && (
                       <button
@@ -738,7 +738,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 <option value="ورشة فنية">ورشة فنية</option><option value="عميل تجزئة">عميل تجزئة</option><option value="أسطول شركات">أسطول شركات</option>
               </select>
             </label>
-            <label className="block text-neutral-300 font-bold">حد الائتمان (ج.م) — صفر = غير محدود
+            <label className="block text-neutral-300 font-bold">حد الائتمان (ج.م) — صفر = الحد الافتراضي 5,000
               <input required type="number" min="0" step="0.01" value={editCreditLimit} onChange={e => setEditCreditLimit(e.target.value)} className="mt-1 w-full h-10 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white font-mono" />
             </label>
             <div className="flex gap-2 pt-1">
@@ -760,7 +760,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           >
             <h4 className="font-black text-white text-sm">حد الائتمان — {limitModalCustomer.name}</h4>
             <p className="text-neutral-400">
-              المديونية الحالية: {Math.max(0, limitModalCustomer.balance).toLocaleString()} ج.م. أي بيع آجل يتجاوز الحد سيُرفض في الكاشير. اكتب 0 لإلغاء الحد.
+              المديونية الحالية: {Math.max(0, limitModalCustomer.balance).toLocaleString()} ج.م. أي بيع آجل يتجاوز الحد سيُرفض في الكاشير. اكتب 0 لاستخدام الحد الافتراضي 5,000 ج.م.
             </p>
             <input
               type="number"
