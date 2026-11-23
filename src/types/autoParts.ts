@@ -242,6 +242,7 @@ export interface Customer {
   creditLimit?: number; // حد الائتمان (ج.م) — القيمة الافتراضية 5,000 ج.م عند عدم التحديد
   loyaltyPoints?: number; // رصيد نقاط الولاء (يُدمج بالفرق على السحابة)
   chequesPending?: number; // (محسوب وغير محفوظ) شيكات واردة مفتوحة تُحتسب ضمن مخاطر الائتمان
+  isArchived?: boolean; // حساب مؤرشف؛ يحتفظ بالفواتير والسجل ولا يظهر للبيع الجديد
 }
 
 export type ExpenseCategory = 
