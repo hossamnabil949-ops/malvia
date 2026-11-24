@@ -47,6 +47,7 @@ import {
   Shift
 } from './types/autoParts';
 import type { OpeningBalanceRecord } from './utils/openingBalanceLogic';
+import type { LedgerAccount, AccountingPeriod, JournalEntry } from './utils/accountingCore';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
 import { createBankMovementEntry, createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount, summarizeBankAccount } from './utils/bankLedger';
 import { requiresDirectBankAccount, requiresSpecificBankAccount } from './utils/paymentMethods';
@@ -182,6 +183,9 @@ export default function App() {
   const [openingBalances, setOpeningBalances] = useState<OpeningBalanceRecord[]>([]);
   const [stockBatches, setStockBatches] = useState<StockBatch[]>([]);
   const [serialUnits, setSerialUnits] = useState<SerialUnit[]>([]);
+  const [accountingAccounts, setAccountingAccounts] = useState<LedgerAccount[]>([]);
+  const [accountingPeriods, setAccountingPeriods] = useState<AccountingPeriod[]>([]);
+  const [accountingJournalEntries, setAccountingJournalEntries] = useState<JournalEntry[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   // معرّفات حركات الخزنة المعروفة (المحمّلة) — أي حركة جديدة خارجها تُختم بوقتها ووردية الدرج
   const knownTreasuryIds = useRef<Set<string>>(new Set());
@@ -300,6 +304,9 @@ export default function App() {
     setOpeningBalances(data.openingBalances || []);
     setStockBatches(data.stockBatches || []);
     setSerialUnits(data.serialUnits || []);
+    setAccountingAccounts(data.accountingAccounts || []);
+    setAccountingPeriods(data.accountingPeriods || []);
+    setAccountingJournalEntries(data.accountingJournalEntries || []);
   }, []);
 
   useEffect(() => {
@@ -3315,6 +3322,25 @@ export default function App() {
             bankLedgerEntries={bankLedgerEntries}
             openingBalances={openingBalances}
             canManageOpeningBalances={canManageCapital}
+            accountingTenantId={activeTenant?.tenantId || ''}
+            accountingBranchId="MAIN"
+            accountingAccounts={accountingAccounts}
+            accountingPeriods={accountingPeriods}
+            accountingJournalEntries={accountingJournalEntries}
+            canManageAccounting={effectiveRole === 'مدير عام' || effectiveRole === 'محاسب مالي' || Boolean(effectivePermissions?.canManageTreasury)}
+            onSaveAccounting={(updates) => {
+              if (!activeTenant?.tenantId) return false;
+              const saved = persistChanges({
+                ...(updates.accounts ? { accountingAccounts: updates.accounts } : {}),
+                ...(updates.periods ? { accountingPeriods: updates.periods } : {}),
+                ...(updates.entries ? { accountingJournalEntries: updates.entries } : {}),
+              });
+              if (!saved) return false;
+              if (updates.accounts) setAccountingAccounts(updates.accounts);
+              if (updates.periods) setAccountingPeriods(updates.periods);
+              if (updates.entries) setAccountingJournalEntries(updates.entries);
+              return true;
+            }}
             currentUserName={currentUser?.employeeName || 'المدير العام'}
             onApproveOpeningBalances={(record: OpeningBalanceRecord) => {
               if (!canManageCapital || openingBalances.length) return false;
