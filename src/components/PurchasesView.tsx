@@ -32,6 +32,7 @@ import {
   PurchaseInvoiceItem, 
   PurchaseReturn,
   PurchaseReturnItem,
+  PurchaseRequisition,
   Supplier, 
   AutoPart, 
   PaymentMethod, 
@@ -50,6 +51,8 @@ import { DateRange, EMPTY_DATE_RANGE, inDateRange } from '../utils/dateRange';
 interface PurchasesViewProps {
   purchaseInvoices: PurchaseInvoice[];
   purchaseReturns: PurchaseReturn[];
+  purchaseRequisitions: PurchaseRequisition[];
+  onUpdatePurchaseRequisition: (requisition: PurchaseRequisition) => void;
   suppliers: Supplier[];
   parts: AutoPart[];
   treasuryBalance: number;
@@ -71,6 +74,8 @@ interface PurchasesViewProps {
 export const PurchasesView: React.FC<PurchasesViewProps> = ({
   purchaseInvoices,
   purchaseReturns,
+  purchaseRequisitions,
+  onUpdatePurchaseRequisition,
   suppliers,
   parts,
   treasuryBalance,
@@ -88,7 +93,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   canReceiveOnly = false,
   bankAccounts = [],
 }) => {
-  const [currentTab, setCurrentTab] = useState<'invoices' | 'returns'>('invoices');
+  const [currentTab, setCurrentTab] = useState<'invoices' | 'returns' | 'requisitions'>('invoices');
   useEffect(() => { if (canReceiveOnly) setCurrentTab('invoices'); }, [canReceiveOnly]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -574,6 +579,12 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
               <RotateCcw className="w-3.5 h-3.5" />
               <span>مرتجعات الموردين ({purchaseReturns.length})</span>
             </button>}
+            {!canReceiveOnly && <button
+              onClick={() => setCurrentTab('requisitions')}
+              className={`px-2 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-bold leading-tight whitespace-nowrap transition-all ${currentTab === 'requisitions' ? 'bg-emerald-500 text-neutral-950' : 'text-emerald-400 hover:text-emerald-300'}`}
+            >
+              <span>طلبات التوريد ({purchaseRequisitions.length})</span>
+            </button>}
           </div>
 
           <button
@@ -679,7 +690,72 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
         <DateRangeFilter value={dateRange} onChange={setDateRange} />
 
-        {currentTab === 'invoices' && (
+        {currentTab === 'requisitions' && !canReceiveOnly && (
+        <div className="bg-surface-2 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
+          <div className="p-4 border-b border-neutral-800 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-black text-white">طلبات التوريد المحفوظة</h3>
+              <p className="text-xs text-neutral-400 mt-1">طلبات مستقلة حسب المورد — لا تؤثر على المخزون أو الخزينة أو فواتير الشراء</p>
+            </div>
+            <span className="text-xs text-emerald-300">{purchaseRequisitions.length} طلب</span>
+          </div>
+          {purchaseRequisitions.length === 0 ? (
+            <div className="p-10 text-center text-neutral-400">لا توجد طلبات توريد محفوظة حتى الآن. أنشئ طلباً من إشعارات النواقص.</div>
+          ) : (
+            <div className="divide-y divide-neutral-800">
+              {purchaseRequisitions.map(req => (
+                <div key={req.id} className="p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="font-mono font-black text-white">{req.requisitionNumber}</div>
+                      <div className="text-[11px] text-neutral-400">{req.date} · {req.createdBy}</div>
+                    </div>
+                    <div className="font-mono font-bold text-emerald-300">{req.estimatedTotal.toLocaleString()} ج.م تقديري</div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label className="text-xs text-neutral-400">المورد
+                      <select value={req.supplierId || ''} onChange={e => {
+                        const supplier = suppliers.find(item => item.id === e.target.value);
+                        onUpdatePurchaseRequisition({...req, supplierId: supplier?.id, supplierName: supplier?.name});
+                      }} className="mt-1 w-full h-9 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-white">
+                        <option value="">لم يحدد بعد</option>
+                        {suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-xs text-neutral-400">حالة الطلب
+                      <select value={req.status} onChange={e => onUpdatePurchaseRequisition({...req, status: e.target.value as PurchaseRequisition['status']})}
+                        className="mt-1 w-full h-9 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-white">
+                        <option value="DRAFT">مسودة</option>
+                        <option value="APPROVED">معتمد</option>
+                        <option value="SENT">تم الإرسال للمورد</option>
+                        <option value="PARTIALLY_RECEIVED">استلام جزئي</option>
+                        <option value="RECEIVED">تم الاستلام بالكامل</option>
+                        <option value="CANCELLED">ملغي</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-right text-xs">
+                      <thead className="text-neutral-500"><tr><th className="p-2">الصنف</th><th className="p-2">المتاح</th><th className="p-2">الكمية المطلوبة</th><th className="p-2">التكلفة التقديرية</th></tr></thead>
+                      <tbody className="divide-y divide-neutral-800">
+                        {req.items.map((item, index) => <tr key={item.partId + index}>
+                          <td className="p-2 text-white">{item.partName}<div className="text-[10px] text-neutral-500">{item.partNumber} · {item.brand || ''}</div></td>
+                          <td className="p-2 text-neutral-300">{item.stockQuantity} {item.unit}</td>
+                          <td className="p-2 text-amber-300">{item.quantity} {item.unit}</td>
+                          <td className="p-2 text-neutral-300">{item.estimatedTotal.toLocaleString()} ج.م</td>
+                        </tr>)}
+                      </tbody>
+                    </table>
+                  </div>
+                  {req.notes && <p className="text-xs text-neutral-400">{req.notes}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {currentTab === 'invoices' && (
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
