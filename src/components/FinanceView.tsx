@@ -75,6 +75,8 @@ import { AuditLogPanel } from './AuditLogPanel';
 import { BankLedgerView } from './BankLedgerView';
 import { OpeningBalancesPanel } from './OpeningBalancesPanel';
 import { PartnerCurrentAccountPanel } from './PartnerCurrentAccountPanel';
+import { AccountingLedgerView } from './AccountingLedgerView';
+import type { LedgerAccount, AccountingPeriod, JournalEntry } from '../utils/accountingCore';
 import { getPartnerCurrentAccountBalance } from '../utils/partnerCurrentAccount';
 import type { OpeningBalanceRecord } from '../utils/openingBalanceLogic';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from '../utils/bankLedger';
@@ -131,6 +133,13 @@ interface FinanceViewProps {
   onApproveOpeningBalances?: (record: OpeningBalanceRecord) => boolean;
   canManageOpeningBalances?: boolean;
   currentUserName?: string;
+  accountingTenantId?: string;
+  accountingBranchId?: string;
+  accountingAccounts?: LedgerAccount[];
+  accountingPeriods?: AccountingPeriod[];
+  accountingJournalEntries?: JournalEntry[];
+  canManageAccounting?: boolean;
+  onSaveAccounting?: (updates: { accounts?: LedgerAccount[]; periods?: AccountingPeriod[]; entries?: JournalEntry[] }) => boolean;
 }
 
 const PAYMENT_COLORS: Record<string, string> = {
@@ -175,14 +184,16 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   partnerCurrentAccountTransactions = [], onRecordPartnerCurrentAccount,
   onUpdatePartnerProfile, onRecordPartnerWithdrawal, onCreatePartnerExitSettlement, onApprovePartnerExitSettlement, onRecordPartnerSettlementPayment,
   openingBalances = [], onApproveOpeningBalances, canManageOpeningBalances = false, currentUserName = 'المدير العام',
+  accountingTenantId = '', accountingBranchId = 'MAIN', accountingAccounts = [], accountingPeriods = [], accountingJournalEntries = [], canManageAccounting = false, onSaveAccounting,
 }) => {
-  type FinanceTab = 'income' | 'equity' | 'treasury' | 'expenses' | 'audit' | 'bankLedger' | 'partnerCurrentAccount';
+  type FinanceTab = 'income' | 'equity' | 'treasury' | 'expenses' | 'audit' | 'bankLedger' | 'partnerCurrentAccount' | 'accounting';
   const [activeFinanceTab, setActiveFinanceTab] = useState<FinanceTab>(canManagePartners ? 'equity' : canManageTreasury ? 'treasury' : 'expenses');
   const availableFinanceTabs: FinanceTab[] = [
     ...(canManagePartners ? ['equity' as FinanceTab] : []),
     ...(canManagePartners && canManageTreasury ? ['partnerCurrentAccount' as FinanceTab] : []),
     ...(canManageTreasury ? ['income', 'treasury', 'bankLedger', 'audit'] as FinanceTab[] : []),
     ...(canManageExpenses ? ['expenses' as FinanceTab] : []),
+    ...(canManageAccounting ? ['accounting' as FinanceTab] : []),
   ];
   useEffect(() => {
     if (availableFinanceTabs.length && !availableFinanceTabs.includes(activeFinanceTab)) setActiveFinanceTab(availableFinanceTabs[0]);
@@ -709,6 +720,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             { id: 'audit', label: 'سجل التدقيق وحركات المخزون', icon: FileText },
           ] : []),
           ...(canManageExpenses ? [{ id: 'expenses', label: 'سجل المصروفات التشغيلية', icon: TrendingDown }] : []),
+          ...(canManageAccounting ? [{ id: 'accounting', label: 'دفتر الأستاذ وميزان المراجعة', icon: Scale }] : []),
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeFinanceTab === tab.id;
@@ -736,6 +748,9 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         })}
       </div>}
 
+      {activeFinanceTab === 'accounting' && canManageAccounting && onSaveAccounting && accountingTenantId && (
+        <AccountingLedgerView tenantId={accountingTenantId} branchId={accountingBranchId} currentUserName={currentUserName} canManage={canManageAccounting} accounts={accountingAccounts} periods={accountingPeriods} entries={accountingJournalEntries} onSave={onSaveAccounting} />
+      )}
       {activeFinanceTab === 'partnerCurrentAccount' && canManagePartners && canManageTreasury && onRecordPartnerCurrentAccount && (
         <PartnerCurrentAccountPanel
           partners={partners}
