@@ -197,7 +197,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   ];
   useEffect(() => {
     if (availableFinanceTabs.length && !availableFinanceTabs.includes(activeFinanceTab)) setActiveFinanceTab(availableFinanceTabs[0]);
-  }, [canManageExpenses, canManageTreasury, canManagePartners, activeFinanceTab]);
+  }, [canManageExpenses, canManageTreasury, canManagePartners, canManageAccounting, activeFinanceTab]);
   
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
