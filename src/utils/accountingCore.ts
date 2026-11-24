@@ -49,10 +49,12 @@ export function buildTrialBalanceRows(
   accounts: LedgerAccount[], entries: JournalEntry[], from: string, to: string,
 ): TrialBalanceRow[] {
   if (!validDate(from) || !validDate(to) || from > to) return [];
-  return accounts.filter(account => account.active).map(account => {
+  return accounts.map(account => {
     let openingNet = 0, movementDebit = 0, movementCredit = 0;
     for (const entry of entries) {
-      if (entry.status !== 'posted' || entry.date > to) continue;
+      if (entry.status !== 'posted' || entry.date > to
+        || entry.tenantId !== account.tenantId || entry.branchId !== account.branchId
+        || entry.currency.toUpperCase() !== account.currency.toUpperCase()) continue;
       for (const line of entry.lines) {
         if (line.accountId !== account.id) continue;
         if (entry.date < from) openingNet += line.debit - line.credit;
@@ -60,7 +62,7 @@ export function buildTrialBalanceRows(
       }
     }
     const closingNet = openingNet + movementDebit - movementCredit;
-    return {
+    const row = {
       account,
       openingDebit: roundCurrency(Math.max(0, openingNet)),
       openingCredit: roundCurrency(Math.max(0, -openingNet)),
@@ -69,8 +71,9 @@ export function buildTrialBalanceRows(
       closingDebit: roundCurrency(Math.max(0, closingNet)),
       closingCredit: roundCurrency(Math.max(0, -closingNet)),
     };
-  }).filter(row => row.openingDebit || row.openingCredit || row.movementDebit
-    || row.movementCredit || row.closingDebit || row.closingCredit);
+    return row;
+  }).filter(row => row.account.active || row.openingDebit || row.openingCredit
+    || row.movementDebit || row.movementCredit || row.closingDebit || row.closingCredit);
 }
 
 /**
