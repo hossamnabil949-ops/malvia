@@ -3072,7 +3072,7 @@ export default function App() {
             onUpdateCustomer={(updatedCustomer: Customer) => {
               const previous = customers.find(c => c.id === updatedCustomer.id);
               if (!previous) return;
-              logAudit('customer.update', `تعديل بيانات العميل/الورشة: ${previous.name} ← ${updatedCustomer.name}`, updatedCustomer.id, { name: updatedCustomer.name, phone: updatedCustomer.phone, type: updatedCustomer.type, creditLimit: updatedCustomer.creditLimit });
+              logAudit('customer.update', `تعديل بيانات العميل/الورشة: ${previous.name} ← ${updatedCustomer.name}`, updatedCustomer.id);
               setCustomers(prev => {
                 const updated = prev.map(c => c.id === updatedCustomer.id ? { ...c, name: updatedCustomer.name, phone: updatedCustomer.phone, type: updatedCustomer.type, creditLimit: updatedCustomer.creditLimit } : c);
                 persistChanges({ customers: updated });
