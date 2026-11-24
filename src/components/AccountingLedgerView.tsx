@@ -48,9 +48,9 @@ export const AccountingLedgerView: React.FC<Props> = ({ tenantId, branchId = 'MA
   }).filter(r => r.movementDebit || r.movementCredit || r.debit || r.credit);
   const saveInitial = () => {
     if (!canManage) return;
-    const chart = createDefaultChartOfAccounts({ tenantId, branchId, currency });
+    const chart = accounts.length ? accounts : createDefaultChartOfAccounts({ tenantId, branchId, currency });
     const period: AccountingPeriod = { tenantId, branchId, currency, id: 'FY-' + today().slice(0,4), name: 'السنة المالية ' + today().slice(0,4), startDate: today().slice(0,4)+'-01-01', endDate: today().slice(0,4)+'-12-31', status: 'open' };
-    const ok = onSave({ accounts: chart, periods: periods.length ? periods : [period] });
+    const ok = onSave({ ...(accounts.length ? {} : { accounts: chart }), ...(periods.length ? {} : { periods: [period] }) });
     setNotice(ok ? 'تم إنشاء دليل الحسابات والفترة المالية دون إنشاء أي أرصدة أو قيود.' : 'تعذر حفظ دليل الحسابات. لم يتم اعتماد أي تغيير.');
   };
   const saveEntry = () => {
@@ -86,7 +86,7 @@ export const AccountingLedgerView: React.FC<Props> = ({ tenantId, branchId = 'MA
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="text-lg font-bold text-white">دفتر الأستاذ العام وميزان المراجعة</h2><p className="mt-1 text-xs text-slate-400">دفتر مستقل للقيود المحاسبية المرحلة — لا يعيد تفسير السجلات التاريخية تلقائياً.</p></div>
         <div className="flex flex-wrap gap-2">
-          {!accounts.length && canManage && <button onClick={saveInitial} className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white">تهيئة دليل الحسابات والفترة</button>}
+          {(!accounts.length || !periods.length) && canManage && <button onClick={saveInitial} className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white">تهيئة دليل الحسابات والفترة</button>}
           {canManage && <button onClick={() => setShowEntry(v => !v)} className="rounded-lg border border-blue-500 px-3 py-2 text-sm text-blue-200">قيد يومية جديد</button>}
         </div>
       </div>
