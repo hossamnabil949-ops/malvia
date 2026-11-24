@@ -160,7 +160,7 @@ export type AuditAction =
   | 'stock.adjust' | 'part.restock' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'cheque.create' | 'cheque.action' | 'batch.create' | 'batch.writeoff' | 'serial.register' | 'serial.scrap' | 'stock.transfer' | 'supplier.payment'
   | 'shift.open' | 'shift.close' | 'shift.variance' | 'part.delete' | 'part.update'
   | 'partner.add' | 'partner.share.update' | 'partner.capital.add' | 'partner.profit.reinvest' | 'partner.profile.update' | 'partner.withdrawal' | 'partner.advance' | 'partner.exit' | 'partner.settlement.payment' | 'partner.current_account' | 'bank.settlement' | 'bank.transfer' | 'capital.opening.create'
-  | 'treasury.income' | 'expense.update' | 'expense.delete';
+  | 'treasury.income' | 'expense.update' | 'expense.delete' | 'customer.update' | 'customer.archive';
 
 export interface AuditEntry {
   id: string;
