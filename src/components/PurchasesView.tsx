@@ -32,6 +32,7 @@ import {
   PurchaseInvoiceItem, 
   PurchaseReturn,
   PurchaseReturnItem,
+  PurchaseRequisition,
   Supplier, 
   AutoPart, 
   PaymentMethod, 
@@ -50,6 +51,8 @@ import { DateRange, EMPTY_DATE_RANGE, inDateRange } from '../utils/dateRange';
 interface PurchasesViewProps {
   purchaseInvoices: PurchaseInvoice[];
   purchaseReturns: PurchaseReturn[];
+  purchaseRequisitions: PurchaseRequisition[];
+  onUpdatePurchaseRequisition: (requisition: PurchaseRequisition) => void;
   suppliers: Supplier[];
   parts: AutoPart[];
   treasuryBalance: number;
@@ -69,10 +72,12 @@ interface PurchasesViewProps {
 }
 
 export const PurchasesView: React.FC<PurchasesViewProps> = ({
-  purchaseInvoices,
-  purchaseReturns,
-  suppliers,
-  parts,
+  purchaseInvoices = [],
+  purchaseReturns = [],
+  purchaseRequisitions = [],
+  onUpdatePurchaseRequisition = () => {},
+  suppliers = [],
+  parts = [],
   treasuryBalance,
   onAddPurchaseInvoice,
   warehouses = [],
@@ -88,7 +93,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   canReceiveOnly = false,
   bankAccounts = [],
 }) => {
-  const [currentTab, setCurrentTab] = useState<'invoices' | 'returns'>('invoices');
+  const [currentTab, setCurrentTab] = useState<'invoices' | 'returns' | 'requisitions'>('invoices');
   useEffect(() => { if (canReceiveOnly) setCurrentTab('invoices'); }, [canReceiveOnly]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -488,6 +493,16 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     });
   }, [purchaseReturns, searchQuery, dateRange]);
 
+  const filteredRequisitions = useMemo(() => {
+    const q = searchQuery.trim().toLocaleLowerCase();
+    if (!q) return purchaseRequisitions;
+    return purchaseRequisitions.filter(req =>
+      [req.requisitionNumber, req.supplierName, req.createdBy, req.status,
+       ...(req.items || []).flatMap(item => [item.partName, item.partNumber, item.brand])]
+        .some(value => String(value ?? '').toLocaleLowerCase().includes(q))
+    );
+  }, [purchaseRequisitions, searchQuery]);
+
   const totalPurchasesAmount = useMemo(() => {
     return purchaseInvoices.reduce((acc, i) => acc + i.grandTotal, 0);
   }, [purchaseInvoices]);
@@ -551,11 +566,11 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="p-1 rounded-2xl bg-surface-1 border border-neutral-700 flex flex-wrap items-center gap-1 max-w-full">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 min-w-0">
+          <div className="p-1 rounded-2xl bg-surface-1 border border-neutral-700 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-1 w-full sm:w-auto max-w-full">
             <button
               onClick={() => setCurrentTab('invoices')}
-              className={`px-2 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-bold leading-tight whitespace-nowrap transition-all ${
+              className={`w-full sm:w-auto text-center px-3 py-2.5 rounded-xl text-xs font-bold leading-tight whitespace-nowrap transition-all ${
                 currentTab === 'invoices'
                   ? 'bg-amber-500 text-neutral-950 font-black shadow-sm'
                   : 'text-neutral-400 hover:text-white'
@@ -565,7 +580,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             </button>
             {!canReceiveOnly && <button
               onClick={() => setCurrentTab('returns')}
-              className={`px-2 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-bold leading-tight whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`w-full sm:w-auto justify-center px-3 py-2.5 rounded-xl text-xs font-bold leading-tight whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 currentTab === 'returns'
                   ? 'bg-rose-500 text-[#ffffff] font-black shadow-sm'
                   : 'text-rose-400 hover:text-rose-300'
@@ -573,6 +588,12 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>مرتجعات الموردين ({purchaseReturns.length})</span>
+            </button>}
+            {!canReceiveOnly && <button
+              onClick={() => setCurrentTab('requisitions')}
+              className={`w-full sm:w-auto text-center px-3 py-2.5 rounded-xl text-xs font-bold leading-tight whitespace-nowrap transition-all ${currentTab === 'requisitions' ? 'bg-emerald-500 text-neutral-950' : 'text-emerald-400 hover:text-emerald-300'}`}
+            >
+              <span>طلبات التوريد ({purchaseRequisitions.length})</span>
             </button>}
           </div>
 
@@ -663,23 +684,27 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         </div>
       </div>
 
-      <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 flex flex-col sm:flex-row items-center gap-3">
+      <div className="p-3 sm:p-4 rounded-2xl bg-surface-2 border border-neutral-800 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <div className="relative flex-grow w-full">
           <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={currentTab === 'invoices' 
-              ? "ابحث برقم الفاتورة، اسم المورد/التاجر، أو رقم فاتورة المورد..." 
-              : "ابحث برقم إذن مرتجع المشتريات، المورد، أو الفاتورة الأصلية..."}
+            placeholder={currentTab === 'invoices'
+              ? "ابحث برقم الفاتورة، اسم المورد/التاجر، أو رقم فاتورة المورد..."
+              : currentTab === 'returns'
+                ? "ابحث برقم إذن المرتجع، المورد، أو الفاتورة الأصلية..."
+                : "ابحث برقم طلب التوريد، المورد، أو اسم/كود الصنف..."}
             className="w-full h-11 pr-10 pl-4 rounded-xl bg-surface-1 border border-neutral-700 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400"
           />
         </div>
 
-        <DateRangeFilter value={dateRange} onChange={setDateRange} />
+        {currentTab !== 'requisitions' && <DateRangeFilter value={dateRange} onChange={setDateRange} />}
 
-        {currentTab === 'invoices' && (
+
+
+      {currentTab === 'invoices' && (
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
@@ -694,6 +719,71 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           </select>
         )}
       </div>
+
+        {currentTab === 'requisitions' && !canReceiveOnly && (
+        <div className="bg-surface-2 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
+          <div className="p-4 border-b border-neutral-800 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-black text-white">طلبات التوريد المحفوظة</h3>
+              <p className="text-xs text-neutral-400 mt-1">طلبات مستقلة حسب المورد — لا تؤثر على المخزون أو الخزينة أو فواتير الشراء</p>
+            </div>
+            <span className="text-xs text-emerald-300">{filteredRequisitions.length} طلب</span>
+          </div>
+          {filteredRequisitions.length === 0 ? (
+            <div className="p-10 text-center text-neutral-400">لا توجد طلبات توريد محفوظة حتى الآن. أنشئ طلباً من إشعارات النواقص.</div>
+          ) : (
+            <div className="divide-y divide-neutral-800">
+              {filteredRequisitions.map(req => (
+                <div key={req.id} className="p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="font-mono font-black text-white">{req.requisitionNumber}</div>
+                      <div className="text-[11px] text-neutral-400">{req.date} · {req.createdBy}</div>
+                    </div>
+                    <div className="font-mono font-bold text-emerald-300">{req.estimatedTotal.toLocaleString()} ج.م تقديري</div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label className="text-xs text-neutral-400">المورد
+                      <select value={req.supplierId || ''} onChange={e => {
+                        const supplier = suppliers.find(item => item.id === e.target.value);
+                        onUpdatePurchaseRequisition({...req, supplierId: supplier?.id, supplierName: supplier?.name});
+                      }} className="mt-1 w-full h-9 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-white">
+                        <option value="">لم يحدد بعد</option>
+                        {suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-xs text-neutral-400">حالة الطلب
+                      <select value={req.status} onChange={e => onUpdatePurchaseRequisition({...req, status: e.target.value as PurchaseRequisition['status']})}
+                        className="mt-1 w-full h-9 px-2 rounded-lg bg-surface-1 border border-neutral-700 text-white">
+                        <option value="DRAFT">مسودة</option>
+                        <option value="APPROVED">معتمد</option>
+                        <option value="SENT">تم الإرسال للمورد</option>
+                        <option value="PARTIALLY_RECEIVED">استلام جزئي</option>
+                        <option value="RECEIVED">تم الاستلام بالكامل</option>
+                        <option value="CANCELLED">ملغي</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="overflow-x-auto overscroll-x-contain">
+                    <table className="w-full min-w-[520px] text-right text-xs">
+                      <thead className="text-neutral-500"><tr><th className="p-2">الصنف</th><th className="p-2">المتاح</th><th className="p-2">الكمية المطلوبة</th><th className="p-2">التكلفة التقديرية</th></tr></thead>
+                      <tbody className="divide-y divide-neutral-800">
+                        {req.items.map((item, index) => <tr key={item.partId + index}>
+                          <td className="p-2 text-white">{item.partName}<div className="text-[10px] text-neutral-500">{item.partNumber} · {item.brand || ''}</div></td>
+                          <td className="p-2 text-neutral-300">{item.stockQuantity} {item.unit}</td>
+                          <td className="p-2 text-amber-300">{item.quantity} {item.unit}</td>
+                          <td className="p-2 text-neutral-300">{item.estimatedTotal.toLocaleString()} ج.م</td>
+                        </tr>)}
+                      </tbody>
+                    </table>
+                  </div>
+                  {req.notes && <p className="text-xs text-neutral-400">{req.notes}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {currentTab === 'invoices' && (
         <div className="bg-surface-2 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">

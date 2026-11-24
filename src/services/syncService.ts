@@ -2,7 +2,7 @@
 // والتغييرات تُدمج مع السحابة بدمج ثلاثي حسب id، فلا يضيع عمل جهاز بسبب جهاز آخر.
 
 export const SYNC_RESOURCES = ['parts','invoices','customers','suppliers','supplierPayments','supplierPaymentSchedules','treasury','employees','settings',
-  'salesReturns','purchaseInvoices','purchaseReturns','expenses','partners','partnerWithdrawals','partnerCurrentAccountTransactions','partnerExitSettlements','partnerSettlementPayments','carModels','reservations','inventoryErrors','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers','loyaltyLedger','cheques','stockBatches','serialUnits','bankAccounts','cardSettlements','bankLedgerEntries','openingBalances'] as const;
+  'salesReturns','purchaseInvoices','purchaseReturns','purchaseRequisitions','expenses','partners','partnerWithdrawals','partnerCurrentAccountTransactions','partnerExitSettlements','partnerSettlementPayments','carModels','reservations','inventoryErrors','auditLog','stockMovements','shifts','warehouses','stockLevels','stockTransfers','loyaltyLedger','cheques','stockBatches','serialUnits','bankAccounts','cardSettlements','bankLedgerEntries','openingBalances'] as const;
 
 // حقول رقمية تُدمج بالفرق (delta) بدل الاستبدال، حتى لا يضيع خصم مخزون جهاز آخر.
 export const DELTA_FIELDS: Record<string, string[]> = {
@@ -170,6 +170,48 @@ async function api(path: string, init: RequestInit & { headers?: Record<string, 
   };
 }
 
+let sessionRefreshInFlight: Promise<void> | null = null;
+
+async function refreshServerSession(tenantId: string, licenseKey: string): Promise<void> {
+  if (sessionRefreshInFlight) return sessionRefreshInFlight;
+  sessionRefreshInFlight = (async () => {
+    const raw = localStorage.getItem('malvia_user_session_v1');
+    const session = raw ? JSON.parse(raw) : null;
+    const token = typeof session?.serverSessionToken === 'string' ? session.serverSessionToken : '';
+    if (!token || session?.tenantId !== tenantId) {
+      throw new Error('لا توجد جلسة موظف موثقة؛ سجّل الدخول مجدداً مع اتصال الإنترنت.');
+    }
+    const expiresAt = Date.parse(String(session.serverSessionExpiresAt || ''));
+    if (!Number.isFinite(expiresAt)) {
+      throw new Error('بيانات انتهاء جلسة الموظف غير مكتملة؛ سجّل الخروج ثم الدخول مجدداً.');
+    }
+    if (expiresAt <= Date.now()) {
+      throw new Error('انتهت جلسة الموظف السحابية؛ سجّل الدخول مجدداً مع اتصال الإنترنت.');
+    }
+    // Renew proactively, while the existing bearer token is still valid.
+    if (expiresAt - Date.now() > 60 * 60 * 1000) return;
+
+    const response = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'x-license-key': licenseKey, Authorization: `Bearer ${token}` },
+    });
+    let body: any = {};
+    try { body = await response.json(); } catch { /* handled below */ }
+    if (!response.ok || typeof body.expiresAt !== 'string') {
+      throw new Error(body.error || 'تعذّر تجديد جلسة الموظف؛ سجّل الدخول مجدداً.');
+    }
+    localStorage.setItem('malvia_user_session_v1', JSON.stringify({
+      ...session,
+      serverSessionExpiresAt: body.expiresAt,
+    }));
+  })();
+  try {
+    await sessionRefreshInFlight;
+  } finally {
+    sessionRefreshInFlight = null;
+  }
+}
+
 async function pushResource(tenantId: string, licenseKey: string, res: string): Promise<boolean> {
   for (let attempt = 0; attempt < 4; attempt++) {
     const local = readLocal(tenantId, res);
@@ -335,6 +377,7 @@ async function flush() {
   busy = true;
   const { tenantId, licenseKey } = active;
   try {
+    await refreshServerSession(tenantId, licenseKey);
     readPending(tenantId).forEach(res => dirty.add(res));
     const meta = readMeta(tenantId);
     // Reconcile every local resource at startup and every sync cycle. This recovers
@@ -426,6 +469,7 @@ export async function startSync(tenantId: string, licenseKey: string) {
     if (!active || active.tenantId !== tenantId || document.hidden || tickRunning) return;
     tickRunning = true;
     try {
+      await refreshServerSession(tenantId, licenseKey);
       await pullAll(tenantId, licenseKey);
       await flush();
     } catch (e: any) {

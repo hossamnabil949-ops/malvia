@@ -39,7 +39,8 @@ export default async function handler(req: any, res: any) {
     const employee = employees.find((e) => e && e.status !== 'معلق' && (
       String(e.username || '').toLowerCase() === username ||
       String(e.phone || '').toLowerCase() === username ||
-      String(e.name || '').toLowerCase() === username
+      String(e.name || '').toLowerCase() === username ||
+      (username === 'admin' && e.role === 'مدير عام')
     ));
     if (!employee || !verifyStoredPassword(password, employee)) {
       rateLimit(`employee-login-fail:${ip}`, 8, 10 * 60_000);

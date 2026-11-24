@@ -505,6 +505,37 @@ export interface PurchaseInvoice {
   returnedAmount?: number;
 }
 
+export type PurchaseRequisitionStatus = 'DRAFT' | 'APPROVED' | 'SENT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED';
+
+export interface PurchaseRequisitionItem {
+  partId: string;
+  partNumber: string;
+  partName: string;
+  brand?: string;
+  compatibleModels?: string;
+  unit: string;
+  stockQuantity: number;
+  minAlertStock: number;
+  quantity: number;
+  estimatedUnitCost: number;
+  estimatedTotal: number;
+}
+
+export interface PurchaseRequisition {
+  id: string;
+  requisitionNumber: string;
+  date: string;
+  createdAt: string;
+  updatedAt: string;
+  supplierId?: string;
+  supplierName?: string;
+  status: PurchaseRequisitionStatus;
+  items: PurchaseRequisitionItem[];
+  estimatedTotal: number;
+  notes?: string;
+  createdBy: string;
+}
+
 export interface SalesReturnItem {
   lineId?: string; // يربط المرتجع بسطر الفاتورة الأصلي
   partId?: string; // يربط حركة المخزون بمعرّف الصنف
@@ -694,7 +725,7 @@ export interface UserSession {
   role: Employee['role'];
   permissions: EmployeePermissions;
   loginTime: string;
-  /** Server-issued token used only for privileged AI operations; absent in offline/local-only sessions. */
+  /** Server-issued employee session token for cloud sync and privileged server operations; absent in offline-only sessions. */
   serverSessionToken?: string;
   serverSessionExpiresAt?: string;
 }

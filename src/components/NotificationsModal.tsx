@@ -19,12 +19,14 @@ import {
   MinusCircle,
   RotateCcw
 } from 'lucide-react';
-import { AutoPart } from '../types/autoParts';
+import { AutoPart, Supplier } from '../types/autoParts';
 
 interface NotificationsModalProps {
   isOpen: boolean;
   onClose: () => void;
   parts: AutoPart[];
+  suppliers: Supplier[];
+  onCreatePurchaseRequisition: (parts: AutoPart[], quantities: Record<string, number>, supplierId?: string) => void;
   onUpdateStock: (partId: string, addedStock: number) => void;
   onQuickSalePart: (part: AutoPart) => void;
   onNavigateToInventory: () => void;
@@ -38,6 +40,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   isOpen,
   onClose,
   parts,
+  suppliers,
+  onCreatePurchaseRequisition,
   onUpdateStock,
   onQuickSalePart,
   onNavigateToInventory,
@@ -53,6 +57,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const [showPrintView, setShowPrintView] = useState(false);
   // أصناف أُلغيت من طلب التوريد (لا تظهر في الطلب المنسوخ أو المطبوع ولا في الإجماليات)
   const [excludedIds, setExcludedIds] = useState<string[]>([]);
+  const [selectedRequisitionIds, setSelectedRequisitionIds] = useState<string[]>([]);
+  const [requisitionSupplierId, setRequisitionSupplierId] = useState('');
 
   const outOfStockParts = useMemo(() => {
     return parts.filter((p) => p.stockQuantity <= 0);
@@ -131,12 +137,12 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200 overscroll-contain">
       <div 
-        className="w-full max-w-4xl h-[96dvh] sm:h-auto max-h-[96dvh] sm:max-h-[92vh] rounded-t-2xl sm:rounded-3xl bg-surface-2 border border-neutral-800 shadow-2xl flex flex-col text-neutral-100 overflow-hidden"
+        className="w-full max-w-4xl h-[100dvh] max-h-[100dvh] sm:h-[92dvh] sm:max-h-[92dvh] rounded-none sm:rounded-3xl bg-surface-2 border border-neutral-800 shadow-2xl flex flex-col text-neutral-100 overflow-hidden min-h-0"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-3 sm:p-6 border-b border-neutral-800 bg-gradient-to-r from-surface-3 via-surface-2 to-surface-2 flex items-start sm:items-center justify-between gap-2 shrink-0">
+        <div className="p-3 sm:p-6 border-b border-neutral-800 bg-gradient-to-r from-surface-3 via-surface-2 to-surface-2 flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 relative">
               <Bell className="w-6 h-6" />
@@ -290,7 +296,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
           </div>
         ) : (
           <>
-            <div className="p-2.5 sm:p-4 bg-surface-2 border-b border-neutral-800/80 grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3 shrink-0">
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain touch-pan-y [webkit-overflow-scrolling:touch] scrollbar-thin scrollbar-thumb-neutral-600 scrollbar-track-neutral-900">
+            <div className="p-2.5 sm:p-4 bg-surface-2 border-b border-neutral-800/80 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
               <div className="p-3 rounded-2xl bg-surface-1 border border-rose-500/20">
                 <div className="flex items-center justify-between text-neutral-400 text-xs">
                   <span>نفد بالكامل (0 حبة)</span>
@@ -325,7 +332,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               </div>
             </div>
 
-            <div className="p-3 sm:p-4 border-b border-neutral-800 bg-surface-2 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-2 shrink-0">
+            <div className="p-3 sm:p-4 border-b border-neutral-800 bg-surface-2 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/10 text-rose-300 border border-rose-500/20">
                   الأصناف المستنفدة بالكامل ({outOfStockParts.length})
@@ -347,21 +354,50 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-stretch sm:items-center gap-2 w-full sm:w-auto min-w-0">
+                <button type="button" onClick={() => setSelectedRequisitionIds(filteredParts.map(part => part.id))}
+                  className="px-2 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 text-[11px] font-bold">تحديد المعروض</button>
+                <button type="button" onClick={() => setSelectedRequisitionIds([])}
+                  className="px-2 py-1.5 rounded-lg bg-neutral-800 text-neutral-400 text-[11px] font-bold">إلغاء التحديد</button>
                 {excludedIds.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setExcludedIds([])}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-neutral-300 transition-colors"
+                    className="flex items-center justify-center gap-1 min-h-11 px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-neutral-300 transition-colors"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>إعادة {excludedIds.length} ملغي للطلبية</span>
                   </button>
                 )}
 
+                <select
+                  value={requisitionSupplierId}
+                  onChange={(e) => setRequisitionSupplierId(e.target.value)}
+                  aria-label="المورد لطلب التوريد"
+                  className="col-span-2 sm:col-span-1 w-full sm:w-auto sm:max-w-36 min-w-0 px-2 py-2 rounded-xl bg-surface-3 border border-neutral-700 text-neutral-200 text-xs"
+                >
+                  <option value="">بدون مورد</option>
+                  {suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+                </select>
+                <button
+                  type="button"
+                  disabled={selectedRequisitionIds.length === 0}
+                  onClick={() => {
+                    const chosen = outOfStockParts.filter(part => selectedRequisitionIds.includes(part.id));
+                    if (!chosen.length) return;
+                    onCreatePurchaseRequisition(chosen, Object.fromEntries(chosen.map(part => [part.id, neededQty(part)])), requisitionSupplierId || undefined);
+                    setSelectedRequisitionIds([]);
+                    setRequisitionSupplierId('');
+                  }}
+                  className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 min-h-11 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-xs font-bold text-white"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>إنشاء طلب محفوظ ({selectedRequisitionIds.length})</span>
+                </button>
+
                 <button
                   onClick={handleCopySupplierRequisition}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-3 hover:bg-surface-4 text-xs font-bold text-amber-400 border border-amber-500/30 transition-all active:scale-95"
+                  className="flex items-center justify-center gap-1.5 min-h-11 px-3 py-2 rounded-xl bg-surface-3 hover:bg-surface-4 text-xs font-bold text-amber-400 border border-amber-500/30 transition-all active:scale-95"
                 >
                   {copiedSupplierList ? (
                     <>
@@ -389,7 +425,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 divide-y divide-neutral-800/80 max-h-none no-scrollbar overscroll-contain">
+            <div className="p-3 sm:p-5 divide-y divide-neutral-800/80">
               {filteredParts.length === 0 ? (
                 <div className="py-12 text-center">
                   <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3">
@@ -472,6 +508,14 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 self-stretch md:self-center flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedRequisitionIds(prev => prev.includes(part.id) ? prev.filter(id => id !== part.id) : [...prev, part.id])}
+                          className={`px-2 py-2 rounded-xl text-[11px] font-bold border ${selectedRequisitionIds.includes(part.id) ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-neutral-800 border-neutral-700 text-neutral-400'}`}
+                        >
+                          {selectedRequisitionIds.includes(part.id) ? 'محدد للطلب' : 'اختيار للطلب'}
+                        </button>
+
                         <div className="flex items-center gap-1 bg-surface-2 p-1 rounded-xl border border-neutral-700/80">
                           <input
                             type="number"
@@ -573,6 +617,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                   إغلاق
                 </button>
               </div>
+            </div>
             </div>
           </>
         )}
