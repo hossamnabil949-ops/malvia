@@ -3039,6 +3039,8 @@ export default function App() {
             carBrands={carBrands.filter(b => b !== GENERAL_BRAND)}
             purchaseInvoices={purchaseInvoices}
             purchaseReturns={purchaseReturns}
+            purchaseRequisitions={purchaseRequisitions}
+            onUpdatePurchaseRequisition={handleUpdatePurchaseRequisition}
             suppliers={suppliers}
             warehouses={warehouses}
             serialUnits={serialUnits}
