@@ -309,7 +309,7 @@ export function buildCustomerReceiptJournal(
   if (!validDate(payment.paymentDate)) return fail('SOURCE_DATE_INVALID');
   if (!Number.isFinite(payment.amount) || payment.amount <= 0) return fail('SOURCE_AMOUNT_INVALID');
   let settlement: string | undefined;
-  try { settlement = accounts.settlementAccount(String(payment.paymentMethod), undefined); }
+  try { settlement = accounts.settlementAccount(String(payment.paymentMethod), payment.treasuryTarget); }
   catch { return fail('PAYMENT_METHOD_UNSUPPORTED'); }
   const lines: JournalLine[] = [];
   if (!addLine(lines, settlement, payment.amount, 0, 'تحصيل من العميل ' + payment.customerName)
