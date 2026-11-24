@@ -96,7 +96,8 @@ export function validateSale(lines: CartLine[], stock: StockPart[], totals: Tota
   const credit = payments.filter(p => isCreditPayment(p.method)).reduce((s, p) => s + toPiasters(p.amount), 0);
   if (credit > 0) {
     if (!opt.customerId) throw new SaleError('CREDIT_REQUIRES_CUSTOMER');
-    const limit = (opt.customerCreditLimit ?? 0) > 0 ? (opt.customerCreditLimit as number) : DEFAULT_CUSTOMER_CREDIT_LIMIT;
+    // Missing legacy values keep the 5,000 EGP default; an explicit zero means unlimited credit.
+    const limit = opt.customerCreditLimit ?? DEFAULT_CUSTOMER_CREDIT_LIMIT;
     if (limit > 0 && toPiasters(opt.customerBalance ?? 0) + credit > toPiasters(limit)) {
       throw new SaleError('CREDIT_LIMIT_EXCEEDED', { limit, balance: opt.customerBalance ?? 0 });
     }
