@@ -8,7 +8,7 @@ const policy: Record<string, string[]> = {
   invoices: ['canSellPos'], salesReturns: ['canSellPos'], loyaltyLedger: ['canSellPos'], customers: ['canSellPos','canManageTreasury'],
   suppliers: ['canManagePurchases','canReceivePurchases','canManageTreasury'], supplierPayments: ['canManagePurchases','canManageTreasury'],
   supplierPaymentSchedules: ['canManagePurchases','canManageTreasury'], purchaseInvoices: ['canManagePurchases','canReceivePurchases'],
-  purchaseReturns: ['canManagePurchases'], expenses: ['canManageExpenses','canManageTreasury'],
+  purchaseReturns: ['canManagePurchases'], purchaseRequisitions: ['canManagePurchases'], expenses: ['canManageExpenses','canManageTreasury'],
   treasury: ['canManageTreasury','canSellPos','canManagePurchases','canManageChequeLifecycle','canManageExpenses','canManagePartners'], bankAccounts: ['canManageTreasury'], cardSettlements: ['canManageTreasury'], bankLedgerEntries: ['canManageTreasury','canManageChequeLifecycle','canSellPos','canManagePurchases','canManageExpenses','canManagePartners'],
   shifts: ['canSellPos','canManageTreasury'],
   stockMovements: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
