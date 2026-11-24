@@ -37,6 +37,42 @@ export type AccountingError =
   | 'OPENING_BALANCE_DATE_MISMATCH' | 'OPENING_BALANCE_RECONCILIATION_INCOMPLETE';
 export interface JournalResult { entry: JournalEntry | null; error: AccountingError | null }
 
+export interface TrialBalanceRow {
+  account: LedgerAccount;
+  openingDebit: number; openingCredit: number;
+  movementDebit: number; movementCredit: number;
+  closingDebit: number; closingCredit: number;
+}
+
+/** Builds a trial balance from posted ledger entries only; legacy balances are not inferred. */
+export function buildTrialBalanceRows(
+  accounts: LedgerAccount[], entries: JournalEntry[], from: string, to: string,
+): TrialBalanceRow[] {
+  if (!validDate(from) || !validDate(to) || from > to) return [];
+  return accounts.filter(account => account.active).map(account => {
+    let openingNet = 0, movementDebit = 0, movementCredit = 0;
+    for (const entry of entries) {
+      if (entry.status !== 'posted' || entry.date > to) continue;
+      for (const line of entry.lines) {
+        if (line.accountId !== account.id) continue;
+        if (entry.date < from) openingNet += line.debit - line.credit;
+        else { movementDebit += line.debit; movementCredit += line.credit; }
+      }
+    }
+    const closingNet = openingNet + movementDebit - movementCredit;
+    return {
+      account,
+      openingDebit: roundCurrency(Math.max(0, openingNet)),
+      openingCredit: roundCurrency(Math.max(0, -openingNet)),
+      movementDebit: roundCurrency(movementDebit),
+      movementCredit: roundCurrency(movementCredit),
+      closingDebit: roundCurrency(Math.max(0, closingNet)),
+      closingCredit: roundCurrency(Math.max(0, -closingNet)),
+    };
+  }).filter(row => row.openingDebit || row.openingCredit || row.movementDebit
+    || row.movementCredit || row.closingDebit || row.closingCredit);
+}
+
 /**
  * Historical preservation policy: legacy source transactions remain untouched.
  * New accounting postings begin at activationDate; prior balances enter only
