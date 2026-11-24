@@ -323,7 +323,7 @@ export function buildCustomerReceiptJournal(
 /** Supplier settlements debit payable first; excess payments are supplier advances, never expenses. */
 export function buildSupplierPaymentJournal(
   payment: SupplierPayment, context: AccountingContext, periodId: string, createdAt: string, createdBy: string,
-  accounts: SourceAccountMap, payableApplied = payment.amount,
+  accounts: SourceAccountMap, payableApplied = Number((payment as SupplierPayment & { payableApplied?: number }).payableApplied ?? payment.amount),
 ): SourceAdapterResult {
   if (!payment.id?.trim()) return fail('SOURCE_ID_REQUIRED');
   if (!validDate(payment.paymentDate)) return fail('SOURCE_DATE_INVALID');
