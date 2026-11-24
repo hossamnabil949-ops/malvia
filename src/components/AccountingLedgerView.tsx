@@ -29,23 +29,34 @@ export const AccountingLedgerView: React.FC<Props> = ({ tenantId, branchId = 'MA
     || periods.find(p => p.status === 'open');
   const initializedAccounts = accounts.length ? accounts : createDefaultChartOfAccounts({ tenantId, branchId, currency });
   const activeAccounts = initializedAccounts.filter(a => a.active).sort((a,b) => a.code.localeCompare(b.code));
+  const openingEntries = entries.filter(e => e.status === 'posted' && e.date < from);
   const periodEntries = entries.filter(e => e.status === 'posted' && e.date >= from && e.date <= to);
   const totals = useMemo(() => {
-    const map = new Map<string, { debit: number; credit: number }>();
-    activeAccounts.forEach(a => map.set(a.id, { debit: 0, credit: 0 }));
+    const map = new Map<string, { openingDebit: number; openingCredit: number; movementDebit: number; movementCredit: number }>();
+    activeAccounts.forEach(a => map.set(a.id, { openingDebit: 0, openingCredit: 0, movementDebit: 0, movementCredit: 0 }));
+    openingEntries.forEach(e => e.lines.forEach(l => {
+      const row = map.get(l.accountId);
+      if (row) { row.openingDebit += l.debit; row.openingCredit += l.credit; }
+    }));
     periodEntries.forEach(e => e.lines.forEach(l => {
       const row = map.get(l.accountId);
-      if (row) { row.debit += l.debit; row.credit += l.credit; }
+      if (row) { row.movementDebit += l.debit; row.movementCredit += l.credit; }
     }));
     return map;
-  }, [activeAccounts, periodEntries]);
+  }, [activeAccounts, openingEntries, periodEntries]);
   const sumDebit = periodEntries.reduce((s,e) => s + e.lines.reduce((n,l) => n + l.debit,0),0);
   const sumCredit = periodEntries.reduce((s,e) => s + e.lines.reduce((n,l) => n + l.credit,0),0);
   const trialRows = activeAccounts.map(a => {
-    const t = totals.get(a.id) || { debit: 0, credit: 0 };
-    const net = t.debit - t.credit;
-    return { account: a, debit: Math.max(0,net), credit: Math.max(0,-net), movementDebit: t.debit, movementCredit: t.credit };
-  }).filter(r => r.movementDebit || r.movementCredit || r.debit || r.credit);
+    const t = totals.get(a.id) || { openingDebit: 0, openingCredit: 0, movementDebit: 0, movementCredit: 0 };
+    const openingNet = t.openingDebit - t.openingCredit;
+    const closingNet = openingNet + t.movementDebit - t.movementCredit;
+    return {
+      account: a,
+      openingDebit: Math.max(0, openingNet), openingCredit: Math.max(0, -openingNet),
+      movementDebit: t.movementDebit, movementCredit: t.movementCredit,
+      debit: Math.max(0, closingNet), credit: Math.max(0, -closingNet),
+    };
+  }).filter(r => r.openingDebit || r.openingCredit || r.movementDebit || r.movementCredit || r.debit || r.credit);
   const saveInitial = () => {
     if (!canManage) return;
     const chart = accounts.length ? accounts : createDefaultChartOfAccounts({ tenantId, branchId, currency });
@@ -113,7 +124,7 @@ export const AccountingLedgerView: React.FC<Props> = ({ tenantId, branchId = 'MA
     </div>}
     <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
       <div className="mb-3 flex flex-wrap items-end gap-3"><div className="font-bold text-white">ميزان المراجعة</div><label className="text-xs text-slate-300">من<input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="mt-1 block rounded-lg border border-slate-600 bg-slate-800 p-2 text-white"/></label><label className="text-xs text-slate-300">إلى<input type="date" value={to} onChange={e=>setTo(e.target.value)} className="mt-1 block rounded-lg border border-slate-600 bg-slate-800 p-2 text-white"/></label></div>
-      <div className="overflow-x-auto"><table className="min-w-[720px] w-full text-sm"><thead><tr className="border-b border-slate-700 text-slate-400"><th className="p-2 text-right">كود</th><th className="p-2 text-right">الحساب</th><th className="p-2">مدين</th><th className="p-2">دائن</th><th className="p-2">رصيد مدين</th><th className="p-2">رصيد دائن</th></tr></thead><tbody>{trialRows.map(r=><tr key={r.account.id} className="border-b border-slate-800 text-slate-200"><td className="p-2">{r.account.code}</td><td className="p-2">{r.account.name}</td><td className="p-2 text-center">{money(r.movementDebit)}</td><td className="p-2 text-center">{money(r.movementCredit)}</td><td className="p-2 text-center">{money(r.debit)}</td><td className="p-2 text-center">{money(r.credit)}</td></tr>)}{!trialRows.length&&<tr><td colSpan={6} className="p-6 text-center text-slate-400">لا توجد قيود مرحلة في الفترة المحددة. لا يعني ذلك أن الأرصدة التاريخية صفر.</td></tr>}</tbody><tfoot><tr className="border-t-2 border-slate-600 font-bold text-white"><td colSpan={2} className="p-2">الإجمالي</td><td className="p-2 text-center">{money(sumDebit)}</td><td className="p-2 text-center">{money(sumCredit)}</td><td className="p-2 text-center">{money(trialRows.reduce((s,r)=>s+r.debit,0))}</td><td className="p-2 text-center">{money(trialRows.reduce((s,r)=>s+r.credit,0))}</td></tr></tfoot></table></div>
+      <div className="overflow-x-auto"><table className="min-w-[1040px] w-full text-sm"><thead><tr className="border-b border-slate-700 text-slate-400"><th className="p-2 text-right" rowSpan={2}>كود</th><th className="p-2 text-right" rowSpan={2}>الحساب</th><th className="p-2" colSpan={2}>رصيد ما قبل الفترة</th><th className="p-2" colSpan={2}>حركة الفترة</th><th className="p-2" colSpan={2}>الرصيد الختامي</th></tr><tr className="border-b border-slate-700 text-slate-400"><th className="p-2">مدين</th><th className="p-2">دائن</th><th className="p-2">مدين</th><th className="p-2">دائن</th><th className="p-2">مدين</th><th className="p-2">دائن</th></tr></thead><tbody>{trialRows.map(r=><tr key={r.account.id} className="border-b border-slate-800 text-slate-200"><td className="p-2">{r.account.code}</td><td className="p-2">{r.account.name}</td><td className="p-2 text-center">{money(r.openingDebit)}</td><td className="p-2 text-center">{money(r.openingCredit)}</td><td className="p-2 text-center">{money(r.movementDebit)}</td><td className="p-2 text-center">{money(r.movementCredit)}</td><td className="p-2 text-center">{money(r.debit)}</td><td className="p-2 text-center">{money(r.credit)}</td></tr>)}{!trialRows.length&&<tr><td colSpan={8} className="p-6 text-center text-slate-400">لا توجد قيود مرحلة في الفترة المحددة. لا يعني ذلك أن الأرصدة التاريخية صفر.</td></tr>}</tbody><tfoot><tr className="border-t-2 border-slate-600 font-bold text-white"><td colSpan={2} className="p-2">الإجمالي</td><td className="p-2 text-center">{money(trialRows.reduce((s,r)=>s+r.openingDebit,0))}</td><td className="p-2 text-center">{money(trialRows.reduce((s,r)=>s+r.openingCredit,0))}</td><td className="p-2 text-center">{money(sumDebit)}</td><td className="p-2 text-center">{money(sumCredit)}</td><td className="p-2 text-center">{money(trialRows.reduce((s,r)=>s+r.debit,0))}</td><td className="p-2 text-center">{money(trialRows.reduce((s,r)=>s+r.credit,0))}</td></tr></tfoot></table></div>
       <p className="mt-2 text-xs text-amber-300">هذا ميزان حركات وقيود الدفتر الجديد فقط، وليس ميزان مراجعة شاملاً للأرصدة القديمة حتى اعتماد قيد افتتاحي مطابق.</p>
     </div>
     <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
