@@ -58,12 +58,14 @@ export const AccountingLedgerView: React.FC<Props> = ({ tenantId, branchId = 'MA
     if (!canManage) return;
     if (!currentPeriod) { setNotice('لا توجد فترة مالية مفتوحة تغطي تاريخ القيد.'); return; }
     const value = Number(amount);
+    if (!memo.trim()) { setNotice('اكتب بياناً واضحاً للقيد والمستند المؤيد.'); return; }
     if (!Number.isFinite(value) || value <= 0 || !debitAccount || !creditAccount || debitAccount === creditAccount) {
       setNotice('أدخل مبلغاً صحيحاً وحسابين مختلفين.'); return;
     }
+    const manualId = 'manual:' + crypto.randomUUID();
     const result = createJournalEntry({
-      tenantId, branchId, currency, postingId: 'manual:' + crypto.randomUUID(),
-      source: { type: 'manual.journal', id: 'manual:' + crypto.randomUUID() },
+      tenantId, branchId, currency, postingId: manualId,
+      source: { type: 'manual.journal', id: manualId },
       date: entryDate, periodId: currentPeriod.id, memo: memo.trim(),
       lines: [{ accountId: debitAccount, debit: value, credit: 0 }, { accountId: creditAccount, debit: 0, credit: value }],
       createdAt: new Date().toISOString(), createdBy: currentUserName,
