@@ -269,7 +269,7 @@ export function buildPartnerCurrentAccountJournal(
 /** Purchase posting separates inventory, recoverable input VAT, paid amount, supplier credit and remaining payable. */
 export function buildPurchaseInvoiceJournal(
   invoice: PurchaseInvoice, context: AccountingContext, periodId: string, createdAt: string, createdBy: string,
-  accounts: SourceAccountMap, supplierCreditApplied = 0,
+  accounts: SourceAccountMap, supplierCreditApplied = Number((invoice as PurchaseInvoice & { supplierCreditApplied?: number }).supplierCreditApplied ?? 0),
 ): SourceAdapterResult {
   if (!invoice.id?.trim()) return fail('SOURCE_ID_REQUIRED');
   if (!validDate(invoice.date)) return fail('SOURCE_DATE_INVALID');
