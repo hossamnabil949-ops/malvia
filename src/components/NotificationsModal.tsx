@@ -19,12 +19,14 @@ import {
   MinusCircle,
   RotateCcw
 } from 'lucide-react';
-import { AutoPart } from '../types/autoParts';
+import { AutoPart, Supplier } from '../types/autoParts';
 
 interface NotificationsModalProps {
   isOpen: boolean;
   onClose: () => void;
   parts: AutoPart[];
+  suppliers: Supplier[];
+  onCreatePurchaseRequisition: (parts: AutoPart[], quantities: Record<string, number>, supplierId?: string) => void;
   onUpdateStock: (partId: string, addedStock: number) => void;
   onQuickSalePart: (part: AutoPart) => void;
   onNavigateToInventory: () => void;
@@ -38,6 +40,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   isOpen,
   onClose,
   parts,
+  suppliers,
+  onCreatePurchaseRequisition,
   onUpdateStock,
   onQuickSalePart,
   onNavigateToInventory,
@@ -53,6 +57,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const [showPrintView, setShowPrintView] = useState(false);
   // أصناف أُلغيت من طلب التوريد (لا تظهر في الطلب المنسوخ أو المطبوع ولا في الإجماليات)
   const [excludedIds, setExcludedIds] = useState<string[]>([]);
+  const [selectedRequisitionIds, setSelectedRequisitionIds] = useState<string[]>([]);
+  const [requisitionSupplierId, setRequisitionSupplierId] = useState('');
 
   const outOfStockParts = useMemo(() => {
     return parts.filter((p) => p.stockQuantity <= 0);
@@ -61,6 +67,10 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const filteredParts = useMemo(() => {
     return outOfStockParts.filter((p) => selectedBrand === 'all' || p.brand === selectedBrand);
   }, [outOfStockParts, selectedBrand]);
+
+  React.useEffect(() => {
+    if (isOpen) setSelectedRequisitionIds(outOfStockParts.map(part => part.id));
+  }, [isOpen, outOfStockParts]);
 
   const availableBrands = useMemo(() => {
     const brands = new Set(outOfStockParts.map((p) => p.brand));
@@ -359,6 +369,31 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                   </button>
                 )}
 
+                <select
+                  value={requisitionSupplierId}
+                  onChange={(e) => setRequisitionSupplierId(e.target.value)}
+                  aria-label="المورد لطلب التوريد"
+                  className="max-w-36 px-2 py-1.5 rounded-xl bg-surface-3 border border-neutral-700 text-neutral-200 text-xs"
+                >
+                  <option value="">بدون مورد</option>
+                  {suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+                </select>
+                <button
+                  type="button"
+                  disabled={selectedRequisitionIds.length === 0}
+                  onClick={() => {
+                    const chosen = outOfStockParts.filter(part => selectedRequisitionIds.includes(part.id));
+                    if (!chosen.length) return;
+                    onCreatePurchaseRequisition(chosen, Object.fromEntries(chosen.map(part => [part.id, neededQty(part)])), requisitionSupplierId || undefined);
+                    setSelectedRequisitionIds([]);
+                    setRequisitionSupplierId('');
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-xs font-bold text-white"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>إنشاء طلب محفوظ ({selectedRequisitionIds.length})</span>
+                </button>
+
                 <button
                   onClick={handleCopySupplierRequisition}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-3 hover:bg-surface-4 text-xs font-bold text-amber-400 border border-amber-500/30 transition-all active:scale-95"
@@ -472,6 +507,14 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 self-stretch md:self-center flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedRequisitionIds(prev => prev.includes(part.id) ? prev.filter(id => id !== part.id) : [...prev, part.id])}
+                          className={`px-2 py-2 rounded-xl text-[11px] font-bold border ${selectedRequisitionIds.includes(part.id) ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-neutral-800 border-neutral-700 text-neutral-400'}`}
+                        >
+                          {selectedRequisitionIds.includes(part.id) ? 'محدد للطلب' : 'اختيار للطلب'}
+                        </button>
+
                         <div className="flex items-center gap-1 bg-surface-2 p-1 rounded-xl border border-neutral-700/80">
                           <input
                             type="number"
