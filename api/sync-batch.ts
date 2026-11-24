@@ -320,7 +320,7 @@ export default async function handler(req: any, res: any) {
         if (previousById.has(String(entry.id))) continue;
         const date = String(entry.date || '');
         const parsedDate = new Date(date + 'T00:00:00.000Z');
-        const validCalendarDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(date) && !Number.isNaN(parsedDate.getTime()) && parsedDate.toISOString().slice(0, 10) === date;
+        const validCalendarDate = /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(parsedDate.getTime()) && parsedDate.toISOString().slice(0, 10) === date;
         const normalizedSourceKey = [tenant, entry.branchId, entry.source?.type, entry.source?.id, entry.source?.lineId || '', entry.postingId].map((part: any) => encodeURIComponent(String(part || '').trim())).join('|');
         const period = periods.find((p: any) => p.id === entry.periodId && p.tenantId === tenant && p.branchId === entry.branchId && String(p.currency || '').toUpperCase() === String(entry.currency || '').toUpperCase());
         if (entry.tenantId !== tenant || !String(entry.branchId || '').trim() || !String(entry.currency || '').trim()
