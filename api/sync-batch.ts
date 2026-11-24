@@ -319,20 +319,24 @@ export default async function handler(req: any, res: any) {
       for (const entry of incoming) {
         if (previousById.has(String(entry.id))) continue;
         const date = String(entry.date || '');
+        const parsedDate = new Date(date + 'T00:00:00.000Z');
+        const validCalendarDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(date) && !Number.isNaN(parsedDate.getTime()) && parsedDate.toISOString().slice(0, 10) === date;
+        const normalizedSourceKey = [tenant, entry.branchId, entry.source?.type, entry.source?.id, entry.source?.lineId || '', entry.postingId].map((part: any) => encodeURIComponent(String(part || '').trim())).join('|');
         const period = periods.find((p: any) => p.id === entry.periodId && p.tenantId === tenant && p.branchId === entry.branchId && String(p.currency || '').toUpperCase() === String(entry.currency || '').toUpperCase());
         if (entry.tenantId !== tenant || !String(entry.branchId || '').trim() || !String(entry.currency || '').trim()
-          || entry.status !== 'posted' || !date.match(/^\\d{4}-\\d{2}-\\d{2}$/)
+          || entry.status !== 'posted' || !validCalendarDate
           || !String(entry.memo || '').trim() || !String(entry.createdBy || '').trim()
           || !String(entry.sourceKey || '').trim() || !String(entry.postingId || '').trim()
           || !entry.source?.type || !entry.source?.id || !period || period.status !== 'open'
           || date < period.startDate || date > period.endDate || !Array.isArray(entry.lines) || entry.lines.length < 2
-          || entry.id !== 'JRN:' + entry.sourceKey || knownSourceKeys.has(entry.sourceKey)) {
+          || entry.sourceKey !== normalizedSourceKey || entry.id !== 'JRN:' + entry.sourceKey || knownSourceKeys.has(entry.sourceKey)) {
           return failJournal('ACCOUNTING_JOURNAL_HEADER_INVALID', 'بيانات القيد أو الفترة المحاسبية غير صالحة أو مكررة.');
         }
         let debit = 0, credit = 0;
         for (const line of entry.lines) {
           const account = accounts.find((a: any) => a.id === line.accountId && a.tenantId === tenant && a.branchId === entry.branchId && String(a.currency || '').toUpperCase() === String(entry.currency || '').toUpperCase() && a.active === true);
           if (!account || !Number.isFinite(line.debit) || !Number.isFinite(line.credit) || line.debit < 0 || line.credit < 0
+            || Math.round(line.debit * 100) / 100 !== line.debit || Math.round(line.credit * 100) / 100 !== line.credit
             || ((line.debit > 0) === (line.credit > 0))) {
             return failJournal('ACCOUNTING_JOURNAL_LINE_INVALID', 'أحد أطراف القيد غير صالح أو الحساب غير نشط.');
           }
@@ -349,8 +353,8 @@ export default async function handler(req: any, res: any) {
             || original.currency !== entry.currency || original.lines.length !== entry.lines.length) {
             return failJournal('ACCOUNTING_JOURNAL_REVERSAL_INVALID', 'قيد العكس لا يرتبط بقيد أصلي صالح أو سبق عكسه.');
           }
-          const expected = original.lines.map((line: any) => ({ accountId: line.accountId, debit: line.credit, credit: line.debit }));
-          const actual = entry.lines.map((line: any) => ({ accountId: line.accountId, debit: line.debit, credit: line.credit }));
+          const expected = original.lines.map((line: any) => ({ ...line, debit: line.credit, credit: line.debit }));
+          const actual = entry.lines;
           if (JSON.stringify(expected) !== JSON.stringify(actual)) return failJournal('ACCOUNTING_JOURNAL_REVERSAL_INVALID', 'أطراف قيد العكس لا تطابق القيد الأصلي.');
         }
         knownSourceKeys.add(entry.sourceKey);
