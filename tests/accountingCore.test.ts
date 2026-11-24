@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  createDefaultChartOfAccounts, createJournalEntry, createReversalEntry, createOpeningBalanceEntry,
+  buildTrialBalanceRows, createDefaultChartOfAccounts, createJournalEntry, createReversalEntry, createOpeningBalanceEntry,
   makeSourceKey, roundCurrency,
   type AccountingContext, type AccountingPeriod, type CreateJournalInput,
   type JournalEntry, type LedgerAccount, type OpeningBalanceReconciliation,
@@ -125,5 +125,29 @@ assert.equal(
   ] }, accounts, [period]).error,
   'ENTRY_UNBALANCED',
 );
+
+const openingTrialEntry = createJournalEntry({
+  ...baseInput, postingId: 'trial-opening', date: '2026-11-05',
+  lines: [{ accountId: cashId, debit: 1000, credit: 0 }, { accountId: salesId, debit: 0, credit: 1000 }],
+}, accounts, [period]);
+const movementTrialEntry = createJournalEntry({
+  ...baseInput, postingId: 'trial-movement', date: '2026-11-16',
+  lines: [{ accountId: cashId, debit: 0, credit: 200 }, { accountId: salesId, debit: 200, credit: 0 }],
+}, accounts, [period]);
+assert.equal(openingTrialEntry.error, null);
+assert.equal(movementTrialEntry.error, null);
+const trialRows = buildTrialBalanceRows(accounts,
+  [openingTrialEntry.entry as JournalEntry, movementTrialEntry.entry as JournalEntry],
+  '2026-11-10', '2026-11-30');
+const cashTrial = trialRows.find(row => row.account.id === cashId);
+assert.equal(cashTrial?.openingDebit, 1000);
+assert.equal(cashTrial?.movementCredit, 200);
+assert.equal(cashTrial?.closingDebit, 800);
+assert.equal(cashTrial?.closingCredit, 0);
+const salesTrial = trialRows.find(row => row.account.id === salesId);
+assert.equal(salesTrial?.openingCredit, 1000);
+assert.equal(salesTrial?.movementDebit, 200);
+assert.equal(salesTrial?.closingCredit, 800);
+assert.equal(buildTrialBalanceRows(accounts, [], '2026-12-31', '2026-01-01').length, 0);
 
 console.log('accountingCore: all tests passed');
