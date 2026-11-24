@@ -358,6 +358,17 @@ export async function createEmployeeSession(tenant: string, employeeId: string, 
   await q`insert into malvia_employee_sessions(token_hash,tenant,employee_id,expires_at) values(${tokenHash},${tenant},${employeeId},${expiresAt.toISOString()})`;
 }
 
+export async function extendEmployeeSession(tenant: string, tokenHash: string, expiresAt: Date): Promise<boolean> {
+  await init();
+  const q = await sql();
+  const rows = await q`update malvia_employee_sessions
+    set expires_at = greatest(expires_at, ${expiresAt.toISOString()}::timestamptz)
+    where token_hash = ${tokenHash} and tenant = ${tenant}
+      and revoked_at is null and expires_at > now()
+    returning token_hash`;
+  return (rows as any[]).length > 0;
+}
+
 export async function getAuthenticatedEmployee(tenant: string, tokenHash: string): Promise<any | null> {
   await init();
   const q = await sql();
