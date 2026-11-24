@@ -326,7 +326,7 @@ export default async function handler(req: any, res: any) {
         }
         if (resource === 'accountingAccounts') {
           const validTypes = ['asset', 'liability', 'equity', 'revenue', 'expense'];
-          const normal = item.type === 'asset' || item.type === 'expense' ? 'debit' : 'credit';
+          const normal = item.type === 'asset' || item.type === 'expense' || item.systemKey === 'sales-returns' ? 'debit' : 'credit';
           if (!String(item.code || '').trim() || !String(item.name || '').trim()
             || !validTypes.includes(item.type) || item.normalBalance !== normal
             || typeof item.active !== 'boolean'
