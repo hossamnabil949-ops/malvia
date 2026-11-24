@@ -11,7 +11,8 @@ import {
   ShopSettings, 
   SalesReturn, 
   PurchaseInvoice, 
-  PurchaseReturn, 
+  PurchaseReturn,
+  PurchaseRequisition, 
   Expense, 
   Partner, 
   PartnerCurrentAccountTransaction,
@@ -258,6 +259,7 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     salesReturns: loadResource<SalesReturn[]>('salesReturns', INITIAL_SALES_RETURNS),
     purchaseInvoices: loadResource<PurchaseInvoice[]>('purchaseInvoices', INITIAL_PURCHASE_INVOICES),
     purchaseReturns: loadResource<PurchaseReturn[]>('purchaseReturns', INITIAL_PURCHASE_RETURNS),
+    purchaseRequisitions: loadResource<PurchaseRequisition[]>('purchaseRequisitions', []),
     expenses: loadResource<Expense[]>('expenses', INITIAL_EXPENSES),
     partners: loadResource<Partner[]>('partners', INITIAL_PARTNERS),
     partnerWithdrawals: loadResource<PartnerWithdrawal[]>('partnerWithdrawals', []),
@@ -299,6 +301,7 @@ export function saveTenantStoreData(
     salesReturns?: SalesReturn[];
     purchaseInvoices?: PurchaseInvoice[];
     purchaseReturns?: PurchaseReturn[];
+    purchaseRequisitions?: PurchaseRequisition[];
     expenses?: Expense[];
     partners?: Partner[];
     partnerWithdrawals?: PartnerWithdrawal[];
@@ -351,6 +354,7 @@ export function clearTenantDemoData(tenantId: string): Employee[] {
     localStorage.setItem(getTenantKey(tenantId, 'salesReturns'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'purchaseInvoices'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'purchaseReturns'), emptyArrayJson);
+    localStorage.setItem(getTenantKey(tenantId, 'purchaseRequisitions'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'expenses'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'partners'), emptyArrayJson);
     localStorage.setItem(getTenantKey(tenantId, 'partnerWithdrawals'), emptyArrayJson);
