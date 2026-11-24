@@ -108,13 +108,13 @@ assert.equal(buildSalesReturnJournal(
   context, 'period-1', 'now', 'tester', accounts,
 ).error, 'COST_BASIS_MISSING');
 
-const customerReceipt: any = {
+const customerReceiptWithBank: any = {
   id: 'CR-1', receiptNumber: 'R-001', customerId: 'C-1', customerName: 'عميل',
   amount: 125, paymentDate: '2026-11-16', paymentMethod: 'تحويل بنكي',
   bankAccountId: 'BANK-01', treasuryTarget: 'BANK-01', recordedBy: 'Test',
 };
 const customerReceiptJournal = buildCustomerReceiptJournal(
-  customerReceipt, context, 'period-1', 'now', 'tester', mappedAccounts,
+  customerReceiptWithBank, context, 'period-1', 'now', 'tester', mappedAccounts,
 );
 assert.equal(customerReceiptJournal.error, null);
 assert.equal(customerReceiptJournal.input?.lines[0].accountId, 'GL-BANK-01');
@@ -263,13 +263,13 @@ assert.equal(buildPurchaseReturnJournal(
   purchaseReturn, { ...untaxedPurchase, tax: 13.5 }, context, 'period-1', 'now', 'tester', accounts,
 ).error, 'TAX_DETAIL_MISSING');
 
-const customerReceipt: any = {
+const customerReceiptCash: any = {
   id: 'RCPT-1', receiptNumber: 'R-001', customerId: 'C-1', customerName: 'Customer',
   amount: 35, paymentDate: '2026-11-16', paymentMethod: 'نقدي',
   treasuryTarget: 'الخزنة', recordedBy: 'Test',
 };
 const receiptJournal = buildCustomerReceiptJournal(
-  customerReceipt, context, 'period-1', 'now', 'tester', accounts,
+  customerReceiptCash, context, 'period-1', 'now', 'tester', accounts,
 );
 assert.equal(receiptJournal.error, null);
 assert.equal(receiptJournal.input?.lines.find(line => line.accountId === 'cash')?.debit, 35);
