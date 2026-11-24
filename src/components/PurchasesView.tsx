@@ -493,6 +493,16 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     });
   }, [purchaseReturns, searchQuery, dateRange]);
 
+  const filteredRequisitions = useMemo(() => {
+    const q = searchQuery.trim().toLocaleLowerCase();
+    if (!q) return purchaseRequisitions;
+    return purchaseRequisitions.filter(req =>
+      [req.requisitionNumber, req.supplierName, req.createdBy, req.status,
+       ...(req.items || []).flatMap(item => [item.partName, item.partNumber, item.brand])]
+        .some(value => String(value ?? '').toLocaleLowerCase().includes(q))
+    );
+  }, [purchaseRequisitions, searchQuery]);
+
   const totalPurchasesAmount = useMemo(() => {
     return purchaseInvoices.reduce((acc, i) => acc + i.grandTotal, 0);
   }, [purchaseInvoices]);
@@ -557,10 +567,10 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         </div>
 
         <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 min-w-0">
-          <div className="p-1 rounded-2xl bg-surface-1 border border-neutral-700 grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1 max-w-full">
+          <div className="p-1 rounded-2xl bg-surface-1 border border-neutral-700 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-1 w-full sm:w-auto max-w-full">
             <button
               onClick={() => setCurrentTab('invoices')}
-              className={`flex-1 sm:flex-none px-2 sm:px-3 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold leading-tight whitespace-nowrap transition-all ${
+              className={`w-full sm:w-auto text-center px-3 py-2.5 rounded-xl text-xs font-bold leading-tight whitespace-nowrap transition-all ${
                 currentTab === 'invoices'
                   ? 'bg-amber-500 text-neutral-950 font-black shadow-sm'
                   : 'text-neutral-400 hover:text-white'
@@ -570,7 +580,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             </button>
             {!canReceiveOnly && <button
               onClick={() => setCurrentTab('returns')}
-              className={`px-2 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-bold leading-tight whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`w-full sm:w-auto justify-center px-3 py-2.5 rounded-xl text-xs font-bold leading-tight whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 currentTab === 'returns'
                   ? 'bg-rose-500 text-[#ffffff] font-black shadow-sm'
                   : 'text-rose-400 hover:text-rose-300'
@@ -581,7 +591,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             </button>}
             {!canReceiveOnly && <button
               onClick={() => setCurrentTab('requisitions')}
-              className={`px-2 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-bold leading-tight whitespace-nowrap transition-all ${currentTab === 'requisitions' ? 'bg-emerald-500 text-neutral-950' : 'text-emerald-400 hover:text-emerald-300'}`}
+              className={`w-full sm:w-auto text-center px-3 py-2.5 rounded-xl text-xs font-bold leading-tight whitespace-nowrap transition-all ${currentTab === 'requisitions' ? 'bg-emerald-500 text-neutral-950' : 'text-emerald-400 hover:text-emerald-300'}`}
             >
               <span>طلبات التوريد ({purchaseRequisitions.length})</span>
             </button>}
@@ -674,7 +684,6 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         </div>
       </div>
 
-      {currentTab !== 'requisitions' && (
       <div className="p-3 sm:p-4 rounded-2xl bg-surface-2 border border-neutral-800 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <div className="relative flex-grow w-full">
           <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
@@ -682,9 +691,11 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={currentTab === 'invoices' 
-              ? "ابحث برقم الفاتورة، اسم المورد/التاجر، أو رقم فاتورة المورد..." 
-              : "ابحث برقم إذن مرتجع المشتريات، المورد، أو الفاتورة الأصلية..."}
+            placeholder={currentTab === 'invoices'
+              ? "ابحث برقم الفاتورة، اسم المورد/التاجر، أو رقم فاتورة المورد..."
+              : currentTab === 'returns'
+                ? "ابحث برقم إذن المرتجع، المورد، أو الفاتورة الأصلية..."
+                : "ابحث برقم طلب التوريد، المورد، أو اسم/كود الصنف..."}
             className="w-full h-11 pr-10 pl-4 rounded-xl bg-surface-1 border border-neutral-700 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400"
           />
         </div>
@@ -708,7 +719,6 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           </select>
         )}
       </div>
-      )}
 
         {currentTab === 'requisitions' && !canReceiveOnly && (
         <div className="bg-surface-2 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
@@ -717,13 +727,13 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
               <h3 className="text-sm font-black text-white">طلبات التوريد المحفوظة</h3>
               <p className="text-xs text-neutral-400 mt-1">طلبات مستقلة حسب المورد — لا تؤثر على المخزون أو الخزينة أو فواتير الشراء</p>
             </div>
-            <span className="text-xs text-emerald-300">{purchaseRequisitions.length} طلب</span>
+            <span className="text-xs text-emerald-300">{filteredRequisitions.length} طلب</span>
           </div>
-          {purchaseRequisitions.length === 0 ? (
+          {filteredRequisitions.length === 0 ? (
             <div className="p-10 text-center text-neutral-400">لا توجد طلبات توريد محفوظة حتى الآن. أنشئ طلباً من إشعارات النواقص.</div>
           ) : (
             <div className="divide-y divide-neutral-800">
-              {purchaseRequisitions.map(req => (
+              {filteredRequisitions.map(req => (
                 <div key={req.id} className="p-4 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
