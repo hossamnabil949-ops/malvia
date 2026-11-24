@@ -33,6 +33,8 @@ export const AccountingLedgerView: React.FC<Props> = ({ tenantId, branchId = 'MA
   const trialRows = buildTrialBalanceRows(activeAccounts, entries, from, to);
   const sumDebit = periodEntries.reduce((s,e) => s + e.lines.reduce((n,l) => n + l.debit,0),0);
   const sumCredit = periodEntries.reduce((s,e) => s + e.lines.reduce((n,l) => n + l.credit,0),0);
+  const closingDebit = trialRows.reduce((sum, row) => sum + row.closingDebit, 0);
+  const closingCredit = trialRows.reduce((sum, row) => sum + row.closingCredit, 0);
   const saveInitial = () => {
     if (!canManage) return;
     const chart = accounts.length ? accounts : createDefaultChartOfAccounts({ tenantId, branchId, currency });
@@ -79,10 +81,11 @@ export const AccountingLedgerView: React.FC<Props> = ({ tenantId, branchId = 'MA
           {canManage && <button onClick={() => setShowEntry(v => !v)} className="rounded-lg border border-blue-500 px-3 py-2 text-sm text-blue-200">قيد يومية جديد</button>}
         </div>
       </div>
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-lg bg-slate-800 p-3"><div className="text-xs text-slate-400">عدد الحسابات</div><strong className="text-white">{activeAccounts.length}</strong></div>
         <div className="rounded-lg bg-slate-800 p-3"><div className="text-xs text-slate-400">القيود المرحلة في الفترة</div><strong className="text-white">{periodEntries.length}</strong></div>
-        <div className="rounded-lg bg-slate-800 p-3"><div className="text-xs text-slate-400">حالة توازن الحركات</div><strong className={Math.abs(sumDebit-sumCredit)<0.005?'text-emerald-400':'text-rose-400'}>{Math.abs(sumDebit-sumCredit)<0.005?'متوازن':'غير متوازن'}</strong></div>
+        <div className="rounded-lg bg-slate-800 p-3"><div className="text-xs text-slate-400">توازن حركة الفترة</div><strong className={Math.abs(sumDebit-sumCredit)<0.005?'text-emerald-400':'text-rose-400'}>{Math.abs(sumDebit-sumCredit)<0.005?'متوازن':'غير متوازن'}</strong></div>
+        <div className="rounded-lg bg-slate-800 p-3"><div className="text-xs text-slate-400">توازن أرصدة ميزان المراجعة</div><strong className={Math.abs(closingDebit-closingCredit)<0.005?'text-emerald-400':'text-rose-400'}>{Math.abs(closingDebit-closingCredit)<0.005?'متوازن':'غير متوازن'}</strong></div>
       </div>
     </header>
     {notice && <div role="status" className="rounded-lg border border-slate-600 bg-slate-800 p-3 text-sm text-slate-200">{notice}</div>}
