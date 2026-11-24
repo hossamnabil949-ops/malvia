@@ -285,6 +285,78 @@ export default async function handler(req: any, res: any) {
         if (record.partners.some((p: any) => !p.partnerId || !String(p.partnerName || '').trim() || !Number.isFinite(p.originalContribution) || p.originalContribution < 0 || !Number.isFinite(p.ownershipPercentage) || p.ownershipPercentage < 0 || p.ownershipPercentage > 100 || (p.currentAccountBalance !== undefined && !Number.isFinite(p.currentAccountBalance))) || (record.partners.length > 0 && Math.abs(shares - 100) > 0.01)) return res.status(400).json({ code: 'OPENING_BALANCE_PARTNERS_INVALID', resource: 'openingBalances', error: 'بيانات الشركاء أو مجموع نسب الملكية غير صالحة.', diagnostic: { traceId, phase, resource: 'openingBalances', operationCount: operationResources.length, errorName: 'SyncValidationError', errorCode: 'OPENING_BALANCE_PARTNERS_INVALID' } });
       }
     }
+    phase = 'accounting_journal_validation';
+    const journalOperation: any = operations.find((op: any) => op.resource === 'accountingJournalEntries');
+    if (journalOperation) {
+      const previousRow = await getOne(tenant, 'accountingJournalEntries');
+      const previous: any[] = Array.isArray(previousRow?.data) ? previousRow.data as any[] : [];
+      const incoming: any[] = Array.isArray(journalOperation.data) ? journalOperation.data as any[] : [];
+      const accountOperation: any = operations.find((op: any) => op.resource === 'accountingAccounts');
+      const periodOperation: any = operations.find((op: any) => op.resource === 'accountingPeriods');
+      const accountRow = accountOperation ? accountOperation.data : (await getOne(tenant, 'accountingAccounts'))?.data;
+      const periodRow = periodOperation ? periodOperation.data : (await getOne(tenant, 'accountingPeriods'))?.data;
+      const accounts: any[] = Array.isArray(accountRow) ? accountRow : [];
+      const periods: any[] = Array.isArray(periodRow) ? periodRow : [];
+      const failJournal = (code: string, message: string) => res.status(400).json({
+        code, resource: 'accountingJournalEntries', error: message,
+        diagnostic: { traceId, phase, resource: 'accountingJournalEntries', operationCount: operationResources.length, errorName: 'AccountingLedgerValidationError', errorCode: code },
+      });
+      const previousById = new Map(previous.map((entry: any) => [String(entry?.id || ''), JSON.stringify(entry)]));
+      const incomingIds = new Set<string>();
+      for (const entry of incoming) {
+        const id = String(entry?.id || '');
+        if (!id || incomingIds.has(id)) return failJournal('ACCOUNTING_JOURNAL_ID_DUPLICATE', 'معرّف القيد المحاسبي مفقود أو مكرر.');
+        incomingIds.add(id);
+      }
+      for (const oldEntry of previous) {
+        const oldId = String(oldEntry?.id || '');
+        const next = incoming.find((entry: any) => String(entry?.id || '') === oldId);
+        if (!next || JSON.stringify(next) !== previousById.get(oldId)) {
+          return failJournal('ACCOUNTING_JOURNAL_IMMUTABLE', 'لا يمكن حذف أو تعديل قيد محاسبي مرحّل؛ استخدم قيد عكس مستقل.');
+        }
+      }
+      const knownSourceKeys = new Set(previous.map((entry: any) => String(entry?.sourceKey || '')));
+      for (const entry of incoming) {
+        if (previousById.has(String(entry.id))) continue;
+        const date = String(entry.date || '');
+        const period = periods.find((p: any) => p.id === entry.periodId && p.tenantId === tenant && p.branchId === entry.branchId && String(p.currency || '').toUpperCase() === String(entry.currency || '').toUpperCase());
+        if (entry.tenantId !== tenant || !String(entry.branchId || '').trim() || !String(entry.currency || '').trim()
+          || entry.status !== 'posted' || !date.match(/^\\d{4}-\\d{2}-\\d{2}$/)
+          || !String(entry.memo || '').trim() || !String(entry.createdBy || '').trim()
+          || !String(entry.sourceKey || '').trim() || !String(entry.postingId || '').trim()
+          || !entry.source?.type || !entry.source?.id || !period || period.status !== 'open'
+          || date < period.startDate || date > period.endDate || !Array.isArray(entry.lines) || entry.lines.length < 2
+          || entry.id !== 'JRN:' + entry.sourceKey || knownSourceKeys.has(entry.sourceKey)) {
+          return failJournal('ACCOUNTING_JOURNAL_HEADER_INVALID', 'بيانات القيد أو الفترة المحاسبية غير صالحة أو مكررة.');
+        }
+        let debit = 0, credit = 0;
+        for (const line of entry.lines) {
+          const account = accounts.find((a: any) => a.id === line.accountId && a.tenantId === tenant && a.branchId === entry.branchId && String(a.currency || '').toUpperCase() === String(entry.currency || '').toUpperCase() && a.active === true);
+          if (!account || !Number.isFinite(line.debit) || !Number.isFinite(line.credit) || line.debit < 0 || line.credit < 0
+            || ((line.debit > 0) === (line.credit > 0))) {
+            return failJournal('ACCOUNTING_JOURNAL_LINE_INVALID', 'أحد أطراف القيد غير صالح أو الحساب غير نشط.');
+          }
+          debit += Math.round(line.debit * 100) / 100;
+          credit += Math.round(line.credit * 100) / 100;
+        }
+        if (Math.round(debit * 100) !== Math.round(credit * 100) || debit <= 0) {
+          return failJournal('ACCOUNTING_JOURNAL_UNBALANCED', 'القيد المحاسبي غير متوازن.');
+        }
+        if (entry.reversalOf) {
+          const original = previous.find((candidate: any) => candidate.id === entry.reversalOf);
+          if (!original || previous.some((candidate: any) => candidate.reversalOf === entry.reversalOf)
+            || original.tenantId !== entry.tenantId || original.branchId !== entry.branchId
+            || original.currency !== entry.currency || original.lines.length !== entry.lines.length) {
+            return failJournal('ACCOUNTING_JOURNAL_REVERSAL_INVALID', 'قيد العكس لا يرتبط بقيد أصلي صالح أو سبق عكسه.');
+          }
+          const expected = original.lines.map((line: any) => ({ accountId: line.accountId, debit: line.credit, credit: line.debit }));
+          const actual = entry.lines.map((line: any) => ({ accountId: line.accountId, debit: line.debit, credit: line.credit }));
+          if (JSON.stringify(expected) !== JSON.stringify(actual)) return failJournal('ACCOUNTING_JOURNAL_REVERSAL_INVALID', 'أطراف قيد العكس لا تطابق القيد الأصلي.');
+        }
+        knownSourceKeys.add(entry.sourceKey);
+      }
+    }
+
     phase = 'finance_policy_validation';
     if (!owner && operations.some((op: any) => ['cheques', 'treasury', 'bankLedgerEntries', 'expenses', 'auditLog'].includes(op.resource)) &&
         permissions.canManageTreasury !== true) {
