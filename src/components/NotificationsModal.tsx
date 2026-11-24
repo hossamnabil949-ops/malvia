@@ -137,12 +137,12 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overscroll-contain">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200 overscroll-contain">
       <div 
-        className="w-full max-w-4xl h-[96dvh] sm:h-auto max-h-[96dvh] sm:max-h-[92vh] rounded-t-2xl sm:rounded-3xl bg-surface-2 border border-neutral-800 shadow-2xl flex flex-col text-neutral-100 overflow-hidden"
+        className="w-full max-w-4xl h-[100dvh] max-h-[100dvh] sm:h-[92dvh] sm:max-h-[92dvh] rounded-none sm:rounded-3xl bg-surface-2 border border-neutral-800 shadow-2xl flex flex-col text-neutral-100 overflow-hidden min-h-0"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-3 sm:p-6 border-b border-neutral-800 bg-gradient-to-r from-surface-3 via-surface-2 to-surface-2 flex items-start sm:items-center justify-between gap-2 shrink-0">
+        <div className="p-3 sm:p-6 border-b border-neutral-800 bg-gradient-to-r from-surface-3 via-surface-2 to-surface-2 flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 relative">
               <Bell className="w-6 h-6" />
