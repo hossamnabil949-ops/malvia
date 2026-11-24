@@ -68,10 +68,6 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     return outOfStockParts.filter((p) => selectedBrand === 'all' || p.brand === selectedBrand);
   }, [outOfStockParts, selectedBrand]);
 
-  React.useEffect(() => {
-    if (isOpen) setSelectedRequisitionIds(outOfStockParts.map(part => part.id));
-  }, [isOpen, outOfStockParts]);
-
   const availableBrands = useMemo(() => {
     const brands = new Set(outOfStockParts.map((p) => p.brand));
     return Array.from(brands);
@@ -358,6 +354,10 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setSelectedRequisitionIds(filteredParts.map(part => part.id))}
+                  className="px-2 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 text-[11px] font-bold">تحديد المعروض</button>
+                <button type="button" onClick={() => setSelectedRequisitionIds([])}
+                  className="px-2 py-1.5 rounded-lg bg-neutral-800 text-neutral-400 text-[11px] font-bold">إلغاء التحديد</button>
                 {excludedIds.length > 0 && (
                   <button
                     type="button"
