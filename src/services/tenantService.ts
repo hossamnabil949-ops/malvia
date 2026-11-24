@@ -57,6 +57,7 @@ import type { Cheque } from '../utils/chequeLogic';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from '../utils/bankLedger';
 import type { StockBatch, SerialUnit } from '../utils/trackingLogic';
 import { DEFAULT_PASSWORDS, hashPassword, isHashed, verifyPassword } from './passwordService';
+import type { LedgerAccount, AccountingPeriod, JournalEntry } from '../utils/accountingCore';
 
 const LICENSES_KEY = 'malvia_tenant_licenses_v1';
 const ACTIVE_TENANT_KEY = 'malvia_active_tenant_id_v1';
@@ -283,6 +284,9 @@ export function loadTenantStoreData(tenant: TenantLicense) {
     openingBalances: loadResource<import('../utils/openingBalanceLogic').OpeningBalanceRecord[]>('openingBalances', []),
     stockBatches: loadResource<StockBatch[]>('stockBatches', []),
     serialUnits: loadResource<SerialUnit[]>('serialUnits', []),
+    accountingAccounts: loadResource<LedgerAccount[]>('accountingAccounts', []),
+    accountingPeriods: loadResource<AccountingPeriod[]>('accountingPeriods', []),
+    accountingJournalEntries: loadResource<JournalEntry[]>('accountingJournalEntries', []),
   };
 }
 
@@ -325,6 +329,9 @@ export function saveTenantStoreData(
     openingBalances?: import('../utils/openingBalanceLogic').OpeningBalanceRecord[];
     stockBatches?: StockBatch[];
     serialUnits?: SerialUnit[];
+    accountingAccounts?: LedgerAccount[];
+    accountingPeriods?: AccountingPeriod[];
+    accountingJournalEntries?: JournalEntry[];
   }
 ): boolean {
   try {
