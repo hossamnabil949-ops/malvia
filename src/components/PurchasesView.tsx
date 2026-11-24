@@ -557,7 +557,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         </div>
 
         <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 min-w-0">
-          <div className="p-1 rounded-2xl bg-surface-1 border border-neutral-700 flex flex-wrap items-center gap-1 max-w-full">
+          <div className="p-1 rounded-2xl bg-surface-1 border border-neutral-700 grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1 max-w-full">
             <button
               onClick={() => setCurrentTab('invoices')}
               className={`flex-1 sm:flex-none px-2 sm:px-3 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold leading-tight whitespace-nowrap transition-all ${
@@ -674,6 +674,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         </div>
       </div>
 
+      {currentTab !== 'requisitions' && (
       <div className="p-3 sm:p-4 rounded-2xl bg-surface-2 border border-neutral-800 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <div className="relative flex-grow w-full">
           <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
@@ -707,6 +708,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           </select>
         )}
       </div>
+      )}
 
         {currentTab === 'requisitions' && !canReceiveOnly && (
         <div className="bg-surface-2 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
