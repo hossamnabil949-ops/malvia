@@ -694,7 +694,7 @@ export interface UserSession {
   role: Employee['role'];
   permissions: EmployeePermissions;
   loginTime: string;
-  /** Server-issued token used only for privileged AI operations; absent in offline/local-only sessions. */
+  /** Server-issued employee session token for cloud sync and privileged server operations; absent in offline-only sessions. */
   serverSessionToken?: string;
   serverSessionExpiresAt?: string;
 }
