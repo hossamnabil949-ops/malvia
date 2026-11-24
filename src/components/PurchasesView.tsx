@@ -72,12 +72,12 @@ interface PurchasesViewProps {
 }
 
 export const PurchasesView: React.FC<PurchasesViewProps> = ({
-  purchaseInvoices,
-  purchaseReturns,
-  purchaseRequisitions,
-  onUpdatePurchaseRequisition,
-  suppliers,
-  parts,
+  purchaseInvoices = [],
+  purchaseReturns = [],
+  purchaseRequisitions = [],
+  onUpdatePurchaseRequisition = () => {},
+  suppliers = [],
+  parts = [],
   treasuryBalance,
   onAddPurchaseInvoice,
   warehouses = [],
