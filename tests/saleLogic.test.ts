@@ -45,7 +45,9 @@ import { validateDiscountPolicy } from '../src/utils/saleLogic.ts';
   const base = { allowBelowCost: false, customerId: 'c1' };
   validateSale([L], stock, tt, credit, { ...base, customerBalance: 400, customerCreditLimit: 500 });                 // 400+100 = الحد بالضبط: مقبول
   assert.equal(code(() => validateSale([L], stock, tt, credit, { ...base, customerBalance: 401, customerCreditLimit: 500 })), 'CREDIT_LIMIT_EXCEEDED');
-  assert.equal(code(() => validateSale([L], stock, tt, credit, { ...base, customerBalance: 99999, customerCreditLimit: 0 })), 'CREDIT_LIMIT_EXCEEDED'); // الصفر يستخدم الحد الافتراضي
+  validateSale([L], stock, tt, credit, { ...base, customerBalance: 99999, customerCreditLimit: 0 }); // الصفر = مفتوح دون حد
+  assert.equal(code(() => validateSale([L], stock, tt, credit, { ...base, customerBalance: 99999, customerCreditLimit: 500 })), 'CREDIT_LIMIT_EXCEEDED');
+  assert.equal(code(() => validateSale([L], stock, tt, credit, { ...base, customerBalance: 99999 })), 'CREDIT_LIMIT_EXCEEDED'); // القيمة غير المسجلة تحتفظ بالافتراضي 5,000
   validateSale([L], stock, tt, [{ method: 'كاش', amount: 100 }], { ...base, customerBalance: 99999, customerCreditLimit: 500 }); // الدفع النقدي لا يتأثر
 }
 

@@ -239,7 +239,7 @@ export interface Customer {
   monthlyPurchases: number; // مشتريات الشهر الحالي
   invoicesCount?: number;
   lastVisit: string;
-  creditLimit?: number; // حد الائتمان (ج.م) — القيمة الافتراضية 5,000 ج.م عند عدم التحديد
+  creditLimit?: number; // حد الائتمان (ج.م) — صفر = مفتوح دون حد؛ غير المسجل افتراضياً 5,000 ج.م
   loyaltyPoints?: number; // رصيد نقاط الولاء (يُدمج بالفرق على السحابة)
   chequesPending?: number; // (محسوب وغير محفوظ) شيكات واردة مفتوحة تُحتسب ضمن مخاطر الائتمان
   isArchived?: boolean; // حساب مؤرشف؛ يحتفظ بالفواتير والسجل ولا يظهر للبيع الجديد

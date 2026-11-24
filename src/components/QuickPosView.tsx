@@ -426,7 +426,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
           allowBelowCost: lossConfirmed, // لا يُسمح بأقل من التكلفة إلا بعد موافقة المدير الصريحة
           customerId: hasCredit ? (selectedCustomerId !== 'cash' ? selectedCustomerId : hasNewName ? 'new' : undefined) : undefined,
           customerBalance: (selectedCustomer?.balance ?? 0) + (selectedCustomer?.chequesPending ?? 0),
-          customerCreditLimit: selectedCustomer?.creditLimit ?? 0,
+          customerCreditLimit: selectedCustomer?.creditLimit,
         }
       );
     } catch (e) {
@@ -440,7 +440,7 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
         DISCOUNT_EXCEEDS_SUBTOTAL: 'الخصم أكبر من قيمة الفاتورة',
         PAYMENT_MISMATCH: 'مجموع المدفوعات لا يساوي إجمالي الفاتورة',
         CREDIT_REQUIRES_CUSTOMER: 'البيع الآجل يتطلب اختيار عميل أو كتابة اسمه',
-        CREDIT_LIMIT_EXCEEDED: `البيع الآجل يتجاوز حد ائتمان العميل (الحد ${(selectedCustomer?.creditLimit ?? 0).toLocaleString()} ج.م، مديونيته الحالية ${Math.max(0, selectedCustomer?.balance ?? 0).toLocaleString()} ج.م)`,
+        CREDIT_LIMIT_EXCEEDED: `البيع الآجل يتجاوز حد ائتمان العميل (الحد ${(selectedCustomer?.creditLimit ?? 5000).toLocaleString()} ج.م، مديونيته الحالية ${Math.max(0, selectedCustomer?.balance ?? 0).toLocaleString()} ج.م)`,
         EMPTY_CART: 'السلة فارغة',
       };
       setSaleError(messages[code] || 'تعذّر إتمام الفاتورة');
@@ -846,7 +846,9 @@ export const QuickPosView: React.FC<QuickPosViewProps> = ({
               <div className="p-2 rounded-lg bg-surface-1 text-[11px] text-sky-300 flex justify-between">
                 <span>حد الائتمان / المتاح:</span>
                 <span className="font-bold font-mono">
-                  {((selectedCustomer.creditLimit ?? 0) > 0 ? selectedCustomer.creditLimit as number : 5000).toLocaleString()} / {Math.max(0, ((selectedCustomer.creditLimit ?? 0) > 0 ? selectedCustomer.creditLimit as number : 5000) - Math.max(0, selectedCustomer.balance) - (selectedCustomer.chequesPending ?? 0)).toLocaleString()} ج.م
+                  {(selectedCustomer.creditLimit ?? 5000) > 0
+                    ? `${(selectedCustomer.creditLimit ?? 5000).toLocaleString()} / ${Math.max(0, (selectedCustomer.creditLimit ?? 5000) - Math.max(0, selectedCustomer.balance) - (selectedCustomer.chequesPending ?? 0)).toLocaleString()} ج.م`
+                    : 'مفتوح بدون حد'}
                 </span>
               </div>
             )}

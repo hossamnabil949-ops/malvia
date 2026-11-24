@@ -90,16 +90,20 @@ assert.equal(inclusiveTax.grandTotal, 11400);
 // FIN-15: an unset/zero credit limit is not unlimited; it uses the explicit default cap.
 const creditLimitLines = [{ partId: 'p1', qty: 1, unitPrice: 100, unitCost: 50 }];
 const creditLimitTotals = computeTotals(creditLimitLines, 0, 0, false);
-assert.throws(
-  () => validateSale(
-    creditLimitLines,
-    [{ id: 'p1', stockQuantity: 10 }],
-    creditLimitTotals,
-    [{ method: 'آجل', amount: 100 }],
-    { allowBelowCost: false, customerId: 'c1', customerBalance: 5000, customerCreditLimit: 0 },
-  ),
-  (error: any) => error instanceof SaleError && error.code === 'CREDIT_LIMIT_EXCEEDED',
-);
+assert.doesNotThrow(() => validateSale(
+  creditLimitLines,
+  [{ id: 'p1', stockQuantity: 10 }],
+  creditLimitTotals,
+  [{ method: 'آجل', amount: 100 }],
+  { allowBelowCost: false, customerId: 'c1', customerBalance: 5000, customerCreditLimit: 0 },
+));
+assert.throws(() => validateSale(
+  creditLimitLines,
+  [{ id: 'p1', stockQuantity: 10 }],
+  creditLimitTotals,
+  [{ method: 'آجل', amount: 100 }],
+  { allowBelowCost: false, customerId: 'c1', customerBalance: 5000, customerCreditLimit: 5000 },
+), (error: any) => error instanceof SaleError && error.code === 'CREDIT_LIMIT_EXCEEDED');
 
 // FIN-14: monthly schedule must never begin before the configured start date.
 assert.deepEqual(

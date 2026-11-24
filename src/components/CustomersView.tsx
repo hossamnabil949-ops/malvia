@@ -103,7 +103,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       monthlyPurchases: 0,
       invoicesCount: 0,
       lastVisit: 'اليوم',
-      creditLimit: Math.max(0, Number(newCreditLimit) || 5000),
+      creditLimit: Number.isFinite(Number(newCreditLimit)) ? Math.max(0, Number(newCreditLimit)) : 5000,
     });
 
     setName('');
@@ -501,14 +501,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   <span className="text-neutral-400">حد الائتمان:</span>
                   <span className="flex items-center gap-2">
                     <span className="font-mono font-bold text-sky-300">
-                      {c.creditLimit && c.creditLimit > 0
-                        ? `${c.creditLimit.toLocaleString()} ج.م (المتاح ${Math.max(0, c.creditLimit - Math.max(0, c.balance) - (c.chequesPending ?? 0)).toLocaleString()})`
-                        : 'الحد الافتراضي 5,000 ج.م'}
+                      {(c.creditLimit ?? 5000) > 0
+                        ? `${(c.creditLimit ?? 5000).toLocaleString()} ج.م (المتاح ${Math.max(0, (c.creditLimit ?? 5000) - Math.max(0, c.balance) - (c.chequesPending ?? 0)).toLocaleString()})`
+                        : 'مفتوح بدون حد'}
                     </span>
                     {onUpdateCreditLimit && (
                       <button
                         type="button"
-                        onClick={() => { setLimitModalCustomer(c); setLimitValue(String(c.creditLimit || '')); }}
+                        onClick={() => { setLimitModalCustomer(c); setLimitValue(String(c.creditLimit ?? 5000)); }}
                         className="text-[10px] text-amber-400 hover:text-amber-300 font-bold"
                       >
                         تعديل
@@ -698,7 +698,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               </div>
 
               <div>
-                <label className="text-neutral-300 font-bold block mb-1">حد الائتمان (ج.م) — اتركه فارغاً لغير محدود</label>
+                <label className="text-neutral-300 font-bold block mb-1">حد الائتمان (ج.م) — صفر = مفتوح بدون حد؛ الافتراضي 5,000 ج.م</label>
                 <input
                   type="number"
                   min="0"
@@ -738,7 +738,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 <option value="ورشة فنية">ورشة فنية</option><option value="عميل تجزئة">عميل تجزئة</option><option value="أسطول شركات">أسطول شركات</option>
               </select>
             </label>
-            <label className="block text-neutral-300 font-bold">حد الائتمان (ج.م) — صفر = الحد الافتراضي 5,000
+            <label className="block text-neutral-300 font-bold">حد الائتمان (ج.م) — صفر = مفتوح بدون حد
               <input required type="number" min="0" step="0.01" value={editCreditLimit} onChange={e => setEditCreditLimit(e.target.value)} className="mt-1 w-full h-10 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white font-mono" />
             </label>
             <div className="flex gap-2 pt-1">
@@ -760,7 +760,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           >
             <h4 className="font-black text-white text-sm">حد الائتمان — {limitModalCustomer.name}</h4>
             <p className="text-neutral-400">
-              المديونية الحالية: {Math.max(0, limitModalCustomer.balance).toLocaleString()} ج.م. أي بيع آجل يتجاوز الحد سيُرفض في الكاشير. اكتب 0 لاستخدام الحد الافتراضي 5,000 ج.م.
+              المديونية الحالية: {Math.max(0, limitModalCustomer.balance).toLocaleString()} ج.م. أي بيع آجل يتجاوز الحد سيُرفض في الكاشير. اكتب 0 لفتح الائتمان دون حد.
             </p>
             <input
               type="number"
