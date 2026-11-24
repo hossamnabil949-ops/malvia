@@ -1849,7 +1849,7 @@ export default function App() {
       date: now.toISOString().slice(0,10), createdAt: stamp, updatedAt: stamp,
       supplierId: supplier?.id, supplierName: supplier?.name,
       status: 'DRAFT', items, estimatedTotal: items.reduce((sum, item) => sum + item.estimatedTotal, 0),
-      createdBy: currentUser?.employeeName || currentUser?.username || 'مستخدم النظام',
+      createdBy: currentUser?.employeeName || 'مستخدم النظام',
     };
     setPurchaseRequisitions(prev => {
       const updated = [requisition, ...prev];
@@ -2997,8 +2997,6 @@ export default function App() {
             purchaseInvoices={purchaseInvoices}
             salesReturns={salesReturns}
             purchaseReturns={purchaseReturns}
-            purchaseRequisitions={purchaseRequisitions}
-            onUpdatePurchaseRequisition={handleUpdatePurchaseRequisition}
             carBrands={carBrands}
             onAddBrand={handleAddBrand}
             onRemoveBrand={handleRemoveBrand}
