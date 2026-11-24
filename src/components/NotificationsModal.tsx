@@ -296,7 +296,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
           </div>
         ) : (
           <>
-            <div className="p-2.5 sm:p-4 bg-surface-2 border-b border-neutral-800/80 grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3 shrink-0">
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain touch-pan-y [webkit-overflow-scrolling:touch] scrollbar-thin scrollbar-thumb-neutral-600 scrollbar-track-neutral-900">
+            <div className="p-2.5 sm:p-4 bg-surface-2 border-b border-neutral-800/80 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
               <div className="p-3 rounded-2xl bg-surface-1 border border-rose-500/20">
                 <div className="flex items-center justify-between text-neutral-400 text-xs">
                   <span>نفد بالكامل (0 حبة)</span>
@@ -331,7 +332,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               </div>
             </div>
 
-            <div className="p-3 sm:p-4 border-b border-neutral-800 bg-surface-2 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-2 shrink-0">
+            <div className="p-3 sm:p-4 border-b border-neutral-800 bg-surface-2 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/10 text-rose-300 border border-rose-500/20">
                   الأصناف المستنفدة بالكامل ({outOfStockParts.length})
@@ -424,7 +425,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 divide-y divide-neutral-800/80 max-h-none no-scrollbar overscroll-contain touch-pan-y">
+            <div className="p-3 sm:p-5 divide-y divide-neutral-800/80">
               {filteredParts.length === 0 ? (
                 <div className="py-12 text-center">
                   <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3">
@@ -616,6 +617,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                   إغلاق
                 </button>
               </div>
+            </div>
             </div>
           </>
         )}
