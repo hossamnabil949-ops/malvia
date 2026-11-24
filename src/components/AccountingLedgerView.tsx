@@ -30,7 +30,7 @@ export const AccountingLedgerView: React.FC<Props> = ({ tenantId, branchId = 'MA
   const initializedAccounts = accounts.length ? accounts : createDefaultChartOfAccounts({ tenantId, branchId, currency });
   const activeAccounts = initializedAccounts.filter(a => a.active).sort((a,b) => a.code.localeCompare(b.code));
   const periodEntries = entries.filter(e => e.status === 'posted' && e.date >= from && e.date <= to);
-  const trialRows = buildTrialBalanceRows(activeAccounts, entries, from, to);
+  const trialRows = buildTrialBalanceRows(initializedAccounts, entries, from, to);
   const sumDebit = periodEntries.reduce((s,e) => s + e.lines.reduce((n,l) => n + l.debit,0),0);
   const sumCredit = periodEntries.reduce((s,e) => s + e.lines.reduce((n,l) => n + l.credit,0),0);
   const closingDebit = trialRows.reduce((sum, row) => sum + row.closingDebit, 0);
