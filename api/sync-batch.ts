@@ -1,7 +1,7 @@
 // FIN-18: atomic multi-resource sync. Every resource is validated and committed in one PostgreSQL transaction.
 
 const policy: Record<string, string[]> = {
-  employees: ['canManageSettings'], settings: ['canManageSettings'], partners: ['canManagePartners'], partnerWithdrawals: ['canManagePartners'], partnerCurrentAccountTransactions: ['canManagePartners','canManageTreasury'], partnerExitSettlements: ['canManagePartners'], partnerSettlementPayments: ['canManagePartners'], openingBalances: [],
+  employees: ['canManageSettings'], settings: ['canManageSettings'], accountingAccounts: ['canManageSettings','canManageTreasury'], accountingPeriods: ['canManageSettings','canManageTreasury'], accountingJournalEntries: ['canManageSettings','canManageTreasury'], partners: ['canManagePartners'], partnerWithdrawals: ['canManagePartners'], partnerCurrentAccountTransactions: ['canManagePartners','canManageTreasury'], partnerExitSettlements: ['canManagePartners'], partnerSettlementPayments: ['canManagePartners'], openingBalances: [],
   parts: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], stockLevels: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
   stockBatches: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'], serialUnits: ['canManageInventory','canManagePurchases','canReceivePurchases','canSellPos'],
   inventoryErrors: ['canManageInventory'], stockTransfers: ['canManageInventory'], warehouses: ['canManageInventory'],
