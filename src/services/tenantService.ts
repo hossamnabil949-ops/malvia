@@ -517,24 +517,68 @@ export async function authenticateShopUser(
     };
   }
 
+  // Authenticate online against the cloud employee registry BEFORE consulting the
+  // browser's local employee cache. A fresh device may have a valid license but no
+  // downloaded employees yet; local cache must not block the server login request.
   const storeData = loadTenantStoreData(tenant);
-  const employees = storeData.employees && storeData.employees.length > 0 ? storeData.employees : INITIAL_EMPLOYEES;
-
+  const employees = Array.isArray(storeData.employees) ? storeData.employees : [];
   const cleanUser = usernameOrPhone.trim().toLowerCase();
   const cleanPass = passwordInput.trim();
 
-  const matchedEmp = employees.find(e => 
+  const localEmployee = employees.find(e =>
     (e.username && e.username.toLowerCase() === cleanUser) ||
     e.phone === cleanUser ||
     e.name.toLowerCase() === cleanUser ||
     (cleanUser === 'admin' && e.role === 'مدير عام')
   );
 
+  let serverSessionToken: string | undefined;
+  let serverSessionExpiresAt: string | undefined;
+  let localOnlyLogin = typeof navigator !== 'undefined' && !navigator.onLine;
+  let cloudEmployee: Partial<Employee> | undefined;
+
+  if (typeof navigator !== 'undefined' && navigator.onLine) {
+    try {
+      const authResponse = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-license-key': tenant.licenseKey },
+        body: JSON.stringify({ username: cleanUser, password: cleanPass }),
+      });
+      let authBody: any = {};
+      try { authBody = await authResponse.json(); } catch { /* invalid server response */ }
+      if (!authResponse.ok || typeof authBody.token !== 'string' || authBody.token.length < 32 || !authBody.employee?.id) {
+        // Online access is fail-closed: never bypass server authentication using stale local data.
+        return {
+          success: false,
+          message: authBody.error || 'تعذّر توثيق الموظف على الخادم. راجع مدير المحل لمطابقة حساب الموظف ثم أعد المحاولة.',
+          employees,
+        };
+      }
+      serverSessionToken = authBody.token;
+      serverSessionExpiresAt = typeof authBody.expiresAt === 'string' ? authBody.expiresAt : undefined;
+      cloudEmployee = authBody.employee as Partial<Employee>;
+    } catch (e) {
+      console.warn('Cloud employee authentication failed.', e);
+      return {
+        success: false,
+        message: 'تعذّر الاتصال بخادم تسجيل الدخول. تحقق من الإنترنت وحاول مجددًا.',
+        employees,
+      };
+    }
+  }
+
+  // The server-authenticated identity is authoritative online. Local profile fields
+  // are retained only when present; this does not write a partial employee list back
+  // to storage or mark it dirty, which could overwrite the full cloud roster.
+  const matchedEmp = cloudEmployee
+    ? ({ ...(localEmployee || {}), ...cloudEmployee, username: localEmployee?.username || cleanUser, status: 'نشط' } as Employee)
+    : localEmployee;
+
   if (!matchedEmp) {
     return {
       success: false,
       message: 'اسم المستخدم أو الموظف غير مسجل في هذا المحل. (لصاحب المحل أول مرة: استخدم admin)',
-      employees
+      employees,
     };
   }
 
@@ -545,40 +589,26 @@ export async function authenticateShopUser(
     };
   }
 
-  // التحقق: الحساب المجزّأ أولاً. الحسابات القديمة (نص) تُقبل مرة واحدة ثم تُحوَّل كلها إلى تجزئة.
-  let passwordOk = false;
-  if (matchedEmp.passwordHash && isHashed(matchedEmp.passwordHash)) {
-    passwordOk = await verifyPassword(cleanPass, matchedEmp.passwordHash);
-  } else {
-    const legacyPlain = matchedEmp.password || (matchedEmp.role === 'مدير عام' ? '123456' : '1234');
-    passwordOk = cleanPass === legacyPlain;
-  }
-  if (!passwordOk) {
-    return {
-      success: false,
-      message: 'كلمة المرور غير صحيحة. يرجى التأكد من كلمة المرور الخاصة بك أو مراجعة مدير المحل.',
-      employees
-    };
-  }
-
-  // ترحيل: أي موظف ما زالت كلمته نصاً (أو بلا كلمة) تُحفظ مجزّأة وتُحذف النسخة النصية من الداتا المتزامنة
-  let migratedEmployees = employees;
-  if (employees.some(e => !e.passwordHash || e.password !== undefined)) {
-    migratedEmployees = await Promise.all(employees.map(async (e) => {
-      if (e.passwordHash && e.password === undefined) return e;
-      const { password: plain, ...rest } = e;
-      const passwordHash = e.passwordHash && isHashed(e.passwordHash)
-        ? e.passwordHash
-        : await hashPassword(plain || (e.role === 'مدير عام' ? '123456' : '1234'));
-      return { ...rest, passwordHash } as Employee;
-    }));
-    try {
-      localStorage.setItem(getTenantKey(tenant.tenantId, 'employees'), JSON.stringify(migratedEmployees));
-      markDirty(tenant.tenantId, ['employees']);
-    } catch (err) {
-      console.error('تعذّر حفظ ترحيل كلمات المرور', err);
+  // Offline-only login uses the locally cached employee and password.
+  if (localOnlyLogin) {
+    let passwordOk = false;
+    if (matchedEmp.passwordHash && isHashed(matchedEmp.passwordHash)) {
+      passwordOk = await verifyPassword(cleanPass, matchedEmp.passwordHash);
+    } else {
+      const legacyPlain = matchedEmp.password || (matchedEmp.role === 'مدير عام' ? '123456' : '1234');
+      passwordOk = cleanPass === legacyPlain;
+    }
+    if (!passwordOk) {
+      return {
+        success: false,
+        message: 'كلمة المرور غير صحيحة. يرجى التأكد من كلمة المرور الخاصة بك أو مراجعة مدير المحل.',
+        employees,
+      };
     }
   }
+
+  // Never persist a one-employee cloud response as the complete local roster.
+  const authenticatedEmployees = employees.length ? employees : [matchedEmp];
   const usingDefaultPassword = DEFAULT_PASSWORDS.includes(cleanPass);
 
   // A locally verified employee may enter in LOCAL-ONLY mode when the cloud copy
@@ -602,7 +632,7 @@ export async function authenticateShopUser(
         return {
           success: false,
           message: authBody.error || 'تعذّر توثيق الموظف على الخادم. راجع مدير المحل لمطابقة حساب الموظف ثم أعد المحاولة.',
-          employees: migratedEmployees,
+          employees: authenticatedEmployees,
         };
       } else {
         serverSessionToken = authBody.token;
