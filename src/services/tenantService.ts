@@ -611,43 +611,6 @@ export async function authenticateShopUser(
   const authenticatedEmployees = employees.length ? employees : [matchedEmp];
   const usingDefaultPassword = DEFAULT_PASSWORDS.includes(cleanPass);
 
-  // A locally verified employee may enter in LOCAL-ONLY mode when the cloud copy
-  // is stale (for example, credentials were changed while this device was offline).
-  // No server token is created in this case, so protected cloud sync remains blocked.
-  let serverSessionToken: string | undefined;
-  let serverSessionExpiresAt: string | undefined;
-  let localOnlyLogin = typeof navigator !== 'undefined' && !navigator.onLine;
-  if (typeof navigator !== 'undefined' && navigator.onLine) {
-    try {
-      const authResponse = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-license-key': tenant.licenseKey },
-        body: JSON.stringify({ username: cleanUser, password: cleanPass }),
-      });
-      let authBody: any = {};
-      try { authBody = await authResponse.json(); } catch { /* invalid server response */ }
-      if (!authResponse.ok || typeof authBody.token !== 'string' || authBody.token.length < 32) {
-        // Online access must never appear successful without a server-issued session.
-        // A local/cloud employee mismatch requires an authorized account sync or an offline login.
-        return {
-          success: false,
-          message: authBody.error || 'تعذّر توثيق الموظف على الخادم. راجع مدير المحل لمطابقة حساب الموظف ثم أعد المحاولة.',
-          employees: authenticatedEmployees,
-        };
-      } else {
-        serverSessionToken = authBody.token;
-        serverSessionExpiresAt = typeof authBody.expiresAt === 'string' ? authBody.expiresAt : undefined;
-      }
-    } catch (e) {
-      console.warn('Cloud employee authentication failed.', e);
-      return {
-        success: false,
-        message: 'تعذّر الاتصال بخادم تسجيل الدخول. تحقق من الإنترنت وحاول مجددًا.',
-        employees: migratedEmployees,
-      };
-    }
-  }
-
   const session: UserSession = {
     tenantId: tenant.tenantId,
     licenseKey: tenant.licenseKey,
@@ -672,7 +635,7 @@ export async function authenticateShopUser(
       (usingDefaultPassword ? ' ⚠ كلمة المرور افتراضية: غيّرها من الإعدادات.' : ''),
     session,
     tenant,
-    employees: migratedEmployees
+    employees: authenticatedEmployees
   };
 }
 
