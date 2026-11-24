@@ -556,11 +556,11 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 min-w-0">
           <div className="p-1 rounded-2xl bg-surface-1 border border-neutral-700 flex flex-wrap items-center gap-1 max-w-full">
             <button
               onClick={() => setCurrentTab('invoices')}
-              className={`px-2 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-bold leading-tight whitespace-nowrap transition-all ${
+              className={`flex-1 sm:flex-none px-2 sm:px-3 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold leading-tight whitespace-nowrap transition-all ${
                 currentTab === 'invoices'
                   ? 'bg-amber-500 text-neutral-950 font-black shadow-sm'
                   : 'text-neutral-400 hover:text-white'
@@ -674,7 +674,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
         </div>
       </div>
 
-      <div className="p-4 rounded-2xl bg-surface-2 border border-neutral-800 flex flex-col sm:flex-row items-center gap-3">
+      <div className="p-3 sm:p-4 rounded-2xl bg-surface-2 border border-neutral-800 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <div className="relative flex-grow w-full">
           <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
           <input
@@ -688,7 +688,25 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           />
         </div>
 
-        <DateRangeFilter value={dateRange} onChange={setDateRange} />
+        {currentTab !== 'requisitions' && <DateRangeFilter value={dateRange} onChange={setDateRange} />}
+
+
+
+      {currentTab === 'invoices' && (
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="bg-surface-1 border border-neutral-700 text-neutral-200 text-xs rounded-xl px-3 h-11 focus:outline-none focus:border-amber-400 w-full sm:w-auto"
+          >
+            <option value="all">كافة حالات السداد</option>
+            <option value="مدفوعة نقداً">مدفوعة نقداً</option>
+            <option value="مسددة جزئياً">مسددة جزئياً</option>
+            <option value="آجل">آجل (قيد السداد)</option>
+            <option value="مرتجع جزئي">مرتجع جزئي</option>
+            <option value="مرتجع كلي">مرتجع كلي</option>
+          </select>
+        )}
+      </div>
 
         {currentTab === 'requisitions' && !canReceiveOnly && (
         <div className="bg-surface-2 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
@@ -734,8 +752,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                       </select>
                     </label>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-right text-xs">
+                  <div className="overflow-x-auto overscroll-x-contain">
+                    <table className="w-full min-w-[520px] text-right text-xs">
                       <thead className="text-neutral-500"><tr><th className="p-2">الصنف</th><th className="p-2">المتاح</th><th className="p-2">الكمية المطلوبة</th><th className="p-2">التكلفة التقديرية</th></tr></thead>
                       <tbody className="divide-y divide-neutral-800">
                         {req.items.map((item, index) => <tr key={item.partId + index}>
@@ -754,22 +772,6 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
           )}
         </div>
       )}
-
-      {currentTab === 'invoices' && (
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-surface-1 border border-neutral-700 text-neutral-200 text-xs rounded-xl px-3 h-11 focus:outline-none focus:border-amber-400 w-full sm:w-auto"
-          >
-            <option value="all">كافة حالات السداد</option>
-            <option value="مدفوعة نقداً">مدفوعة نقداً</option>
-            <option value="مسددة جزئياً">مسددة جزئياً</option>
-            <option value="آجل">آجل (قيد السداد)</option>
-            <option value="مرتجع جزئي">مرتجع جزئي</option>
-            <option value="مرتجع كلي">مرتجع كلي</option>
-          </select>
-        )}
-      </div>
 
       {currentTab === 'invoices' && (
         <div className="bg-surface-2 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
