@@ -597,17 +597,13 @@ export async function authenticateShopUser(
       let authBody: any = {};
       try { authBody = await authResponse.json(); } catch { /* invalid server response */ }
       if (!authResponse.ok || typeof authBody.token !== 'string' || authBody.token.length < 32) {
-        // Only a credential/employee mismatch can fall back to the locally verified account.
-        // License, authorization, rate-limit and server errors must still fail closed.
-        if (authResponse.status === 401 && authBody.code === 'EMPLOYEE_INVALID_CREDENTIALS') {
-          localOnlyLogin = true;
-        } else {
-          return {
-            success: false,
-            message: authBody.error || 'تعذّر توثيق الموظف على الخادم. حاول مرة أخرى.',
-            employees: migratedEmployees,
-          };
-        }
+        // Online access must never appear successful without a server-issued session.
+        // A local/cloud employee mismatch requires an authorized account sync or an offline login.
+        return {
+          success: false,
+          message: authBody.error || 'تعذّر توثيق الموظف على الخادم. راجع مدير المحل لمطابقة حساب الموظف ثم أعد المحاولة.',
+          employees: migratedEmployees,
+        };
       } else {
         serverSessionToken = authBody.token;
         serverSessionExpiresAt = typeof authBody.expiresAt === 'string' ? authBody.expiresAt : undefined;
