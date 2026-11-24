@@ -7,6 +7,7 @@ on:
       - malvia-web
       - fix/financial-integrity-fin2-fin18
       - commercial-v1-fin18-next
+      - feat/accounting-erp-integration-audit-20261124
     paths:
       - '**/*.ts'
       - '**/*.tsx'
