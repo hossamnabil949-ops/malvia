@@ -30,7 +30,8 @@ import {
   ShopSettings, 
   SalesReturn, 
   PurchaseInvoice, 
-  PurchaseReturn, 
+  PurchaseReturn,
+  PurchaseRequisition, 
   Expense, 
   Partner, 
   TenantLicense, 
@@ -158,6 +159,7 @@ export default function App() {
   const [salesReturns, setSalesReturns] = useState<SalesReturn[]>([]);
   const [purchaseInvoices, setPurchaseInvoices] = useState<PurchaseInvoice[]>([]);
   const [purchaseReturns, setPurchaseReturns] = useState<PurchaseReturn[]>([]);
+  const [purchaseRequisitions, setPurchaseRequisitions] = useState<PurchaseRequisition[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [partnerWithdrawals, setPartnerWithdrawals] = useState<PartnerWithdrawal[]>([]);
@@ -276,6 +278,7 @@ export default function App() {
     setSalesReturns(data.salesReturns);
     setPurchaseInvoices(data.purchaseInvoices);
     setPurchaseReturns(data.purchaseReturns);
+    setPurchaseRequisitions(data.purchaseRequisitions || []);
     setExpenses(data.expenses);
     setPartners((data.partners || []).map(partner => ({ ...partner, status: partner.status || 'ACTIVE' })));
     setPartnerWithdrawals(data.partnerWithdrawals || []);
@@ -1823,6 +1826,47 @@ export default function App() {
     }
   };
 
+  // طلبات التوريد: سجل مستقل لا ينشئ فاتورة أو حركة مخزون/خزينة.
+  const handleCreatePurchaseRequisition = (selectedParts: AutoPart[], quantities: Record<string, number>, supplierId?: string) => {
+    if (!selectedParts.length) return;
+    const supplier = suppliers.find(item => item.id === supplierId);
+    const now = new Date();
+    const stamp = now.toISOString();
+    const suffix = Math.floor(Math.random() * 900 + 100);
+    const items = selectedParts.map(part => {
+      const quantity = Math.max(1, Math.floor(Number(quantities[part.id]) || 1));
+      return {
+        partId: part.id, partNumber: part.partNumber, partName: part.name,
+        brand: part.brand, compatibleModels: part.compatibleModels, unit: part.unit,
+        stockQuantity: part.stockQuantity, minAlertStock: part.minAlertStock,
+        quantity, estimatedUnitCost: Number(part.costPrice) || 0,
+        estimatedTotal: quantity * (Number(part.costPrice) || 0),
+      };
+    });
+    const requisition: PurchaseRequisition = {
+      id: `preq-${now.getTime()}-${suffix}`,
+      requisitionNumber: `PR-${now.toISOString().slice(0,10).replace(/-/g,'')}-${String(now.getTime()).slice(-6)}-${suffix}`,
+      date: now.toISOString().slice(0,10), createdAt: stamp, updatedAt: stamp,
+      supplierId: supplier?.id, supplierName: supplier?.name,
+      status: 'DRAFT', items, estimatedTotal: items.reduce((sum, item) => sum + item.estimatedTotal, 0),
+      createdBy: currentUser?.employeeName || currentUser?.username || 'مستخدم النظام',
+    };
+    setPurchaseRequisitions(prev => {
+      const updated = [requisition, ...prev];
+      persistChanges({ purchaseRequisitions: updated });
+      return updated;
+    });
+    window.alert(`تم حفظ طلب التوريد ${requisition.requisitionNumber} كمسودة في شاشة المشتريات.`);
+  };
+
+  const handleUpdatePurchaseRequisition = (requisition: PurchaseRequisition) => {
+    setPurchaseRequisitions(prev => {
+      const updated = prev.map(item => item.id === requisition.id ? { ...requisition, updatedAt: new Date().toISOString() } : item);
+      persistChanges({ purchaseRequisitions: updated });
+      return updated;
+    });
+  };
+
   // Handlers for Purchases
   const handleAddPurchaseInvoice = (invoice: PurchaseInvoice): boolean => {
     // Reject invalid quantities/costs and overpayment before any ledger or stock mutation.
@@ -2953,6 +2997,8 @@ export default function App() {
             purchaseInvoices={purchaseInvoices}
             salesReturns={salesReturns}
             purchaseReturns={purchaseReturns}
+            purchaseRequisitions={purchaseRequisitions}
+            onUpdatePurchaseRequisition={handleUpdatePurchaseRequisition}
             carBrands={carBrands}
             onAddBrand={handleAddBrand}
             onRemoveBrand={handleRemoveBrand}
@@ -3827,6 +3873,8 @@ export default function App() {
           isOpen={showNotifications}
           onClose={() => setShowNotifications(false)}
           parts={parts}
+          suppliers={suppliers}
+          onCreatePurchaseRequisition={handleCreatePurchaseRequisition}
           onUpdateStock={handleUpdateStock}
           onQuickSalePart={(part: AutoPart) => {
             handleAddToCart(part);
