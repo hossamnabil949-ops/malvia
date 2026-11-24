@@ -149,5 +149,13 @@ assert.equal(salesTrial?.openingCredit, 1000);
 assert.equal(salesTrial?.movementDebit, 200);
 assert.equal(salesTrial?.closingCredit, 800);
 assert.equal(buildTrialBalanceRows(accounts, [], '2026-12-31', '2026-01-01').length, 0);
+const archivedCash = { ...accounts.find(account => account.id === cashId)!, active: false };
+const archivedTrial = buildTrialBalanceRows(
+  [archivedCash], [openingTrialEntry.entry as JournalEntry],
+  '2026-11-10', '2026-11-30',
+);
+assert.equal(archivedTrial.length, 1, 'inactive accounts with balances must remain visible');
+assert.equal(archivedTrial[0].closingDebit, 1000);
+
 
 console.log('accountingCore: all tests passed');
