@@ -170,36 +170,46 @@ async function api(path: string, init: RequestInit & { headers?: Record<string, 
   };
 }
 
-async function refreshServerSession(tenantId: string, licenseKey: string): Promise<void> {
-  const raw = localStorage.getItem('malvia_user_session_v1');
-  const session = raw ? JSON.parse(raw) : null;
-  const token = typeof session?.serverSessionToken === 'string' ? session.serverSessionToken : '';
-  if (!token || session?.tenantId !== tenantId) {
-    throw new Error('لا توجد جلسة موظف موثقة؛ سجّل الدخول مجدداً مع اتصال الإنترنت.');
-  }
-  const expiresAt = Date.parse(String(session.serverSessionExpiresAt || ''));
-  if (!Number.isFinite(expiresAt)) {
-    throw new Error('بيانات انتهاء جلسة الموظف غير مكتملة؛ سجّل الخروج ثم الدخول مجدداً.');
-  }
-  if (expiresAt <= Date.now()) {
-    throw new Error('انتهت جلسة الموظف السحابية؛ سجّل الدخول مجدداً مع اتصال الإنترنت.');
-  }
-  // Renew proactively, while the existing bearer token is still valid.
-  if (expiresAt - Date.now() > 60 * 60 * 1000) return;
+let sessionRefreshInFlight: Promise<void> | null = null;
 
-  const response = await fetch('/api/auth/refresh', {
-    method: 'POST',
-    headers: { 'x-license-key': licenseKey, Authorization: `Bearer ${token}` },
-  });
-  let body: any = {};
-  try { body = await response.json(); } catch { /* handled below */ }
-  if (!response.ok || typeof body.expiresAt !== 'string') {
-    throw new Error(body.error || 'تعذّر تجديد جلسة الموظف؛ سجّل الدخول مجدداً.');
+async function refreshServerSession(tenantId: string, licenseKey: string): Promise<void> {
+  if (sessionRefreshInFlight) return sessionRefreshInFlight;
+  sessionRefreshInFlight = (async () => {
+    const raw = localStorage.getItem('malvia_user_session_v1');
+    const session = raw ? JSON.parse(raw) : null;
+    const token = typeof session?.serverSessionToken === 'string' ? session.serverSessionToken : '';
+    if (!token || session?.tenantId !== tenantId) {
+      throw new Error('لا توجد جلسة موظف موثقة؛ سجّل الدخول مجدداً مع اتصال الإنترنت.');
+    }
+    const expiresAt = Date.parse(String(session.serverSessionExpiresAt || ''));
+    if (!Number.isFinite(expiresAt)) {
+      throw new Error('بيانات انتهاء جلسة الموظف غير مكتملة؛ سجّل الخروج ثم الدخول مجدداً.');
+    }
+    if (expiresAt <= Date.now()) {
+      throw new Error('انتهت جلسة الموظف السحابية؛ سجّل الدخول مجدداً مع اتصال الإنترنت.');
+    }
+    // Renew proactively, while the existing bearer token is still valid.
+    if (expiresAt - Date.now() > 60 * 60 * 1000) return;
+
+    const response = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'x-license-key': licenseKey, Authorization: `Bearer ${token}` },
+    });
+    let body: any = {};
+    try { body = await response.json(); } catch { /* handled below */ }
+    if (!response.ok || typeof body.expiresAt !== 'string') {
+      throw new Error(body.error || 'تعذّر تجديد جلسة الموظف؛ سجّل الدخول مجدداً.');
+    }
+    localStorage.setItem('malvia_user_session_v1', JSON.stringify({
+      ...session,
+      serverSessionExpiresAt: body.expiresAt,
+    }));
+  })();
+  try {
+    await sessionRefreshInFlight;
+  } finally {
+    sessionRefreshInFlight = null;
   }
-  localStorage.setItem('malvia_user_session_v1', JSON.stringify({
-    ...session,
-    serverSessionExpiresAt: body.expiresAt,
-  }));
 }
 
 async function pushResource(tenantId: string, licenseKey: string, res: string): Promise<boolean> {
