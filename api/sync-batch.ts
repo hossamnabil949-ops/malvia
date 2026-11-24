@@ -285,6 +285,79 @@ export default async function handler(req: any, res: any) {
         if (record.partners.some((p: any) => !p.partnerId || !String(p.partnerName || '').trim() || !Number.isFinite(p.originalContribution) || p.originalContribution < 0 || !Number.isFinite(p.ownershipPercentage) || p.ownershipPercentage < 0 || p.ownershipPercentage > 100 || (p.currentAccountBalance !== undefined && !Number.isFinite(p.currentAccountBalance))) || (record.partners.length > 0 && Math.abs(shares - 100) > 0.01)) return res.status(400).json({ code: 'OPENING_BALANCE_PARTNERS_INVALID', resource: 'openingBalances', error: 'بيانات الشركاء أو مجموع نسب الملكية غير صالحة.', diagnostic: { traceId, phase, resource: 'openingBalances', operationCount: operationResources.length, errorName: 'SyncValidationError', errorCode: 'OPENING_BALANCE_PARTNERS_INVALID' } });
       }
     }
+    phase = 'accounting_master_data_validation';
+    const validateMasterData = async (resource: 'accountingAccounts' | 'accountingPeriods') => {
+      const operation: any = operations.find((op: any) => op.resource === resource);
+      if (!operation) return null;
+      const previousRow = await getOne(tenant, resource);
+      const previous: any[] = Array.isArray(previousRow?.data) ? previousRow.data as any[] : [];
+      const incoming: any[] = Array.isArray(operation.data) ? operation.data as any[] : [];
+      const failMaster = (code: string, message: string) => ({
+        code, resource, error: message,
+        diagnostic: { traceId, phase, resource, operationCount: operationResources.length, errorName: 'AccountingMasterDataValidationError', errorCode: code },
+      });
+      if (!Array.isArray(operation.data)) return failMaster('ACCOUNTING_MASTER_DATA_INVALID', 'بيانات الدليل أو الفترات المحاسبية غير صالحة.');
+      const oldById = new Map(previous.map((item: any) => [String(item?.id || ''), item]));
+      const newIds = new Set<string>();
+      for (const item of incoming) {
+        const id = String(item?.id || '');
+        if (!id || newIds.has(id)) return failMaster('ACCOUNTING_MASTER_ID_DUPLICATE', 'يوجد معرّف مفقود أو مكرر في البيانات المحاسبية.');
+        newIds.add(id);
+      }
+      for (const oldItem of previous) {
+        const id = String(oldItem?.id || '');
+        const next = incoming.find((item: any) => String(item?.id || '') === id);
+        if (!next) return failMaster('ACCOUNTING_MASTER_DELETE_FORBIDDEN', 'لا يمكن حذف حساب أو فترة مالية محفوظة.');
+        if (JSON.stringify(next) !== JSON.stringify(oldItem)) {
+          const closeOnly = resource === 'accountingPeriods'
+            && oldItem.status === 'open' && next.status === 'closed'
+            && oldItem.id === next.id && oldItem.tenantId === next.tenantId
+            && oldItem.branchId === next.branchId && oldItem.currency === next.currency
+            && oldItem.name === next.name && oldItem.startDate === next.startDate && oldItem.endDate === next.endDate
+            && Boolean(String(next.closedAt || '').trim()) && Boolean(String(next.closedBy || '').trim());
+          if (!closeOnly) return failMaster('ACCOUNTING_MASTER_IMMUTABLE', 'لا يمكن تعديل حساب أو فترة مالية محفوظة؛ الإضافة أو إقفال الفترة فقط مسموح.');
+        }
+      }
+      for (const item of incoming) {
+        if (oldById.has(String(item.id))) continue;
+        const currency = String(item.currency || '').trim().toUpperCase();
+        if (item.tenantId !== tenant || !String(item.branchId || '').trim() || !currency) {
+          return failMaster('ACCOUNTING_MASTER_CONTEXT_INVALID', 'بيانات الحساب أو الفترة لا تتبع المحل الحالي.');
+        }
+        if (resource === 'accountingAccounts') {
+          const validTypes = ['asset', 'liability', 'equity', 'revenue', 'expense'];
+          const normal = item.type === 'asset' || item.type === 'expense' ? 'debit' : 'credit';
+          if (!String(item.code || '').trim() || !String(item.name || '').trim()
+            || !validTypes.includes(item.type) || item.normalBalance !== normal
+            || typeof item.active !== 'boolean'
+            || incoming.some((other: any) => other !== item && other.tenantId === tenant
+              && other.branchId === item.branchId && String(other.currency || '').toUpperCase() === currency
+              && String(other.code || '').trim().toLowerCase() === String(item.code || '').trim().toLowerCase())) {
+            return failMaster('ACCOUNTING_ACCOUNT_INVALID', 'بيانات الحساب أو كوده أو طبيعته المحاسبية غير صالحة أو مكررة.');
+          }
+        } else {
+          const validDate = (value: any) => {
+            if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+            const d = new Date(value + 'T00:00:00.000Z');
+            return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+          };
+          if (!String(item.name || '').trim() || item.status !== 'open'
+            || !validDate(item.startDate) || !validDate(item.endDate) || item.startDate > item.endDate) {
+            return failMaster('ACCOUNTING_PERIOD_INVALID', 'بيانات الفترة المالية أو تواريخها غير صالحة.');
+          }
+          const overlaps = incoming.some((other: any) => other !== item && other.tenantId === tenant
+            && other.branchId === item.branchId && String(other.currency || '').toUpperCase() === currency
+            && item.startDate <= other.endDate && other.startDate <= item.endDate);
+          if (overlaps) return failMaster('ACCOUNTING_PERIOD_OVERLAP', 'لا يمكن إنشاء فترات مالية متداخلة لنفس الفرع والعملة.');
+        }
+      }
+      return null;
+    };
+    for (const resource of ['accountingAccounts', 'accountingPeriods'] as const) {
+      const masterError = await validateMasterData(resource);
+      if (masterError) return res.status(400).json(masterError);
+    }
+
     phase = 'accounting_journal_validation';
     const journalOperation: any = operations.find((op: any) => op.resource === 'accountingJournalEntries');
     if (journalOperation) {
