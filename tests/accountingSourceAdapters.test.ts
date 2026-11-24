@@ -294,7 +294,7 @@ assert.equal(buildSupplierPaymentJournal(
 
 const cardSettlement = buildCardSettlementJournal(
   { id: 'CARD-1', processor: 'Acquirer', grossAmount: 100, feeAmount: 2.5,
-    netAmount: 97.5, settlementDate: '2026-11-16', bankAccountId: 'BANK-A', reference: 'BATCH-1' },
+    netAmount: 97.5, settlementDate: '2026-11-16', bankAccountId: 'BANK-01', reference: 'BATCH-1' },
   context, 'period-1', 'now', 'tester', mappedAccounts,
 );
 assert.equal(cardSettlement.error, null);
