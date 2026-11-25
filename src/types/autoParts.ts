@@ -439,6 +439,7 @@ export interface SupplierPayment {
   supplierId: string;
   supplierName: string;
   amount: number;
+  payableApplied?: number; // الجزء المسدد من مديونية المورد؛ والباقي دفعة مقدمة
   paymentDate: string;
   paymentMethod: PaymentMethod | string;
   bankAccountId?: string;
