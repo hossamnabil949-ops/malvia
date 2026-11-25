@@ -80,7 +80,7 @@ import type { LedgerAccount, AccountingPeriod, JournalEntry } from '../utils/acc
 import { getPartnerCurrentAccountBalance } from '../utils/partnerCurrentAccount';
 import type { OpeningBalanceRecord } from '../utils/openingBalanceLogic';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from '../utils/bankLedger';
-import { requiresSpecificBankAccount } from '../utils/paymentMethods';
+import { paymentAccountOf, requiresSpecificBankAccount } from '../utils/paymentMethods';
 
 interface FinanceViewProps {
   invoices: Invoice[];
@@ -107,6 +107,7 @@ interface FinanceViewProps {
   onAddBankAccount?: (account: BankAccount) => void;
   onSettleVisa?: (batch: CardSettlementBatch) => { ok: boolean; message?: string };
   onTransferBank?: (input: { id: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; date: string; reference: string }) => { ok: boolean; message?: string };
+  onTransferFunds?: (input: { id: string; date: string; amount: number; sourceMethod: string; destinationMethod: string; sourceBankAccountId?: string; destinationBankAccountId?: string; reference?: string }) => { ok: boolean; message?: string };
   canManageExpenses?: boolean;
   canManageTreasury?: boolean;
   canManagePartners?: boolean;
@@ -178,7 +179,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   onInjectCapital,
   onReinvestProfit,
   bankAccounts = [], cardSettlements = [], bankLedgerEntries = [], outstandingVisaBalance = 0,
-  onAddBankAccount, onSettleVisa, onTransferBank,
+  onAddBankAccount, onSettleVisa, onTransferBank, onTransferFunds,
   canManageExpenses = true, canManageTreasury = true, canManagePartners = true,
   partnerWithdrawals = [], partnerExitSettlements = [], partnerSettlementPayments = [],
   partnerCurrentAccountTransactions = [], onRecordPartnerCurrentAccount,
@@ -761,6 +762,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           currentUserName={currentUserName}
           onRecord={onRecordPartnerCurrentAccount}
         />
+      )}
+
+      {activeFinanceTab === 'bankLedger' && canManageTreasury && onTransferFunds && (
+        <LiquidAccountTransferPanel treasuryTransactions={treasuryTransactions} bankAccounts={bankAccounts} bankLedgerEntries={bankLedgerEntries} onTransfer={onTransferFunds} />
       )}
 
       {activeFinanceTab === 'bankLedger' && canManageTreasury && onAddBankAccount && onSettleVisa && (
@@ -1950,5 +1955,125 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
       )}
     </div>
+  );
+};
+
+
+const TRANSFER_RAILS = [
+  { value: 'نقدي', label: 'الخزينة النقدية' },
+  { value: 'إنستاباي / InstaPay', label: 'إنستاباي — حساب مستقل' },
+  { value: 'إنستاباي - حساب بنكي', label: 'إنستاباي — رصيد داخل بنك' },
+  { value: 'إنستاباي - محفظة إلكترونية', label: 'إنستاباي — رصيد داخل محفظة' },
+  { value: 'محفظة إلكترونية - Vodafone Cash', label: 'فودافون كاش' },
+  { value: 'محفظة إلكترونية - Orange Cash', label: 'أورنج كاش' },
+  { value: 'محفظة إلكترونية - Etisalat Cash', label: 'اتصالات كاش' },
+  { value: 'محفظة إلكترونية - WE Pay', label: 'WE Pay' },
+  { value: 'تحويل بنكي / حساب بنكي', label: 'حساب بنكي' },
+];
+
+const LiquidAccountTransferPanel: React.FC<{
+  treasuryTransactions: TreasuryTransaction[];
+  bankAccounts: BankAccount[];
+  bankLedgerEntries: BankLedgerEntry[];
+  onTransfer: (input: { id: string; date: string; amount: number; sourceMethod: string; destinationMethod: string; sourceBankAccountId?: string; destinationBankAccountId?: string; reference?: string }) => { ok: boolean; message?: string };
+}> = ({ treasuryTransactions, bankAccounts, bankLedgerEntries, onTransfer }) => {
+  const [sourceMethod, setSourceMethod] = useState('نقدي');
+  const [destinationMethod, setDestinationMethod] = useState('تحويل بنكي / حساب بنكي');
+  const [sourceBankId, setSourceBankId] = useState('');
+  const [destinationBankId, setDestinationBankId] = useState(bankAccounts.find(a => a.active)?.id || '');
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(todayISO());
+  const [reference, setReference] = useState('');
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const activeBanks = bankAccounts.filter(a => a.active);
+  const isBank = (method: string) => { try { return paymentAccountOf(method) === 'bank'; } catch { return false; } };
+  const balance = (method: string, bankId?: string) => {
+    if (isBank(method)) {
+      const account = activeBanks.find(a => a.id === bankId);
+      return account ? summarizeBankAccount(account, bankLedgerEntries) : 0;
+    }
+    let total = 0;
+    treasuryTransactions.forEach(tx => {
+      try {
+        const rail = paymentAccountOf(method);
+        if (paymentAccountOf(tx.paymentMethod) !== rail) return;
+        if (rail !== 'cash' && tx.paymentMethod !== method) return;
+        total += tx.type === 'قبض' ? tx.amount : -tx.amount;
+      } catch { /* ignore non-liquid historical methods */ }
+    });
+    return total;
+  };
+  const sourceBalance = balance(sourceMethod, sourceBankId);
+  const destinationBalance = balance(destinationMethod, destinationBankId);
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault(); setError(''); setNotice('');
+    const value = Number(amount);
+    if (!Number.isFinite(value) || value <= 0) { setError('أدخل مبلغاً أكبر من صفر.'); return; }
+    if (isBank(sourceMethod) && !sourceBankId) { setError('حدد الحساب البنكي المصدر.'); return; }
+    if (isBank(destinationMethod) && !destinationBankId) { setError('حدد الحساب البنكي المستلم.'); return; }
+    if (sourceMethod === destinationMethod && (!isBank(sourceMethod) || sourceBankId === destinationBankId)) { setError('اختر حسابين مختلفين.'); return; }
+    const result = onTransfer({
+      id: 'FIN-TRF-' + Date.now(), date, amount: value, sourceMethod, destinationMethod,
+      ...(isBank(sourceMethod) ? { sourceBankAccountId: sourceBankId } : {}),
+      ...(isBank(destinationMethod) ? { destinationBankAccountId: destinationBankId } : {}),
+      reference: reference.trim(),
+    });
+    if (!result.ok) { setError(result.message || 'تعذر تسجيل التحويل.'); return; }
+    setAmount(''); setReference(''); setNotice('تم تسجيل التحويل وتحديث دفتر الحسابات الطرفية والقيد المحاسبي.');
+  };
+  const money = (value: number) => value.toLocaleString('ar-EG', { maximumFractionDigits: 2 }) + ' ج.م';
+  const bankSelect = (value: string, setValue: (next: string) => void, label: string) => (
+    <label className="block text-[11px] text-neutral-400">{label}
+      <select className="w-full h-10 mt-1 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-xs" value={value} onChange={e => setValue(e.target.value)}>
+        <option value="">اختر الحساب البنكي</option>
+        {activeBanks.map(account => <option key={account.id} value={account.id}>{account.bankName} — {account.name}{account.accountLast4 ? ' ••' + account.accountLast4 : ''}</option>)}
+      </select>
+    </label>
+  );
+  return (
+    <form onSubmit={submit} className="p-4 rounded-2xl bg-surface-2 border border-sky-500/30 space-y-4" dir="rtl">
+      <div>
+        <h3 className="text-sm font-black text-white">تحويل بين جميع الحسابات المالية</h3>
+        <p className="text-[11px] text-neutral-400 mt-1">الخزينة، إنستاباي، المحافظ الإلكترونية، وأي حساب بنكي نشط. التحويل حركة داخلية لا تعتبر إيراداً أو مصروفاً.</p>
+      </div>
+      {error && <div role="alert" className="rounded-xl border border-rose-500/40 bg-rose-950/30 p-3 text-xs text-rose-200">{error}</div>}
+      {notice && <div role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3 text-xs text-emerald-200">{notice}</div>}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="rounded-xl bg-surface-1 p-3 space-y-2">
+          <label className="block text-[11px] text-neutral-400">الحساب المصدر
+            <select className="w-full h-10 mt-1 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white text-xs" value={sourceMethod} onChange={e => { setSourceMethod(e.target.value); setSourceBankId(''); }}>
+              {TRANSFER_RAILS.map(rail => <option key={rail.value} value={rail.value}>{rail.label}</option>)}
+            </select>
+          </label>
+          {isBank(sourceMethod) && bankSelect(sourceBankId, setSourceBankId, 'الحساب البنكي المصدر')}
+          <div className="text-xs text-neutral-400">الرصيد الحالي: <b className="text-white font-mono">{money(sourceBalance)}</b></div>
+        </div>
+        <div className="rounded-xl bg-surface-1 p-3 space-y-2">
+          <label className="block text-[11px] text-neutral-400">الحساب المستلم
+            <select className="w-full h-10 mt-1 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white text-xs" value={destinationMethod} onChange={e => { setDestinationMethod(e.target.value); setDestinationBankId(''); }}>
+              {TRANSFER_RAILS.map(rail => <option key={rail.value} value={rail.value}>{rail.label}</option>)}
+            </select>
+          </label>
+          {isBank(destinationMethod) && bankSelect(destinationBankId, setDestinationBankId, 'الحساب البنكي المستلم')}
+          <div className="text-xs text-neutral-400">الرصيد الحالي: <b className="text-white font-mono">{money(destinationBalance)}</b></div>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <label className="text-[11px] text-neutral-400">المبلغ بالجنيه
+          <input className="w-full h-10 mt-1 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-xs" type="number" min="0.01" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required />
+        </label>
+        <label className="text-[11px] text-neutral-400">تاريخ الحركة
+          <input className="w-full h-10 mt-1 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-xs" type="date" value={date} onChange={e => setDate(e.target.value)} required />
+        </label>
+        <label className="text-[11px] text-neutral-400">مرجع / ملاحظات
+          <input className="w-full h-10 mt-1 px-3 rounded-xl bg-surface-1 border border-neutral-700 text-white text-xs" value={reference} onChange={e => setReference(e.target.value)} placeholder="اختياري" />
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-[11px] text-neutral-400">بعد التحويل: المصدر {money(sourceBalance - (Number(amount) || 0))} — المستلم {money(destinationBalance + (Number(amount) || 0))}</div>
+        <button type="submit" className="h-10 px-5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-black">تنفيذ التحويل وترحيل القيد</button>
+      </div>
+    </form>
   );
 };
