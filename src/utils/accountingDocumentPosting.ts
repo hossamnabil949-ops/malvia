@@ -61,7 +61,9 @@ export function prepareAccountingDocumentPosting(request: AccountingPostingReque
   const { kind, document, context, accounts, periods, existingEntries, actor, createdAt } = request;
   const date = kind === 'sales.invoice-void'
     ? (document as Invoice).voidedAt?.slice(0, 10) || ''
-    : ('paymentDate' in document ? document.paymentDate : ('date' in document ? document.date : ''));
+    : kind === 'purchase.invoice' && (document as PurchaseInvoice).receiptStatus === 'received'
+      ? (document as PurchaseInvoice).receivedAt?.slice(0, 10) || (document as PurchaseInvoice).date
+      : ('paymentDate' in document ? document.paymentDate : ('date' in document ? document.date : ''));
   if (kind === 'purchase.invoice') {
     const purchase = document as PurchaseInvoice;
     if (purchase.receiptStatus === 'pending') return { status: 'skipped', entry: null, error: null, reason: 'PURCHASE_NOT_RECEIVED' };
