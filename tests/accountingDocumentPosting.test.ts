@@ -36,6 +36,37 @@ assert.equal(namedWalletTransfer.status, 'posted');
 if (namedWalletTransfer.status !== 'posted') throw new Error('named wallet transfer was not posted');
 assert.equal(namedWalletTransfer.entry.lines.find(line => line.accountId === namedWalletAccount.id)?.credit, 75);
 
+const namedBankAccount: any = {
+  ...accounts[0], id: context.tenantId + ':MAIN:bank:BK-1',
+  code: '101-001', name: 'البنك — حساب تجريبي',
+  systemKey: 'bank:BK-1',
+};
+const cashToBank = prepareAccountingDocumentPosting({
+  ...request,
+  kind: 'finance.account-transfer',
+  accounts: [...accounts, namedBankAccount],
+  document: { id: 'MOVE-CASH-BANK-1', date: '2026-11-25', amount: 500,
+    sourceMethod: 'نقدي', destinationMethod: 'تحويل بنكي / حساب بنكي',
+    destinationBankAccountId: 'BK-1' },
+});
+assert.equal(cashToBank.status, 'posted');
+if (cashToBank.status !== 'posted') throw new Error('cash to bank transfer was not posted');
+assert.equal(cashToBank.entry.lines.find(line => line.accountId === accounts.find(a => a.systemKey === 'cash')?.id)?.credit, 500);
+assert.equal(cashToBank.entry.lines.find(line => line.accountId === namedBankAccount.id)?.debit, 500);
+
+const instaPayToBank = prepareAccountingDocumentPosting({
+  ...request,
+  kind: 'finance.account-transfer',
+  accounts: [...accounts, namedBankAccount],
+  document: { id: 'MOVE-INSTAPAY-BANK-1', date: '2026-11-25', amount: 200,
+    sourceMethod: 'إنستاباي - حساب بنكي', destinationMethod: 'نقدي',
+    sourceBankAccountId: 'BK-1' },
+});
+assert.equal(instaPayToBank.status, 'posted');
+if (instaPayToBank.status !== 'posted') throw new Error('InstaPay bank-routed transfer was not posted');
+assert.equal(instaPayToBank.entry.lines.find(line => line.accountId === namedBankAccount.id)?.credit, 200);
+assert.equal(instaPayToBank.entry.lines.find(line => line.accountId === accounts.find(a => a.systemKey === 'cash')?.id)?.debit, 200);
+
 const cashToWallet = prepareAccountingDocumentPosting({
   ...request,
   kind: 'finance.account-transfer',
