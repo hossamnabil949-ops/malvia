@@ -1967,7 +1967,10 @@ export default function App() {
       window.alert('تعذّر حفظ فاتورة المشتريات: راجع المورد والكميات والتكلفة، وتأكد أن المدفوع لا يتجاوز إجمالي الفاتورة.');
       return false;
     }
-    if (purchaseInvoices.some(existing => existing.id === invoice.id || existing.invoiceNumber === invoice.invoiceNumber)) {
+    const sameInvoice = purchaseInvoices.find(existing => existing.id === invoice.id);
+    const duplicateNumber = purchaseInvoices.find(existing => existing.invoiceNumber === invoice.invoiceNumber && existing.id !== invoice.id);
+    const isPendingReceiptTransition = sameInvoice?.receiptStatus === 'pending' && invoice.receiptStatus === 'received';
+    if ((sameInvoice && !isPendingReceiptTransition) || duplicateNumber) {
       window.alert('فاتورة المشتريات مسجلة بالفعل؛ تم إيقاف العملية لمنع التكرار.');
       return false;
     }
@@ -1976,7 +1979,7 @@ export default function App() {
       return false;
     }
     if (invoice.receiptStatus === 'pending') {
-      const nextPending = [invoice, ...purchaseInvoices];
+      const nextPending = [invoice, ...purchaseInvoices.filter(existing => existing.id !== invoice.id)];
       if (!persistChanges({ purchaseInvoices: nextPending })) return false;
       setPurchaseInvoices(nextPending);
       return true;
@@ -2014,7 +2017,7 @@ export default function App() {
 
     if (!postAccountingDocument('purchase.invoice', invoice)) return false;
     setPurchaseInvoices(prev => {
-      const updated = [invoice, ...prev];
+      const updated = [invoice, ...prev.filter(existing => existing.id !== invoice.id)];
       persistChanges({ purchaseInvoices: updated });
       return updated;
     });
@@ -2158,6 +2161,19 @@ export default function App() {
     }
     return true;
   };
+  const handleReceivePurchaseInvoice = (invoiceId: string): boolean => {
+    const pending = purchaseInvoices.find(invoice => invoice.id === invoiceId);
+    if (!pending || pending.receiptStatus !== 'pending') return false;
+    const receivedAt = new Date().toISOString();
+    return handleAddPurchaseInvoice({
+      ...pending,
+      receiptStatus: 'received',
+      receivedAt,
+      receivedById: currentUser?.employeeId,
+      receivedBy: currentUser?.employeeName || pending.receivedBy,
+    });
+  };
+
   const handleAddPurchaseReturn = (purchaseReturn: PurchaseReturn) => {
     const supplier = suppliers.find(s => s.id === purchaseReturn.supplierId);
     const originalInvoice = purchaseInvoices.find(i => i.id === purchaseReturn.purchaseInvoiceId);
@@ -3151,6 +3167,7 @@ export default function App() {
             parts={parts}
             treasuryBalance={treasuryBalance}
             onAddPurchaseInvoice={handleAddPurchaseInvoice}
+            onReceivePurchaseInvoice={handleReceivePurchaseInvoice}
             bankAccounts={bankAccounts}
             onPurchaseReturn={handleAddPurchaseReturn}
             onDeletePurchaseReturn={handleDeletePurchaseReturn}
