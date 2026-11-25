@@ -368,6 +368,15 @@ export function buildFinancialStatements(
   const totalRevenue = roundCurrency(revenueLines.reduce((sum, line) => sum + line.amount, 0));
   const totalExpenses = roundCurrency(expenseLines.reduce((sum, line) => sum + line.amount, 0));
   const netIncome = roundCurrency(totalRevenue - totalExpenses);
+  const cumulativeIncomeNet = new Map<string, number>();
+  for (const entry of scopedEntries) for (const line of entry.lines) {
+    cumulativeIncomeNet.set(line.accountId, (cumulativeIncomeNet.get(line.accountId) || 0) + line.credit - line.debit);
+  }
+  const cumulativeRevenue = roundCurrency(scopedAccounts.filter(a => a.type === 'revenue')
+    .reduce((sum, account) => sum + (cumulativeIncomeNet.get(account.id) || 0), 0));
+  const cumulativeExpenses = roundCurrency(scopedAccounts.filter(a => a.type === 'expense')
+    .reduce((sum, account) => sum - (cumulativeIncomeNet.get(account.id) || 0), 0));
+  const cumulativeEarnings = roundCurrency(cumulativeRevenue - cumulativeExpenses);
   const balanceNet = new Map<string, number>();
   for (const entry of scopedEntries) for (const line of entry.lines) {
     balanceNet.set(line.accountId, (balanceNet.get(line.accountId) || 0) + line.debit - line.credit);
@@ -410,7 +419,7 @@ export function buildFinancialStatements(
   return {
     income: { revenueLines, expenseLines, totalRevenue, totalExpenses, netIncome },
     balance: { assetLines, liabilityLines, equityLines, totalAssets, totalLiabilities, totalEquity,
-      currentPeriodEarnings: netIncome, liabilitiesAndEquity, difference: roundCurrency(totalAssets - liabilitiesAndEquity) },
+      currentPeriodEarnings: cumulativeEarnings, liabilitiesAndEquity, difference: roundCurrency(totalAssets - liabilitiesAndEquity) },
     cashFlow: { openingCash, ...flows, netChange, closingCash: roundCurrency(openingCash + netChange) },
   };
 }
