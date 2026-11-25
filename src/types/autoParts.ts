@@ -503,6 +503,14 @@ export interface PurchaseInvoice {
   notes?: string;
   receivedBy: string;
   returnedAmount?: number;
+  /** Explicit goods-receipt lifecycle. Missing on legacy records is treated as received for compatibility. */
+  receiptStatus?: 'pending' | 'received' | 'cancelled';
+  receivedAt?: string;
+  receivedById?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancellationReason?: string;
+  cancellationApprovedBy?: string;
 }
 
 export type PurchaseRequisitionStatus = 'DRAFT' | 'APPROVED' | 'SENT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED';
