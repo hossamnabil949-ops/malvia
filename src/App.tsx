@@ -2174,6 +2174,25 @@ export default function App() {
     });
   };
 
+  const handleCancelPendingPurchaseInvoice = (invoiceId: string): boolean => {
+    const pending = purchaseInvoices.find(invoice => invoice.id === invoiceId);
+    if (!pending || pending.receiptStatus !== 'pending') return false;
+    const cancelled = {
+      ...pending, receiptStatus: 'cancelled' as const,
+      cancelledAt: new Date().toISOString(),
+      cancelledBy: currentUser?.employeeName || 'مستخدم النظام',
+      cancellationReason: 'إلغاء قبل استلام البضاعة',
+      cancellationApprovedBy: currentUser?.employeeName || 'مستخدم النظام',
+    };
+    const updated = purchaseInvoices.map(invoice => invoice.id === invoiceId ? cancelled : invoice);
+    if (!persistChanges({ purchaseInvoices: updated })) {
+      window.alert('تعذر حفظ إلغاء طلب الشراء.');
+      return false;
+    }
+    setPurchaseInvoices(updated);
+    return true;
+  };
+
   const handleAddPurchaseReturn = (purchaseReturn: PurchaseReturn) => {
     const supplier = suppliers.find(s => s.id === purchaseReturn.supplierId);
     const originalInvoice = purchaseInvoices.find(i => i.id === purchaseReturn.purchaseInvoiceId);
@@ -3168,6 +3187,7 @@ export default function App() {
             treasuryBalance={treasuryBalance}
             onAddPurchaseInvoice={handleAddPurchaseInvoice}
             onReceivePurchaseInvoice={handleReceivePurchaseInvoice}
+            onCancelPendingPurchaseInvoice={handleCancelPendingPurchaseInvoice}
             bankAccounts={bankAccounts}
             onPurchaseReturn={handleAddPurchaseReturn}
             onDeletePurchaseReturn={handleDeletePurchaseReturn}
