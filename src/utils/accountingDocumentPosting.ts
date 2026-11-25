@@ -68,6 +68,7 @@ export function prepareAccountingDocumentPosting(request: AccountingPostingReque
     ? (document as Invoice).voidedAt?.slice(0, 10) || ''
     : kind === 'purchase.invoice' && (document as PurchaseInvoice).receiptStatus === 'received'
       ? (document as PurchaseInvoice).receivedAt?.slice(0, 10) || (document as PurchaseInvoice).date
+      : kind === 'bank.card-settlement' ? (document as CardSettlementBatch).settlementDate
       : kind === 'cheque.register' ? (document as Cheque).receivedDate
       : kind === 'cheque.lifecycle' ? request.chequeLifecycle?.eventDate || ''
       : ('paymentDate' in document ? document.paymentDate : ('date' in document ? document.date : ''));
