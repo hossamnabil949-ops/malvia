@@ -559,6 +559,39 @@ export function buildPurchaseInvoiceVoidJournal(
     lines, createdAt, createdBy));
 }
 
+
+/** Transfer value between any two configured liquid-asset rails without creating income or expense. */
+export function buildLiquidAccountTransferJournal(
+  movement: {
+    id: string; date: string; amount: number;
+    sourceMethod: string; destinationMethod: string;
+    sourceBankAccountId?: string; destinationBankAccountId?: string;
+    reference?: string;
+  },
+  context: AccountingContext, periodId: string, createdAt: string, createdBy: string,
+  accounts: SourceAccountMap,
+): SourceAdapterResult {
+  if (!movement.id?.trim()) return fail('SOURCE_ID_REQUIRED');
+  if (!validDate(movement.date)) return fail('SOURCE_DATE_INVALID');
+  if (!Number.isFinite(movement.amount) || movement.amount <= 0) return fail('SOURCE_AMOUNT_INVALID');
+  let source: string | undefined;
+  let destination: string | undefined;
+  try {
+    source = accounts.settlementAccount(movement.sourceMethod, movement.sourceBankAccountId);
+    destination = accounts.settlementAccount(movement.destinationMethod, movement.destinationBankAccountId);
+  } catch { return fail('PAYMENT_METHOD_UNSUPPORTED'); }
+  if (!source || !destination) return fail('ACCOUNT_MAPPING_MISSING');
+  if (source === destination) return fail('SOURCE_AMOUNT_INVALID');
+  const amount = r2(movement.amount);
+  const lines: JournalLine[] = [];
+  if (!addLine(lines, destination, amount, 0, 'تحويل وارد إلى ' + movement.destinationMethod)
+    || !addLine(lines, source, 0, amount, 'تحويل صادر من ' + movement.sourceMethod)) {
+    return fail('ACCOUNT_MAPPING_MISSING');
+  }
+  return ok(baseInput(context, 'finance.account-transfer', movement.id, movement.date, periodId,
+    'تحويل بين وسائل مالية — ' + (movement.reference || movement.id), lines, createdAt, createdBy));
+}
+
 /** Cash deposited to a bank moves assets from cash to bank; withdrawal moves them back. */
 export function buildCashBankMovementJournal(
   movement: {
