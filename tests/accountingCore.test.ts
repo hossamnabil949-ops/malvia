@@ -8,6 +8,11 @@ import {
 
 const context: AccountingContext = { tenantId: 'tenant-a', branchId: 'branch-1', currency: 'EGP' };
 const accounts: LedgerAccount[] = createDefaultChartOfAccounts(context);
+assert.equal(new Set(accounts.map(account => account.systemKey)).size, accounts.length,
+  'default chart must not define duplicate system account keys');
+assert.ok(accounts.some(account => account.systemKey === 'wallet-clearing'));
+assert.ok(accounts.some(account => account.systemKey === 'instapay-clearing'));
+
 const cashId = context.tenantId + ':' + context.branchId + ':cash';
 const salesId = context.tenantId + ':' + context.branchId + ':sales';
 const vatId = context.tenantId + ':' + context.branchId + ':vat-output';
