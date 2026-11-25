@@ -80,6 +80,7 @@ import type { LedgerAccount, AccountingPeriod, JournalEntry } from '../utils/acc
 import { getPartnerCurrentAccountBalance } from '../utils/partnerCurrentAccount';
 import type { OpeningBalanceRecord } from '../utils/openingBalanceLogic';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from '../utils/bankLedger';
+import { summarizeBankAccount } from '../utils/bankLedger';
 import { paymentAccountOf, requiresSpecificBankAccount } from '../utils/paymentMethods';
 
 interface FinanceViewProps {
@@ -142,6 +143,8 @@ interface FinanceViewProps {
   canManageAccounting?: boolean;
   onSaveAccounting?: (updates: { accounts?: LedgerAccount[]; periods?: AccountingPeriod[]; entries?: JournalEntry[] }) => boolean;
 }
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const PAYMENT_COLORS: Record<string, string> = {
   'نقدي': '#10b981',
