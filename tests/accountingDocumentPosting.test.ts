@@ -128,6 +128,42 @@ const chequeClear = prepareAccountingDocumentPosting({
 });
 assert.equal(chequeClear.status, 'posted');
 
+const purchaseVoidResult = prepareAccountingDocumentPosting({
+  ...request,
+  kind: 'purchase.invoice-void',
+  document: purchase,
+  purchaseInvoiceCancellation: {
+    id: 'PUR-1:VOID-1', date: '2026-11-25', reason: 'فاتورة مكررة', approvedBy: 'GM',
+    cashRefund: 0, supplierAdvanceRestored: 0, payableReleased: 40,
+  },
+});
+assert.equal(purchaseVoidResult.status, 'posted');
+if (purchaseVoidResult.status !== 'posted') throw new Error('purchase invoice void was not posted');
+assert.equal(purchaseVoidResult.entry.source.type, 'purchase.invoice-void');
+assert.equal(purchaseVoidResult.entry.lines.find(line => line.accountId === accounts.find(a => a.systemKey === 'inventory')?.id)?.credit, 40);
+
+const cashDepositResult = prepareAccountingDocumentPosting({
+  ...request,
+  kind: 'bank.cash-movement',
+  document: { id: 'CASH-BANK-1', date: '2026-11-25', direction: 'deposit', amount: 250, bankAccountId: 'B1', reference: 'DEP-1' },
+  accounts: bankAccounts,
+});
+assert.equal(cashDepositResult.status, 'posted');
+if (cashDepositResult.status !== 'posted') throw new Error('cash deposit was not posted');
+assert.equal(cashDepositResult.entry.lines.find(line => line.accountId === 'GL-B1')?.debit, 250);
+assert.equal(cashDepositResult.entry.lines.find(line => line.accountId === accounts.find(a => a.systemKey === 'cash')?.id)?.credit, 250);
+
+const cashWithdrawalResult = prepareAccountingDocumentPosting({
+  ...request,
+  kind: 'bank.cash-movement',
+  document: { id: 'CASH-BANK-2', date: '2026-11-25', direction: 'withdrawal', amount: 80, bankAccountId: 'B1' },
+  accounts: bankAccounts,
+});
+assert.equal(cashWithdrawalResult.status, 'posted');
+if (cashWithdrawalResult.status !== 'posted') throw new Error('cash withdrawal was not posted');
+assert.equal(cashWithdrawalResult.entry.lines.find(line => line.accountId === 'GL-B1')?.credit, 80);
+assert.equal(cashWithdrawalResult.entry.lines.find(line => line.accountId === accounts.find(a => a.systemKey === 'cash')?.id)?.debit, 80);
+
 const noPeriod = prepareAccountingDocumentPosting({ ...request, periods: [] });
 assert.equal(noPeriod.status, 'failed');
 if (noPeriod.status !== 'failed') throw new Error('missing period should fail closed');
