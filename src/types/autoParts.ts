@@ -156,7 +156,7 @@ export interface InvoiceSettlement {
 export type AuditAction =
   | 'invoice.create' | 'invoice.price_override' | 'invoice.discount' | 'invoice.void'
   | 'sales_return.create' | 'sales_return.delete'
-  | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
+  | 'purchase.create' | 'purchase.cancel' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
   | 'stock.adjust' | 'part.restock' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'cheque.create' | 'cheque.action' | 'batch.create' | 'batch.writeoff' | 'serial.register' | 'serial.scrap' | 'stock.transfer' | 'supplier.payment'
   | 'shift.open' | 'shift.close' | 'shift.variance' | 'part.delete' | 'part.update'
   | 'partner.add' | 'partner.share.update' | 'partner.capital.add' | 'partner.profit.reinvest' | 'partner.profile.update' | 'partner.withdrawal' | 'partner.advance' | 'partner.exit' | 'partner.settlement.payment' | 'partner.current_account' | 'bank.settlement' | 'bank.transfer' | 'capital.opening.create'
