@@ -48,7 +48,14 @@ import {
 } from './types/autoParts';
 import type { OpeningBalanceRecord } from './utils/openingBalanceLogic';
 import { createDefaultChartOfAccounts, createJournalEntry } from './utils/accountingCore';
+import { createDefaultChartOfAccounts, createJournalEntry, makeSourceKey } from './utils/accountingCore';
 import type { LedgerAccount, AccountingPeriod, JournalEntry } from './utils/accountingCore';
+import {
+  buildSalesInvoiceJournal, buildInvoiceVoidJournal, buildPurchaseInvoiceJournal,
+  buildSalesReturnJournal, buildPurchaseReturnJournal, buildExpenseJournal,
+} from './utils/accountingSourceAdapters';
+import type { SourceAccountMap, SourceAdapterResult } from './utils/accountingSourceAdapters';
+import { paymentAccountOf } from './utils/paymentMethods';
 import { buildSalesInvoiceJournal, buildInvoiceVoidJournal, buildPurchaseInvoiceJournal, buildSalesReturnJournal, buildPurchaseReturnJournal } from './utils/accountingSourceAdapters';
 import type { SourceAccountMap, SourceAdapterResult } from './utils/accountingSourceAdapters';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
@@ -407,6 +414,84 @@ export default function App() {
     if (!activeTenantId) return false;
     return saveTenantStoreData(activeTenantId, updates);
   }, [activeTenantId]);
+  // ترحيل محاسبي مركزي: نفس مصدر المستند ونفس postingId يمنعان إنشاء قيد مكرر.
+  const postAccountingSource = (
+    date: string,
+    build: (context: { tenantId: string; branchId: string; currency: string }, periodId: string,
+      createdAt: string, createdBy: string, map: SourceAccountMap) => SourceAdapterResult,
+  ): boolean => {
+    const tenantId = activeTenant?.tenantId || '';
+    if (!tenantId || !/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) return false;
+    const context = { tenantId, branchId: 'MAIN', currency: 'EGP' };
+    const defaults = createDefaultChartOfAccounts(context);
+    const currentAccounts = accountingAccounts.filter(a => a.tenantId === tenantId && a.branchId === 'MAIN');
+    const accounts = [...currentAccounts];
+    for (const account of defaults) {
+      if (!accounts.some(existing => existing.systemKey === account.systemKey)) accounts.push(account);
+    }
+    let periods = accountingPeriods.filter(p => p.tenantId === tenantId && p.branchId === 'MAIN' && p.currency.toUpperCase() === 'EGP');
+    if (!periods.length) {
+      const year = date.slice(0, 4);
+      periods = [{ ...context, id: 'FY-' + year, name: 'السنة المالية ' + year,
+        startDate: year + '-01-01', endDate: year + '-12-31', status: 'open' }];
+    }
+    const period = periods.find(p => p.status === 'open' && p.startDate <= date && p.endDate >= date);
+    if (!period) {
+      window.alert('تعذر الترحيل المحاسبي: لا توجد فترة مالية مفتوحة تغطي تاريخ المستند. لم يتم اعتماد العملية.');
+      return false;
+    }
+    const id = (key: string) => accounts.find(a => a.systemKey === key)?.id;
+    const map: SourceAccountMap = {
+      sales: id('sales') || '', outputVat: id('vat-output') || '', receivables: id('receivables') || '',
+      costOfGoodsSold: id('cost-of-goods-sold') || '', inventory: id('inventory') || '',
+      operatingExpenses: id('operating-expenses') || '', inputVat: id('vat-input') || '',
+      visaClearing: id('card-clearing') || '', bankFees: id('bank-fees') || '',
+      payables: id('payables') || '', supplierAdvances: id('supplier-advances') || '',
+      salesReturns: id('sales-returns'), chequesReceivable: id('cheques-receivable'),
+      chequesPayable: id('cheques-payable'), partnerCurrentAccount: id('partner-current-account') || '',
+      settlementAccount: (method: string, bankAccountId?: string) => {
+        const rail = paymentAccountOf(method);
+        if (rail === 'credit') return id('receivables');
+        if (rail === 'cash') return id('cash');
+        if (rail === 'visa') return id('card-clearing');
+        if (rail === 'wallet') return id('wallet-clearing');
+        if (rail === 'instapay') return id('instapay-clearing');
+        if (rail === 'bank') return bankAccountId && bankAccounts.some(account => account.id === bankAccountId)
+          ? id('bank') : undefined;
+        return undefined;
+      },
+    };
+    const required = [map.sales, map.outputVat, map.receivables, map.costOfGoodsSold, map.inventory,
+      map.operatingExpenses, map.inputVat, map.visaClearing, map.bankFees, map.payables,
+      map.supplierAdvances, map.partnerCurrentAccount];
+    if (required.some(value => !value)) {
+      window.alert('تعذر الترحيل: دليل الحسابات لا يحتوي كل الحسابات النظامية المطلوبة.');
+      return false;
+    }
+    const createdAt = new Date().toISOString();
+    const createdBy = currentUser?.employeeName || 'النظام';
+    const adapted = build(context, period.id, createdAt, createdBy, map);
+    if (adapted.error || !adapted.input) {
+      window.alert('تعذر اعتماد المستند محاسبياً (' + (adapted.error || 'UNKNOWN') + '). لم يتم اعتماد العملية.');
+      return false;
+    }
+    const sourceKey = makeSourceKey(context, adapted.input.source, adapted.input.postingId);
+    if (accountingJournalEntries.some(entry => entry.sourceKey === sourceKey)) return true;
+    const result = createJournalEntry(adapted.input, accounts, periods, accountingJournalEntries);
+    if (result.error || !result.entry) {
+      window.alert('فشل التحقق من القيد المحاسبي (' + (result.error || 'UNKNOWN') + '). لم يتم اعتماد العملية.');
+      return false;
+    }
+    const nextEntries = [...accountingJournalEntries, result.entry];
+    if (!persistChanges({ accountingAccounts: accounts, accountingPeriods: periods, accountingJournalEntries: nextEntries })) {
+      window.alert('تعذر حفظ القيد المحاسبي. لم يتم اعتماد العملية.');
+      return false;
+    }
+    setAccountingAccounts(accounts);
+    setAccountingPeriods(periods);
+    setAccountingJournalEntries(nextEntries);
+    return true;
+  };
 
   // سجل التدقيق: من فعل ماذا ومتى (يمنع التلاعب ويكشفه)
   const logAudit = (action: AuditEntry['action'], summary: string, entityId?: string, amount?: number) => {
