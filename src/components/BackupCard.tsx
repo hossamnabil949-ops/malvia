@@ -12,7 +12,7 @@ export const BackupCard: React.FC<BackupCardProps> = ({ tenantId, licenseKey, co
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const [inspection, setInspection] = useState<{ fileName: string; exportedAt: string; company?: string; tenantId?: string; source?: string; resources: Array<{ name: string; count: number }>; total: number; warnings: string[] } | null>(null);
+  const [inspection, setInspection] = useState<{ fileName: string; exportedAt: string; company?: string; tenantId?: string; source?: string; backupId?: number; backupKind?: string; resources: Array<{ name: string; count: number }>; total: number; warnings: string[] } | null>(null);
   const [inspectError, setInspectError] = useState<string | null>(null);
 
   const handleInspectFile = async (file?: File) => {
@@ -29,6 +29,14 @@ export const BackupCard: React.FC<BackupCardProps> = ({ tenantId, licenseKey, co
       if (!parsed || parsed.app !== 'MALVIA' || !Number.isInteger(parsed.format) || !parsed.docs || typeof parsed.docs !== 'object' || Array.isArray(parsed.docs)) {
         throw new Error('صيغة الملف لا تطابق نسخة MALVIA الاحتياطية المعروفة.');
       }
+
+      // Owner downloads use the backup-record envelope: tenant / created_at / kind / backupId.
+      // Shop exports use tenantId / exportedAt / company / source. Both contain docs.
+      const isOwnerBackup = typeof parsed.tenant === 'string' && parsed.tenant.length > 0 && Number.isInteger(Number(parsed.backupId));
+      const tenant = typeof parsed.tenantId === 'string' && parsed.tenantId ? parsed.tenantId : isOwnerBackup ? parsed.tenant : undefined;
+      const exportedAt = parsed.exportedAt || (isOwnerBackup ? parsed.created_at : undefined) || 'غير محدد';
+      const source = parsed.source || (isOwnerBackup ? 'نسخة محفوظة من شاشة المالك' : undefined);
+
       const resources = Object.entries(parsed.docs).map(([name, entry]: [string, any]) => {
         if (!entry || typeof entry !== 'object' || !Object.prototype.hasOwnProperty.call(entry, 'data')) {
           throw new Error('القسم ' + name + ' لا يحتوي على حقل البيانات المتوقع.');
@@ -37,12 +45,26 @@ export const BackupCard: React.FC<BackupCardProps> = ({ tenantId, licenseKey, co
         const count = Array.isArray(data) ? data.length : data && typeof data === 'object' ? Object.keys(data).length : data == null ? 0 : 1;
         return { name, count };
       }).sort((a, b) => a.name.localeCompare(b.name));
+
       const warnings: string[] = [];
       if (parsed.format !== 1) warnings.push('إصدار تنسيق النسخة مختلف عن الإصدار المعروف (1)، يلزم التحقق من التوافق.');
-      if (parsed.tenantId && tenantId && parsed.tenantId !== tenantId) warnings.push('النسخة تخص معرف محل مختلف عن المحل المفتوح حاليًا. لن يتم استيرادها.');
-      if (!parsed.tenantId) warnings.push('النسخة لا تحتوي على معرف محل؛ يلزم التحقق من مصدرها قبل أي استيراد.');
+      if (!tenant) warnings.push('لم يتم العثور على معرف المحل داخل الملف.');
+      if (tenant && tenantId && tenant !== tenantId) warnings.push('النسخة تخص معرف محل مختلف عن المحل المفتوح حاليًا. لن يتم استيرادها.');
+      if (isOwnerBackup && !parsed.company) warnings.push('نسخة المالك لا تتضمن اسم الشركة؛ تم التعرف على المحل من معرفه الداخلي فقط. طابقه مع المحل المحدد في شاشة المالك.');
       if (parsed.source === 'device') warnings.push('هذه نسخة محلية من الجهاز وقد لا تشمل أحدث بيانات السحابة.');
-      setInspection({ fileName: file.name, exportedAt: parsed.exportedAt || 'غير محدد', company: parsed.company, tenantId: parsed.tenantId, source: parsed.source, resources, total: resources.reduce((sum, item) => sum + item.count, 0), warnings });
+
+      setInspection({
+        fileName: file.name,
+        exportedAt,
+        company: parsed.company,
+        tenantId: tenant,
+        source,
+        backupId: isOwnerBackup ? Number(parsed.backupId) : undefined,
+        backupKind: isOwnerBackup ? parsed.kind : undefined,
+        resources,
+        total: resources.reduce((sum, item) => sum + item.count, 0),
+        warnings,
+      });
     } catch (error: any) {
       setInspectError(error?.message || 'تعذر قراءة ملف النسخة الاحتياطية.');
     }
@@ -124,6 +146,8 @@ export const BackupCard: React.FC<BackupCardProps> = ({ tenantId, licenseKey, co
               <div>تاريخ التصدير: <b>{inspection.exportedAt}</b></div>
               <div>المصدر: <b>{inspection.source || 'غير محدد'}</b></div>
               <div>معرف المحل: <b className="break-all">{inspection.tenantId || 'غير موجود'}</b></div>
+              {inspection.backupId !== undefined && <div>رقم النسخة: <b>#{inspection.backupId}</b></div>}
+              {inspection.backupKind && <div>نوع النسخة: <b>{inspection.backupKind === 'manual' ? 'يدوية' : inspection.backupKind === 'auto' ? 'تلقائية يومية' : inspection.backupKind}</b></div>}
             </div>
             <div className="max-h-56 overflow-auto rounded-lg border border-neutral-800">
               <table className="w-full text-xs text-right">
