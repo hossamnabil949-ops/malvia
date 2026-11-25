@@ -12,7 +12,7 @@ import type { VoidPlan } from './saleLogic';
 export type SourceAdapterError =
   | 'SOURCE_ID_REQUIRED' | 'SOURCE_DATE_INVALID' | 'SOURCE_AMOUNT_INVALID'
   | 'INVOICE_CANCELLED' | 'INVOICE_TOTAL_MISMATCH' | 'PAYMENT_TOTAL_MISMATCH'
-  | 'PAYMENT_METHOD_UNSUPPORTED' | 'ACCOUNT_MAPPING_MISSING' | 'CHEQUE_LIFECYCLE_INVALID' | 'INVOICE_VOID_INVALID' | 'PURCHASE_INVOICE_VOID_INVALID'
+  | 'PAYMENT_METHOD_UNSUPPORTED' | 'ACCOUNT_MAPPING_MISSING' | 'CHEQUE_LIFECYCLE_INVALID' | 'INVOICE_VOID_INVALID' | 'PURCHASE_INVOICE_VOID_INVALID' | 'PURCHASE_NOT_RECEIVED' | 'PURCHASE_CANCELLED'
   | 'COST_BASIS_MISSING' | 'INVOICE_LINES_INVALID' | 'TAX_DETAIL_MISSING';
 
 export interface SourceAdapterResult {
@@ -272,6 +272,8 @@ export function buildPurchaseInvoiceJournal(
   accounts: SourceAccountMap, supplierCreditApplied = Number((invoice as PurchaseInvoice & { supplierCreditApplied?: number }).supplierCreditApplied ?? 0),
 ): SourceAdapterResult {
   if (!invoice.id?.trim()) return fail('SOURCE_ID_REQUIRED');
+  if (invoice.receiptStatus === 'cancelled') return fail('PURCHASE_CANCELLED');
+  if (invoice.receiptStatus === 'pending') return fail('PURCHASE_NOT_RECEIVED');
   if (!validDate(invoice.date)) return fail('SOURCE_DATE_INVALID');
   if (!invoice.items?.length || invoice.items.some(item => !Number.isFinite(item.quantity) || item.quantity <= 0
     || !validAmount(item.costPrice) || !validAmount(item.total))) return fail('INVOICE_LINES_INVALID');
@@ -441,6 +443,8 @@ export function buildPurchaseReturnJournal(
   if (!purchaseReturn.id?.trim()) return fail('SOURCE_ID_REQUIRED');
   if (!validDate(purchaseReturn.date) || !validDate(originalInvoice.date)) return fail('SOURCE_DATE_INVALID');
   if (purchaseReturn.purchaseInvoiceId !== originalInvoice.id) return fail('INVOICE_CANCELLED');
+  if (originalInvoice.receiptStatus === 'pending') return fail('PURCHASE_NOT_RECEIVED');
+  if (originalInvoice.receiptStatus === 'cancelled') return fail('PURCHASE_CANCELLED');
   if (!validAmount(originalInvoice.tax) || originalInvoice.tax > 0.005) return fail('TAX_DETAIL_MISSING');
   if (!Number.isFinite(purchaseReturn.totalReturnAmount) || purchaseReturn.totalReturnAmount <= 0
     || purchaseReturn.totalReturnAmount > originalInvoice.grandTotal - (originalInvoice.returnedAmount || 0) + 0.01
@@ -507,6 +511,8 @@ export function buildPurchaseInvoiceVoidJournal(
   accounts: SourceAccountMap,
 ): SourceAdapterResult {
   if (!invoice.id?.trim() || !cancellation.id?.trim()) return fail('SOURCE_ID_REQUIRED');
+  if (invoice.receiptStatus === 'pending') return fail('PURCHASE_NOT_RECEIVED');
+  if (invoice.receiptStatus === 'cancelled') return fail('PURCHASE_CANCELLED');
   if (!validDate(invoice.date) || !validDate(cancellation.date)) return fail('SOURCE_DATE_INVALID');
   if (!cancellation.reason?.trim() || !cancellation.approvedBy?.trim()) return fail('PURCHASE_INVOICE_VOID_INVALID');
   if (![invoice.subtotal, invoice.discount, invoice.tax, invoice.grandTotal, invoice.amountPaid,
