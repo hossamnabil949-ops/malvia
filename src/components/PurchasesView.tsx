@@ -57,6 +57,7 @@ interface PurchasesViewProps {
   parts: AutoPart[];
   treasuryBalance: number;
   onAddPurchaseInvoice: (invoice: PurchaseInvoice) => void;
+  onReceivePurchaseInvoice?: (invoiceId: string) => boolean;
   serialUnits?: SerialUnit[]; // لمنع تكرار الأرقام التسلسلية عند التوريد
   warehouses?: import('../types/autoParts').Warehouse[]; // لو فيه مخازن/فروع يظهر اختيار «استلام في مخزن»
   onEditPurchaseInvoice?: (invoice: PurchaseInvoice) => void;
@@ -80,6 +81,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   parts = [],
   treasuryBalance,
   onAddPurchaseInvoice,
+  onReceivePurchaseInvoice,
   warehouses = [],
   serialUnits = [],
   onEditPurchaseInvoice,
@@ -853,7 +855,11 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                           )}
                         </td>
                         <td className="p-3.5">
-                          {hasReturn ? (
+                          {inv.receiptStatus === 'pending' ? (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold">بانتظار استلام البضاعة — غير مرحّلة</span>
+                          ) : inv.receiptStatus === 'cancelled' ? (
+                            <span className="px-2 py-0.5 rounded-full bg-neutral-700 text-neutral-300 text-[10px] font-bold">ملغاة — غير مرحّلة</span>
+                          ) : hasReturn ? (
                             <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold">
                               {inv.grandTotal === 0 ? 'مرتجع كلي' : 'مرتجع جزئي'}
                             </span>
@@ -873,6 +879,15 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                         </td>
                         <td className="p-3.5 text-center">
                           <div className="flex items-center justify-center gap-1.5">
+                            {inv.receiptStatus === 'pending' && onReceivePurchaseInvoice && <button
+                              onClick={() => {
+                                if (window.confirm('تأكيد استلام جميع أصناف الفاتورة؟ سيتم تحديث المخزون وأرصدة المورد وترحيل القيد المحاسبي مرة واحدة.')) {
+                                  onReceivePurchaseInvoice(inv.id);
+                                }
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold"
+                              title="تأكيد الاستلام وترحيل الفاتورة محاسبياً مرة واحدة"
+                            >تأكيد الاستلام</button>}
                             {!canReceiveOnly && <button
                               onClick={() => handleOpenReturnModal(inv)}
                               className="px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all flex items-center gap-1"
