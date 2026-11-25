@@ -57,6 +57,7 @@ interface PurchasesViewProps {
   parts: AutoPart[];
   treasuryBalance: number;
   onAddPurchaseInvoice: (invoice: PurchaseInvoice) => void;
+  onReceivePurchaseInvoice?: (invoiceId: string) => boolean;
   serialUnits?: SerialUnit[]; // لمنع تكرار الأرقام التسلسلية عند التوريد
   warehouses?: import('../types/autoParts').Warehouse[]; // لو فيه مخازن/فروع يظهر اختيار «استلام في مخزن»
   onEditPurchaseInvoice?: (invoice: PurchaseInvoice) => void;
@@ -80,6 +81,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   parts = [],
   treasuryBalance,
   onAddPurchaseInvoice,
+  onReceivePurchaseInvoice,
   warehouses = [],
   serialUnits = [],
   onEditPurchaseInvoice,
@@ -875,7 +877,18 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                         </td>
                         <td className="p-3.5 text-center">
                           <div className="flex items-center justify-center gap-1.5">
-                            {!canReceiveOnly && <button
+                            {inv.receiptStatus === 'pending' && onReceivePurchaseInvoice && (
+                              <button
+                                onClick={() => {
+                                  const ok = onReceivePurchaseInvoice(inv.id);
+                                  if (ok) window.alert('تم تأكيد استلام البضاعة وترحيل الفاتورة محاسبياً وتحديث المخزون.');
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold"
+                                title="تأكيد استلام البضاعة وترحيل الفاتورة">
+                                تأكيد الاستلام
+                              </button>
+                            )}
+                            {!canReceiveOnly && inv.receiptStatus !== 'pending' && <button
                               onClick={() => handleOpenReturnModal(inv)}
                               className="px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all flex items-center gap-1"
                               title="إجراء مرتجع مشتريات للمورد وتعديل الفاتورة وإعادة جدولة الدفعات"
