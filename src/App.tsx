@@ -47,7 +47,6 @@ import {
   Shift
 } from './types/autoParts';
 import type { OpeningBalanceRecord } from './utils/openingBalanceLogic';
-import { createDefaultChartOfAccounts, createJournalEntry } from './utils/accountingCore';
 import { createDefaultChartOfAccounts, createJournalEntry, makeSourceKey } from './utils/accountingCore';
 import type { LedgerAccount, AccountingPeriod, JournalEntry } from './utils/accountingCore';
 import {
@@ -55,8 +54,6 @@ import {
   buildSalesReturnJournal, buildPurchaseReturnJournal, buildExpenseJournal,
 } from './utils/accountingSourceAdapters';
 import type { SourceAccountMap, SourceAdapterResult } from './utils/accountingSourceAdapters';
-import { paymentAccountOf } from './utils/paymentMethods';
-import { buildSalesInvoiceJournal, buildInvoiceVoidJournal, buildPurchaseInvoiceJournal, buildSalesReturnJournal, buildPurchaseReturnJournal } from './utils/accountingSourceAdapters';
 import type { SourceAccountMap, SourceAdapterResult } from './utils/accountingSourceAdapters';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
 import { createBankMovementEntry, createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount, summarizeBankAccount } from './utils/bankLedger';
