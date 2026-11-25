@@ -166,6 +166,13 @@ const purchase: any = {
 };
 const purchaseJournal = buildPurchaseInvoiceJournal(purchase, context, 'period-1', 'now', 'tester', accounts);
 assert.equal(purchaseJournal.error, null);
+assert.equal(buildPurchaseInvoiceJournal(
+  { ...purchase, receiptStatus: 'pending' }, context, 'period-1', 'now', 'tester', accounts,
+).error, 'PURCHASE_NOT_RECEIVED');
+assert.equal(buildPurchaseInvoiceJournal(
+  { ...purchase, receiptStatus: 'cancelled' }, context, 'period-1', 'now', 'tester', accounts,
+).error, 'PURCHASE_CANCELLED');
+
 assert.equal(purchaseJournal.input?.source.type, 'purchase.invoice');
 assert.equal(purchaseJournal.input?.lines.reduce((s, line) => s + line.debit, 0), 103.5);
 assert.equal(purchaseJournal.input?.lines.reduce((s, line) => s + line.credit, 0), 103.5);
