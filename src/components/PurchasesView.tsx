@@ -890,7 +890,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                               className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold"
                               title="تأكيد الاستلام وترحيل الفاتورة محاسبياً مرة واحدة"
                             >تأكيد الاستلام</button>}
-                            {inv.receiptStatus === 'pending' && onCancelPendingPurchaseInvoice && <button
+                            {inv.receiptStatus === 'pending' && !canReceiveOnly && onCancelPendingPurchaseInvoice && <button
                               onClick={() => {
                                 if (window.confirm('إلغاء فاتورة الشراء قبل الاستلام؟ لن يتغير المخزون أو حساب المورد أو الأستاذ العام.')) {
                                   onCancelPendingPurchaseInvoice(inv.id);
