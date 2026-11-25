@@ -2027,8 +2027,6 @@ export default function App() {
     const supplierBeforePosting = suppliers.find(supplier => supplier.id === invoice.supplierId);
     const remainingBeforePosting = Math.max(0, invoice.grandTotal - invoice.amountPaid);
     const supplierCreditApplied = Math.min(supplierBeforePosting?.storeCredit || 0, remainingBeforePosting);
-    if (!postAccountingSource(invoice.date, (context, periodId, createdAt, createdBy, map) =>
-      buildPurchaseInvoiceJournal(invoice, context, periodId, createdAt, createdBy, map, supplierCreditApplied))) return false;
     if (invoice.amountPaid > 0 && requiresSpecificBankAccount(invoice.paymentMethod)) {
       const posting = createBankMovementEntry({
         id: `purchase:${invoice.id}`, batchId: invoice.id, bankAccountId: invoice.bankAccountId || '',
@@ -2055,6 +2053,8 @@ export default function App() {
       return false;
     }
 
+    if (!postAccountingSource(invoice.date, (context, periodId, createdAt, createdBy, map) =>
+      buildPurchaseInvoiceJournal(invoice, context, periodId, createdAt, createdBy, map, supplierCreditApplied))) return false;
 
     setPurchaseInvoices(prev => {
       const updated = receivingExistingPending
