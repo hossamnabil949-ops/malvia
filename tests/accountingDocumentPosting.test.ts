@@ -20,6 +20,22 @@ const request: any = {
   existingEntries: [], actor: 'Tester', createdAt: '2026-11-25T08:00:00.000Z',
 };
 
+const namedWalletAccount: any = {
+  ...accounts[0], id: context.tenantId + ':MAIN:wallet:محفظة إلكترونية - Vodafone Cash',
+  code: '1021-001', name: 'محفظة — Vodafone Cash',
+  systemKey: 'wallet:محفظة إلكترونية - Vodafone Cash',
+};
+const namedWalletTransfer = prepareAccountingDocumentPosting({
+  ...request,
+  kind: 'finance.account-transfer',
+  accounts: [...accounts, namedWalletAccount],
+  document: { id: 'MOVE-NAMED-WALLET-1', date: '2026-11-25', amount: 75,
+    sourceMethod: 'محفظة إلكترونية - Vodafone Cash', destinationMethod: 'نقدي' },
+});
+assert.equal(namedWalletTransfer.status, 'posted');
+if (namedWalletTransfer.status !== 'posted') throw new Error('named wallet transfer was not posted');
+assert.equal(namedWalletTransfer.entry.lines.find(line => line.accountId === namedWalletAccount.id)?.credit, 75);
+
 const cashToWallet = prepareAccountingDocumentPosting({
   ...request,
   kind: 'finance.account-transfer',
