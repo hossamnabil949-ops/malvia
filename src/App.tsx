@@ -423,6 +423,7 @@ export default function App() {
       || ('receivedAt' in document ? document.receivedAt?.slice(0, 10) || '' : '')
       || ('paymentDate' in document ? document.paymentDate : '')
       || ('receivedDate' in document ? document.receivedDate : '')
+      || ('settlementDate' in document ? document.settlementDate : '')
       || ('date' in document ? document.date : '');
     const defaults = createDefaultChartOfAccounts(context);
     let nextAccounts = accountingAccounts.length ? [...accountingAccounts] : defaults;
