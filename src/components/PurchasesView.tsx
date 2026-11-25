@@ -58,6 +58,7 @@ interface PurchasesViewProps {
   treasuryBalance: number;
   onAddPurchaseInvoice: (invoice: PurchaseInvoice) => void;
   onReceivePurchaseInvoice?: (invoiceId: string) => boolean;
+  onCancelPendingPurchaseInvoice?: (invoiceId: string) => boolean;
   serialUnits?: SerialUnit[]; // لمنع تكرار الأرقام التسلسلية عند التوريد
   warehouses?: import('../types/autoParts').Warehouse[]; // لو فيه مخازن/فروع يظهر اختيار «استلام في مخزن»
   onEditPurchaseInvoice?: (invoice: PurchaseInvoice) => void;
@@ -82,6 +83,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   treasuryBalance,
   onAddPurchaseInvoice,
   onReceivePurchaseInvoice,
+  onCancelPendingPurchaseInvoice,
   warehouses = [],
   serialUnits = [],
   onEditPurchaseInvoice,
@@ -888,6 +890,15 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                               className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold"
                               title="تأكيد الاستلام وترحيل الفاتورة محاسبياً مرة واحدة"
                             >تأكيد الاستلام</button>}
+                            {inv.receiptStatus === 'pending' && onCancelPendingPurchaseInvoice && <button
+                              onClick={() => {
+                                if (window.confirm('إلغاء فاتورة الشراء قبل الاستلام؟ لن يتغير المخزون أو حساب المورد أو الأستاذ العام.')) {
+                                  onCancelPendingPurchaseInvoice(inv.id);
+                                }
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-bold"
+                              title="إلغاء قبل الاستلام دون أثر محاسبي"
+                            >إلغاء الطلب</button>}
                             {!canReceiveOnly && <button
                               onClick={() => handleOpenReturnModal(inv)}
                               className="px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all flex items-center gap-1"
