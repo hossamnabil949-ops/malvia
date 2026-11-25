@@ -2,12 +2,13 @@ import type { AccountingContext, AccountingPeriod, JournalEntry, LedgerAccount, 
 import { createJournalEntry, makeSourceKey } from './accountingCore';
 import type { Invoice, PurchaseInvoice, SalesReturn, PurchaseReturn, Expense, CustomerPayment, SupplierPayment, PartnerCurrentAccountTransaction } from '../types/autoParts';
 import type { CardSettlementBatch } from './bankLedger';
+import type { Cheque } from './chequeLogic';
 import { paymentAccountOf } from './paymentMethods';
 import {
   buildSalesInvoiceJournal, buildPurchaseInvoiceJournal, buildSalesReturnJournal,
   buildPurchaseReturnJournal, buildExpenseJournal, buildInvoiceVoidJournal,
   buildCustomerReceiptJournal, buildSupplierPaymentJournal, buildPartnerCurrentAccountJournal,
-  buildBankTransferJournal, buildCardSettlementJournal,
+  buildBankTransferJournal, buildCardSettlementJournal, buildChequeRegistrationJournal, buildChequeLifecycleJournal,
   type SourceAccountMap,
 } from './accountingSourceAdapters';
 import type { VoidPlan } from './saleLogic';
@@ -15,11 +16,11 @@ import type { VoidPlan } from './saleLogic';
 export type AccountingDocumentKind =
   | 'sales.invoice' | 'sales.invoice-void' | 'sales.return'
   | 'purchase.invoice' | 'purchase.return' | 'expense' | 'customer.receipt' | 'supplier.payment'
-  | 'partner.current-account' | 'bank.transfer' | 'bank.card-settlement';
+  | 'partner.current-account' | 'bank.transfer' | 'bank.card-settlement' | 'cheque.register' | 'cheque.lifecycle';
 
 export interface AccountingPostingRequest {
   kind: AccountingDocumentKind;
-  document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment | PartnerCurrentAccountTransaction | CardSettlementBatch | { id: string; date: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; reference?: string };
+  document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment | PartnerCurrentAccountTransaction | CardSettlementBatch | Cheque | { id: string; date: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; reference?: string };
   context: AccountingContext;
   accounts: LedgerAccount[];
   periods: AccountingPeriod[];
@@ -28,6 +29,7 @@ export interface AccountingPostingRequest {
   createdAt: string;
   originalInvoice?: Invoice | PurchaseInvoice;
   voidPlan?: VoidPlan;
+  chequeLifecycle?: { action: 'clear' | 'bounce' | 'cancel'; previousStatus: Cheque['status']; eventId: string; eventDate: string };
 }
 
 export type AccountingPostingResult =
@@ -66,6 +68,8 @@ export function prepareAccountingDocumentPosting(request: AccountingPostingReque
     ? (document as Invoice).voidedAt?.slice(0, 10) || ''
     : kind === 'purchase.invoice' && (document as PurchaseInvoice).receiptStatus === 'received'
       ? (document as PurchaseInvoice).receivedAt?.slice(0, 10) || (document as PurchaseInvoice).date
+      : kind === 'cheque.register' ? (document as Cheque).receivedDate
+      : kind === 'cheque.lifecycle' ? request.chequeLifecycle?.eventDate || ''
       : ('paymentDate' in document ? document.paymentDate : ('date' in document ? document.date : ''));
   if (kind === 'purchase.invoice') {
     const purchase = document as PurchaseInvoice;
@@ -111,6 +115,13 @@ export function prepareAccountingDocumentPosting(request: AccountingPostingReque
         context, period.id, createdAt, actor, bankId => systemAccount(accounts, 'bank:' + bankId)); break;
     case 'bank.card-settlement':
       adapted = buildCardSettlementJournal(document as CardSettlementBatch, context, period.id, createdAt, actor, accountMap); break;
+    case 'cheque.register':
+      adapted = buildChequeRegistrationJournal(document as Cheque, context, period.id, createdAt, actor, accountMap); break;
+    case 'cheque.lifecycle':
+      if (!request.chequeLifecycle) return { status: 'failed', entry: null, error: 'CHEQUE_EVENT_REQUIRED' };
+      adapted = buildChequeLifecycleJournal(document as Cheque, request.chequeLifecycle.action,
+        request.chequeLifecycle.previousStatus, request.chequeLifecycle.eventId,
+        request.chequeLifecycle.eventDate, context, period.id, createdAt, actor, accountMap); break;
   }
   if (!adapted || adapted.error || !adapted.input) return { status: 'failed', entry: null, error: adapted?.error || 'SOURCE_ADAPTER_FAILED' };
   const sourceKey = makeSourceKey(context, adapted.input.source, adapted.input.postingId);
