@@ -19,6 +19,31 @@ const request: any = {
   kind: 'sales.invoice', document: invoice, context, accounts, periods,
   existingEntries: [], actor: 'Tester', createdAt: '2026-11-25T08:00:00.000Z',
 };
+
+const cashToWallet = prepareAccountingDocumentPosting({
+  ...request,
+  kind: 'finance.account-transfer',
+  document: { id: 'MOVE-CASH-WALLET-1', date: '2026-11-25', amount: 1250,
+    sourceMethod: 'نقدي', destinationMethod: 'محفظة إلكترونية', reference: 'WALLET-DEP-1' },
+});
+assert.equal(cashToWallet.status, 'posted');
+if (cashToWallet.status !== 'posted') throw new Error('cash to wallet transfer was not posted');
+assert.equal(cashToWallet.entry.lines.find(line => line.accountId === accounts.find(a => a.systemKey === 'cash')?.id)?.credit, 1250);
+assert.equal(cashToWallet.entry.lines.find(line => line.accountId === accounts.find(a => a.systemKey === 'wallet')?.id)?.debit, 1250);
+assert.equal(cashToWallet.entry.lines.reduce((sum, line) => sum + line.debit, 0),
+  cashToWallet.entry.lines.reduce((sum, line) => sum + line.credit, 0));
+
+const walletToInstaPay = prepareAccountingDocumentPosting({
+  ...request,
+  kind: 'finance.account-transfer',
+  document: { id: 'MOVE-WALLET-INSTAPAY-1', date: '2026-11-25', amount: 300,
+    sourceMethod: 'محفظة إلكترونية', destinationMethod: 'إنستاباي / InstaPay', reference: 'WALLET-IP-1' },
+});
+assert.equal(walletToInstaPay.status, 'posted');
+if (walletToInstaPay.status !== 'posted') throw new Error('wallet to InstaPay transfer was not posted');
+assert.equal(walletToInstaPay.entry.lines.find(line => line.accountId === accounts.find(a => a.systemKey === 'wallet')?.id)?.credit, 300);
+assert.equal(walletToInstaPay.entry.lines.find(line => line.accountId === accounts.find(a => a.systemKey === 'instapay')?.id)?.debit, 300);
+
 const sale = prepareAccountingDocumentPosting(request);
 assert.equal(sale.status, 'posted');
 if (sale.status !== 'posted') throw new Error('sale was not posted');
