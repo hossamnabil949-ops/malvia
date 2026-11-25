@@ -1601,6 +1601,12 @@ export default function App() {
       voidedInvoice, plan, ctx, periodId, new Date().toISOString(), currentUser?.employeeName || 'النظام', map,
     ), voidedInvoice.voidedAt.slice(0, 10))) return false;
     const fraction = plan.fraction;
+    const voidedInvoiceForLedger: Invoice = {
+      ...inv, status: 'ملغاة', voidedAt: new Date().toISOString(),
+      voidReason: cleanReason, voidApprovedBy: approvedBy,
+    };
+    if (!postAccountingSource(voidedInvoiceForLedger.voidedAt!.slice(0, 10), (context, periodId, createdAt, createdBy, map) =>
+      buildInvoiceVoidJournal(voidedInvoiceForLedger, plan, context, periodId, createdAt, createdBy, map))) return false;
     // عكس الولاء: تُسحب النقاط المتبقية من الفاتورة وتُرد النقاط المستبدلة
     appendLoyalty(inv.customerId, [
       { type: 'reverse_earn', points: -loyaltyAfterReturn(inv.loyaltyEarned || 0, inv.grandTotal, inv.returnedAmount || 0), refId: inv.id, refNumber: inv.invoiceNumber, note: cleanReason },
@@ -1791,6 +1797,8 @@ export default function App() {
     if (!origInv || !postAutomaticAccounting((ctx, periodId, map) => buildSalesReturnJournal(
       salesReturn, origInv, ctx, periodId, new Date().toISOString(), currentUser?.employeeName || 'النظام', map,
     ), salesReturn.date)) return;
+    if (!origInv || !postAccountingSource(salesReturn.date, (context, periodId, createdAt, createdBy, map) =>
+      buildSalesReturnJournal(salesReturn, origInv, context, periodId, createdAt, createdBy, map))) return;
     if (origInv) applyReturnTracking(origInv, salesReturn.items, 1);
     setSalesReturns(prev => {
       const updated = [salesReturn, ...prev];
@@ -2281,6 +2289,8 @@ export default function App() {
       unpaidDebtAfterReturn: debtBefore - deducted,
       isSettled: true,
     };
+    if (!originalInvoice || !postAccountingSource(finalReturn.date, (context, periodId, createdAt, createdBy, map) =>
+      buildPurchaseReturnJournal(finalReturn, originalInvoice, context, periodId, createdAt, createdBy, map))) return;
 
     if (!originalInvoice || !postAutomaticAccounting((ctx, periodId, map) => buildPurchaseReturnJournal(
       finalReturn, originalInvoice, ctx, periodId, new Date().toISOString(), currentUser?.employeeName || 'النظام', map,
@@ -2674,6 +2684,8 @@ export default function App() {
       bankLedgerEntryId: requiresSpecificBankAccount(newExp.paymentMethod) ? `expense:${newExp.id}` : undefined,
       recordedBy: currentUser?.employeeName || newExp.recordedBy || 'المحاسب',
     };
+    if (!postAccountingSource(expense.date, (context, periodId, createdAt, createdBy, map) =>
+      buildExpenseJournal(expense, context, periodId, createdAt, createdBy, map))) return;
     const tx: TreasuryTransaction = {
       id: `TX-EXP-${Date.now()}`,
       txNumber: uniqueTransactionNumber('TX-EX'),
