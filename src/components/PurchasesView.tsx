@@ -58,6 +58,7 @@ interface PurchasesViewProps {
   treasuryBalance: number;
   onAddPurchaseInvoice: (invoice: PurchaseInvoice) => void;
   onReceivePurchaseInvoice?: (invoiceId: string) => boolean;
+  onCancelPendingPurchaseInvoice?: (invoiceId: string, reason: string) => boolean;
   serialUnits?: SerialUnit[]; // لمنع تكرار الأرقام التسلسلية عند التوريد
   warehouses?: import('../types/autoParts').Warehouse[]; // لو فيه مخازن/فروع يظهر اختيار «استلام في مخزن»
   onEditPurchaseInvoice?: (invoice: PurchaseInvoice) => void;
@@ -82,6 +83,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   treasuryBalance,
   onAddPurchaseInvoice,
   onReceivePurchaseInvoice,
+  onCancelPendingPurchaseInvoice,
   warehouses = [],
   serialUnits = [],
   onEditPurchaseInvoice,
@@ -886,6 +888,19 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                                 className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold"
                                 title="تأكيد استلام البضاعة وترحيل الفاتورة">
                                 تأكيد الاستلام
+                              </button>
+                            )}
+                            {inv.receiptStatus === 'pending' && onCancelPendingPurchaseInvoice && (
+                              <button
+                                onClick={() => {
+                                  const reason = window.prompt('سبب إلغاء فاتورة المشتريات المعلقة (لم يتم استلام البضاعة):');
+                                  if (!reason?.trim()) return;
+                                  const ok = onCancelPendingPurchaseInvoice(inv.id, reason.trim());
+                                  if (ok) window.alert('تم إلغاء الفاتورة المعلقة دون ترحيل محاسبي أو حركة مخزون.');
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-bold"
+                                title="إلغاء فاتورة معلقة قبل الاستلام">
+                                إلغاء الطلب
                               </button>
                             )}
                             {!canReceiveOnly && inv.receiptStatus !== 'pending' && <button
