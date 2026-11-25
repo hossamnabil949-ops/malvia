@@ -272,7 +272,9 @@ export function buildPurchaseInvoiceJournal(
   accounts: SourceAccountMap, supplierCreditApplied = Number((invoice as PurchaseInvoice & { supplierCreditApplied?: number }).supplierCreditApplied ?? 0),
 ): SourceAdapterResult {
   if (!invoice.id?.trim()) return fail('SOURCE_ID_REQUIRED');
-  if (!validDate(invoice.date)) return fail('SOURCE_DATE_INVALID');
+  const postingDate = invoice.receiptStatus === 'received' && invoice.receivedAt
+    ? invoice.receivedAt.slice(0, 10) : invoice.date;
+  if (!validDate(postingDate)) return fail('SOURCE_DATE_INVALID');
   if (!invoice.items?.length || invoice.items.some(item => !Number.isFinite(item.quantity) || item.quantity <= 0
     || !validAmount(item.costPrice) || !validAmount(item.total))) return fail('INVOICE_LINES_INVALID');
   if (![invoice.subtotal, invoice.discount, invoice.tax, invoice.grandTotal, invoice.amountPaid, supplierCreditApplied].every(validAmount)) {
@@ -296,7 +298,7 @@ export function buildPurchaseInvoiceJournal(
     || !addLine(lines, accounts.payables, 0, invoice.grandTotal - invoice.amountPaid - supplierCreditApplied, 'المتبقي للمورد ' + invoice.supplierName)) {
     return fail('ACCOUNT_MAPPING_MISSING');
   }
-  return ok(baseInput(context, 'purchase.invoice', invoice.id, invoice.date, periodId,
+  return ok(baseInput(context, 'purchase.invoice', invoice.id, postingDate, periodId,
     'ترحيل فاتورة مشتريات ' + invoice.invoiceNumber, lines, createdAt, createdBy));
 }
 
