@@ -159,3 +159,56 @@ assert.equal(archivedTrial[0].closingDebit, 1000);
 
 
 console.log('accountingCore: all tests passed');
+
+
+const {
+  buildFinancialStatements, closeAccountingPeriod,
+} = await import('../src/utils/accountingCore.ts');
+const expenseId = context.tenantId + ':' + context.branchId + ':operating-expenses';
+const partnerCurrentId = context.tenantId + ':' + context.branchId + ':partner-current-account';
+const makeTestEntry = (postingId: string, sourceType: string, date: string, lines: CreateJournalInput['lines']) => {
+  const result = createJournalEntry({
+    ...context, postingId, source: { type: sourceType, id: postingId },
+    date, periodId: period.id, memo: postingId, lines,
+    createdAt: date + 'T12:00:00.000Z', createdBy: 'test',
+  }, accounts, [period]);
+  assert.equal(result.error, null);
+  return result.entry as JournalEntry;
+};
+const statementEntries = [
+  makeTestEntry('statement-sale', 'sales.invoice', '2026-11-05', [
+    { accountId: cashId, debit: 100, credit: 0 }, { accountId: salesId, debit: 0, credit: 100 },
+  ]),
+  makeTestEntry('statement-expense', 'expense', '2026-11-10', [
+    { accountId: expenseId, debit: 40, credit: 0 }, { accountId: cashId, debit: 0, credit: 40 },
+  ]),
+  makeTestEntry('statement-partner-funding', 'partner.current-account', '2026-11-15', [
+    { accountId: cashId, debit: 25, credit: 0 }, { accountId: partnerCurrentId, debit: 0, credit: 25 },
+  ]),
+];
+const statements = buildFinancialStatements(accounts, statementEntries, context, '2026-11-01', '2026-11-30');
+assert.equal(statements.income.totalRevenue, 100);
+assert.equal(statements.income.totalExpenses, 40);
+assert.equal(statements.income.netIncome, 60);
+assert.equal(statements.balance.totalAssets, 85);
+assert.equal(statements.balance.totalLiabilities, 25);
+assert.equal(statements.balance.currentPeriodEarnings, 60);
+assert.equal(statements.balance.difference, 0);
+assert.equal(statements.cashFlow.operating, 60);
+assert.equal(statements.cashFlow.financing, 25);
+assert.equal(statements.cashFlow.closingCash, 85);
+
+const closed = closeAccountingPeriod(period.id, '2026-12-01T09:00:00.000Z', 'owner', [period], statementEntries);
+assert.equal(closed.error, null);
+assert.equal(closed.period?.status, 'closed');
+assert.equal(closed.period?.closedBy, 'owner');
+assert.equal(closeAccountingPeriod(period.id, '2026-12-01T09:00:00.000Z', 'owner',
+  [closed.period as AccountingPeriod], statementEntries).error, 'PERIOD_ALREADY_CLOSED');
+assert.equal(closeAccountingPeriod(period.id, '2026-11-20T09:00:00.000Z', 'owner',
+  [period], statementEntries).error, 'PERIOD_NOT_ENDED');
+const tampered = { ...statementEntries[0], lines: [
+  { accountId: cashId, debit: 100, credit: 0 },
+  { accountId: salesId, debit: 0, credit: 99 },
+] };
+assert.equal(closeAccountingPeriod(period.id, '2026-12-01T09:00:00.000Z', 'owner',
+  [period], [tampered, ...statementEntries.slice(1)]).error, 'PERIOD_ENTRIES_UNBALANCED');
