@@ -437,6 +437,7 @@ export default function App() {
       [movement.sourceMethod, movement.destinationMethod].forEach(method => {
         const rail = paymentAccountOf(method);
         if (rail !== 'wallet' && rail !== 'instapay') return;
+        if (rail === 'wallet' && (method === 'فودافون كاش ومحافظ إلكترونية' || method === 'محفظة إلكترونية')) return;
         const systemKey = rail + ':' + method;
         if (nextAccounts.some(account => account.systemKey === systemKey)) return;
         const prefix = rail === 'wallet' ? '1021-' : '1022-';
@@ -2855,7 +2856,7 @@ export default function App() {
         let same = false;
         try {
           same = paymentAccountOf(tx.paymentMethod) === rail
-            && (rail === 'cash' || tx.paymentMethod === method);
+            && (rail === 'cash' || (rail === 'wallet' && (method === 'فودافون كاش ومحافظ إلكترونية' || method === 'محفظة إلكترونية')) || tx.paymentMethod === method);
         } catch { same = false; }
         return same ? sum + (tx.type === 'قبض' ? tx.amount : -tx.amount) : sum;
       }, 0);
