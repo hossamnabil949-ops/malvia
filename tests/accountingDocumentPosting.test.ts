@@ -35,11 +35,13 @@ const purchase: any = {
   supplierName: 'Supplier', items: [{ partNumber: 'P-1', partName: 'Part', category: 'General',
     quantity: 2, costPrice: 20, salePrice: 50, total: 40, taxAmount: 0 }],
   subtotal: 40, tax: 0, discount: 0, grandTotal: 40, paymentStatus: 'آجل',
-  amountPaid: 0, paymentMethod: 'نقدي', receivedBy: 'Tester', receiptStatus: 'received',
+  amountPaid: 0, paymentMethod: 'نقدي', receivedBy: 'Tester', receiptStatus: 'received', receivedAt: '2026-11-26T09:30:00.000Z',
 };
 const purchaseRequest: any = { ...request, kind: 'purchase.invoice', document: purchase };
 const received = prepareAccountingDocumentPosting(purchaseRequest);
 assert.equal(received.status, 'posted');
+if (received.status !== 'posted') throw new Error('received purchase was not posted');
+assert.equal(received.entry.date, '2026-11-26', 'purchase posting uses actual receipt date');
 const pending = prepareAccountingDocumentPosting({
   ...purchaseRequest, document: { ...purchase, id: 'PUR-PENDING', receiptStatus: 'pending' }, periods: [],
 });
@@ -52,6 +54,29 @@ const cancelled = prepareAccountingDocumentPosting({
 assert.equal(cancelled.status, 'skipped');
 if (cancelled.status !== 'skipped') throw new Error('cancelled purchase must not post');
 assert.equal(cancelled.reason, 'DOCUMENT_CANCELLED');
+
+const receipt: any = {
+  id: 'RCPT-1', receiptNumber: 'RCPT-1', customerId: 'C-1', customerName: 'Customer',
+  amount: 60, paymentDate: '2026-11-25', paymentMethod: 'نقدي',
+  treasuryTarget: 'cash', recordedBy: 'Tester',
+};
+const receiptResult = prepareAccountingDocumentPosting({ ...request, kind: 'customer.receipt', document: receipt });
+assert.equal(receiptResult.status, 'posted');
+if (receiptResult.status !== 'posted') throw new Error('customer receipt was not posted');
+assert.equal(receiptResult.entry.lines.find(line => line.accountId === accounts.find(a => a.systemKey === 'cash')?.id)?.debit, 60);
+
+const supplierPayment: any = {
+  id: 'SP-1', paymentNumber: 'SP-1', supplierId: 'SUP-1', supplierName: 'Supplier',
+  amount: 100, payableApplied: 70, paymentDate: '2026-11-25', paymentMethod: 'نقدي',
+  treasurySource: 'cash', recordedBy: 'Tester',
+};
+const supplierPaymentResult = prepareAccountingDocumentPosting({
+  ...request, kind: 'supplier.payment', document: supplierPayment,
+});
+assert.equal(supplierPaymentResult.status, 'posted');
+if (supplierPaymentResult.status !== 'posted') throw new Error('supplier payment was not posted');
+assert.equal(supplierPaymentResult.entry.lines.find(line => line.accountId === accounts.find(a => a.systemKey === 'payables')?.id)?.debit, 70);
+assert.equal(supplierPaymentResult.entry.lines.find(line => line.accountId === accounts.find(a => a.systemKey === 'supplier-advances')?.id)?.debit, 30);
 
 const noPeriod = prepareAccountingDocumentPosting({ ...request, periods: [] });
 assert.equal(noPeriod.status, 'failed');
