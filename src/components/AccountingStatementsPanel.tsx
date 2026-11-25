@@ -71,7 +71,7 @@ export const AccountingStatementsPanel: React.FC<Props> = ({
           {renderLines(statements.balance.liabilityLines)}
           <div className="font-semibold">حقوق الملكية: {money(statements.balance.totalEquity + statements.balance.currentPeriodEarnings)} ج.م</div>
           {renderLines(statements.balance.equityLines)}
-          <div className="flex justify-between text-xs"><span>نتيجة الفترة</span><span>{money(statements.balance.currentPeriodEarnings)}</span></div>
+          <div className="flex justify-between text-xs"><span>الأرباح المتراكمة غير المقفلة</span><span>{money(statements.balance.currentPeriodEarnings)}</span></div>
           <div className="flex justify-between border-t border-slate-700 pt-2 font-bold"><span>فرق الميزانية</span><strong className={Math.abs(statements.balance.difference) < 0.005 ? 'text-emerald-400' : 'text-rose-400'}>{money(statements.balance.difference)} ج.م</strong></div>
         </div>
       </details>
