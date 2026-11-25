@@ -9,6 +9,7 @@ on:
       - commercial-v1-fin18-next
       - feat/accounting-erp-integration-audit-20261124
       - feat/accounting-ledger-phase1-20261124
+      - feat/accounting-document-posting-hooks-20261125
     paths:
       - '**/*.ts'
       - '**/*.tsx'
