@@ -1486,7 +1486,7 @@ export default function App() {
       loyaltyEarned: earnedPts > 0 ? earnedPts : undefined,
     };
     if (!postAccountingSource(finalInvoice.date, (context, periodId, createdAt, createdBy, map) =>
-      buildSalesInvoiceJournal(finalInvoice, context, periodId, createdAt, createdBy, map))) return;
+      buildSalesInvoiceJournal(finalInvoice, context, periodId, createdAt, createdBy, map))) return false;
 
     appendLoyalty(finalInvoice.customerId, [
       { type: 'redeem', points: -redeemedPts, refId: finalInvoice.id, refNumber: finalInvoice.invoiceNumber },
