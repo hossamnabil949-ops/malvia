@@ -1965,6 +1965,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 const TRANSFER_RAILS = [
   { value: 'نقدي', label: 'الخزينة النقدية' },
   { value: 'إنستاباي / InstaPay', label: 'إنستاباي — حساب مستقل' },
+  { value: 'فودافون كاش ومحافظ إلكترونية', label: 'المحافظ الإلكترونية — الرصيد التاريخي المجمع' },
   { value: 'إنستاباي - حساب بنكي', label: 'إنستاباي — رصيد داخل بنك' },
   { value: 'إنستاباي - محفظة إلكترونية', label: 'إنستاباي — رصيد داخل محفظة' },
   { value: 'محفظة إلكترونية - Vodafone Cash', label: 'فودافون كاش' },
@@ -2001,7 +2002,8 @@ const LiquidAccountTransferPanel: React.FC<{
       try {
         const rail = paymentAccountOf(method);
         if (paymentAccountOf(tx.paymentMethod) !== rail) return;
-        if (rail !== 'cash' && tx.paymentMethod !== method) return;
+        const pooledWallet = rail === 'wallet' && (method === 'فودافون كاش ومحافظ إلكترونية' || method === 'محفظة إلكترونية');
+        if (rail !== 'cash' && !pooledWallet && tx.paymentMethod !== method) return;
         total += tx.type === 'قبض' ? tx.amount : -tx.amount;
       } catch { /* ignore non-liquid historical methods */ }
     });
