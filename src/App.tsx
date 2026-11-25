@@ -1643,6 +1643,8 @@ export default function App() {
         if (rail === 'cash') return account('cash');
         if (rail === 'bank') return account('bank');
         if (rail === 'visa') return account('card-clearing');
+        if (rail === 'instapay') return account('instapay-clearing');
+        if (rail === 'wallet') return account('wallet-clearing');
         return undefined;
       },
     };
