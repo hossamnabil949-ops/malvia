@@ -647,7 +647,8 @@ export interface TreasuryTransaction {
     | 'تسوية مستحقات الفيزا'
     | 'إيداع صافي تسوية الفيزا بالبنك'
     | 'إيرادات أخرى'
-    | 'عكس مصروفات تشغيلية';
+    | 'عكس مصروفات تشغيلية'
+    | 'تحويل بين الحسابات المالية';
   amount: number;
   paymentMethod: PaymentMethod | string;
   balanceAfter: number;
