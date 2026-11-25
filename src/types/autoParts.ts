@@ -497,6 +497,7 @@ export interface PurchaseInvoice {
   originalGrandTotal?: number;
   paymentStatus: 'مدفوعة نقداً' | 'آجل' | 'مسددة جزئياً' | 'مرتجع جزئي' | 'مرتجع كلي';
   amountPaid: number;
+  supplierCreditApplied?: number; // رصيد دائن سابق استُخدم لتسوية هذه الفاتورة
   remainingBalance?: number;
   paymentMethod: PaymentMethod | string;
   bankAccountId?: string;
