@@ -59,7 +59,9 @@ function makeSourceAccountMap(accounts: LedgerAccount[]): SourceAccountMap {
 
 export function prepareAccountingDocumentPosting(request: AccountingPostingRequest): AccountingPostingResult {
   const { kind, document, context, accounts, periods, existingEntries, actor, createdAt } = request;
-  const date = 'paymentDate' in document ? document.paymentDate : ('date' in document ? document.date : '');
+  const date = kind === 'sales.invoice-void'
+    ? (document as Invoice).voidedAt?.slice(0, 10) || ''
+    : ('paymentDate' in document ? document.paymentDate : ('date' in document ? document.date : ''));
   if (kind === 'purchase.invoice') {
     const purchase = document as PurchaseInvoice;
     if (purchase.receiptStatus === 'pending') return { status: 'skipped', entry: null, error: null, reason: 'PURCHASE_NOT_RECEIVED' };
@@ -70,7 +72,7 @@ export function prepareAccountingDocumentPosting(request: AccountingPostingReque
     && item.status === 'open' && item.startDate <= date && item.endDate >= date);
   if (!period) return { status: 'failed', entry: null, error: 'ACCOUNTING_PERIOD_NOT_OPEN' };
   const accountMap = makeSourceAccountMap(accounts);
-  let adapted: ReturnType<typeof buildSalesInvoiceJournal>;
+  let adapted: ReturnType<typeof buildSalesInvoiceJournal> | null = null;
   switch (kind) {
     case 'sales.invoice':
       adapted = buildSalesInvoiceJournal(document as Invoice, context, period.id, createdAt, actor, accountMap); break;
@@ -98,7 +100,7 @@ export function prepareAccountingDocumentPosting(request: AccountingPostingReque
       adapted = buildSupplierPaymentJournal(document as SupplierPayment, context, period.id, createdAt, actor, accountMap,
         Number((document as SupplierPayment & { payableApplied?: number }).payableApplied ?? document.amount)); break;
   }
-  if (adapted.error || !adapted.input) return { status: 'failed', entry: null, error: adapted.error || 'SOURCE_ADAPTER_FAILED' };
+  if (!adapted || adapted.error || !adapted.input) return { status: 'failed', entry: null, error: adapted?.error || 'SOURCE_ADAPTER_FAILED' };
   const sourceKey = makeSourceKey(context, adapted.input.source, adapted.input.postingId);
   const prior = existingEntries.find(entry => entry.sourceKey === sourceKey);
   if (prior) return { status: 'already-posted', entry: prior, error: null };
