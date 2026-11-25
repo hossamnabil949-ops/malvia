@@ -1458,6 +1458,7 @@ export default function App() {
       items: invoice.items.map((it, i) => ({ ...it, partId: lines[i].partId, ...(trackedExtras[i] || {}) })),
       loyaltyEarned: earnedPts > 0 ? earnedPts : undefined,
     };
+    if (!postAccountingDocument('sales.invoice', finalInvoice)) return false;
     appendLoyalty(finalInvoice.customerId, [
       { type: 'redeem', points: -redeemedPts, refId: finalInvoice.id, refNumber: finalInvoice.invoiceNumber },
       { type: 'earn', points: earnedPts, refId: finalInvoice.id, refNumber: finalInvoice.invoiceNumber, expires: true },
@@ -1687,6 +1688,7 @@ export default function App() {
           }),
         }
       : rawReturn;
+    if (!origInv || !postAccountingDocument('sales.return', salesReturn, { originalInvoice: origInv })) return;
     if (origInv) applyReturnTracking(origInv, salesReturn.items, 1);
     setSalesReturns(prev => {
       const updated = [salesReturn, ...prev];
@@ -1960,6 +1962,22 @@ export default function App() {
       window.alert('فاتورة المشتريات مسجلة بالفعل؛ تم إيقاف العملية لمنع التكرار.');
       return false;
     }
+    if (invoice.receiptStatus === 'cancelled') {
+      window.alert('لا يمكن اعتماد فاتورة مشتريات ملغاة.');
+      return false;
+    }
+    if (invoice.receiptStatus === 'pending') {
+      const nextPending = [invoice, ...purchaseInvoices];
+      if (!persistChanges({ purchaseInvoices: nextPending })) return false;
+      setPurchaseInvoices(nextPending);
+      return true;
+    }
+    const supplierCreditApplied = Math.min(
+      Math.max(0, suppliers.find(supplier => supplier.id === invoice.supplierId)?.storeCredit || 0),
+      Math.max(0, invoice.grandTotal - invoice.amountPaid),
+    );
+    invoice = { ...invoice, supplierCreditApplied };
+    if (!postAccountingDocument('purchase.invoice', invoice)) return false;
     if (invoice.amountPaid > 0 && requiresSpecificBankAccount(invoice.paymentMethod)) {
       const posting = createBankMovementEntry({
         id: `purchase:${invoice.id}`, batchId: invoice.id, bankAccountId: invoice.bankAccountId || '',
@@ -2151,6 +2169,7 @@ export default function App() {
       unpaidDebtAfterReturn: debtBefore - deducted,
       isSettled: true,
     };
+    if (!originalInvoice || !postAccountingDocument('purchase.return', finalReturn, { originalInvoice })) return;
 
     setPurchaseReturns(prev => {
       const updated = [finalReturn, ...prev];
@@ -2540,6 +2559,7 @@ export default function App() {
       bankLedgerEntryId: requiresSpecificBankAccount(newExp.paymentMethod) ? `expense:${newExp.id}` : undefined,
       recordedBy: currentUser?.employeeName || newExp.recordedBy || 'المحاسب',
     };
+    if (!postAccountingDocument('expense', expense)) return;
     const tx: TreasuryTransaction = {
       id: `TX-EXP-${Date.now()}`,
       txNumber: uniqueTransactionNumber('TX-EX'),
