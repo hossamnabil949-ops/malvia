@@ -2162,6 +2162,9 @@ export default function App() {
     return true;
   };
   const handleReceivePurchaseInvoice = (invoiceId: string): boolean => {
+    const canReceive = effectiveRole === 'مدير عام'
+      || Boolean(effectivePermissions?.canReceivePurchases || effectivePermissions?.canManagePurchases);
+    if (!canReceive) return false;
     const pending = purchaseInvoices.find(invoice => invoice.id === invoiceId);
     if (!pending || pending.receiptStatus !== 'pending') return false;
     const receivedAt = new Date().toISOString();
@@ -2175,6 +2178,8 @@ export default function App() {
   };
 
   const handleCancelPendingPurchaseInvoice = (invoiceId: string): boolean => {
+    const canCancel = effectiveRole === 'مدير عام' || Boolean(effectivePermissions?.canManagePurchases);
+    if (!canCancel) return false;
     const pending = purchaseInvoices.find(invoice => invoice.id === invoiceId);
     if (!pending || pending.receiptStatus !== 'pending') return false;
     const cancelled = {
