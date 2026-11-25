@@ -1,22 +1,25 @@
 import type { AccountingContext, AccountingPeriod, JournalEntry, LedgerAccount, JournalResult } from './accountingCore';
 import { createJournalEntry, makeSourceKey } from './accountingCore';
-import type { Invoice, PurchaseInvoice, SalesReturn, PurchaseReturn, Expense, CustomerPayment, SupplierPayment } from '../types/autoParts';
+import type { Invoice, PurchaseInvoice, SalesReturn, PurchaseReturn, Expense, CustomerPayment, SupplierPayment, PartnerCurrentAccountTransaction } from '../types/autoParts';
+import type { CardSettlementBatch } from './bankLedger';
 import { paymentAccountOf } from './paymentMethods';
 import {
   buildSalesInvoiceJournal, buildPurchaseInvoiceJournal, buildSalesReturnJournal,
   buildPurchaseReturnJournal, buildExpenseJournal, buildInvoiceVoidJournal,
-  buildCustomerReceiptJournal, buildSupplierPaymentJournal,
+  buildCustomerReceiptJournal, buildSupplierPaymentJournal, buildPartnerCurrentAccountJournal,
+  buildBankTransferJournal, buildCardSettlementJournal,
   type SourceAccountMap,
 } from './accountingSourceAdapters';
 import type { VoidPlan } from './saleLogic';
 
 export type AccountingDocumentKind =
   | 'sales.invoice' | 'sales.invoice-void' | 'sales.return'
-  | 'purchase.invoice' | 'purchase.return' | 'expense' | 'customer.receipt' | 'supplier.payment';
+  | 'purchase.invoice' | 'purchase.return' | 'expense' | 'customer.receipt' | 'supplier.payment'
+  | 'partner.current-account' | 'bank.transfer' | 'bank.card-settlement';
 
 export interface AccountingPostingRequest {
   kind: AccountingDocumentKind;
-  document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment;
+  document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment | PartnerCurrentAccountTransaction | CardSettlementBatch | { id: string; date: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; reference?: string };
   context: AccountingContext;
   accounts: LedgerAccount[];
   periods: AccountingPeriod[];
@@ -101,6 +104,13 @@ export function prepareAccountingDocumentPosting(request: AccountingPostingReque
     case 'supplier.payment':
       adapted = buildSupplierPaymentJournal(document as SupplierPayment, context, period.id, createdAt, actor, accountMap,
         Number((document as SupplierPayment & { payableApplied?: number }).payableApplied ?? (document as SupplierPayment).amount)); break;
+    case 'partner.current-account':
+      adapted = buildPartnerCurrentAccountJournal(document as PartnerCurrentAccountTransaction, context, period.id, createdAt, actor, accountMap); break;
+    case 'bank.transfer':
+      adapted = buildBankTransferJournal(document as { id: string; date: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; reference?: string },
+        context, period.id, createdAt, actor, bankId => systemAccount(accounts, 'bank:' + bankId)); break;
+    case 'bank.card-settlement':
+      adapted = buildCardSettlementJournal(document as CardSettlementBatch, context, period.id, createdAt, actor, accountMap); break;
   }
   if (!adapted || adapted.error || !adapted.input) return { status: 'failed', entry: null, error: adapted?.error || 'SOURCE_ADAPTER_FAILED' };
   const sourceKey = makeSourceKey(context, adapted.input.source, adapted.input.postingId);
