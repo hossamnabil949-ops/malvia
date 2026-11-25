@@ -2002,7 +2002,10 @@ export default function App() {
       window.alert('تعذّر حفظ فاتورة المشتريات: راجع المورد والكميات والتكلفة، وتأكد أن المدفوع لا يتجاوز إجمالي الفاتورة.');
       return false;
     }
-    if (purchaseInvoices.some(existing => existing.id === invoice.id || existing.invoiceNumber === invoice.invoiceNumber)) {
+    const duplicateInvoice = purchaseInvoices.find(existing => existing.id === invoice.id || existing.invoiceNumber === invoice.invoiceNumber);
+    const receivingExistingPending = Boolean(duplicateInvoice && duplicateInvoice.id === invoice.id
+      && duplicateInvoice.receiptStatus === 'pending' && invoice.receiptStatus === 'received');
+    if (duplicateInvoice && !receivingExistingPending) {
       window.alert('فاتورة المشتريات مسجلة بالفعل؛ تم إيقاف العملية لمنع التكرار.');
       return false;
     }
@@ -2012,7 +2015,9 @@ export default function App() {
     }
     if (invoice.receiptStatus === 'pending') {
       setPurchaseInvoices(prev => {
-        const updated = [invoice, ...prev];
+        const updated = receivingExistingPending
+          ? prev.map(existing => existing.id === invoice.id ? invoice : existing)
+          : [invoice, ...prev];
         persistChanges({ purchaseInvoices: updated });
         return updated;
       });
@@ -2052,7 +2057,9 @@ export default function App() {
 
 
     setPurchaseInvoices(prev => {
-      const updated = [invoice, ...prev];
+      const updated = receivingExistingPending
+        ? prev.map(existing => existing.id === invoice.id ? invoice : existing)
+        : [invoice, ...prev];
       persistChanges({ purchaseInvoices: updated });
       return updated;
     });
@@ -2195,6 +2202,14 @@ export default function App() {
       }
     }
     return true;
+  };
+  const handleReceivePendingPurchaseInvoice = (invoiceId: string): boolean => {
+    const pending = purchaseInvoices.find(invoice => invoice.id === invoiceId);
+    if (!pending || pending.receiptStatus !== 'pending') return false;
+    return handleAddPurchaseInvoice({
+      ...pending, receiptStatus: 'received', receivedAt: new Date().toISOString(),
+      receivedById: currentUser?.employeeId, receivedBy: currentUser?.employeeName || pending.receivedBy,
+    });
   };
   const handleAddPurchaseReturn = (purchaseReturn: PurchaseReturn) => {
     const supplier = suppliers.find(s => s.id === purchaseReturn.supplierId);
