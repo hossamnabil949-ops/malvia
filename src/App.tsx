@@ -1476,6 +1476,8 @@ export default function App() {
       items: invoice.items.map((it, i) => ({ ...it, partId: lines[i].partId, ...(trackedExtras[i] || {}) })),
       loyaltyEarned: earnedPts > 0 ? earnedPts : undefined,
     };
+    if (!postAccountingSource(finalInvoice.date, (context, periodId, createdAt, createdBy, map) =>
+      buildSalesInvoiceJournal(finalInvoice, context, periodId, createdAt, createdBy, map))) return;
     if (!postAutomaticAccounting((ctx, periodId, map) => buildSalesInvoiceJournal(
       finalInvoice, ctx, periodId, new Date().toISOString(), currentUser?.employeeName || 'النظام', map,
     ), finalInvoice.date)) return false;
@@ -2062,6 +2064,24 @@ export default function App() {
       window.alert('فاتورة المشتريات مسجلة بالفعل؛ تم إيقاف العملية لمنع التكرار.');
       return false;
     }
+    if (invoice.receiptStatus === 'cancelled') {
+      window.alert('لا يمكن اعتماد فاتورة مشتريات ملغاة.');
+      return false;
+    }
+    if (invoice.receiptStatus === 'pending') {
+      setPurchaseInvoices(prev => {
+        const updated = [invoice, ...prev];
+        persistChanges({ purchaseInvoices: updated });
+        return updated;
+      });
+      logAudit('purchase.create', 'حفظ فاتورة مشتريات معلقة لحين استلام البضاعة ' + invoice.invoiceNumber, invoice.id, invoice.grandTotal);
+      return true;
+    }
+    const supplierBeforePosting = suppliers.find(supplier => supplier.id === invoice.supplierId);
+    const remainingBeforePosting = Math.max(0, invoice.grandTotal - invoice.amountPaid);
+    const supplierCreditApplied = Math.min(supplierBeforePosting?.storeCredit || 0, remainingBeforePosting);
+    if (!postAccountingSource(invoice.date, (context, periodId, createdAt, createdBy, map) =>
+      buildPurchaseInvoiceJournal(invoice, context, periodId, createdAt, createdBy, map, supplierCreditApplied))) return false;
     if (invoice.amountPaid > 0 && requiresSpecificBankAccount(invoice.paymentMethod)) {
       const posting = createBankMovementEntry({
         id: `purchase:${invoice.id}`, batchId: invoice.id, bankAccountId: invoice.bankAccountId || '',
