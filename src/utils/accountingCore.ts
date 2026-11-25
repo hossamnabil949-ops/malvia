@@ -277,8 +277,6 @@ export function createDefaultChartOfAccounts(context: AccountingContext): Ledger
     ['1020', 'مستحقات البطاقات', 'asset', 'debit', 'card-clearing'],
     ['1025', 'محافظ إلكترونية', 'asset', 'debit', 'wallet-clearing'],
     ['1026', 'مستحقات إنستاباي', 'asset', 'debit', 'instapay-clearing'],
-    ['1030', 'مستحقات إنستاباي', 'asset', 'debit', 'instapay-clearing'],
-    ['1040', 'مستحقات المحافظ الإلكترونية', 'asset', 'debit', 'wallet-clearing'],
     ['1100', 'العملاء', 'asset', 'debit', 'receivables'],
     ['1200', 'المخزون', 'asset', 'debit', 'inventory'],
     ['1300', 'ضريبة مدخلات - تحتاج ضبطًا ضريبيًا', 'asset', 'debit', 'vat-input'],
