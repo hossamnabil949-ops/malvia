@@ -412,7 +412,7 @@ export default function App() {
   // لا يُرحّل طلب الشراء قبل الاستلام، ولا يُنشأ قيد عند الإلغاء.
   const postAccountingDocument = (
     kind: AccountingDocumentKind,
-    document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment,
+    document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment | PartnerCurrentAccountTransaction | CardSettlementBatch | { id: string; date: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; reference?: string },
     options: { originalInvoice?: Invoice | PurchaseInvoice; voidPlan?: ReturnType<typeof computeVoidPlan> } = {},
   ): boolean => {
     const tenantId = activeTenant?.tenantId || '';
@@ -2783,6 +2783,7 @@ export default function App() {
       };
       return { ok: false, message: messages[result.error] || 'بيانات التحويل غير صالحة.' };
     }
+    if (!postAccountingDocument('bank.transfer', input)) return { ok: false, message: 'تعذر ترحيل التحويل البنكي محاسبياً.' };
     const nextEntries = [...result.entries, ...bankLedgerEntries];
     setBankLedgerEntries(nextEntries);
     persistChanges({ bankLedgerEntries: nextEntries });
@@ -2796,6 +2797,7 @@ export default function App() {
     if (batch.grossAmount > outstanding + 0.005) return { ok: false, message: 'قيمة التسوية أكبر من مستحقات الفيزا غير المسوّاة.' };
     const result = createCardSettlementEntries(batch, bankAccounts, cardSettlements);
     if (result.error) return { ok: false, message: result.error === 'SETTLEMENT_DUPLICATE' ? 'رقم التسوية مسجل من قبل.' : 'بيانات التسوية أو الحساب البنكي غير صالحة.' };
+    if (!postAccountingDocument('bank.card-settlement', batch)) return { ok: false, message: 'تعذر ترحيل تسوية الفيزا محاسبياً.' };
     const nextSettlements = [batch, ...cardSettlements];
     const nextEntries = [...result.entries, ...bankLedgerEntries];
     const nextExpenses: Expense[] = batch.feeAmount > 0 ? [{
@@ -3626,6 +3628,7 @@ export default function App() {
               };
               // Persist the same canonical optional bank-account value used by the paired treasury entry.
               const normalizedRecord = { ...record, partnerName: target.name, bankAccountId: isBank ? record.bankAccountId : undefined };
+              if (!postAccountingDocument('partner.current-account', normalizedRecord)) return false;
               const nextCurrentAccount = [normalizedRecord, ...partnerCurrentAccountTransactions];
               const nextTreasury = [tx, ...treasury];
               const nextBankEntries = bankEntry ? [bankEntry, ...bankLedgerEntries] : bankLedgerEntries;
