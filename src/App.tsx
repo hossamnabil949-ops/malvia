@@ -25,6 +25,8 @@ import {
   Customer, 
   Supplier, 
   SupplierPaymentSchedule,
+  SupplierPayment,
+  CustomerPayment,
   TreasuryTransaction, 
   Employee, 
   ShopSettings, 
@@ -410,7 +412,7 @@ export default function App() {
   // لا يُرحّل طلب الشراء قبل الاستلام، ولا يُنشأ قيد عند الإلغاء.
   const postAccountingDocument = (
     kind: AccountingDocumentKind,
-    document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense,
+    document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment,
     options: { originalInvoice?: Invoice | PurchaseInvoice; voidPlan?: ReturnType<typeof computeVoidPlan> } = {},
   ): boolean => {
     const tenantId = activeTenant?.tenantId || '';
@@ -3220,6 +3222,12 @@ export default function App() {
               const collectedAt = new Date();
               const collectedDate = todayISO();
               const collectedTime = collectedAt.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+              const customerReceipt: CustomerPayment = {
+                id: receiptNumber, receiptNumber, customerId, customerName: cust.name,
+                amount, paymentDate: collectedDate, paymentMethod,
+                treasuryTarget: bankAccountId || 'cash', recordedBy: currentUser?.employeeName || 'الكاشير',
+              };
+              if (!postAccountingDocument('customer.receipt', customerReceipt)) return;
               // Allocate collections to this customer's oldest open credit invoices (FIFO).
               setInvoices(prev => {
                 let remaining = amount;
@@ -3351,11 +3359,13 @@ export default function App() {
               const updatedSuppliers = suppliers.map(s => s.id === supplierId
                 ? { ...s, balance: newDebt, deferredDebt: newDebt, storeCredit: (s.storeCredit || 0) + overpaid, totalPaid: (s.totalPaid || 0) + amount, lastPaymentDate: paymentDate }
                 : s);
-              const paymentRecord: import('./types/autoParts').SupplierPayment = {
+              const payableApplied = Math.min(amount, Math.max(0, debt));
+              const paymentRecord: SupplierPayment = {
                 id: paymentId, paymentNumber: paymentId.slice(-6), supplierId, supplierName: supplier.name,
-                amount, paymentDate, paymentMethod, treasurySource: _treasurySource, bankAccountId, notes,
+                amount, payableApplied, paymentDate, paymentMethod, treasurySource: _treasurySource, bankAccountId, notes,
                 recordedBy: currentUser?.employeeName || 'مسؤول المشتريات', scheduleId,
               };
+              if (!postAccountingDocument('supplier.payment', paymentRecord)) return reject('تعذر ترحيل سداد المورد محاسبياً؛ لم يتم اعتماد السداد.');
               const tx: TreasuryTransaction = {
                 id: txId, txNumber: uniqueTransactionNumber('TX-S'), date: paymentDate,
                 time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
