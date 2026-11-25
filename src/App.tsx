@@ -2211,6 +2211,26 @@ export default function App() {
       receivedById: currentUser?.employeeId, receivedBy: currentUser?.employeeName || pending.receivedBy,
     });
   };
+  const handleCancelPendingPurchaseInvoice = (invoiceId: string, reason: string): boolean => {
+    const allowed = effectiveRole === 'مدير عام' || Boolean(effectivePermissions?.canManagePurchases);
+    const pending = purchaseInvoices.find(invoice => invoice.id === invoiceId);
+    const cleanReason = reason.trim();
+    if (!allowed || !pending || pending.receiptStatus !== 'pending' || cleanReason.length < 3) return false;
+    const cancelled: PurchaseInvoice = {
+      ...pending, receiptStatus: 'cancelled', cancelledAt: new Date().toISOString(),
+      cancelledBy: currentUser?.employeeName || 'مدير عام',
+      cancellationReason: cleanReason,
+      cancellationApprovedBy: currentUser?.employeeName || 'مدير عام',
+    };
+    const nextInvoices = purchaseInvoices.map(invoice => invoice.id === invoiceId ? cancelled : invoice);
+    if (!persistChanges({ purchaseInvoices: nextInvoices })) {
+      window.alert('تعذر حفظ إلغاء الفاتورة المعلقة. لم يتم تغيير حالتها.');
+      return false;
+    }
+    setPurchaseInvoices(nextInvoices);
+    logAudit('purchase.cancel', 'إلغاء فاتورة مشتريات قبل الاستلام: ' + pending.invoiceNumber + ' — ' + cleanReason, invoiceId, pending.grandTotal);
+    return true;
+  };
   const handleAddPurchaseReturn = (purchaseReturn: PurchaseReturn) => {
     const supplier = suppliers.find(s => s.id === purchaseReturn.supplierId);
     const originalInvoice = purchaseInvoices.find(i => i.id === purchaseReturn.purchaseInvoiceId);
@@ -3208,6 +3228,7 @@ export default function App() {
             treasuryBalance={treasuryBalance}
             onAddPurchaseInvoice={handleAddPurchaseInvoice}
             onReceivePurchaseInvoice={handleReceivePendingPurchaseInvoice}
+            onCancelPendingPurchaseInvoice={effectiveRole === 'مدير عام' || effectivePermissions?.canManagePurchases ? handleCancelPendingPurchaseInvoice : undefined}
             bankAccounts={bankAccounts}
             onPurchaseReturn={handleAddPurchaseReturn}
             onDeletePurchaseReturn={handleDeletePurchaseReturn}
