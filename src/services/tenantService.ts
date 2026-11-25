@@ -504,7 +504,39 @@ export async function authenticateShopUser(
 }> {
   const cleanKey = licenseKey.trim().toUpperCase();
   const licenses = loadTenantLicenses();
-  const tenant = licenses.find(l => l.licenseKey.toUpperCase() === cleanKey);
+  let tenant: TenantLicense | undefined = licenses.find(l => l.licenseKey.toUpperCase() === cleanKey);
+  const cleanUser = usernameOrPhone.trim().toLowerCase();
+  const cleanPass = passwordInput.trim();
+  let preAuthenticatedBody: any = null;
+
+  // The server registry is authoritative: a valid tenant may be absent from this
+  // device's stale local license cache (notably isolated Preview tenants).
+  if (!tenant && typeof navigator !== 'undefined' && navigator.onLine) {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-license-key': cleanKey },
+        body: JSON.stringify({ username: cleanUser, password: cleanPass }),
+      });
+      let body: any = {};
+      try { body = await response.json(); } catch { /* invalid server response */ }
+      if (response.ok && body?.license?.licenseKey && body?.employee?.id &&
+          typeof body?.token === 'string' && body.token.length >= 32) {
+        tenant = body.license as TenantLicense;
+        preAuthenticatedBody = body;
+      } else {
+        return {
+          success: false,
+          message: body?.error || 'مفتاح ترخيص المحل غير مسجل. يرجى التأكد من المفتاح المعتمد وبيانات الدخول.',
+        };
+      }
+    } catch {
+      return {
+        success: false,
+        message: 'تعذّر الاتصال بخادم التحقق من الترخيص. تحقق من الإنترنت وحاول مجددًا.',
+      };
+    }
+  }
 
   if (!tenant) {
     return {
@@ -533,9 +565,6 @@ export async function authenticateShopUser(
   // downloaded employees yet; local cache must not block the server login request.
   const storeData = loadTenantStoreData(tenant);
   const employees = Array.isArray(storeData.employees) ? storeData.employees : [];
-  const cleanUser = usernameOrPhone.trim().toLowerCase();
-  const cleanPass = passwordInput.trim();
-
   const localEmployee = employees.find(e =>
     (e.username && e.username.toLowerCase() === cleanUser) ||
     e.phone === cleanUser ||
@@ -543,12 +572,12 @@ export async function authenticateShopUser(
     (cleanUser === 'admin' && e.role === 'مدير عام')
   );
 
-  let serverSessionToken: string | undefined;
-  let serverSessionExpiresAt: string | undefined;
+  let serverSessionToken: string | undefined = preAuthenticatedBody?.token;
+  let serverSessionExpiresAt: string | undefined = preAuthenticatedBody?.expiresAt;
   let localOnlyLogin = typeof navigator !== 'undefined' && !navigator.onLine;
-  let cloudEmployee: Partial<Employee> | undefined;
+  let cloudEmployee: Partial<Employee> | undefined = preAuthenticatedBody?.employee;
 
-  if (typeof navigator !== 'undefined' && navigator.onLine) {
+  if (typeof navigator !== 'undefined' && navigator.onLine && !preAuthenticatedBody) {
     try {
       const authResponse = await fetch('/api/auth/login', {
         method: 'POST',
