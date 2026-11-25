@@ -1485,8 +1485,12 @@ export default function App() {
       items: invoice.items.map((it, i) => ({ ...it, partId: lines[i].partId, ...(trackedExtras[i] || {}) })),
       loyaltyEarned: earnedPts > 0 ? earnedPts : undefined,
     };
-    if (!postAccountingSource(finalInvoice.date, (context, periodId, createdAt, createdBy, map) =>
-      buildSalesInvoiceJournal(finalInvoice, context, periodId, createdAt, createdBy, map))) return false;
+    const saleAccountingPosted: boolean = postAccountingSource(
+      finalInvoice.date,
+      (context, periodId, createdAt, createdBy, map): SourceAdapterResult =>
+        buildSalesInvoiceJournal(finalInvoice, context, periodId, createdAt, createdBy, map),
+    );
+    if (!saleAccountingPosted) return false;
 
     appendLoyalty(finalInvoice.customerId, [
       { type: 'redeem', points: -redeemedPts, refId: finalInvoice.id, refNumber: finalInvoice.invoiceNumber },
