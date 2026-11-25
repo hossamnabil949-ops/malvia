@@ -299,3 +299,149 @@ export function createDefaultChartOfAccounts(context: AccountingContext): Ledger
     code, name, type, normalBalance, systemKey,
   }));
 }
+
+
+export interface StatementLine {
+  accountId: string; code: string; name: string; amount: number;
+}
+export interface IncomeStatement {
+  revenueLines: StatementLine[]; expenseLines: StatementLine[];
+  totalRevenue: number; totalExpenses: number; netIncome: number;
+}
+export interface BalanceSheet {
+  assetLines: StatementLine[]; liabilityLines: StatementLine[]; equityLines: StatementLine[];
+  totalAssets: number; totalLiabilities: number; totalEquity: number;
+  currentPeriodEarnings: number; liabilitiesAndEquity: number; difference: number;
+}
+export interface CashFlowStatement {
+  openingCash: number; operating: number; investing: number;
+  financing: number; unclassified: number; netChange: number; closingCash: number;
+}
+export interface FinancialStatements {
+  income: IncomeStatement; balance: BalanceSheet; cashFlow: CashFlowStatement;
+}
+export type PeriodCloseError =
+  | 'PERIOD_NOT_FOUND' | 'PERIOD_ALREADY_CLOSED' | 'PERIOD_NOT_ENDED'
+  | 'CLOSE_DATE_INVALID' | 'PERIOD_ENTRIES_UNBALANCED' | 'PERIOD_TOTALS_UNBALANCED';
+export type PeriodCloseResult =
+  | { period: AccountingPeriod; error: null }
+  | { period: null; error: PeriodCloseError };
+
+const inContext = (account: LedgerAccount, context: AccountingContext) =>
+  account.tenantId === context.tenantId && account.branchId === context.branchId
+  && account.currency.toUpperCase() === context.currency.toUpperCase();
+
+const statementLines = (accounts: LedgerAccount[], amountById: Map<string, number>): StatementLine[] =>
+  accounts.filter(account => account.active && (amountById.get(account.id) || 0) !== 0)
+    .map(account => ({ accountId: account.id, code: account.code, name: account.name,
+      amount: roundCurrency(amountById.get(account.id) || 0) }))
+    .sort((a, b) => a.code.localeCompare(b.code));
+
+/** Builds journal-only statements. Legacy balances are included only through posted opening journals. */
+export function buildFinancialStatements(
+  accounts: LedgerAccount[], entries: JournalEntry[], context: AccountingContext,
+  from: string, to: string,
+): FinancialStatements {
+  if (!validDate(from) || !validDate(to) || from > to) {
+    const emptyIncome: IncomeStatement = { revenueLines: [], expenseLines: [], totalRevenue: 0, totalExpenses: 0, netIncome: 0 };
+    const emptyBalance: BalanceSheet = { assetLines: [], liabilityLines: [], equityLines: [], totalAssets: 0, totalLiabilities: 0, totalEquity: 0, currentPeriodEarnings: 0, liabilitiesAndEquity: 0, difference: 0 };
+    return { income: emptyIncome, balance: emptyBalance, cashFlow: { openingCash: 0, operating: 0, investing: 0, financing: 0, unclassified: 0, netChange: 0, closingCash: 0 } };
+  }
+  const scopedAccounts = accounts.filter(account => inContext(account, context));
+  const scopedEntries = entries.filter(entry => entry.status === 'posted' && entry.tenantId === context.tenantId
+    && entry.branchId === context.branchId && entry.currency.toUpperCase() === context.currency.toUpperCase()
+    && entry.date <= to);
+  const periodEntries = scopedEntries.filter(entry => entry.date >= from);
+  const incomeNet = new Map<string, number>();
+  for (const entry of periodEntries) for (const line of entry.lines) {
+    incomeNet.set(line.accountId, (incomeNet.get(line.accountId) || 0) + line.credit - line.debit);
+  }
+  const revenueAmounts = new Map<string, number>();
+  const expenseAmounts = new Map<string, number>();
+  for (const account of scopedAccounts) {
+    const net = incomeNet.get(account.id) || 0;
+    if (account.type === 'revenue') revenueAmounts.set(account.id, net);
+    if (account.type === 'expense') expenseAmounts.set(account.id, -net);
+  }
+  const revenueLines = statementLines(scopedAccounts.filter(a => a.type === 'revenue'), revenueAmounts);
+  const expenseLines = statementLines(scopedAccounts.filter(a => a.type === 'expense'), expenseAmounts);
+  const totalRevenue = roundCurrency(revenueLines.reduce((sum, line) => sum + line.amount, 0));
+  const totalExpenses = roundCurrency(expenseLines.reduce((sum, line) => sum + line.amount, 0));
+  const netIncome = roundCurrency(totalRevenue - totalExpenses);
+  const balanceNet = new Map<string, number>();
+  for (const entry of scopedEntries) for (const line of entry.lines) {
+    balanceNet.set(line.accountId, (balanceNet.get(line.accountId) || 0) + line.debit - line.credit);
+  }
+  const assets = new Map<string, number>(), liabilities = new Map<string, number>(), equity = new Map<string, number>();
+  for (const account of scopedAccounts) {
+    const net = balanceNet.get(account.id) || 0;
+    if (account.type === 'asset') assets.set(account.id, net);
+    if (account.type === 'liability') liabilities.set(account.id, -net);
+    if (account.type === 'equity') equity.set(account.id, -net);
+  }
+  const assetLines = statementLines(scopedAccounts.filter(a => a.type === 'asset'), assets);
+  const liabilityLines = statementLines(scopedAccounts.filter(a => a.type === 'liability'), liabilities);
+  const equityLines = statementLines(scopedAccounts.filter(a => a.type === 'equity'), equity);
+  const totalAssets = roundCurrency(assetLines.reduce((sum, line) => sum + line.amount, 0));
+  const totalLiabilities = roundCurrency(liabilityLines.reduce((sum, line) => sum + line.amount, 0));
+  const totalEquity = roundCurrency(equityLines.reduce((sum, line) => sum + line.amount, 0));
+  const liabilitiesAndEquity = roundCurrency(totalLiabilities + totalEquity + netIncome);
+  const cashKeys = (key?: string) => !!key && (key === 'cash' || key === 'bank' || key.startsWith('bank:')
+    || key === 'wallet' || key.startsWith('wallet:') || key === 'instapay' || key.startsWith('instapay:'));
+  const liquidIds = new Set(scopedAccounts.filter(account => cashKeys(account.systemKey)).map(account => account.id));
+  const cashDelta = (entry: JournalEntry) => roundCurrency(entry.lines
+    .filter(line => liquidIds.has(line.accountId)).reduce((sum, line) => sum + line.debit - line.credit, 0));
+  const openingCash = roundCurrency(scopedEntries.filter(entry => entry.date < from).reduce((sum, entry) => sum + cashDelta(entry), 0));
+  const flows = { operating: 0, investing: 0, financing: 0, unclassified: 0 };
+  const flowTypes: Record<string, keyof typeof flows> = {
+    'sales.invoice': 'operating', 'sales.invoice-void': 'operating', 'sales.return': 'operating',
+    'purchase.invoice': 'operating', 'purchase.invoice-void': 'operating', 'purchase.return': 'operating',
+    expense: 'operating', 'customer.receipt': 'operating', 'supplier.payment': 'operating',
+    'bank.card-settlement': 'operating', 'cheque.lifecycle': 'operating',
+    'partner.current-account': 'financing',
+  };
+  for (const entry of periodEntries) {
+    const delta = cashDelta(entry);
+    if (!delta) continue;
+    const category = flowTypes[entry.source.type] || 'unclassified';
+    flows[category] = roundCurrency(flows[category] + delta);
+  }
+  const netChange = roundCurrency(flows.operating + flows.investing + flows.financing + flows.unclassified);
+  return {
+    income: { revenueLines, expenseLines, totalRevenue, totalExpenses, netIncome },
+    balance: { assetLines, liabilityLines, equityLines, totalAssets, totalLiabilities, totalEquity,
+      currentPeriodEarnings: netIncome, liabilitiesAndEquity, difference: roundCurrency(totalAssets - liabilitiesAndEquity) },
+    cashFlow: { openingCash, ...flows, netChange, closingCash: roundCurrency(openingCash + netChange) },
+  };
+}
+
+/** Closes a period only after checking every posted entry and the period-wide debit/credit totals. */
+export function closeAccountingPeriod(
+  periodId: string, closedAt: string, closedBy: string,
+  periods: AccountingPeriod[], entries: JournalEntry[],
+): PeriodCloseResult {
+  const period = periods.find(item => item.id === periodId);
+  if (!period) return { period: null, error: 'PERIOD_NOT_FOUND' };
+  if (period.status !== 'open') return { period: null, error: 'PERIOD_ALREADY_CLOSED' };
+  const closeDate = closedAt.slice(0, 10);
+  if (!validDate(closeDate)) return { period: null, error: 'CLOSE_DATE_INVALID' };
+  if (period.endDate > closeDate) return { period: null, error: 'PERIOD_NOT_ENDED' };
+  const periodEntries = entries.filter(entry => entry.status === 'posted' && entry.periodId === periodId
+    && entry.tenantId === period.tenantId && entry.branchId === period.branchId
+    && entry.currency.toUpperCase() === period.currency.toUpperCase());
+  let debit = 0, credit = 0;
+  for (const entry of periodEntries) {
+    let entryDebit = 0, entryCredit = 0;
+    for (const line of entry.lines) {
+      if (!Number.isFinite(line.debit) || !Number.isFinite(line.credit) || line.debit < 0 || line.credit < 0
+        || ((line.debit > 0) === (line.credit > 0))) return { period: null, error: 'PERIOD_ENTRIES_UNBALANCED' };
+      entryDebit += line.debit; entryCredit += line.credit;
+    }
+    if (roundCurrency(entryDebit) <= 0 || roundCurrency(entryDebit) !== roundCurrency(entryCredit)) {
+      return { period: null, error: 'PERIOD_ENTRIES_UNBALANCED' };
+    }
+    debit += entryDebit; credit += entryCredit;
+  }
+  if (roundCurrency(debit) !== roundCurrency(credit)) return { period: null, error: 'PERIOD_TOTALS_UNBALANCED' };
+  return { period: { ...period, status: 'closed', closedAt, closedBy }, error: null };
+}
