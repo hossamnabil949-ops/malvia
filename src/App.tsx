@@ -418,7 +418,12 @@ export default function App() {
     const tenantId = activeTenant?.tenantId || '';
     if (!tenantId) return false;
     const context = { tenantId, branchId: 'MAIN', currency: 'EGP' };
-    const documentDate = 'date' in document ? document.date : '';
+    const documentDate = options.chequeLifecycle?.eventDate
+      || ('voidedAt' in document ? document.voidedAt?.slice(0, 10) || '' : '')
+      || ('receivedAt' in document ? document.receivedAt?.slice(0, 10) || '' : '')
+      || ('paymentDate' in document ? document.paymentDate : '')
+      || ('receivedDate' in document ? document.receivedDate : '')
+      || ('date' in document ? document.date : '');
     const defaults = createDefaultChartOfAccounts(context);
     let nextAccounts = accountingAccounts.length ? [...accountingAccounts] : defaults;
     const knownSystemKeys = new Set(nextAccounts.map(account => account.systemKey).filter(Boolean));
