@@ -3,6 +3,7 @@ import {
   buildTrialBalanceRows, createDefaultChartOfAccounts, createJournalEntry, createReversalEntry,
   type LedgerAccount, type AccountingPeriod, type JournalEntry, type AccountType,
 } from '../utils/accountingCore';
+import { AccountingStatementsPanel } from './AccountingStatementsPanel';
 
 interface Props {
   tenantId: string; branchId?: string; currentUserName: string; canManage: boolean;
@@ -89,6 +90,7 @@ export const AccountingLedgerView: React.FC<Props> = ({ tenantId, branchId = 'MA
       </div>
     </header>
     {notice && <div role="status" className="rounded-lg border border-slate-600 bg-slate-800 p-3 text-sm text-slate-200">{notice}</div>}
+    <AccountingStatementsPanel context={{ tenantId, branchId, currency }} accounts={initializedAccounts} periods={periods} entries={entries} currentUserName={currentUserName} canManage={canManage} onSave={onSave} />
     {showEntry && <div className="rounded-xl border border-slate-700 bg-slate-900 p-4 space-y-3">
       <h3 className="font-bold text-white">إنشاء قيد يومية يدوي</h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
