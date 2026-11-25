@@ -3666,6 +3666,7 @@ export default function App() {
             onAddBankAccount={handleAddBankAccount}
             onSettleVisa={handleSettleVisa}
             onTransferBank={handleBankTransfer}
+            onTransferFunds={handleTransferFunds}
             canManageExpenses={currentUser?.role === 'مدير عام' || Boolean(effectivePermissions?.canManageExpenses || effectivePermissions?.canManageTreasury)}
             canManageTreasury={effectiveRole === 'مدير عام' || effectiveRole === 'محاسب مالي' || Boolean(effectivePermissions?.canManageTreasury)}
             canManagePartners={canManageCapital}
