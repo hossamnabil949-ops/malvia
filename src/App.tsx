@@ -54,7 +54,7 @@ import type { LedgerAccount, AccountingPeriod, JournalEntry } from './utils/acco
 import { prepareAccountingDocumentPosting, type AccountingDocumentKind } from './utils/accountingDocumentPosting';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
 import { createBankMovementEntry, createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount, summarizeBankAccount } from './utils/bankLedger';
-import { requiresDirectBankAccount, requiresSpecificBankAccount } from './utils/paymentMethods';
+import { paymentAccountOf, requiresDirectBankAccount, requiresSpecificBankAccount } from './utils/paymentMethods';
 import { applySupplierSchedulePayment, getSupplierSchedulePaymentState } from './utils/supplierPaymentScheduleLogic';
 import { getOpenPartnerCurrentAccountOrigins, partnerCurrentAccountCashDirection, PARTNER_CURRENT_ACCOUNT_CATEGORIES } from './utils/partnerCurrentAccount';
 
@@ -412,7 +412,7 @@ export default function App() {
   // لا يُرحّل طلب الشراء قبل الاستلام، ولا يُنشأ قيد عند الإلغاء.
   const postAccountingDocument = (
     kind: AccountingDocumentKind,
-    document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment | PartnerCurrentAccountTransaction | CardSettlementBatch | Cheque | { id: string; date: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; reference?: string },
+    document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment | PartnerCurrentAccountTransaction | CardSettlementBatch | Cheque | { id: string; date: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; reference?: string } | { id: string; date: string; amount: number; sourceMethod: string; destinationMethod: string; sourceBankAccountId?: string; destinationBankAccountId?: string; reference?: string },
     options: { originalInvoice?: Invoice | PurchaseInvoice; voidPlan?: ReturnType<typeof computeVoidPlan>; chequeLifecycle?: { action: 'clear' | 'bounce' | 'cancel'; previousStatus: Cheque['status']; eventId: string; eventDate: string } } = {},
   ): boolean => {
     const tenantId = activeTenant?.tenantId || '';
@@ -432,6 +432,23 @@ export default function App() {
       if (account.systemKey && !knownSystemKeys.has(account.systemKey)
         && !nextAccounts.some(existing => existing.id === account.id)) nextAccounts.push(account);
     });
+    if (kind === 'finance.account-transfer') {
+      const movement = document as { sourceMethod: string; destinationMethod: string };
+      [movement.sourceMethod, movement.destinationMethod].forEach(method => {
+        const rail = paymentAccountOf(method);
+        if (rail !== 'wallet' && rail !== 'instapay') return;
+        const systemKey = rail + ':' + method;
+        if (nextAccounts.some(account => account.systemKey === systemKey)) return;
+        const prefix = rail === 'wallet' ? '1021-' : '1022-';
+        const count = nextAccounts.filter(account => account.systemKey?.startsWith(rail + ':')).length + 1;
+        nextAccounts.push({
+          ...context, currency: 'EGP', id: tenantId + ':MAIN:' + systemKey,
+          code: prefix + String(count).padStart(3, '0'),
+          name: (rail === 'wallet' ? 'محفظة — ' : 'إنستاباي — ') + method,
+          type: 'asset', normalBalance: 'debit', systemKey, active: true,
+        });
+      });
+    }
     // Each active bank sub-ledger receives its own stable GL control account.
     bankAccounts.filter(bank => bank.active).forEach((bank, index) => {
       const systemKey = 'bank:' + bank.id;
@@ -2802,6 +2819,104 @@ export default function App() {
     setBankLedgerEntries(nextEntries);
     persistChanges({ bankLedgerEntries: nextEntries });
     logAudit('bank.transfer', `تحويل بنكي بقيمة ${input.amount} ج.م من ${bankAccounts.find(a => a.id === input.sourceBankAccountId)?.name || ''} إلى ${bankAccounts.find(a => a.id === input.destinationBankAccountId)?.name || ''}`, input.id, input.amount);
+    return { ok: true };
+  };
+
+  const handleTransferFunds = (input: {
+    id: string; date: string; amount: number; sourceMethod: string; destinationMethod: string;
+    sourceBankAccountId?: string; destinationBankAccountId?: string; reference?: string;
+  }): { ok: boolean; message?: string } => {
+    if (!input.id || !Number.isFinite(input.amount) || input.amount <= 0) return { ok: false, message: 'أدخل مبلغاً صحيحاً ورقم حركة صالحاً.' };
+    if (!input.date || !input.sourceMethod || !input.destinationMethod) return { ok: false, message: 'حدد الحساب المصدر والمستلم والتاريخ.' };
+    let sourceRail: ReturnType<typeof paymentAccountOf>, destinationRail: ReturnType<typeof paymentAccountOf>;
+    try {
+      sourceRail = paymentAccountOf(input.sourceMethod);
+      destinationRail = paymentAccountOf(input.destinationMethod);
+    } catch (error) { return { ok: false, message: error instanceof Error ? error.message : 'نوع الحساب غير معروف.' }; }
+    if (sourceRail === 'credit' || destinationRail === 'credit') return { ok: false, message: 'لا يمكن التحويل إلى حساب آجل؛ اختر حساب سيولة.' };
+    if (input.sourceMethod === input.destinationMethod
+      && (sourceRail !== 'bank' || input.sourceBankAccountId === input.destinationBankAccountId)) {
+      return { ok: false, message: 'اختر حسابين مختلفين.' };
+    }
+    const activeBank = (id?: string) => bankAccounts.find(account => account.id === id && account.active);
+    if (sourceRail === 'bank' && !activeBank(input.sourceBankAccountId)) return { ok: false, message: 'اختر حساب البنك المصدر النشط.' };
+    if (destinationRail === 'bank' && !activeBank(input.destinationBankAccountId)) return { ok: false, message: 'اختر حساب البنك المستلم النشط.' };
+    if (treasury.some(tx => tx.referenceId === input.id)
+      || bankLedgerEntries.some(entry => entry.batchId === input.id || entry.id.includes(input.id))) {
+      return { ok: false, message: 'رقم الحركة مسجل من قبل؛ لم يتم تكرار التحويل.' };
+    }
+    const amount = round2(input.amount);
+    const railBalance = (method: string, rail: ReturnType<typeof paymentAccountOf>, bankId?: string): number => {
+      if (rail === 'bank') {
+        const account = activeBank(bankId);
+        return account ? summarizeBankAccount(account, bankLedgerEntries) : 0;
+      }
+      return treasury.reduce((sum, tx) => {
+        let same = false;
+        try {
+          same = paymentAccountOf(tx.paymentMethod) === rail
+            && (rail === 'cash' || tx.paymentMethod === method);
+        } catch { same = false; }
+        return same ? sum + (tx.type === 'قبض' ? tx.amount : -tx.amount) : sum;
+      }, 0);
+    };
+    const sourceBalance = railBalance(input.sourceMethod, sourceRail, input.sourceBankAccountId);
+    if (sourceBalance + 0.005 < amount) {
+      return { ok: false, message: 'الرصيد المتاح في الحساب المصدر غير كافٍ. الرصيد الحالي: ' + sourceBalance.toLocaleString('ar-EG') + ' ج.م' };
+    }
+    const now = new Date();
+    const by = currentUser?.employeeName || 'غير معروف';
+    const nextTreasury: TreasuryTransaction[] = [];
+    const nextBank: BankLedgerEntry[] = [];
+    const makeTreasuryMovement = (method: string, type: 'قبض' | 'صرف', balanceAfter: number, suffix: string): TreasuryTransaction => ({
+      id: 'FIN-TRF:' + input.id + ':' + suffix,
+      txNumber: uniqueTransactionNumber('TX-TRF'),
+      date: input.date,
+      time: now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+      type, category: 'تحويل بين الحسابات المالية', amount,
+      paymentMethod: method, balanceAfter: round2(balanceAfter),
+      referenceId: input.id,
+      description: 'تحويل داخلي ' + (type === 'صرف' ? 'صادر إلى ' + input.destinationMethod : 'وارد من ' + input.sourceMethod)
+        + (input.reference ? ' — مرجع: ' + input.reference : ''),
+      recordedBy: by, at: now.toISOString(),
+    });
+    if (sourceRail === 'bank') {
+      const created = createBankMovementEntry({
+        id: 'finance-transfer:' + input.id + ':out', batchId: input.id,
+        bankAccountId: input.sourceBankAccountId!, direction: 'out', amount,
+        date: input.date, reference: input.reference || input.id, description: 'تحويل إلى ' + input.destinationMethod,
+      }, bankAccounts, bankLedgerEntries);
+      if (created.error || !created.entry) return { ok: false, message: 'تعذر إنشاء حركة الصرف من البنك المصدر.' };
+      nextBank.push(created.entry);
+    } else {
+      nextTreasury.push(makeTreasuryMovement(input.sourceMethod, 'صرف', sourceBalance - amount, 'out'));
+    }
+    const destinationBalance = railBalance(input.destinationMethod, destinationRail, input.destinationBankAccountId);
+    if (destinationRail === 'bank') {
+      const created = createBankMovementEntry({
+        id: 'finance-transfer:' + input.id + ':in', batchId: input.id,
+        bankAccountId: input.destinationBankAccountId!, direction: 'in', amount,
+        date: input.date, reference: input.reference || input.id, description: 'تحويل وارد من ' + input.sourceMethod,
+      }, bankAccounts, [...bankLedgerEntries, ...nextBank]);
+      if (created.error || !created.entry) return { ok: false, message: 'تعذر إنشاء حركة الإيداع في البنك المستلم.' };
+      nextBank.push(created.entry);
+    } else {
+      nextTreasury.push(makeTreasuryMovement(input.destinationMethod, 'قبض', destinationBalance + amount, 'in'));
+    }
+    const document = { ...input, amount };
+    if (!postAccountingDocument('finance.account-transfer', document)) return { ok: false, message: 'تم إيقاف التحويل لأن القيد المحاسبي لم يُعتمد.' };
+    const saved = persistChanges({
+      ...(nextTreasury.length ? { treasuryTransactions: [...nextTreasury, ...treasury] } : {}),
+      ...(nextBank.length ? { bankLedgerEntries: [...nextBank, ...bankLedgerEntries] } : {}),
+    });
+    if (!saved) return { ok: false, message: 'تعذر حفظ دفاتر الحركة؛ راجع سجل الأستاذ قبل إعادة المحاولة.' };
+    if (nextTreasury.length) {
+      const updated = [...nextTreasury, ...treasury];
+      setTreasury(updated);
+      nextTreasury.forEach(tx => knownTreasuryIds.current.add(tx.id));
+    }
+    if (nextBank.length) setBankLedgerEntries([...nextBank, ...bankLedgerEntries]);
+    logAudit('bank.transfer', 'تحويل داخلي ' + amount + ' ج.م من ' + input.sourceMethod + ' إلى ' + input.destinationMethod, input.id, amount);
     return { ok: true };
   };
 
