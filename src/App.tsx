@@ -1181,7 +1181,7 @@ export default function App() {
       ...applied,
       history: [{ at: nowISO, status: initialStatus(input.direction), by, note: 'تسجيل الشيك' }],
     };
-    if (!postAccountingDocument('cheque.register', cheque)) return { ok: false, error: 'CHEQUE_LIFECYCLE_INVALID' };
+    if (!postAccountingDocument('cheque.register', cheque)) return { ok: false };
     applyChequeEffectToParty(cheque, effect, true);
     setCheques(prev => {
       const updated = [cheque, ...prev];
