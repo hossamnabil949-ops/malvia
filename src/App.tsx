@@ -1391,6 +1391,10 @@ export default function App() {
       items: invoice.items.map((it, i) => ({ ...it, partId: lines[i].partId, ...(trackedExtras[i] || {}) })),
       loyaltyEarned: earnedPts > 0 ? earnedPts : undefined,
     };
+    if (!postAutomaticAccounting((ctx, periodId, map) => buildSalesInvoiceJournal(
+      finalInvoice, ctx, periodId, new Date().toISOString(), currentUser?.employeeName || 'النظام', map,
+    ), finalInvoice.date)) return false;
+
     appendLoyalty(finalInvoice.customerId, [
       { type: 'redeem', points: -redeemedPts, refId: finalInvoice.id, refNumber: finalInvoice.invoiceNumber },
       { type: 'earn', points: earnedPts, refId: finalInvoice.id, refNumber: finalInvoice.invoiceNumber, expires: true },
@@ -1502,6 +1506,13 @@ export default function App() {
         totalRefundAmount: ret.totalRefundAmount,
       })),
     });
+    const voidedInvoice = {
+      ...inv, status: 'ملغاة' as const, voidedAt: new Date().toISOString(),
+      voidApprovedBy: approvedBy, voidReason: cleanReason,
+    };
+    if (!postAutomaticAccounting((ctx, periodId, map) => buildInvoiceVoidJournal(
+      voidedInvoice, plan, ctx, periodId, new Date().toISOString(), currentUser?.employeeName || 'النظام', map,
+    ), voidedInvoice.voidedAt.slice(0, 10))) return false;
     const fraction = plan.fraction;
     // عكس الولاء: تُسحب النقاط المتبقية من الفاتورة وتُرد النقاط المستبدلة
     appendLoyalty(inv.customerId, [
@@ -1688,6 +1699,9 @@ export default function App() {
           }),
         }
       : rawReturn;
+    if (!origInv || !postAutomaticAccounting((ctx, periodId, map) => buildSalesReturnJournal(
+      salesReturn, origInv, ctx, periodId, new Date().toISOString(), currentUser?.employeeName || 'النظام', map,
+    ), salesReturn.date)) return;
     if (origInv) applyReturnTracking(origInv, salesReturn.items, 1);
     setSalesReturns(prev => {
       const updated = [salesReturn, ...prev];
@@ -1987,6 +2001,14 @@ export default function App() {
       return false;
     }
 
+    if (invoice.receiptStatus === 'pending' || invoice.receiptStatus === 'cancelled') {
+      window.alert('لا يمكن ترحيل فاتورة مشتريات قبل تأكيد استلام البضاعة أو بعد إلغائها.');
+      return false;
+    }
+    if (!postAutomaticAccounting((ctx, periodId, map) => buildPurchaseInvoiceJournal(
+      invoice, ctx, periodId, new Date().toISOString(), currentUser?.employeeName || 'النظام', map,
+    ), invoice.date)) return false;
+
     setPurchaseInvoices(prev => {
       const updated = [invoice, ...prev];
       persistChanges({ purchaseInvoices: updated });
@@ -2152,6 +2174,10 @@ export default function App() {
       unpaidDebtAfterReturn: debtBefore - deducted,
       isSettled: true,
     };
+
+    if (!originalInvoice || !postAutomaticAccounting((ctx, periodId, map) => buildPurchaseReturnJournal(
+      finalReturn, originalInvoice, ctx, periodId, new Date().toISOString(), currentUser?.employeeName || 'النظام', map,
+    ), finalReturn.date)) return;
 
     setPurchaseReturns(prev => {
       const updated = [finalReturn, ...prev];
