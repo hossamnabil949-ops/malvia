@@ -47,7 +47,9 @@ import {
   Shift
 } from './types/autoParts';
 import type { OpeningBalanceRecord } from './utils/openingBalanceLogic';
+import { createDefaultChartOfAccounts } from './utils/accountingCore';
 import type { LedgerAccount, AccountingPeriod, JournalEntry } from './utils/accountingCore';
+import { prepareAccountingDocumentPosting, type AccountingDocumentKind } from './utils/accountingDocumentPosting';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
 import { createBankMovementEntry, createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount, summarizeBankAccount } from './utils/bankLedger';
 import { requiresDirectBankAccount, requiresSpecificBankAccount } from './utils/paymentMethods';
@@ -404,6 +406,74 @@ export default function App() {
     if (!activeTenantId) return false;
     return saveTenantStoreData(activeTenantId, updates);
   }, [activeTenantId]);
+  // يرحّل المستندات المعتمدة إلى الأستاذ العام بمعرّف مصدر ثابت يمنع تكرار القيد.
+  // لا يُرحّل طلب الشراء قبل الاستلام، ولا يُنشأ قيد عند الإلغاء.
+  const postAccountingDocument = (
+    kind: AccountingDocumentKind,
+    document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense,
+    options: { originalInvoice?: Invoice | PurchaseInvoice; voidPlan?: ReturnType<typeof computeVoidPlan> } = {},
+  ): boolean => {
+    const tenantId = activeTenant?.tenantId || '';
+    if (!tenantId) return false;
+    const context = { tenantId, branchId: 'MAIN', currency: 'EGP' };
+    const documentDate = 'date' in document ? document.date : '';
+    const defaults = createDefaultChartOfAccounts(context);
+    let nextAccounts = accountingAccounts.length ? [...accountingAccounts] : defaults;
+    const knownSystemKeys = new Set(nextAccounts.map(account => account.systemKey).filter(Boolean));
+    defaults.forEach(account => {
+      if (account.systemKey && !knownSystemKeys.has(account.systemKey)
+        && !nextAccounts.some(existing => existing.id === account.id)) nextAccounts.push(account);
+    });
+    // Each active bank sub-ledger receives its own stable GL control account.
+    bankAccounts.filter(bank => bank.active).forEach((bank, index) => {
+      const systemKey = 'bank:' + bank.id;
+      if (!nextAccounts.some(account => account.systemKey === systemKey)) {
+        nextAccounts.push({
+          ...context, currency: 'EGP', id: tenantId + ':MAIN:' + systemKey,
+          code: '101-' + String(index + 1).padStart(3, '0'),
+          name: 'البنك — ' + bank.name, type: 'asset', normalBalance: 'debit',
+          systemKey, active: true,
+        });
+      }
+    });
+    let nextPeriods = [...accountingPeriods];
+    if (!nextPeriods.length && /^\\d{4}-\\d{2}-\\d{2}$/.test(documentDate)) {
+      const year = documentDate.slice(0, 4);
+      nextPeriods = [{
+        ...context, id: 'FY-' + year, name: 'السنة المالية ' + year,
+        startDate: year + '-01-01', endDate: year + '-12-31', status: 'open',
+      }];
+    }
+    const result = prepareAccountingDocumentPosting({
+      kind, document, context, accounts: nextAccounts, periods: nextPeriods,
+      existingEntries: accountingJournalEntries,
+      actor: currentUser?.employeeName || 'مستخدم النظام',
+      createdAt: new Date().toISOString(),
+      ...(options.originalInvoice ? { originalInvoice: options.originalInvoice } : {}),
+      ...(options.voidPlan ? { voidPlan: options.voidPlan } : {}),
+    });
+    if (result.status === 'skipped') return true;
+    if (result.status === 'failed') {
+      window.alert('لم يتم اعتماد المستند محاسبياً، لذلك أُوقفت العملية لحماية الأرصدة. سبب الرفض: ' + result.error);
+      return false;
+    }
+    if (result.status === 'already-posted') return true;
+    const nextEntries = [...accountingJournalEntries, result.entry];
+    const saved = persistChanges({
+      ...(!accountingAccounts.length || nextAccounts.length !== accountingAccounts.length ? { accountingAccounts: nextAccounts } : {}),
+      ...(!accountingPeriods.length ? { accountingPeriods: nextPeriods } : {}),
+      accountingJournalEntries: nextEntries,
+    });
+    if (!saved) {
+      window.alert('تعذر حفظ القيد المحاسبي. لم يتم اعتماد المستند.');
+      return false;
+    }
+    setAccountingAccounts(nextAccounts);
+    setAccountingPeriods(nextPeriods);
+    setAccountingJournalEntries(nextEntries);
+    return true;
+  };
+
 
   // سجل التدقيق: من فعل ماذا ومتى (يمنع التلاعب ويكشفه)
   const logAudit = (action: AuditEntry['action'], summary: string, entityId?: string, amount?: number) => {
