@@ -421,7 +421,7 @@ export default function App() {
       createdAt: string, createdBy: string, map: SourceAccountMap) => SourceAdapterResult,
   ): boolean => {
     const tenantId = activeTenant?.tenantId || '';
-    if (!tenantId || !/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) return false;
+    if (!tenantId || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)) return false;
     const context = { tenantId, branchId: 'MAIN', currency: 'EGP' };
     const defaults = createDefaultChartOfAccounts(context);
     const currentAccounts = accountingAccounts.filter(a => a.tenantId === tenantId && a.branchId === 'MAIN');
@@ -1746,8 +1746,26 @@ export default function App() {
       window.alert('تعذر إنشاء القيد المحاسبي للمستند: ' + (built.error || 'بيانات المستند غير مكتملة') + '. لم يتم اعتماد العملية.');
       return false;
     }
+    const sourceKey = [
+      context.tenantId, context.branchId, built.input.source.type, built.input.source.id,
+      (built.input.source.lineId || ''), built.input.postingId,
+    ].map(part => encodeURIComponent(part)).join('|');
+    const existingSourceEntry = accountingJournalEntries.find(entry => entry.sourceKey === sourceKey);
+    if (existingSourceEntry) {
+      const sameLines = existingSourceEntry.lines.length === built.input.lines.length
+        && existingSourceEntry.lines.every((line, index) => {
+          const candidate = built.input!.lines[index];
+          return line.accountId === candidate.accountId && line.debit === candidate.debit
+            && line.credit === candidate.credit && line.description === candidate.description;
+        });
+      const sameDocument = existingSourceEntry.date === built.input.date
+        && existingSourceEntry.periodId === built.input.periodId
+        && existingSourceEntry.memo === built.input.memo && sameLines;
+      if (sameDocument) return true;
+      window.alert('تم العثور على قيد سابق لنفس المستند لكن تفاصيله مختلفة. أوقف النظام الترحيل لمنع ازدواج أو تعارض محاسبي؛ يلزم مراجعة المحاسب.');
+      return false;
+    }
     const result = createJournalEntry(built.input, accounts, periods, accountingJournalEntries);
-    if (result.error === 'DUPLICATE_POSTING') return true;
     if (!result.entry || result.error) {
       window.alert('تعذر اعتماد القيد المحاسبي: ' + (result.error || 'UNKNOWN') + '. لم يتم اعتماد العملية.');
       return false;
