@@ -54,7 +54,6 @@ import {
   buildSalesReturnJournal, buildPurchaseReturnJournal, buildExpenseJournal,
 } from './utils/accountingSourceAdapters';
 import type { SourceAccountMap, SourceAdapterResult } from './utils/accountingSourceAdapters';
-import type { SourceAccountMap, SourceAdapterResult } from './utils/accountingSourceAdapters';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from './utils/bankLedger';
 import { createBankMovementEntry, createBankTransferEntries, createCardSettlementEntries, createChequeBankEntry, createChequeBankReversalEntry, validateBankAccount, summarizeBankAccount } from './utils/bankLedger';
 import { paymentAccountOf, requiresDirectBankAccount, requiresSpecificBankAccount } from './utils/paymentMethods';
@@ -473,7 +472,20 @@ export default function App() {
       return false;
     }
     const sourceKey = makeSourceKey(context, adapted.input.source, adapted.input.postingId);
-    if (accountingJournalEntries.some(entry => entry.sourceKey === sourceKey)) return true;
+    const existing = accountingJournalEntries.find(entry => entry.sourceKey === sourceKey);
+    if (existing) {
+      const sameLines = existing.lines.length === adapted.input!.lines.length
+        && existing.lines.every((line, index) => {
+          const candidate = adapted.input!.lines[index];
+          return line.accountId === candidate.accountId && line.debit === candidate.debit
+            && line.credit === candidate.credit && line.description === candidate.description;
+        });
+      const sameDocument = existing.date === adapted.input.date
+        && existing.periodId === adapted.input.periodId && existing.memo === adapted.input.memo && sameLines;
+      if (sameDocument) return true;
+      window.alert('يوجد قيد سابق لنفس المستند بتفاصيل مختلفة. تم إيقاف العملية لمنع الترحيل المكرر أو المتعارض.');
+      return false;
+    }
     const result = createJournalEntry(adapted.input, accounts, periods, accountingJournalEntries);
     if (result.error || !result.entry) {
       window.alert('فشل التحقق من القيد المحاسبي (' + (result.error || 'UNKNOWN') + '). لم يتم اعتماد العملية.');
@@ -1475,9 +1487,6 @@ export default function App() {
     };
     if (!postAccountingSource(finalInvoice.date, (context, periodId, createdAt, createdBy, map) =>
       buildSalesInvoiceJournal(finalInvoice, context, periodId, createdAt, createdBy, map))) return;
-    if (!postAutomaticAccounting((ctx, periodId, map) => buildSalesInvoiceJournal(
-      finalInvoice, ctx, periodId, new Date().toISOString(), currentUser?.employeeName || 'النظام', map,
-    ), finalInvoice.date)) return false;
 
     appendLoyalty(finalInvoice.customerId, [
       { type: 'redeem', points: -redeemedPts, refId: finalInvoice.id, refNumber: finalInvoice.invoiceNumber },
@@ -1594,9 +1603,6 @@ export default function App() {
       ...inv, status: 'ملغاة' as const, voidedAt: new Date().toISOString(),
       voidApprovedBy: approvedBy, voidReason: cleanReason,
     };
-    if (!postAutomaticAccounting((ctx, periodId, map) => buildInvoiceVoidJournal(
-      voidedInvoice, plan, ctx, periodId, new Date().toISOString(), currentUser?.employeeName || 'النظام', map,
-    ), voidedInvoice.voidedAt.slice(0, 10))) return false;
     const fraction = plan.fraction;
     const voidedInvoiceForLedger: Invoice = {
       ...inv, status: 'ملغاة', voidedAt: new Date().toISOString(),
@@ -1695,94 +1701,6 @@ export default function App() {
     return true;
   };
 
-  // Automatic ledger posting: immutable source keys make retries idempotent.
-  const postAutomaticAccounting = (
-    build: (context: { tenantId: string; branchId: string; currency: string }, periodId: string, map: SourceAccountMap) => SourceAdapterResult,
-    date: string,
-  ): boolean => {
-    const tenantId = activeTenant?.tenantId || '';
-    if (!tenantId || !/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) return false;
-    const context = { tenantId, branchId: 'MAIN', currency: 'EGP' };
-    const accounts = accountingAccounts.length ? accountingAccounts : createDefaultChartOfAccounts(context);
-    const year = date.slice(0, 4);
-    const fallbackPeriod: AccountingPeriod = {
-      ...context, id: 'FY-' + year, name: 'السنة المالية ' + year,
-      startDate: year + '-01-01', endDate: year + '-12-31', status: 'open',
-    };
-    const periods = accountingPeriods.length ? accountingPeriods : [fallbackPeriod];
-    const period = periods.find(p => p.tenantId === tenantId && p.branchId === 'MAIN'
-      && p.currency.toUpperCase() === 'EGP' && p.status === 'open'
-      && p.startDate <= date && p.endDate >= date);
-    if (!period) {
-      window.alert('تعذر ترحيل المستند محاسبياً: لا توجد فترة مالية مفتوحة تغطي تاريخه. افتح الفترة أو راجع المحاسب.');
-      return false;
-    }
-    const account = (key: string) => accounts.find(a => a.tenantId === tenantId && a.branchId === 'MAIN'
-      && a.currency.toUpperCase() === 'EGP' && a.systemKey === key && a.active)?.id;
-    const map: SourceAccountMap = {
-      sales: account('sales') || '', outputVat: account('vat-output') || '',
-      receivables: account('receivables') || '', costOfGoodsSold: account('cost-of-goods-sold') || '',
-      inventory: account('inventory') || '', operatingExpenses: account('operating-expenses') || '',
-      inputVat: account('vat-input') || '', visaClearing: account('card-clearing') || '',
-      bankFees: account('bank-fees') || '', payables: account('payables') || '',
-      supplierAdvances: account('supplier-advances') || '',
-      salesReturns: account('sales-returns'), chequesReceivable: account('cheques-receivable'),
-      chequesPayable: account('cheques-payable'), partnerCurrentAccount: account('partner-current-account') || '',
-      settlementAccount: (method: string, _bankAccountId?: string) => {
-        const rail = paymentAccountOf(method);
-        if (rail === 'cash') return account('cash');
-        if (rail === 'bank') return account('bank');
-        if (rail === 'visa') return account('card-clearing');
-        if (rail === 'instapay') return account('instapay-clearing');
-        if (rail === 'wallet') return account('wallet-clearing');
-        return undefined;
-      },
-    };
-    const built = build(context, period.id, map);
-    if (!built.input || built.error) {
-      window.alert('تعذر إنشاء القيد المحاسبي للمستند: ' + (built.error || 'بيانات المستند غير مكتملة') + '. لم يتم اعتماد العملية.');
-      return false;
-    }
-    const sourceKey = [
-      context.tenantId, context.branchId, built.input.source.type, built.input.source.id,
-      (built.input.source.lineId || ''), built.input.postingId,
-    ].map(part => encodeURIComponent(part)).join('|');
-    const existingSourceEntry = accountingJournalEntries.find(entry => entry.sourceKey === sourceKey);
-    if (existingSourceEntry) {
-      const sameLines = existingSourceEntry.lines.length === built.input.lines.length
-        && existingSourceEntry.lines.every((line, index) => {
-          const candidate = built.input!.lines[index];
-          return line.accountId === candidate.accountId && line.debit === candidate.debit
-            && line.credit === candidate.credit && line.description === candidate.description;
-        });
-      const sameDocument = existingSourceEntry.date === built.input.date
-        && existingSourceEntry.periodId === built.input.periodId
-        && existingSourceEntry.memo === built.input.memo && sameLines;
-      if (sameDocument) return true;
-      window.alert('تم العثور على قيد سابق لنفس المستند لكن تفاصيله مختلفة. أوقف النظام الترحيل لمنع ازدواج أو تعارض محاسبي؛ يلزم مراجعة المحاسب.');
-      return false;
-    }
-    const result = createJournalEntry(built.input, accounts, periods, accountingJournalEntries);
-    if (!result.entry || result.error) {
-      window.alert('تعذر اعتماد القيد المحاسبي: ' + (result.error || 'UNKNOWN') + '. لم يتم اعتماد العملية.');
-      return false;
-    }
-    const updates = {
-      ...(accountingAccounts.length ? {} : { accountingAccounts: accounts }),
-      ...(accountingPeriods.length ? {} : { accountingPeriods: periods }),
-      accountingJournalEntries: [...accountingJournalEntries, result.entry],
-    };
-    if (!persistChanges(updates)) {
-      window.alert('فشل حفظ القيد المحاسبي على بيانات المنشأة؛ لم يتم اعتماد العملية.');
-      return false;
-    }
-    if (!accountingAccounts.length) setAccountingAccounts(accounts);
-    if (!accountingPeriods.length) setAccountingPeriods(periods);
-    setAccountingJournalEntries(prev => prev.some(entry => entry.sourceKey === result.entry!.sourceKey)
-      ? prev : [...prev, result.entry!]);
-    return true;
-  };
-
   // Handlers for Sales Returns
   const handleAddSalesReturn = (rawReturn: SalesReturn) => {
     // تثبيت السيريالات المرتجعة فعلياً داخل سجل المرتجع (المختارة من الشاشة أو تلقائياً)
@@ -1809,9 +1727,6 @@ export default function App() {
           }),
         }
       : rawReturn;
-    if (!origInv || !postAutomaticAccounting((ctx, periodId, map) => buildSalesReturnJournal(
-      salesReturn, origInv, ctx, periodId, new Date().toISOString(), currentUser?.employeeName || 'النظام', map,
-    ), salesReturn.date)) return;
     if (!origInv || !postAccountingSource(salesReturn.date, (context, periodId, createdAt, createdBy, map) =>
       buildSalesReturnJournal(salesReturn, origInv, context, periodId, createdAt, createdBy, map))) return;
     if (origInv) applyReturnTracking(origInv, salesReturn.items, 1);
@@ -2131,13 +2046,6 @@ export default function App() {
       return false;
     }
 
-    if (invoice.receiptStatus === 'pending' || invoice.receiptStatus === 'cancelled') {
-      window.alert('لا يمكن ترحيل فاتورة مشتريات قبل تأكيد استلام البضاعة أو بعد إلغائها.');
-      return false;
-    }
-    if (!postAutomaticAccounting((ctx, periodId, map) => buildPurchaseInvoiceJournal(
-      invoice, ctx, periodId, new Date().toISOString(), currentUser?.employeeName || 'النظام', map,
-    ), invoice.date)) return false;
 
     setPurchaseInvoices(prev => {
       const updated = [invoice, ...prev];
@@ -2307,9 +2215,6 @@ export default function App() {
     if (!originalInvoice || !postAccountingSource(finalReturn.date, (context, periodId, createdAt, createdBy, map) =>
       buildPurchaseReturnJournal(finalReturn, originalInvoice, context, periodId, createdAt, createdBy, map))) return;
 
-    if (!originalInvoice || !postAutomaticAccounting((ctx, periodId, map) => buildPurchaseReturnJournal(
-      finalReturn, originalInvoice, ctx, periodId, new Date().toISOString(), currentUser?.employeeName || 'النظام', map,
-    ), finalReturn.date)) return;
 
     setPurchaseReturns(prev => {
       const updated = [finalReturn, ...prev];
