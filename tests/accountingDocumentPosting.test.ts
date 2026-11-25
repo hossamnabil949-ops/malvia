@@ -78,6 +78,56 @@ if (supplierPaymentResult.status !== 'posted') throw new Error('supplier payment
 assert.equal(supplierPaymentResult.entry.lines.find(line => line.accountId === accounts.find(a => a.systemKey === 'payables')?.id)?.debit, 70);
 assert.equal(supplierPaymentResult.entry.lines.find(line => line.accountId === accounts.find(a => a.systemKey === 'supplier-advances')?.id)?.debit, 30);
 
+const bankAccounts = [
+  ...accounts,
+  { ...context, id: 'GL-B1', code: '101-001', name: 'Bank 1', type: 'asset' as const, normalBalance: 'debit' as const, systemKey: 'bank:B1', active: true },
+  { ...context, id: 'GL-B2', code: '101-002', name: 'Bank 2', type: 'asset' as const, normalBalance: 'debit' as const, systemKey: 'bank:B2', active: true },
+];
+const transfer: any = {
+  id: 'BT-1', date: '2026-11-25', sourceBankAccountId: 'B1',
+  destinationBankAccountId: 'B2', amount: 25, reference: 'TR-1',
+};
+const transferResult = prepareAccountingDocumentPosting({ ...request, kind: 'bank.transfer', document: transfer, accounts: bankAccounts });
+assert.equal(transferResult.status, 'posted');
+
+const cardSettlement: any = {
+  id: 'VISA-1', processor: 'Processor', grossAmount: 100, feeAmount: 2,
+  netAmount: 98, settlementDate: '2026-11-25', bankAccountId: 'B1', reference: 'CARD-1',
+};
+const cardResult = prepareAccountingDocumentPosting({
+  ...request, kind: 'bank.card-settlement', document: cardSettlement, accounts: bankAccounts,
+});
+assert.equal(cardResult.status, 'posted');
+
+const partnerMovement: any = {
+  id: 'PCA-1', partnerId: 'PARTNER-1', partnerName: 'Partner',
+  type: 'partner_deposit', amount: 45, date: '2026-11-25',
+  paymentMethod: 'نقدي', treasuryTransactionId: 'TX-PCA-1',
+  recordedBy: 'Tester', createdAt: '2026-11-25T08:00:00.000Z',
+};
+const partnerResult = prepareAccountingDocumentPosting({
+  ...request, kind: 'partner.current-account', document: partnerMovement,
+});
+assert.equal(partnerResult.status, 'posted');
+
+const incomingCheque: any = {
+  id: 'CHQ-1', number: '1001', direction: 'incoming', status: 'في الحافظة',
+  amount: 75, receivedDate: '2026-11-25', partyType: 'customer',
+  partyId: 'C-1', partyName: 'Customer', createdBy: 'Tester',
+  createdAt: '2026-11-25T08:00:00.000Z', appliedAmount: 75, history: [],
+};
+const chequeRegistration = prepareAccountingDocumentPosting({
+  ...request, kind: 'cheque.register', document: incomingCheque,
+});
+assert.equal(chequeRegistration.status, 'posted');
+const chequeClear = prepareAccountingDocumentPosting({
+  ...request, kind: 'cheque.lifecycle',
+  document: { ...incomingCheque, status: 'محصّل', clearedBankAccountId: 'B1' },
+  accounts: bankAccounts,
+  chequeLifecycle: { action: 'clear', previousStatus: 'في الحافظة', eventId: 'CHQ-1:CLEAR', eventDate: '2026-11-25' },
+});
+assert.equal(chequeClear.status, 'posted');
+
 const noPeriod = prepareAccountingDocumentPosting({ ...request, periods: [] });
 assert.equal(noPeriod.status, 'failed');
 if (noPeriod.status !== 'failed') throw new Error('missing period should fail closed');
