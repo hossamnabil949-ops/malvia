@@ -9,6 +9,7 @@ import {
   buildPurchaseReturnJournal, buildExpenseJournal, buildInvoiceVoidJournal,
   buildCustomerReceiptJournal, buildSupplierPaymentJournal, buildPartnerCurrentAccountJournal,
   buildBankTransferJournal, buildCardSettlementJournal, buildChequeRegistrationJournal, buildChequeLifecycleJournal,
+  buildPurchaseInvoiceVoidJournal, buildCashBankMovementJournal,
   type SourceAccountMap,
 } from './accountingSourceAdapters';
 import type { VoidPlan } from './saleLogic';
@@ -16,7 +17,8 @@ import type { VoidPlan } from './saleLogic';
 export type AccountingDocumentKind =
   | 'sales.invoice' | 'sales.invoice-void' | 'sales.return'
   | 'purchase.invoice' | 'purchase.return' | 'expense' | 'customer.receipt' | 'supplier.payment'
-  | 'partner.current-account' | 'bank.transfer' | 'bank.card-settlement' | 'cheque.register' | 'cheque.lifecycle';
+  | 'partner.current-account' | 'bank.transfer' | 'bank.card-settlement' | 'bank.cash-movement'
+  | 'purchase.invoice-void' | 'cheque.register' | 'cheque.lifecycle';
 
 export interface AccountingPostingRequest {
   kind: AccountingDocumentKind;
@@ -30,6 +32,11 @@ export interface AccountingPostingRequest {
   originalInvoice?: Invoice | PurchaseInvoice;
   voidPlan?: VoidPlan;
   chequeLifecycle?: { action: 'clear' | 'bounce' | 'cancel'; previousStatus: Cheque['status']; eventId: string; eventDate: string };
+  purchaseInvoiceCancellation?: {
+    id: string; date: string; reason: string; approvedBy: string;
+    cashRefund: number; supplierAdvanceRestored: number; payableReleased: number;
+    refundMethod?: string; refundBankAccountId?: string;
+  };
 }
 
 export type AccountingPostingResult =
@@ -68,6 +75,7 @@ export function prepareAccountingDocumentPosting(request: AccountingPostingReque
     ? (document as Invoice).voidedAt?.slice(0, 10) || ''
     : kind === 'purchase.invoice' && (document as PurchaseInvoice).receiptStatus === 'received'
       ? (document as PurchaseInvoice).receivedAt?.slice(0, 10) || (document as PurchaseInvoice).date
+      : kind === 'purchase.invoice-void' ? request.purchaseInvoiceCancellation?.date || ''
       : kind === 'bank.card-settlement' ? (document as CardSettlementBatch).settlementDate
       : kind === 'cheque.register' ? (document as Cheque).receivedDate
       : kind === 'cheque.lifecycle' ? request.chequeLifecycle?.eventDate || ''
@@ -116,6 +124,16 @@ export function prepareAccountingDocumentPosting(request: AccountingPostingReque
         context, period.id, createdAt, actor, bankId => systemAccount(accounts, 'bank:' + bankId)); break;
     case 'bank.card-settlement':
       adapted = buildCardSettlementJournal(document as CardSettlementBatch, context, period.id, createdAt, actor, accountMap); break;
+    case 'purchase.invoice-void':
+      if (!request.purchaseInvoiceCancellation) return { status: 'failed', entry: null, error: 'PURCHASE_INVOICE_CANCELLATION_REQUIRED' };
+      adapted = buildPurchaseInvoiceVoidJournal(document as PurchaseInvoice, request.purchaseInvoiceCancellation,
+        context, period.id, createdAt, actor, accountMap); break;
+    case 'bank.cash-movement': {
+      const movement = document as { id: string; date: string; direction: 'deposit' | 'withdrawal'; amount: number; bankAccountId: string; reference?: string };
+      adapted = buildCashBankMovementJournal(movement, context, period.id, createdAt, actor,
+        systemAccount(accounts, 'cash') || '', bankId => systemAccount(accounts, 'bank:' + bankId));
+      break;
+    }
     case 'cheque.register':
       adapted = buildChequeRegistrationJournal(document as Cheque, context, period.id, createdAt, actor, accountMap); break;
     case 'cheque.lifecycle':
