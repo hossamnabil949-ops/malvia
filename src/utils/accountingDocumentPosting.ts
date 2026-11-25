@@ -62,8 +62,8 @@ function makeSourceAccountMap(accounts: LedgerAccount[]): SourceAccountMap {
       if (rail === 'cash') return systemAccount(accounts, 'cash');
       if (rail === 'visa') return systemAccount(accounts, 'card-clearing');
       if (rail === 'bank') return bankAccountId ? systemAccount(accounts, 'bank:' + bankAccountId) : undefined;
-      if (rail === 'wallet') return systemAccount(accounts, 'wallet');
-      if (rail === 'instapay') return systemAccount(accounts, 'instapay');
+      if (rail === 'wallet') return systemAccount(accounts, 'wallet:' + method) || systemAccount(accounts, 'wallet');
+      if (rail === 'instapay') return systemAccount(accounts, 'instapay:' + method) || systemAccount(accounts, 'instapay');
       return undefined;
     },
   };
