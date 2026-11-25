@@ -1,21 +1,22 @@
 import type { AccountingContext, AccountingPeriod, JournalEntry, LedgerAccount, JournalResult } from './accountingCore';
 import { createJournalEntry, makeSourceKey } from './accountingCore';
-import type { Invoice, PurchaseInvoice, SalesReturn, PurchaseReturn, Expense } from '../types/autoParts';
+import type { Invoice, PurchaseInvoice, SalesReturn, PurchaseReturn, Expense, CustomerPayment, SupplierPayment } from '../types/autoParts';
 import { paymentAccountOf } from './paymentMethods';
 import {
   buildSalesInvoiceJournal, buildPurchaseInvoiceJournal, buildSalesReturnJournal,
   buildPurchaseReturnJournal, buildExpenseJournal, buildInvoiceVoidJournal,
+  buildCustomerReceiptJournal, buildSupplierPaymentJournal,
   type SourceAccountMap,
 } from './accountingSourceAdapters';
 import type { VoidPlan } from './saleLogic';
 
 export type AccountingDocumentKind =
   | 'sales.invoice' | 'sales.invoice-void' | 'sales.return'
-  | 'purchase.invoice' | 'purchase.return' | 'expense';
+  | 'purchase.invoice' | 'purchase.return' | 'expense' | 'customer.receipt' | 'supplier.payment';
 
 export interface AccountingPostingRequest {
   kind: AccountingDocumentKind;
-  document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense;
+  document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment;
   context: AccountingContext;
   accounts: LedgerAccount[];
   periods: AccountingPeriod[];
@@ -58,7 +59,7 @@ function makeSourceAccountMap(accounts: LedgerAccount[]): SourceAccountMap {
 
 export function prepareAccountingDocumentPosting(request: AccountingPostingRequest): AccountingPostingResult {
   const { kind, document, context, accounts, periods, existingEntries, actor, createdAt } = request;
-  const date = 'date' in document ? document.date : '';
+  const date = 'paymentDate' in document ? document.paymentDate : ('date' in document ? document.date : '');
   if (kind === 'purchase.invoice') {
     const purchase = document as PurchaseInvoice;
     if (purchase.receiptStatus === 'pending') return { status: 'skipped', entry: null, error: null, reason: 'PURCHASE_NOT_RECEIVED' };
@@ -91,6 +92,11 @@ export function prepareAccountingDocumentPosting(request: AccountingPostingReque
       adapted = buildPurchaseReturnJournal(document as PurchaseReturn, request.originalInvoice as PurchaseInvoice, context, period.id, createdAt, actor, accountMap); break;
     case 'expense':
       adapted = buildExpenseJournal(document as Expense, context, period.id, createdAt, actor, accountMap); break;
+    case 'customer.receipt':
+      adapted = buildCustomerReceiptJournal(document as CustomerPayment, context, period.id, createdAt, actor, accountMap); break;
+    case 'supplier.payment':
+      adapted = buildSupplierPaymentJournal(document as SupplierPayment, context, period.id, createdAt, actor, accountMap,
+        Number((document as SupplierPayment & { payableApplied?: number }).payableApplied ?? document.amount)); break;
   }
   if (adapted.error || !adapted.input) return { status: 'failed', entry: null, error: adapted.error || 'SOURCE_ADAPTER_FAILED' };
   const sourceKey = makeSourceKey(context, adapted.input.source, adapted.input.postingId);
