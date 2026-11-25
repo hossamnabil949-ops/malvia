@@ -9,7 +9,7 @@ import {
   buildPurchaseReturnJournal, buildExpenseJournal, buildInvoiceVoidJournal,
   buildCustomerReceiptJournal, buildSupplierPaymentJournal, buildPartnerCurrentAccountJournal,
   buildBankTransferJournal, buildCardSettlementJournal, buildChequeRegistrationJournal, buildChequeLifecycleJournal,
-  buildPurchaseInvoiceVoidJournal, buildCashBankMovementJournal,
+  buildPurchaseInvoiceVoidJournal, buildCashBankMovementJournal, buildLiquidAccountTransferJournal,
   type SourceAccountMap,
 } from './accountingSourceAdapters';
 import type { VoidPlan } from './saleLogic';
@@ -18,11 +18,11 @@ export type AccountingDocumentKind =
   | 'sales.invoice' | 'sales.invoice-void' | 'sales.return'
   | 'purchase.invoice' | 'purchase.return' | 'expense' | 'customer.receipt' | 'supplier.payment'
   | 'partner.current-account' | 'bank.transfer' | 'bank.card-settlement' | 'bank.cash-movement'
-  | 'purchase.invoice-void' | 'cheque.register' | 'cheque.lifecycle';
+  | 'purchase.invoice-void' | 'cheque.register' | 'cheque.lifecycle' | 'finance.account-transfer';
 
 export interface AccountingPostingRequest {
   kind: AccountingDocumentKind;
-  document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment | PartnerCurrentAccountTransaction | CardSettlementBatch | Cheque | { id: string; date: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; reference?: string };
+  document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment | PartnerCurrentAccountTransaction | CardSettlementBatch | Cheque | { id: string; date: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; reference?: string } | { id: string; date: string; amount: number; sourceMethod: string; destinationMethod: string; sourceBankAccountId?: string; destinationBankAccountId?: string; reference?: string };
   context: AccountingContext;
   accounts: LedgerAccount[];
   periods: AccountingPeriod[];
@@ -128,6 +128,11 @@ export function prepareAccountingDocumentPosting(request: AccountingPostingReque
       if (!request.purchaseInvoiceCancellation) return { status: 'failed', entry: null, error: 'PURCHASE_INVOICE_CANCELLATION_REQUIRED' };
       adapted = buildPurchaseInvoiceVoidJournal(document as PurchaseInvoice, request.purchaseInvoiceCancellation,
         context, period.id, createdAt, actor, accountMap); break;
+    case 'finance.account-transfer': {
+      const movement = document as { id: string; date: string; amount: number; sourceMethod: string; destinationMethod: string; sourceBankAccountId?: string; destinationBankAccountId?: string; reference?: string };
+      adapted = buildLiquidAccountTransferJournal(movement, context, period.id, createdAt, actor, accountMap);
+      break;
+    }
     case 'bank.cash-movement': {
       const movement = document as { id: string; date: string; direction: 'deposit' | 'withdrawal'; amount: number; bankAccountId: string; reference?: string };
       adapted = buildCashBankMovementJournal(movement, context, period.id, createdAt, actor,
