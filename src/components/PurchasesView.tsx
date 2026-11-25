@@ -365,6 +365,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       bankAccountId: !canReceiveOnly && finalAmountPaid > 0 && requiresSpecificBankAccount(paymentMethod) ? bankAccountId : undefined,
       notes: notes.trim() || undefined,
       receivedBy,
+      receiptStatus: 'received',
+      receivedAt: new Date().toISOString(),
     };
 
     onAddPurchaseInvoice(newInvoice);
