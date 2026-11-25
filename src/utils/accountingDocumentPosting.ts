@@ -22,7 +22,7 @@ export type AccountingDocumentKind =
 
 export interface AccountingPostingRequest {
   kind: AccountingDocumentKind;
-  document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment | PartnerCurrentAccountTransaction | CardSettlementBatch | Cheque | { id: string; date: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; reference?: string } | { id: string; date: string; amount: number; sourceMethod: string; destinationMethod: string; sourceBankAccountId?: string; destinationBankAccountId?: string; reference?: string };
+  document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment | PartnerCurrentAccountTransaction | CardSettlementBatch | Cheque | { id: string; date: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; reference?: string } | { id: string; date: string; amount: number; sourceMethod: string; destinationMethod: string; sourceBankAccountId?: string; destinationBankAccountId?: string; reference?: string } | { id: string; date: string; direction: 'deposit' | 'withdrawal'; amount: number; bankAccountId: string; reference?: string };
   context: AccountingContext;
   accounts: LedgerAccount[];
   periods: AccountingPeriod[];
