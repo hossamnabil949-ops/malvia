@@ -412,8 +412,8 @@ export default function App() {
   // لا يُرحّل طلب الشراء قبل الاستلام، ولا يُنشأ قيد عند الإلغاء.
   const postAccountingDocument = (
     kind: AccountingDocumentKind,
-    document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment | PartnerCurrentAccountTransaction | CardSettlementBatch | { id: string; date: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; reference?: string },
-    options: { originalInvoice?: Invoice | PurchaseInvoice; voidPlan?: ReturnType<typeof computeVoidPlan> } = {},
+    document: Invoice | PurchaseInvoice | SalesReturn | PurchaseReturn | Expense | CustomerPayment | SupplierPayment | PartnerCurrentAccountTransaction | CardSettlementBatch | Cheque | { id: string; date: string; sourceBankAccountId: string; destinationBankAccountId: string; amount: number; reference?: string },
+    options: { originalInvoice?: Invoice | PurchaseInvoice; voidPlan?: ReturnType<typeof computeVoidPlan>; chequeLifecycle?: { action: 'clear' | 'bounce' | 'cancel'; previousStatus: Cheque['status']; eventId: string; eventDate: string } } = {},
   ): boolean => {
     const tenantId = activeTenant?.tenantId || '';
     if (!tenantId) return false;
@@ -453,6 +453,7 @@ export default function App() {
       createdAt: new Date().toISOString(),
       ...(options.originalInvoice ? { originalInvoice: options.originalInvoice } : {}),
       ...(options.voidPlan ? { voidPlan: options.voidPlan } : {}),
+      ...(options.chequeLifecycle ? { chequeLifecycle: options.chequeLifecycle } : {}),
     });
     if (result.status === 'skipped') return true;
     if (result.status === 'failed') {
@@ -1175,6 +1176,7 @@ export default function App() {
       ...applied,
       history: [{ at: nowISO, status: initialStatus(input.direction), by, note: 'تسجيل الشيك' }],
     };
+    if (!postAccountingDocument('cheque.register', cheque)) return { ok: false, error: 'CHEQUE_LIFECYCLE_INVALID' };
     applyChequeEffectToParty(cheque, effect, true);
     setCheques(prev => {
       const updated = [cheque, ...prev];
@@ -1232,6 +1234,12 @@ export default function App() {
       nextBankEntries = [reversal.entry, ...bankLedgerEntries];
     }
     const updatedCheque = action === 'clear' ? { ...updated, clearedBankAccountId: bankAccountId } : updated;
+    if (action === 'clear' || action === 'bounce' || action === 'cancel') {
+      const eventId = cur.id + ':' + action + ':' + cur.status + ':' + updatedCheque.status;
+      if (!postAccountingDocument('cheque.lifecycle', updatedCheque, {
+        chequeLifecycle: { action, previousStatus: cur.status, eventId, eventDate: todayISO() },
+      })) return { ok: false, message: 'تعذر ترحيل أثر الشيك محاسبياً؛ لم يتم اعتماد الإجراء.' };
+    }
     applyChequeEffectToParty(cur, effect, false);
     if (action === 'clear' || isPostClearBounce) {
       setBankLedgerEntries(nextBankEntries);
