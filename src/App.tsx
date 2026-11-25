@@ -1570,6 +1570,13 @@ export default function App() {
         totalRefundAmount: ret.totalRefundAmount,
       })),
     });
+    const voidedAt = new Date().toISOString();
+    const voidedBy = currentUser?.employeeName || 'غير معروف';
+    const voidedInvoice: Invoice = {
+      ...inv, status: 'ملغاة', voidedAt, voidedBy,
+      voidApprovedBy: approvedBy, voidReason: cleanReason,
+    };
+    if (!postAccountingDocument('sales.invoice-void', voidedInvoice, { voidPlan: plan })) return false;
     const fraction = plan.fraction;
     // عكس الولاء: تُسحب النقاط المتبقية من الفاتورة وتُرد النقاط المستبدلة
     appendLoyalty(inv.customerId, [
@@ -1607,8 +1614,8 @@ export default function App() {
       const updated = prev.map(i => i.id === invoiceId ? {
         ...i,
         status: 'ملغاة' as const,
-        voidedAt: new Date().toISOString(),
-        voidedBy: currentUser?.employeeName || 'غير معروف',
+        voidedAt,
+        voidedBy,
         voidApprovedBy: approvedBy,
         voidReason: cleanReason,
       } : i);
