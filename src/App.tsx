@@ -3207,6 +3207,7 @@ export default function App() {
             parts={parts}
             treasuryBalance={treasuryBalance}
             onAddPurchaseInvoice={handleAddPurchaseInvoice}
+            onReceivePurchaseInvoice={handleReceivePendingPurchaseInvoice}
             bankAccounts={bankAccounts}
             onPurchaseReturn={handleAddPurchaseReturn}
             onDeletePurchaseReturn={handleDeletePurchaseReturn}
