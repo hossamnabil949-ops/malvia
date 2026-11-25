@@ -1986,7 +1986,6 @@ export default function App() {
       Math.max(0, invoice.grandTotal - invoice.amountPaid),
     );
     invoice = { ...invoice, supplierCreditApplied };
-    if (!postAccountingDocument('purchase.invoice', invoice)) return false;
     if (invoice.amountPaid > 0 && requiresSpecificBankAccount(invoice.paymentMethod)) {
       const posting = createBankMovementEntry({
         id: `purchase:${invoice.id}`, batchId: invoice.id, bankAccountId: invoice.bankAccountId || '',
@@ -2013,6 +2012,7 @@ export default function App() {
       return false;
     }
 
+    if (!postAccountingDocument('purchase.invoice', invoice)) return false;
     setPurchaseInvoices(prev => {
       const updated = [invoice, ...prev];
       persistChanges({ purchaseInvoices: updated });
