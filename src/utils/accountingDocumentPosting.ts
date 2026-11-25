@@ -100,7 +100,7 @@ export function prepareAccountingDocumentPosting(request: AccountingPostingReque
       adapted = buildCustomerReceiptJournal(document as CustomerPayment, context, period.id, createdAt, actor, accountMap); break;
     case 'supplier.payment':
       adapted = buildSupplierPaymentJournal(document as SupplierPayment, context, period.id, createdAt, actor, accountMap,
-        Number((document as SupplierPayment & { payableApplied?: number }).payableApplied ?? document.amount)); break;
+        Number((document as SupplierPayment & { payableApplied?: number }).payableApplied ?? (document as SupplierPayment).amount)); break;
   }
   if (!adapted || adapted.error || !adapted.input) return { status: 'failed', entry: null, error: adapted?.error || 'SOURCE_ADAPTER_FAILED' };
   const sourceKey = makeSourceKey(context, adapted.input.source, adapted.input.postingId);
