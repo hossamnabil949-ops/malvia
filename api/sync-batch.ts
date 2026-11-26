@@ -71,6 +71,7 @@ export default async function handler(req: any, res: any) {
     phase = 'payload_validation';
     let operations = req.body?.operations;
     const syncWarnings: any[] = [];
+    let journalReconciled = false;
     const idempotencyKey = String(req.body?.idempotencyKey || '').trim();
     if (!Array.isArray(operations) || operations.length < 1 || operations.length > 40 ||
         !/^[A-Za-z0-9:_-]{12,160}$/.test(idempotencyKey) ||
@@ -384,10 +385,20 @@ export default async function handler(req: any, res: any) {
       for (const oldEntry of previous) {
         const oldId = String(oldEntry?.id || '');
         const next = incoming.find((entry: any) => String(entry?.id || '') === oldId);
-        if (!next || JSON.stringify(next) !== previousById.get(oldId)) {
-          return failJournal('ACCOUNTING_JOURNAL_IMMUTABLE', 'لا يمكن حذف أو تعديل قيد محاسبي مرحّل؛ استخدم قيد عكس مستقل.');
+        if (!next) {
+          // A stale/offline client may submit a journal snapshot that omits an
+          // already-posted row. Preserve the server's immutable row rather than
+          // treating an accidental omission as a deletion request.
+          incoming.push(oldEntry);
+          incomingIds.add(oldId);
+          journalReconciled = true;
+          continue;
+        }
+        if (JSON.stringify(next) !== previousById.get(oldId)) {
+          return failJournal('ACCOUNTING_JOURNAL_IMMUTABLE', 'لا يمكن تعديل قيد محاسبي مرحّل؛ استخدم قيد عكس مستقل.');
         }
       }
+      if (journalReconciled) journalOperation.data = incoming;
       const knownSourceKeys = new Set(previous.map((entry: any) => String(entry?.sourceKey || '')));
       for (const entry of incoming) {
         if (previousById.has(String(entry.id))) continue;
@@ -532,12 +543,20 @@ export default async function handler(req: any, res: any) {
     resource = operationResources.join(',');
     const result = await commitSyncBatch(tenant, idempotencyKey, requestHash, operations);
     if (result?.conflict) return res.status(409).json(result);
-    const reconciled = Object.fromEntries(
+    const reconciled: Record<string, any> = Object.fromEntries(
       operations
         .filter((op: any) => ['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'].includes(op.resource))
         .map((op: any) => [op.resource, op.data]),
     );
-    return res.status(200).json({ ...result, ...(syncWarnings.length ? { warnings: syncWarnings, reconciled } : {}) });
+    if (journalReconciled) {
+      const journalOperation: any = operations.find((op: any) => op.resource === 'accountingJournalEntries');
+      if (journalOperation) reconciled.accountingJournalEntries = journalOperation.data;
+    }
+    return res.status(200).json({
+      ...result,
+      ...(syncWarnings.length ? { warnings: syncWarnings } : {}),
+      ...(Object.keys(reconciled).length ? { reconciled } : {}),
+    });
   } catch (error: any) {
     const errorName = error instanceof Error ? error.name : typeof error;
     const errorCode = typeof error?.code === 'string' || typeof error?.code === 'number' ? String(error.code).slice(0, 80) : undefined;
