@@ -15,6 +15,12 @@ const validDate = (value: unknown): boolean => typeof value === 'string' && /^\d
   && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
+export interface BankLedgerSyncFailure {
+  code: BankLedgerSyncError;
+  recordIds: string[];
+  relatedGroupIds: string[];
+}
+
 /** Bank ledger is append-only; new entries must reference an active account and a matching business document. */
 export function validateBankLedgerSync(input: {
   previous: BankLedgerEntry[];
@@ -32,15 +38,32 @@ export function validateBankLedgerSync(input: {
   partnerExitSettlements?: any[];
   cardSettlements?: any[];
   cheques?: any[];
-}): BankLedgerSyncError | null {
+}, detailed?: false): BankLedgerSyncError | null;
+export function validateBankLedgerSync(input: {
+  previous: BankLedgerEntry[]; incoming: BankLedgerEntry[]; bankAccounts: BankAccount[];
+  invoices?: any[]; supplierPayments?: any[]; purchaseInvoices?: any[]; expenses?: any[]; treasury?: any[];
+  partners?: any[]; partnerWithdrawals?: any[]; partnerCurrentAccountTransactions?: PartnerCurrentAccountTransaction[];
+  partnerSettlementPayments?: any[]; partnerExitSettlements?: any[]; cardSettlements?: any[]; cheques?: any[];
+}, detailed: true): BankLedgerSyncFailure | null;
+export function validateBankLedgerSync(input: {
+  previous: BankLedgerEntry[]; incoming: BankLedgerEntry[]; bankAccounts: BankAccount[];
+  invoices?: any[]; supplierPayments?: any[]; purchaseInvoices?: any[]; expenses?: any[]; treasury?: any[];
+  partners?: any[]; partnerWithdrawals?: any[]; partnerCurrentAccountTransactions?: PartnerCurrentAccountTransaction[];
+  partnerSettlementPayments?: any[]; partnerExitSettlements?: any[]; cardSettlements?: any[]; cheques?: any[];
+}, detailed = false): BankLedgerSyncError | BankLedgerSyncFailure | null {
   const { previous, incoming, bankAccounts } = input;
-  if (!Array.isArray(previous) || !Array.isArray(incoming)) return 'BANK_LEDGER_NOT_ARRAY';
+  const fail = (code: BankLedgerSyncError, entries: any[] = []): BankLedgerSyncError | BankLedgerSyncFailure => detailed ? {
+    code,
+    recordIds: [...new Set(entries.map(entry => String(entry?.id || '')).filter(Boolean))].slice(0, 100),
+    relatedGroupIds: [...new Set(entries.flatMap(entry => [entry?.batchId, entry?.reference, entry?.referenceId].filter(Boolean).map(String)))].slice(0, 100),
+  } : code;
+  if (!Array.isArray(previous) || !Array.isArray(incoming)) return fail('BANK_LEDGER_NOT_ARRAY');
   const previousById = new Map(previous.map(entry => [entry.id, entry]));
   const incomingById = new Map(incoming.map(entry => [entry.id, entry]));
-  if (incomingById.size !== incoming.length) return 'BANK_LEDGER_ENTRY_INVALID';
+  if (incomingById.size !== incoming.length) { const duplicates = incoming.filter((entry, index) => incoming.findIndex(other => other.id === entry.id) !== index); return fail('BANK_LEDGER_ENTRY_INVALID', duplicates); }
   for (const oldEntry of previous) {
     const current = incomingById.get(oldEntry.id);
-    if (!current || !same(current, oldEntry)) return 'BANK_LEDGER_HISTORY_MODIFIED';
+    if (!current || !same(current, oldEntry)) return fail('BANK_LEDGER_HISTORY_MODIFIED', [oldEntry, current]);
   }
   const added = incoming.filter(entry => !previousById.has(entry.id));
   const activeAccounts = new Set(bankAccounts.filter(account => account.active).map(account => account.id));
@@ -61,8 +84,8 @@ export function validateBankLedgerSync(input: {
   for (const entry of added) {
     if (!entry.id || !entry.batchId || !['in', 'out'].includes(entry.direction)
       || !Number.isFinite(entry.amount) || entry.amount <= 0 || !validDate(entry.date)
-      || !entry.reference || !entry.description) return 'BANK_LEDGER_ENTRY_INVALID';
-    if (entry.accountKind === 'bank' && (!entry.bankAccountId || !activeAccounts.has(entry.bankAccountId))) return 'BANK_LEDGER_ACCOUNT_INVALID';
+      || !entry.reference || !entry.description) return fail('BANK_LEDGER_ENTRY_INVALID', [entry]);
+    if (entry.accountKind === 'bank' && (!entry.bankAccountId || !activeAccounts.has(entry.bankAccountId))) return fail('BANK_LEDGER_ACCOUNT_INVALID', [entry]);
 
     let matched = false;
     if (entry.id.startsWith('pos-payment:')) {
@@ -131,7 +154,7 @@ export function validateBankLedgerSync(input: {
           && Number(cheque.amount) === Number(entry.amount));
       }
     }
-    if (!matched) return 'BANK_LEDGER_SOURCE_MISSING';
+    if (!matched) return fail('BANK_LEDGER_SOURCE_MISSING', [entry]);
   }
 
   const transferGroups = new Map<string, BankLedgerEntry[]>();
@@ -144,7 +167,7 @@ export function validateBankLedgerSync(input: {
     if (group.length !== 2 || group.filter(item => item.direction === 'out').length !== 1
       || group.filter(item => item.direction === 'in').length !== 1
       || group[0].amount !== group[1].amount || group[0].date !== group[1].date
-      || group[0].bankAccountId === group[1].bankAccountId) return 'BANK_LEDGER_TRANSFER_UNBALANCED';
+      || group[0].bankAccountId === group[1].bankAccountId) return fail('BANK_LEDGER_TRANSFER_UNBALANCED', group);
   }
   return null;
 }
