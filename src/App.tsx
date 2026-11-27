@@ -2202,15 +2202,36 @@ export default function App() {
 
   const handleDeletePurchaseReturn = (returnId: string) => {
     const ret = purchaseReturns.find(r => r.id === returnId);
+    if (!ret) return;
+
+    const cashRefund = Math.max(0, ret.cashRefundToTreasury || 0);
+    const bankRefund = Math.max(0, ret.bankRefundToAccount || 0);
+    let bankReversalEntry: BankLedgerEntry | undefined;
+    if (bankRefund > 0) {
+      const originalBankEntry = bankLedgerEntries.find(entry => entry.id === `purchase-return:${ret.id}`);
+      if (!originalBankEntry) {
+        window.alert('لا يمكن حذف المرتجع: حركة الاسترداد البنكي الأصلية غير موجودة في سجل البنك.');
+        return;
+      }
+      const reversal = createBankMovementEntry({
+        id: `purchase-return-reversal:${ret.id}`, batchId: ret.id,
+        bankAccountId: originalBankEntry.bankAccountId || '', direction: 'out', amount: bankRefund,
+        date: todayISO(), reference: ret.returnNumber,
+        description: `عكس استرداد بنكي بسبب حذف مرتجع مشتريات ${ret.returnNumber}`,
+      }, bankAccounts, bankLedgerEntries);
+      if (reversal.error || !reversal.entry) {
+        window.alert('لا يمكن حذف المرتجع الآن: تعذر تسجيل عكس حركة البنك. تحقق من تفعيل الحساب البنكي.');
+        return;
+      }
+      bankReversalEntry = reversal.entry;
+    }
+
     setPurchaseReturns(prev => {
       const updated = prev.filter(r => r.id !== returnId);
       persistChanges({ purchaseReturns: updated });
       return updated;
     });
-    if (!ret) return;
 
-    const cashRefund = Math.max(0, ret.cashRefundToTreasury || 0);
-    const bankRefund = Math.max(0, ret.bankRefundToAccount || 0);
     const deducted = ret.deductedFromDeferredDebt || 0;
     const credited = ret.creditedToStoreBalance || 0;
     const wasApplied = Boolean(ret.isSettled) || deducted > 0 || credited > 0;
@@ -2283,23 +2304,12 @@ export default function App() {
     logAudit('purchase_return.delete', `حذف مرتجع مشتريات ${ret.returnNumber || ret.id}`, ret.id, ret.totalReturnAmount);
 
     // عكس الاسترداد البنكي بقيد معاكس بدلاً من حذف أثر البنك الأصلي
-    if (bankRefund > 0) {
-      const originalBankEntry = bankLedgerEntries.find(entry => entry.id === `purchase-return:${ret.id}`);
-      if (originalBankEntry) {
-        const reversal = createBankMovementEntry({
-          id: `purchase-return-reversal:${ret.id}`, batchId: ret.id,
-          bankAccountId: originalBankEntry.bankAccountId || '', direction: 'out', amount: bankRefund,
-          date: todayISO(), reference: ret.returnNumber,
-          description: `عكس استرداد بنكي بسبب حذف مرتجع مشتريات ${ret.returnNumber}`,
-        }, bankAccounts, bankLedgerEntries);
-        if (reversal.entry) {
-          setBankLedgerEntries(prev => {
-            const updated = [reversal.entry!, ...prev];
-            persistChanges({ bankLedgerEntries: updated });
-            return updated;
-          });
-        }
-      }
+    if (bankReversalEntry) {
+      setBankLedgerEntries(prev => {
+        const updated = [bankReversalEntry!, ...prev];
+        persistChanges({ bankLedgerEntries: updated });
+        return updated;
+      });
     }
 
     // عكس الاسترداد النقدي
