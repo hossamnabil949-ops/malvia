@@ -37,7 +37,7 @@ export default async function handler(req: any, res: any) {
     // Keep the function entrypoint dependency-light. If a server-only module fails
     // during initialization, catch it here and return a safe JSON diagnostic.
     phase = 'request_validation';
-    if (req.method !== 'POST') {
+    if (req.method !== 'POST' && req.method !== 'GET') {
       return res.status(405).json({ code: 'METHOD_NOT_ALLOWED', error: 'method not allowed' });
     }
 
@@ -52,7 +52,7 @@ export default async function handler(req: any, res: any) {
     ]);
     ApiErrorClass = security.ApiError;
     sendErrorFn = security.sendError;
-    const { commitSyncBatch, getAuthenticatedEmployee, getOne } = db;
+    const { commitSyncBatch, getAuthenticatedEmployee, getOne, listSyncRejections } = db;
     const { clientIp, findLicense, rateLimit } = security;
     const { createHash } = crypto;
     const {
@@ -78,6 +78,16 @@ export default async function handler(req: any, res: any) {
     phase = 'employee_authentication';
     const employee = await getAuthenticatedEmployee(tenant, tokenHash);
     if (!employee) return res.status(401).json({ code: 'EMPLOYEE_SESSION_INVALID', error: 'جلسة الموظف غير صالحة أو انتهت.' });
+    if (req.method === 'GET') {
+      const role = String(employee.role || '').trim().toUpperCase();
+      const isGeneralManager = ['مدير عام', 'ADMIN', 'OWNER', 'SUPER_ADMIN'].includes(role);
+      if (!isGeneralManager) return res.status(403).json({ code: 'SYNC_NOTIFICATIONS_FORBIDDEN', error: 'عرض إشعارات رفض المزامنة متاح للمدير العام فقط.' });
+      const rawLimit = Number(req.query?.limit || 50);
+      const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(100, Math.trunc(rawLimit))) : 50;
+      const notifications = await listSyncRejections(tenant, limit);
+      return res.status(200).json({ notifications });
+    }
+
     phase = 'payload_validation';
     let operations = req.body?.operations;
     const syncWarnings: any[] = [];

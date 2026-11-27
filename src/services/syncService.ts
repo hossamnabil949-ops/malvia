@@ -186,7 +186,7 @@ export interface SyncRejectionNotification {
 
 export async function fetchSyncRejectionNotifications(licenseKey: string): Promise<{ ok: boolean; notifications: SyncRejectionNotification[] }> {
   try {
-    const result = await api('/api/sync-notifications?limit=50', {
+    const result = await api('/api/sync-batch?notifications=1&limit=50', {
       method: 'GET',
       headers: { 'x-license-key': licenseKey },
     });
