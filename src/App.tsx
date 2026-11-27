@@ -2234,16 +2234,41 @@ export default function App() {
     const supplier = suppliers.find(s => s.id === purchaseReturn.supplierId);
     const originalInvoice = purchaseInvoices.find(i => i.id === purchaseReturn.purchaseInvoiceId);
 
-    // توزيع قيمة المرتجع: (1) استرداد نقدي إن اختير، (2) تخفيض مديونية المورد، (3) الباقي رصيد دائن للمحل عند المورد
-    const cashRefund = Math.min(Math.max(0, purchaseReturn.cashRefundToTreasury || 0), purchaseReturn.totalReturnAmount);
-    const nonCash = Math.max(0, purchaseReturn.totalReturnAmount - cashRefund);
     const debtBefore = supplier ? (supplier.deferredDebt ?? supplier.balance ?? 0) : 0;
-    const deducted = Math.min(nonCash, debtBefore);
-    const credited = nonCash - deducted;
+    const invoiceDebtBefore = originalInvoice ? Math.max(0, originalInvoice.grandTotal - originalInvoice.amountPaid) : debtBefore;
+    const cashRefund = Math.max(0, Math.min(purchaseReturn.cashRefundToTreasury || 0, purchaseReturn.totalReturnAmount));
+    const bankRefund = Math.max(0, Math.min(purchaseReturn.bankRefundToAccount || 0, purchaseReturn.totalReturnAmount - cashRefund));
+    const hasExplicitBreakdown = purchaseReturn.deductedFromDeferredDebt !== undefined || purchaseReturn.creditedToStoreBalance !== undefined || purchaseReturn.bankRefundToAccount !== undefined;
+    const requestedDebt = hasExplicitBreakdown ? Math.max(0, purchaseReturn.deductedFromDeferredDebt || 0) : 0;
+    const requestedCredit = hasExplicitBreakdown ? Math.max(0, purchaseReturn.creditedToStoreBalance || 0) : 0;
+    const nonCash = Math.max(0, purchaseReturn.totalReturnAmount - cashRefund - bankRefund);
+    const deducted = hasExplicitBreakdown ? requestedDebt : Math.min(nonCash, debtBefore);
+    const credited = hasExplicitBreakdown ? requestedCredit : Math.max(0, nonCash - deducted);
+    const allocated = cashRefund + bankRefund + deducted + credited;
+    if (Math.abs(allocated - purchaseReturn.totalReturnAmount) > 0.01 || deducted > Math.min(debtBefore, invoiceDebtBefore) + 0.01) {
+      window.alert('تعذر حفظ المرتجع: توزيع قيمة التسوية غير متوازن أو يتجاوز مديونية المورد.');
+      return;
+    }
+    let bankRefundEntry: BankLedgerEntry | undefined;
+    if (bankRefund > 0) {
+      const posting = createBankMovementEntry({
+        id: `purchase-return:${purchaseReturn.id}`, batchId: purchaseReturn.id,
+        bankAccountId: purchaseReturn.bankAccountId || '', direction: 'in', amount: bankRefund,
+        date: purchaseReturn.date, reference: purchaseReturn.returnNumber,
+        description: `استرداد بنكي لمرتجع مشتريات ${purchaseReturn.returnNumber} من المورد ${purchaseReturn.supplierName}`,
+      }, bankAccounts, bankLedgerEntries);
+      if (posting.error || !posting.entry) {
+        window.alert('تعذر تسجيل الاسترداد البنكي. اختر حساباً بنكياً نشطاً وتأكد من عدم تكرار حركة المرتجع.');
+        return;
+      }
+      bankRefundEntry = posting.entry;
+    }
 
     const finalReturn: PurchaseReturn = {
       ...purchaseReturn,
       cashRefundToTreasury: cashRefund,
+      bankRefundToAccount: bankRefund,
+      bankAccountId: bankRefund > 0 ? purchaseReturn.bankAccountId : undefined,
       deductedFromDeferredDebt: deducted,
       creditedToStoreBalance: credited,
       unpaidDebtBeforeReturn: debtBefore,
@@ -2285,7 +2310,7 @@ export default function App() {
           const original = inv.originalGrandTotal ?? (inv.grandTotal + (inv.returnedAmount || 0));
           const returnedAmount = (inv.returnedAmount || 0) + purchaseReturn.totalReturnAmount;
           const newGrandTotal = Math.max(0, original - returnedAmount);
-          const newPaid = Math.max(0, inv.amountPaid - cashRefund);
+          const newPaid = Math.max(0, inv.amountPaid - cashRefund - bankRefund);
           const items = inv.items.map(it => {
             const r = purchaseReturn.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
             return r ? { ...it, returnedQuantity: (it.returnedQuantity || 0) + r.quantity } : it;
@@ -2323,6 +2348,14 @@ export default function App() {
       purchaseReturn.items.map(i => ({ partNumber: i.partNumber, qty: i.quantity })), -1);
     logAudit('purchase_return.create', `مرتجع مشتريات ${purchaseReturn.returnNumber || purchaseReturn.id} - ${purchaseReturn.supplierName}`, purchaseReturn.id, -purchaseReturn.totalReturnAmount);
 
+    if (bankRefundEntry) {
+      setBankLedgerEntries(prev => {
+        const updated = [bankRefundEntry!, ...prev];
+        persistChanges({ bankLedgerEntries: updated });
+        return updated;
+      });
+    }
+
     // If cash refund received to treasury
     if (cashRefund > 0) {
       const newTx: TreasuryTransaction = {
@@ -2333,7 +2366,7 @@ export default function App() {
         type: 'قبض',
         category: 'مرتجع مشتريات نقدي (توريد للخزنة)',
         amount: cashRefund,
-        paymentMethod: originalInvoice?.paymentMethod || 'نقدي',
+        paymentMethod: 'كاش (نقدي)',
         balanceAfter: treasuryBalance + cashRefund,
         referenceId: purchaseReturn.id,
         description: `استرداد نقدي لمرتجع مشتريات من مورد: ${purchaseReturn.supplierName}`,
@@ -2421,14 +2454,36 @@ export default function App() {
 
   const handleDeletePurchaseReturn = (returnId: string) => {
     const ret = purchaseReturns.find(r => r.id === returnId);
+    if (!ret) return;
+
+    const cashRefund = Math.max(0, ret.cashRefundToTreasury || 0);
+    const bankRefund = Math.max(0, ret.bankRefundToAccount || 0);
+    let bankReversalEntry: BankLedgerEntry | undefined;
+    if (bankRefund > 0) {
+      const originalBankEntry = bankLedgerEntries.find(entry => entry.id === `purchase-return:${ret.id}`);
+      if (!originalBankEntry) {
+        window.alert('لا يمكن حذف المرتجع: حركة الاسترداد البنكي الأصلية غير موجودة في سجل البنك.');
+        return;
+      }
+      const reversal = createBankMovementEntry({
+        id: `purchase-return-reversal:${ret.id}`, batchId: ret.id,
+        bankAccountId: originalBankEntry.bankAccountId || '', direction: 'out', amount: bankRefund,
+        date: todayISO(), reference: ret.returnNumber,
+        description: `عكس استرداد بنكي بسبب حذف مرتجع مشتريات ${ret.returnNumber}`,
+      }, bankAccounts, bankLedgerEntries);
+      if (reversal.error || !reversal.entry) {
+        window.alert('لا يمكن حذف المرتجع الآن: تعذر تسجيل عكس حركة البنك. تحقق من تفعيل الحساب البنكي.');
+        return;
+      }
+      bankReversalEntry = reversal.entry;
+    }
+
     setPurchaseReturns(prev => {
       const updated = prev.filter(r => r.id !== returnId);
       persistChanges({ purchaseReturns: updated });
       return updated;
     });
-    if (!ret) return;
 
-    const cashRefund = Math.max(0, ret.cashRefundToTreasury || 0);
     const deducted = ret.deductedFromDeferredDebt || 0;
     const credited = ret.creditedToStoreBalance || 0;
     const wasApplied = Boolean(ret.isSettled) || deducted > 0 || credited > 0;
@@ -2460,7 +2515,7 @@ export default function App() {
         const returnedAmount = (inv.returnedAmount || 0) - ret.totalReturnAmount;
         const original = inv.originalGrandTotal ?? (inv.grandTotal + (inv.returnedAmount || 0));
         const newGrandTotal = Math.max(0, original - returnedAmount);
-        const newPaid = inv.amountPaid + cashRefund;
+        const newPaid = inv.amountPaid + cashRefund + bankRefund;
         const items = inv.items.map(it => {
           const r = ret.items.find(i => i.partNumber === it.partNumber && i.partName === it.partName);
           return r ? { ...it, returnedQuantity: Math.max(0, (it.returnedQuantity || 0) - r.quantity) } : it;
@@ -2499,6 +2554,15 @@ export default function App() {
     shiftWarehouseStock(purchaseInvoices.find(i => i.id === ret.purchaseInvoiceId)?.warehouseId,
       ret.items.map(i => ({ partNumber: i.partNumber, qty: i.quantity })), 1);
     logAudit('purchase_return.delete', `حذف مرتجع مشتريات ${ret.returnNumber || ret.id}`, ret.id, ret.totalReturnAmount);
+
+    // عكس الاسترداد البنكي بقيد معاكس بدلاً من حذف أثر البنك الأصلي
+    if (bankReversalEntry) {
+      setBankLedgerEntries(prev => {
+        const updated = [bankReversalEntry!, ...prev];
+        persistChanges({ bankLedgerEntries: updated });
+        return updated;
+      });
+    }
 
     // عكس الاسترداد النقدي
     if (cashRefund > 0) {

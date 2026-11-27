@@ -113,7 +113,9 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const [returnPurchaseInvoice, setReturnPurchaseInvoice] = useState<PurchaseInvoice | null>(null);
   const [returnItems, setReturnItems] = useState<{ [key: string]: number }>({});
   const [returnReason, setReturnReason] = useState('بضاعة معيبة / غير مطابقة للمواصفات');
-  const [excessSettlementOption, setExcessSettlementOption] = useState<'treasury_cash' | 'supplier_credit'>('supplier_credit');
+  type ReturnSettlementDraft = { supplierDebt: number; cash: number; bank: number; storeCredit: number };
+  const [returnSettlementDraft, setReturnSettlementDraft] = useState<ReturnSettlementDraft | null>(null);
+  const [returnBankAccountId, setReturnBankAccountId] = useState('');
   const [returnNotes, setReturnNotes] = useState('');
 
   // New Invoice Form State
@@ -400,6 +402,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       initialQtys[String(idx)] = 0;
     });
     setReturnItems(initialQtys);
+    setReturnSettlementDraft(null);
+    setReturnBankAccountId(bankAccounts.find(account => account.active)?.id || '');
     setReturnNotes('');
   };
 
@@ -422,9 +426,36 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     return { totalReturnAmount, unpaidBefore, debtReduction, unpaidAfter, excessCash, newGrandTotal };
   }, [returnPurchaseInvoice, returnItems]);
 
+  const returnSupplier = returnPurchaseInvoice
+    ? suppliers.find(s => s.id === returnPurchaseInvoice.supplierId)
+    : undefined;
+  const maxReturnDebtOffset = Math.min(returnCalculation.totalReturnAmount, returnCalculation.unpaidBefore, Math.max(0, returnSupplier?.deferredDebt ?? returnSupplier?.balance ?? returnCalculation.unpaidBefore));
+  const returnSettlement = returnSettlementDraft ?? {
+    supplierDebt: maxReturnDebtOffset,
+    cash: 0,
+    bank: 0,
+    storeCredit: Math.max(0, returnCalculation.totalReturnAmount - maxReturnDebtOffset),
+  };
+  const returnSettlementTotal = returnSettlement.supplierDebt + returnSettlement.cash + returnSettlement.bank + returnSettlement.storeCredit;
+  const activeReturnBankAccounts = bankAccounts.filter(account => account.active);
+  const returnSettlementValid =
+    [returnSettlement.supplierDebt, returnSettlement.cash, returnSettlement.bank, returnSettlement.storeCredit].every(value => Number.isFinite(value) && value >= 0) &&
+    Math.abs(returnSettlementTotal - returnCalculation.totalReturnAmount) < 0.01 &&
+    returnSettlement.supplierDebt <= maxReturnDebtOffset + 0.01 &&
+    (returnSettlement.bank <= 0 || Boolean(activeReturnBankAccounts.find(account => account.id === returnBankAccountId)));
+
+  const updateReturnSettlement = (field: keyof ReturnSettlementDraft, rawValue: number) => {
+    const value = Number.isFinite(rawValue) ? Math.max(0, rawValue) : 0;
+    setReturnSettlementDraft({ ...returnSettlement, [field]: value });
+  };
+
   const handleConfirmPurchaseReturn = (e: React.FormEvent) => {
     e.preventDefault();
     if (!returnPurchaseInvoice || returnCalculation.totalReturnAmount <= 0) return;
+    if (!returnSettlementValid) {
+      window.alert('راجع توزيع قيمة المرتجع: يجب أن يساوي مجموع طرق التسوية إجمالي المرتجع، واختر حساباً بنكياً نشطاً عند الاسترداد البنكي.');
+      return;
+    }
 
     const returnedItemsList: PurchaseReturnItem[] = returnPurchaseInvoice.items
       .map((it, idx) => ({ it, qty: returnItems[String(idx)] || 0 }))
@@ -453,8 +484,12 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       totalReturnAmount: returnCalculation.totalReturnAmount,
       unpaidDebtBeforeReturn: returnCalculation.unpaidBefore,
       unpaidDebtAfterReturn: returnCalculation.unpaidAfter,
-      rescheduledDebtReduction: returnCalculation.debtReduction,
-      cashRefundToTreasury: excessSettlementOption === 'treasury_cash' ? returnCalculation.excessCash : 0,
+      rescheduledDebtReduction: returnSettlement.supplierDebt,
+      deductedFromDeferredDebt: returnSettlement.supplierDebt,
+      cashRefundToTreasury: returnSettlement.cash,
+      bankRefundToAccount: returnSettlement.bank,
+      bankAccountId: returnSettlement.bank > 0 ? returnBankAccountId : undefined,
+      creditedToStoreBalance: returnSettlement.storeCredit,
       notes: `${returnReason} ${returnNotes ? ` - ${returnNotes}` : ''}`,
       recordedBy: 'مسؤول المشتريات',
     };
@@ -1537,7 +1572,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(false)}
-                    className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-bold"
+                    className="w-full sm:w-auto px-4 py-3 sm:py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-bold"
                   >
                     إلغاء
                   </button>
@@ -1557,12 +1592,12 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       )}
 
       {returnPurchaseInvoice && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto overscroll-contain"
           onClick={() => setReturnPurchaseInvoice(null)}
         >
-          <div 
-            className="w-full max-w-3xl bg-surface-2 text-white rounded-3xl p-6 shadow-2xl border border-neutral-800 space-y-5 my-8"
+          <div
+            className="w-full max-w-3xl max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain bg-surface-2 text-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-2xl border border-neutral-800 space-y-4 sm:space-y-5 my-0 sm:my-8"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
@@ -1606,8 +1641,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             <form onSubmit={handleConfirmPurchaseReturn} className="space-y-4">
               <div className="space-y-2">
                 <span className="text-xs font-bold text-neutral-300 block">حدد القطع المعادة للمورد والكمية:</span>
-                <div className="border border-neutral-800 rounded-2xl overflow-hidden">
-                  <table className="w-full text-right text-xs">
+                <div className="border border-neutral-800 rounded-2xl overflow-x-auto">
+                  <table className="w-full min-w-[650px] text-right text-xs">
                     <thead className="bg-surface-1 text-neutral-400 text-[11px] border-b border-neutral-800">
                       <tr>
                         <th className="p-2.5">الصنف</th>
@@ -1705,53 +1740,69 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   <div>
                     <span className="text-neutral-400 block">المبلغ المخصوم من الدفعات غير المسددة:</span>
                     <strong className="text-emerald-400 font-mono text-sm">
-                      {returnCalculation.debtReduction.toLocaleString()} ج.م (تخفيض فوري للآجل)
+                      {returnSettlement.supplierDebt.toLocaleString()} ج.م (تخفيض فوري للآجل)
                     </strong>
                   </div>
 
                   <div>
                     <span className="text-neutral-400 block">الدفعات غير المسددة المتبقية بعد الجدولة:</span>
                     <strong className="text-amber-400 font-mono text-sm">
-                      {returnCalculation.unpaidAfter.toLocaleString()} ج.م
+                      {Math.max(0, returnCalculation.unpaidBefore - returnSettlement.supplierDebt).toLocaleString()} ج.م
                     </strong>
                   </div>
                 </div>
 
-                {returnCalculation.excessCash > 0 && (
-                  <div className="mt-2 p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/30 flex items-center justify-between">
+                <div className="mt-3 p-3 sm:p-4 rounded-2xl bg-surface-1 border border-neutral-700 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
                     <div>
-                      <span className="text-amber-300 font-bold block">
-                        فائض المرتجع يتجاوز الديون غير المسددة بمقدار: {returnCalculation.excessCash.toLocaleString()} ج.م
-                      </span>
-                      <span className="text-[11px] text-neutral-400">اختر طريقة تسوية الفائض:</span>
+                      <h4 className="text-sm font-black text-white">طريقة تسوية قيمة المرتجع</h4>
+                      <p className="text-[11px] text-neutral-400">وزّع المبلغ على طريقة واحدة أو أكثر. يجب أن يساوي الإجمالي قيمة المرتجع.</p>
                     </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setExcessSettlementOption('treasury_cash')}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                          excessSettlementOption === 'treasury_cash'
-                            ? 'bg-emerald-500 text-neutral-950'
-                            : 'bg-neutral-800 text-neutral-300'
-                        }`}
-                      >
-                        استرداد نقدي للخزنة (توريد كاش)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setExcessSettlementOption('supplier_credit')}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                          excessSettlementOption === 'supplier_credit'
-                            ? 'bg-amber-500 text-neutral-950'
-                            : 'bg-neutral-800 text-neutral-300'
-                        }`}
-                      >
-                        إيداع رصيد دائن للمحل عند المورد
-                      </button>
-                    </div>
+                    <strong className="text-rose-400 font-mono text-base">{returnCalculation.totalReturnAmount.toLocaleString()} ج.م</strong>
                   </div>
-                )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="block min-w-0">
+                      <span className="text-xs font-bold text-neutral-300 block mb-1">خصم من مديونية المورد</span>
+                      <input type="number" min="0" step="0.01" max={maxReturnDebtOffset} value={returnSettlement.supplierDebt}
+                        onChange={e => updateReturnSettlement('supplierDebt', Number(e.target.value))}
+                        className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white font-mono text-sm" />
+                    </label>
+                    <label className="block min-w-0">
+                      <span className="text-xs font-bold text-neutral-300 block mb-1">استرداد نقدي للخزينة</span>
+                      <input type="number" min="0" step="0.01" value={returnSettlement.cash}
+                        onChange={e => updateReturnSettlement('cash', Number(e.target.value))}
+                        className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white font-mono text-sm" />
+                    </label>
+                    <label className="block min-w-0">
+                      <span className="text-xs font-bold text-neutral-300 block mb-1">استرداد بتحويل بنكي</span>
+                      <input type="number" min="0" step="0.01" value={returnSettlement.bank}
+                        onChange={e => updateReturnSettlement('bank', Number(e.target.value))}
+                        className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white font-mono text-sm" />
+                    </label>
+                    <label className="block min-w-0">
+                      <span className="text-xs font-bold text-neutral-300 block mb-1">رصيد دائن للمحل لدى المورد</span>
+                      <input type="number" min="0" step="0.01" value={returnSettlement.storeCredit}
+                        onChange={e => updateReturnSettlement('storeCredit', Number(e.target.value))}
+                        className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white font-mono text-sm" />
+                    </label>
+                  </div>
+                  {returnSettlement.bank > 0 && (
+                    <label className="block">
+                      <span className="text-xs font-bold text-neutral-300 block mb-1">الحساب البنكي المستلم</span>
+                      <select value={returnBankAccountId} onChange={e => setReturnBankAccountId(e.target.value)}
+                        className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white text-sm">
+                        <option value="">اختر حساباً بنكياً نشطاً</option>
+                        {activeReturnBankAccounts.map(account => <option key={account.id} value={account.id}>{account.bankName} - {account.name}{account.accountLast4 ? ` (••${account.accountLast4})` : ''}</option>)}
+                      </select>
+                    </label>
+                  )}
+                  <div className={`rounded-xl p-3 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 ${returnSettlementValid ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-rose-500/10 border border-rose-500/30'}`}>
+                    <span className="text-neutral-300">إجمالي التسوية: <strong className="font-mono">{returnSettlementTotal.toLocaleString()} ج.م</strong></span>
+                    <span className={returnSettlementValid ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                      {returnSettlementValid ? 'التوزيع متوازن وجاهز للحفظ' : `المتبقي للتوزيع: ${(returnCalculation.totalReturnAmount - returnSettlementTotal).toLocaleString()} ج.م أو راجع المبالغ والحساب البنكي`}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1781,7 +1832,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-surface-1 border border-neutral-800 flex items-center justify-between">
+              <div className="p-3 sm:p-4 rounded-2xl bg-surface-1 border border-neutral-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                   <span className="text-xs text-neutral-400 block">إجمالي قيمة المرتجع المحسوم:</span>
                   <span className="text-2xl font-black text-rose-400 font-mono">
@@ -1789,7 +1840,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={() => setReturnPurchaseInvoice(null)}
@@ -1800,8 +1851,8 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
                   <button
                     type="submit"
-                    disabled={returnCalculation.totalReturnAmount <= 0}
-                    className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-[#ffffff] text-xs font-black shadow-lg shadow-rose-600/30 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                    disabled={returnCalculation.totalReturnAmount <= 0 || !returnSettlementValid}
+                    className="w-full sm:w-auto justify-center px-4 sm:px-5 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-[#ffffff] text-xs font-black shadow-lg shadow-rose-600/30 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>تأكيد المرتجع وتعديل الفاتورة وإعادة الجدولة</span>
