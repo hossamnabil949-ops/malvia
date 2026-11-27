@@ -1985,6 +1985,7 @@ export default function App() {
     const originalInvoice = purchaseInvoices.find(i => i.id === purchaseReturn.purchaseInvoiceId);
 
     const debtBefore = supplier ? (supplier.deferredDebt ?? supplier.balance ?? 0) : 0;
+    const invoiceDebtBefore = originalInvoice ? Math.max(0, originalInvoice.grandTotal - originalInvoice.amountPaid) : debtBefore;
     const cashRefund = Math.max(0, Math.min(purchaseReturn.cashRefundToTreasury || 0, purchaseReturn.totalReturnAmount));
     const bankRefund = Math.max(0, Math.min(purchaseReturn.bankRefundToAccount || 0, purchaseReturn.totalReturnAmount - cashRefund));
     const hasExplicitBreakdown = purchaseReturn.deductedFromDeferredDebt !== undefined || purchaseReturn.creditedToStoreBalance !== undefined || purchaseReturn.bankRefundToAccount !== undefined;
@@ -1994,7 +1995,7 @@ export default function App() {
     const deducted = hasExplicitBreakdown ? requestedDebt : Math.min(nonCash, debtBefore);
     const credited = hasExplicitBreakdown ? requestedCredit : Math.max(0, nonCash - deducted);
     const allocated = cashRefund + bankRefund + deducted + credited;
-    if (Math.abs(allocated - purchaseReturn.totalReturnAmount) > 0.01 || deducted > debtBefore + 0.01) {
+    if (Math.abs(allocated - purchaseReturn.totalReturnAmount) > 0.01 || deducted > Math.min(debtBefore, invoiceDebtBefore) + 0.01) {
       window.alert('تعذر حفظ المرتجع: توزيع قيمة التسوية غير متوازن أو يتجاوز مديونية المورد.');
       return;
     }
