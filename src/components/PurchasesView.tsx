@@ -420,18 +420,19 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const returnSupplier = returnPurchaseInvoice
     ? suppliers.find(s => s.id === returnPurchaseInvoice.supplierId)
     : undefined;
+  const maxReturnDebtOffset = Math.min(returnCalculation.totalReturnAmount, returnCalculation.unpaidBefore, Math.max(0, returnSupplier?.deferredDebt ?? returnSupplier?.balance ?? returnCalculation.unpaidBefore));
   const returnSettlement = returnSettlementDraft ?? {
-    supplierDebt: Math.min(returnCalculation.totalReturnAmount, returnCalculation.unpaidBefore, Math.max(0, returnSupplier?.deferredDebt ?? returnSupplier?.balance ?? returnCalculation.unpaidBefore)),
+    supplierDebt: maxReturnDebtOffset,
     cash: 0,
     bank: 0,
-    storeCredit: Math.max(0, returnCalculation.totalReturnAmount - Math.min(returnCalculation.totalReturnAmount, returnCalculation.unpaidBefore, Math.max(0, returnSupplier?.deferredDebt ?? returnSupplier?.balance ?? returnCalculation.unpaidBefore))),
+    storeCredit: Math.max(0, returnCalculation.totalReturnAmount - maxReturnDebtOffset),
   };
   const returnSettlementTotal = returnSettlement.supplierDebt + returnSettlement.cash + returnSettlement.bank + returnSettlement.storeCredit;
   const activeReturnBankAccounts = bankAccounts.filter(account => account.active);
   const returnSettlementValid =
     [returnSettlement.supplierDebt, returnSettlement.cash, returnSettlement.bank, returnSettlement.storeCredit].every(value => Number.isFinite(value) && value >= 0) &&
     Math.abs(returnSettlementTotal - returnCalculation.totalReturnAmount) < 0.01 &&
-    returnSettlement.supplierDebt <= Math.max(0, returnSupplier?.deferredDebt ?? returnSupplier?.balance ?? returnCalculation.unpaidBefore) + 0.01 &&
+    returnSettlement.supplierDebt <= maxReturnDebtOffset + 0.01 &&
     (returnSettlement.bank <= 0 || Boolean(activeReturnBankAccounts.find(account => account.id === returnBankAccountId)));
 
   const updateReturnSettlement = (field: keyof ReturnSettlementDraft, rawValue: number) => {
@@ -1646,7 +1647,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="block min-w-0">
                       <span className="text-xs font-bold text-neutral-300 block mb-1">خصم من مديونية المورد</span>
-                      <input type="number" min="0" step="0.01" max={Math.min(returnCalculation.totalReturnAmount, returnCalculation.unpaidBefore, Math.max(0, returnSupplier?.deferredDebt ?? returnSupplier?.balance ?? returnCalculation.unpaidBefore))} value={returnSettlement.supplierDebt}
+                      <input type="number" min="0" step="0.01" max={maxReturnDebtOffset} value={returnSettlement.supplierDebt}
                         onChange={e => updateReturnSettlement('supplierDebt', Number(e.target.value))}
                         className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white font-mono text-sm" />
                     </label>
