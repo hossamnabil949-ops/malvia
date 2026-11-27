@@ -560,6 +560,8 @@ export interface PurchaseReturn {
   deductedFromDeferredDebt?: number; // تخفيض الفواتير المؤجلة
   creditedToStoreBalance?: number; // رصيد دائن للمحل
   cashRefundToTreasury: number;
+  bankRefundToAccount?: number; // مبلغ مسترد إلى حساب بنكي محدد
+  bankAccountId?: string; // الحساب البنكي المستلم لقيمة المرتجع
   notes?: string;
   recordedBy: string;
   isCorrected?: boolean;
