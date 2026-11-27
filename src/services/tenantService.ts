@@ -50,7 +50,7 @@ import {
   INITIAL_INVENTORY_ERRORS
 } from '../data/autoPartsData';
 
-import { markDirty, SYNC_STATUS_EVENT } from './syncService';
+import { markDirty, SYNC_STATUS_EVENT, pullAll } from './syncService';
 import type { LoyaltyEntry } from '../utils/loyaltyLogic';
 import type { Cheque } from '../utils/chequeLogic';
 import type { BankAccount, CardSettlementBatch, BankLedgerEntry } from '../utils/bankLedger';
@@ -482,68 +482,99 @@ export async function authenticateShopUser(
   licenseKey: string,
   usernameOrPhone: string,
   passwordInput: string
-): Promise<{ 
-  success: boolean; 
-  message: string; 
-  session?: UserSession; 
-  tenant?: TenantLicense; 
+): Promise<{
+  success: boolean;
+  message: string;
+  session?: UserSession;
+  tenant?: TenantLicense;
   employees?: Employee[];
 }> {
   const cleanKey = licenseKey.trim().toUpperCase();
-  const licenses = loadTenantLicenses();
-  const tenant = licenses.find(l => l.licenseKey.toUpperCase() === cleanKey);
-
-  if (!tenant) {
-    return {
-      success: false,
-      message: 'مفتاح ترخيص المحل غير مسجل. يرجى التأكد من كتابة المفتاح المعتمد الممنوح لك من إدارة المنظومة.'
-    };
-  }
-
-  if (tenant.status === 'معلق مؤقتاً') {
-    return {
-      success: false,
-      message: 'تم تعليق ترخيص هذا المحل مؤقتاً من قِبل إدارة النظام. يرجى مراجعة إدارة المنظومة لتسوية الاشتراك.'
-    };
-  }
-
-  const now = new Date().toISOString().split('T')[0];
-  if (tenant.expiryDate < now) {
-    return {
-      success: false,
-      message: `انتهت صلاحية ترخيص هذا المحل بتاريخ (${tenant.expiryDate}). يرجى تجديد الاشتراك مع الإدارة.`
-    };
-  }
-
-  const storeData = loadTenantStoreData(tenant);
-  const employees = storeData.employees && storeData.employees.length > 0 ? storeData.employees : INITIAL_EMPLOYEES;
-
   const cleanUser = usernameOrPhone.trim().toLowerCase();
   const cleanPass = passwordInput.trim();
+  if (!cleanKey || !cleanUser || !cleanPass) {
+    return { success: false, message: 'أدخل مفتاح الترخيص واسم المستخدم وكلمة المرور.' };
+  }
 
-  const matchedEmp = employees.find(e => 
+  // Online login is server-authoritative. Never require a fresh browser's localStorage
+  // to already contain the tenant license or employee record.
+  if (typeof navigator !== 'undefined' && navigator.onLine) {
+    try {
+      const authResponse = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-license-key': cleanKey },
+        body: JSON.stringify({ username: cleanUser, password: cleanPass }),
+      });
+      let authBody: any = {};
+      try { authBody = await authResponse.json(); } catch { /* handled below */ }
+      if (!authResponse.ok || typeof authBody.token !== 'string' || authBody.token.length < 32 || !authBody.license || !authBody.employee) {
+        return {
+          success: false,
+          message: authBody.error || 'تعذّر التحقق من بيانات الدخول على الخادم. راجع اسم المستخدم وكلمة المرور وحاول مرة أخرى.',
+        };
+      }
+
+      const tenant = authBody.license as TenantLicense;
+      const employee = authBody.employee;
+      upsertTenantLicense(tenant);
+      const session: UserSession = {
+        tenantId: tenant.tenantId,
+        licenseKey: tenant.licenseKey,
+        companyName: tenant.companyName,
+        employeeId: String(employee.id),
+        employeeName: String(employee.name || cleanUser),
+        role: employee.role,
+        permissions: employee.permissions,
+        loginTime: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        serverSessionToken: authBody.token,
+        serverSessionExpiresAt: typeof authBody.expiresAt === 'string' ? authBody.expiresAt : undefined,
+      };
+
+      // Hydrate this browser from the same tenant database only after authentication.
+      await pullAll(tenant.tenantId, tenant.licenseKey, authBody.token);
+      const cloudEmployees = loadTenantStoreData(tenant).employees || [];
+      const authenticatedEmployee = cloudEmployees.find(e => String(e.id) === String(employee.id));
+      if (!authenticatedEmployee) {
+        clearUserSession();
+        return { success: false, message: 'تم توثيق الدخول، لكن تعذّر تحميل سجل الموظفين من قاعدة المحل. لم يتم فتح النظام.' };
+      }
+
+      saveUserSession(session);
+      saveDeviceLicenseKey(tenant.licenseKey);
+      setActiveTenantId(tenant.tenantId);
+      return {
+        success: true,
+        message: `مرحباً بك يا ${authenticatedEmployee.name} (${authenticatedEmployee.role}) في نظام ${tenant.companyName}!`,
+        session,
+        tenant,
+        employees: cloudEmployees,
+      };
+    } catch (error) {
+      console.error('Cloud employee authentication failed.', error);
+      return {
+        success: false,
+        message: 'تعذّر الاتصال بخادم تسجيل الدخول أو تحميل بيانات المحل. تحقق من الاتصال وحاول مجددًا.',
+      };
+    }
+  }
+
+  // Offline-only fallback: use the previously synchronized local tenant data.
+  const tenant = loadTenantLicenses().find(l => l.licenseKey.toUpperCase() === cleanKey);
+  if (!tenant) return { success: false, message: 'هذا الجهاز غير متصل، ومفتاح المحل غير محفوظ محلياً. اتصل بالإنترنت لتسجيل الدخول أول مرة.' };
+  if (tenant.status === 'معلق مؤقتاً') return { success: false, message: 'تم تعليق ترخيص هذا المحل مؤقتاً من إدارة النظام.' };
+  const now = new Date().toISOString().split('T')[0];
+  if (tenant.expiryDate < now) return { success: false, message: `انتهت صلاحية ترخيص هذا المحل بتاريخ (${tenant.expiryDate}).` };
+
+  const storeData = loadTenantStoreData(tenant);
+  const employees = storeData.employees || [];
+  const matchedEmp = employees.find(e =>
     (e.username && e.username.toLowerCase() === cleanUser) ||
     e.phone === cleanUser ||
-    e.name.toLowerCase() === cleanUser ||
-    (cleanUser === 'admin' && e.role === 'مدير عام')
+    e.name.toLowerCase() === cleanUser
   );
+  if (!matchedEmp) return { success: false, message: 'اسم المستخدم أو الموظف غير مسجل في بيانات هذا المحل المحفوظة على هذا الجهاز.' };
+  if (matchedEmp.status === 'معلق') return { success: false, message: 'تم إيقاف حساب هذا الموظف مؤقتاً بواسطة إدارة المحل.' };
 
-  if (!matchedEmp) {
-    return {
-      success: false,
-      message: 'اسم المستخدم أو الموظف غير مسجل في هذا المحل. (لصاحب المحل أول مرة: استخدم admin)',
-      employees
-    };
-  }
-
-  if (matchedEmp.status === 'معلق') {
-    return {
-      success: false,
-      message: 'تم إيقاف حساب هذا الموظف مؤقتاً بواسطة إدارة المحل.'
-    };
-  }
-
-  // التحقق: الحساب المجزّأ أولاً. الحسابات القديمة (نص) تُقبل مرة واحدة ثم تُحوَّل كلها إلى تجزئة.
   let passwordOk = false;
   if (matchedEmp.passwordHash && isHashed(matchedEmp.passwordHash)) {
     passwordOk = await verifyPassword(cleanPass, matchedEmp.passwordHash);
@@ -551,74 +582,7 @@ export async function authenticateShopUser(
     const legacyPlain = matchedEmp.password || (matchedEmp.role === 'مدير عام' ? '123456' : '1234');
     passwordOk = cleanPass === legacyPlain;
   }
-  if (!passwordOk) {
-    return {
-      success: false,
-      message: 'كلمة المرور غير صحيحة. يرجى التأكد من كلمة المرور الخاصة بك أو مراجعة مدير المحل.',
-      employees
-    };
-  }
-
-  // ترحيل: أي موظف ما زالت كلمته نصاً (أو بلا كلمة) تُحفظ مجزّأة وتُحذف النسخة النصية من الداتا المتزامنة
-  let migratedEmployees = employees;
-  if (employees.some(e => !e.passwordHash || e.password !== undefined)) {
-    migratedEmployees = await Promise.all(employees.map(async (e) => {
-      if (e.passwordHash && e.password === undefined) return e;
-      const { password: plain, ...rest } = e;
-      const passwordHash = e.passwordHash && isHashed(e.passwordHash)
-        ? e.passwordHash
-        : await hashPassword(plain || (e.role === 'مدير عام' ? '123456' : '1234'));
-      return { ...rest, passwordHash } as Employee;
-    }));
-    try {
-      localStorage.setItem(getTenantKey(tenant.tenantId, 'employees'), JSON.stringify(migratedEmployees));
-      markDirty(tenant.tenantId, ['employees']);
-    } catch (err) {
-      console.error('تعذّر حفظ ترحيل كلمات المرور', err);
-    }
-  }
-  const usingDefaultPassword = DEFAULT_PASSWORDS.includes(cleanPass);
-
-  // A locally verified employee may enter in LOCAL-ONLY mode when the cloud copy
-  // is stale (for example, credentials were changed while this device was offline).
-  // No server token is created in this case, so protected cloud sync remains blocked.
-  let serverSessionToken: string | undefined;
-  let serverSessionExpiresAt: string | undefined;
-  let localOnlyLogin = typeof navigator !== 'undefined' && !navigator.onLine;
-  if (typeof navigator !== 'undefined' && navigator.onLine) {
-    try {
-      const authResponse = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-license-key': tenant.licenseKey },
-        body: JSON.stringify({ username: cleanUser, password: cleanPass }),
-      });
-      let authBody: any = {};
-      try { authBody = await authResponse.json(); } catch { /* invalid server response */ }
-      if (!authResponse.ok || typeof authBody.token !== 'string' || authBody.token.length < 32) {
-        // Only a credential/employee mismatch can fall back to the locally verified account.
-        // License, authorization, rate-limit and server errors must still fail closed.
-        if (authResponse.status === 401 && authBody.code === 'EMPLOYEE_INVALID_CREDENTIALS') {
-          localOnlyLogin = true;
-        } else {
-          return {
-            success: false,
-            message: authBody.error || 'تعذّر توثيق الموظف على الخادم. حاول مرة أخرى.',
-            employees: migratedEmployees,
-          };
-        }
-      } else {
-        serverSessionToken = authBody.token;
-        serverSessionExpiresAt = typeof authBody.expiresAt === 'string' ? authBody.expiresAt : undefined;
-      }
-    } catch (e) {
-      console.warn('Cloud employee authentication failed.', e);
-      return {
-        success: false,
-        message: 'تعذّر الاتصال بخادم تسجيل الدخول. تحقق من الإنترنت وحاول مجددًا.',
-        employees: migratedEmployees,
-      };
-    }
-  }
+  if (!passwordOk) return { success: false, message: 'كلمة المرور غير صحيحة.' };
 
   const session: UserSession = {
     tenantId: tenant.tenantId,
@@ -629,25 +593,18 @@ export async function authenticateShopUser(
     role: matchedEmp.role,
     permissions: matchedEmp.permissions,
     loginTime: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
-    serverSessionToken,
-    serverSessionExpiresAt,
   };
-
   saveUserSession(session);
   saveDeviceLicenseKey(tenant.licenseKey);
   setActiveTenantId(tenant.tenantId);
-
   return {
     success: true,
-    message: `مرحباً بك يا ${matchedEmp.name} (${matchedEmp.role}) في نظام ${tenant.companyName}!` +
-      (localOnlyLogin ? ' ⚠ دخول محلي مؤقت: بيانات الموظف غير متطابقة مع الخادم؛ المزامنة السحابية متوقفة حتى اعتماد الحساب.' : '') +
-      (usingDefaultPassword ? ' ⚠ كلمة المرور افتراضية: غيّرها من الإعدادات.' : ''),
+    message: `مرحباً بك يا ${matchedEmp.name} (${matchedEmp.role}) في نظام ${tenant.companyName}! دخول محلي دون اتصال.`,
     session,
     tenant,
-    employees: migratedEmployees
+    employees,
   };
 }
-
 export const authenticateShopStaff = authenticateShopUser;
 
 export function getMasterOwnerPin(): string {
