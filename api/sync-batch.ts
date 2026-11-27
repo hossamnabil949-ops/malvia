@@ -115,7 +115,7 @@ export default async function handler(req: any, res: any) {
       if (!primaryAffectedIds.size) {
         for (const [id, item] of primaryNewById) {
           const old = primaryOldById.get(id);
-          if (!old || JSON.stringify(old) !== JSON.stringify(item)) primaryAffectedIds.add(id);
+          if (!old || stableJson(old) !== stableJson(item)) primaryAffectedIds.add(id);
         }
         for (const id of primaryOldById.keys()) if (!primaryNewById.has(id)) primaryAffectedIds.add(id);
       }
@@ -291,7 +291,7 @@ export default async function handler(req: any, res: any) {
         const incomingById = new Map(incomingPca.map((item: any) => [String(item?.id), item]));
         const affected = previous.filter((old: any) => {
           const current: any = incomingById.get(String(old.id));
-          return !current || JSON.stringify(current) !== JSON.stringify(old);
+          return !current || stableJson(current) !== stableJson(old);
         });
         const affectedIds = new Set(affected.map((item: any) => String(item.id)));
         const protectedTreasuryIds = new Set(affected.map((item: any) => String(item.treasuryTransactionId || '')).filter(Boolean));
@@ -478,15 +478,23 @@ export default async function handler(req: any, res: any) {
       const periodRow = periodOperation ? periodOperation.data : (await getOne(tenant, 'accountingPeriods'))?.data;
       const accounts: any[] = Array.isArray(accountRow) ? accountRow : [];
       const periods: any[] = Array.isArray(periodRow) ? periodRow : [];
-      const failJournal = (code: string, message: string) => res.status(400).json({
-        code, resource: 'accountingJournalEntries', error: message,
-        diagnostic: { traceId, phase, resource: 'accountingJournalEntries', operationCount: operationResources.length, errorName: 'AccountingLedgerValidationError', errorCode: code },
-      });
+      const failJournal = async (code: string, message: string, recordIds: string[] = [], groupIds: string[] = []) => {
+        await rejectResourceGroup(
+          ['accountingJournalEntries', 'accountingAccounts', 'accountingPeriods', 'invoices', 'purchaseInvoices', 'purchaseReturns', 'salesReturns', 'expenses', 'treasury', 'bankLedgerEntries', 'supplierPayments', 'partners', 'partnerWithdrawals', 'partnerCurrentAccountTransactions', 'partnerSettlementPayments', 'partnerExitSettlements', 'cardSettlements'],
+          code,
+          message,
+          recordIds,
+          groupIds,
+        );
+      };
       const previousById = new Map(previous.map((entry: any) => [String(entry?.id || ''), stableJson(entry)]));
       const incomingIds = new Set<string>();
       for (const entry of incoming) {
         const id = String(entry?.id || '');
-        if (!id || incomingIds.has(id)) return failJournal('ACCOUNTING_JOURNAL_ID_DUPLICATE', 'معرّف القيد المحاسبي مفقود أو مكرر.');
+        if (!id || incomingIds.has(id)) {
+          await failJournal('ACCOUNTING_JOURNAL_ID_DUPLICATE', 'معرّف القيد المحاسبي مفقود أو مكرر.', id ? [id] : []);
+          break journalValidation;
+        }
         incomingIds.add(id);
       }
       for (const oldEntry of previous) {
@@ -528,7 +536,8 @@ export default async function handler(req: any, res: any) {
           || !entry.source?.type || !entry.source?.id || !period || period.status !== 'open'
           || date < period.startDate || date > period.endDate || !Array.isArray(entry.lines) || entry.lines.length < 2
           || entry.sourceKey !== normalizedSourceKey || entry.id !== 'JRN:' + entry.sourceKey || knownSourceKeys.has(entry.sourceKey)) {
-          return failJournal('ACCOUNTING_JOURNAL_HEADER_INVALID', 'بيانات القيد أو الفترة المحاسبية غير صالحة أو مكررة.');
+          await failJournal('ACCOUNTING_JOURNAL_HEADER_INVALID', 'بيانات القيد أو الفترة المحاسبية غير صالحة أو مكررة.', [String(entry.id || '')].filter(Boolean), [String(entry.source?.id || ''), String(entry.periodId || ''), String(entry.sourceKey || ''), String(entry.postingId || '')].filter(Boolean));
+          break journalValidation;
         }
         let debit = 0, credit = 0;
         for (const line of entry.lines) {
@@ -536,24 +545,30 @@ export default async function handler(req: any, res: any) {
           if (!account || !Number.isFinite(line.debit) || !Number.isFinite(line.credit) || line.debit < 0 || line.credit < 0
             || Math.round(line.debit * 100) / 100 !== line.debit || Math.round(line.credit * 100) / 100 !== line.credit
             || ((line.debit > 0) === (line.credit > 0))) {
-            return failJournal('ACCOUNTING_JOURNAL_LINE_INVALID', 'أحد أطراف القيد غير صالح أو الحساب غير نشط.');
+            await failJournal('ACCOUNTING_JOURNAL_LINE_INVALID', 'أحد أطراف القيد غير صالح أو الحساب غير نشط.', [String(entry.id || '')].filter(Boolean), [String(entry.source?.id || ''), String(line.accountId || ''), String(entry.periodId || '')].filter(Boolean));
+            break journalValidation;
           }
           debit += Math.round(line.debit * 100) / 100;
           credit += Math.round(line.credit * 100) / 100;
         }
         if (Math.round(debit * 100) !== Math.round(credit * 100) || debit <= 0) {
-          return failJournal('ACCOUNTING_JOURNAL_UNBALANCED', 'القيد المحاسبي غير متوازن.');
+          await failJournal('ACCOUNTING_JOURNAL_UNBALANCED', 'القيد المحاسبي غير متوازن.', [String(entry.id || '')].filter(Boolean), [String(entry.source?.id || ''), String(entry.periodId || '')].filter(Boolean));
+          break journalValidation;
         }
         if (entry.reversalOf) {
           const original = previous.find((candidate: any) => candidate.id === entry.reversalOf);
           if (!original || previous.some((candidate: any) => candidate.reversalOf === entry.reversalOf)
             || original.tenantId !== entry.tenantId || original.branchId !== entry.branchId
             || original.currency !== entry.currency || original.lines.length !== entry.lines.length) {
-            return failJournal('ACCOUNTING_JOURNAL_REVERSAL_INVALID', 'قيد العكس لا يرتبط بقيد أصلي صالح أو سبق عكسه.');
+            await failJournal('ACCOUNTING_JOURNAL_REVERSAL_INVALID', 'قيد العكس لا يرتبط بقيد أصلي صالح أو سبق عكسه.', [String(entry.id || '')].filter(Boolean), [String(entry.source?.id || ''), String(entry.reversalOf || ''), String(entry.periodId || '')].filter(Boolean));
+            break journalValidation;
           }
           const expected = original.lines.map((line: any) => ({ ...line, debit: line.credit, credit: line.debit }));
           const actual = entry.lines;
-          if (stableJson(expected) !== stableJson(actual)) return failJournal('ACCOUNTING_JOURNAL_REVERSAL_INVALID', 'أطراف قيد العكس لا تطابق القيد الأصلي.');
+          if (stableJson(expected) !== stableJson(actual)) {
+            await failJournal('ACCOUNTING_JOURNAL_REVERSAL_INVALID', 'أطراف قيد العكس لا تطابق القيد الأصلي.', [String(entry.id || '')].filter(Boolean), [String(entry.source?.id || ''), String(entry.reversalOf || ''), String(entry.periodId || '')].filter(Boolean));
+            break journalValidation;
+          }
         }
         knownSourceKeys.add(entry.sourceKey);
       }
