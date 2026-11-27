@@ -158,9 +158,9 @@ export type AuditAction =
   | 'sales_return.create' | 'sales_return.delete'
   | 'purchase.create' | 'purchase_return.create' | 'purchase_return.delete' | 'purchase_return.settle'
   | 'stock.adjust' | 'part.restock' | 'customer.collect' | 'customer.credit_limit' | 'loyalty.adjust' | 'cheque.create' | 'cheque.action' | 'batch.create' | 'batch.writeoff' | 'serial.register' | 'serial.scrap' | 'stock.transfer' | 'supplier.payment'
-  | 'shift.open' | 'shift.close' | 'shift.variance' | 'part.delete'
+  | 'shift.open' | 'shift.close' | 'shift.variance' | 'part.delete' | 'part.update'
   | 'partner.add' | 'partner.share.update' | 'partner.capital.add' | 'partner.profit.reinvest' | 'partner.profile.update' | 'partner.withdrawal' | 'partner.advance' | 'partner.exit' | 'partner.settlement.payment' | 'partner.current_account' | 'bank.settlement' | 'bank.transfer' | 'capital.opening.create'
-  | 'treasury.income' | 'expense.update' | 'expense.delete';
+  | 'treasury.income' | 'expense.update' | 'expense.delete' | 'customer.update' | 'customer.archive';
 
 export interface AuditEntry {
   id: string;
@@ -242,6 +242,7 @@ export interface Customer {
   creditLimit?: number; // حد الائتمان (ج.م) — القيمة الافتراضية 5,000 ج.م عند عدم التحديد
   loyaltyPoints?: number; // رصيد نقاط الولاء (يُدمج بالفرق على السحابة)
   chequesPending?: number; // (محسوب وغير محفوظ) شيكات واردة مفتوحة تُحتسب ضمن مخاطر الائتمان
+  isArchived?: boolean; // حساب مؤرشف؛ يحتفظ بالفواتير والسجل ولا يظهر للبيع الجديد
 }
 
 export type ExpenseCategory = 
@@ -438,6 +439,7 @@ export interface SupplierPayment {
   supplierId: string;
   supplierName: string;
   amount: number;
+  payableApplied?: number; // الجزء المسدد من مديونية المورد؛ والباقي دفعة مقدمة
   paymentDate: string;
   paymentMethod: PaymentMethod | string;
   bankAccountId?: string;
@@ -496,12 +498,52 @@ export interface PurchaseInvoice {
   originalGrandTotal?: number;
   paymentStatus: 'مدفوعة نقداً' | 'آجل' | 'مسددة جزئياً' | 'مرتجع جزئي' | 'مرتجع كلي';
   amountPaid: number;
+  supplierCreditApplied?: number; // رصيد دائن سابق استُخدم لتسوية هذه الفاتورة
   remainingBalance?: number;
   paymentMethod: PaymentMethod | string;
   bankAccountId?: string;
   notes?: string;
   receivedBy: string;
   returnedAmount?: number;
+  /** Explicit goods-receipt lifecycle. Missing on legacy records is treated as received for compatibility. */
+  receiptStatus?: 'pending' | 'received' | 'cancelled';
+  receivedAt?: string;
+  receivedById?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancellationReason?: string;
+  cancellationApprovedBy?: string;
+}
+
+export type PurchaseRequisitionStatus = 'DRAFT' | 'APPROVED' | 'SENT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED';
+
+export interface PurchaseRequisitionItem {
+  partId: string;
+  partNumber: string;
+  partName: string;
+  brand?: string;
+  compatibleModels?: string;
+  unit: string;
+  stockQuantity: number;
+  minAlertStock: number;
+  quantity: number;
+  estimatedUnitCost: number;
+  estimatedTotal: number;
+}
+
+export interface PurchaseRequisition {
+  id: string;
+  requisitionNumber: string;
+  date: string;
+  createdAt: string;
+  updatedAt: string;
+  supplierId?: string;
+  supplierName?: string;
+  status: PurchaseRequisitionStatus;
+  items: PurchaseRequisitionItem[];
+  estimatedTotal: number;
+  notes?: string;
+  createdBy: string;
 }
 
 export interface SalesReturnItem {
@@ -560,8 +602,6 @@ export interface PurchaseReturn {
   deductedFromDeferredDebt?: number; // تخفيض الفواتير المؤجلة
   creditedToStoreBalance?: number; // رصيد دائن للمحل
   cashRefundToTreasury: number;
-  bankRefundToAccount?: number; // مبلغ مسترد إلى حساب بنكي محدد
-  bankAccountId?: string; // الحساب البنكي المستلم لقيمة المرتجع
   notes?: string;
   recordedBy: string;
   isCorrected?: boolean;
@@ -607,7 +647,8 @@ export interface TreasuryTransaction {
     | 'تسوية مستحقات الفيزا'
     | 'إيداع صافي تسوية الفيزا بالبنك'
     | 'إيرادات أخرى'
-    | 'عكس مصروفات تشغيلية';
+    | 'عكس مصروفات تشغيلية'
+    | 'تحويل بين الحسابات المالية';
   amount: number;
   paymentMethod: PaymentMethod | string;
   balanceAfter: number;
@@ -695,7 +736,7 @@ export interface UserSession {
   role: Employee['role'];
   permissions: EmployeePermissions;
   loginTime: string;
-  /** Server-issued token used only for privileged AI operations; absent in offline/local-only sessions. */
+  /** Server-issued employee session token for cloud sync and privileged server operations; absent in offline-only sessions. */
   serverSessionToken?: string;
   serverSessionExpiresAt?: string;
 }
