@@ -16,6 +16,16 @@ const policy: Record<string, string[]> = {
   carModels: ['canManageInventory'], reservations: ['canSellPos'], cheques: ['canManageTreasury','canRegisterCheques','canManageChequeLifecycle'],
 };
 
+// JSONB may reorder object keys between PostgreSQL and the browser payload.
+// Compare canonical object keys while preserving array order and all values.
+const stableJson = (value: any): string => {
+  if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
+  if (value && typeof value === 'object') {
+    return '{' + Object.keys(value).sort().map((key) => JSON.stringify(key) + ':' + stableJson(value[key])).join(',') + '}';
+  }
+  return JSON.stringify(value);
+};
+
 export default async function handler(req: any, res: any) {
   let phase = 'start';
   let resource = '';
@@ -375,7 +385,7 @@ export default async function handler(req: any, res: any) {
         code, resource: 'accountingJournalEntries', error: message,
         diagnostic: { traceId, phase, resource: 'accountingJournalEntries', operationCount: operationResources.length, errorName: 'AccountingLedgerValidationError', errorCode: code },
       });
-      const previousById = new Map(previous.map((entry: any) => [String(entry?.id || ''), JSON.stringify(entry)]));
+      const previousById = new Map(previous.map((entry: any) => [String(entry?.id || ''), stableJson(entry)]));
       const incomingIds = new Set<string>();
       for (const entry of incoming) {
         const id = String(entry?.id || '');
@@ -394,7 +404,7 @@ export default async function handler(req: any, res: any) {
           journalReconciled = true;
           continue;
         }
-        if (JSON.stringify(next) !== previousById.get(oldId)) {
+        if (stableJson(next) !== previousById.get(oldId)) {
           return failJournal('ACCOUNTING_JOURNAL_IMMUTABLE', 'لا يمكن تعديل قيد محاسبي مرحّل؛ استخدم قيد عكس مستقل.');
         }
       }
@@ -439,7 +449,7 @@ export default async function handler(req: any, res: any) {
           }
           const expected = original.lines.map((line: any) => ({ ...line, debit: line.credit, credit: line.debit }));
           const actual = entry.lines;
-          if (JSON.stringify(expected) !== JSON.stringify(actual)) return failJournal('ACCOUNTING_JOURNAL_REVERSAL_INVALID', 'أطراف قيد العكس لا تطابق القيد الأصلي.');
+          if (stableJson(expected) !== stableJson(actual)) return failJournal('ACCOUNTING_JOURNAL_REVERSAL_INVALID', 'أطراف قيد العكس لا تطابق القيد الأصلي.');
         }
         knownSourceKeys.add(entry.sourceKey);
       }
