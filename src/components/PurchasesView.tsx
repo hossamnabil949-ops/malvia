@@ -421,10 +421,10 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     ? suppliers.find(s => s.id === returnPurchaseInvoice.supplierId)
     : undefined;
   const returnSettlement = returnSettlementDraft ?? {
-    supplierDebt: Math.min(returnCalculation.totalReturnAmount, Math.max(0, returnSupplier?.deferredDebt ?? returnSupplier?.balance ?? returnCalculation.unpaidBefore)),
+    supplierDebt: Math.min(returnCalculation.totalReturnAmount, returnCalculation.unpaidBefore, Math.max(0, returnSupplier?.deferredDebt ?? returnSupplier?.balance ?? returnCalculation.unpaidBefore)),
     cash: 0,
     bank: 0,
-    storeCredit: Math.max(0, returnCalculation.totalReturnAmount - Math.min(returnCalculation.totalReturnAmount, Math.max(0, returnSupplier?.deferredDebt ?? returnSupplier?.balance ?? returnCalculation.unpaidBefore))),
+    storeCredit: Math.max(0, returnCalculation.totalReturnAmount - Math.min(returnCalculation.totalReturnAmount, returnCalculation.unpaidBefore, Math.max(0, returnSupplier?.deferredDebt ?? returnSupplier?.balance ?? returnCalculation.unpaidBefore))),
   };
   const returnSettlementTotal = returnSettlement.supplierDebt + returnSettlement.cash + returnSettlement.bank + returnSettlement.storeCredit;
   const activeReturnBankAccounts = bankAccounts.filter(account => account.active);
@@ -1483,8 +1483,6 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
             className="w-full max-w-3xl max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain bg-surface-2 text-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-2xl border border-neutral-800 space-y-4 sm:space-y-5 my-0 sm:my-8"
             onClick={(e) => e.stopPropagation()}
           >
-            onClick={(e) => e.stopPropagation()}
-          >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
@@ -1625,14 +1623,14 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   <div>
                     <span className="text-neutral-400 block">المبلغ المخصوم من الدفعات غير المسددة:</span>
                     <strong className="text-emerald-400 font-mono text-sm">
-                      {returnCalculation.debtReduction.toLocaleString()} ج.م (تخفيض فوري للآجل)
+                      {returnSettlement.supplierDebt.toLocaleString()} ج.م (تخفيض فوري للآجل)
                     </strong>
                   </div>
 
                   <div>
                     <span className="text-neutral-400 block">الدفعات غير المسددة المتبقية بعد الجدولة:</span>
                     <strong className="text-amber-400 font-mono text-sm">
-                      {returnCalculation.unpaidAfter.toLocaleString()} ج.م
+                      {Math.max(0, returnCalculation.unpaidBefore - returnSettlement.supplierDebt).toLocaleString()} ج.م
                     </strong>
                   </div>
                 </div>
@@ -1648,7 +1646,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="block min-w-0">
                       <span className="text-xs font-bold text-neutral-300 block mb-1">خصم من مديونية المورد</span>
-                      <input type="number" min="0" step="0.01" max={Math.min(returnCalculation.totalReturnAmount, Math.max(0, returnSupplier?.deferredDebt ?? returnSupplier?.balance ?? returnCalculation.unpaidBefore))} value={returnSettlement.supplierDebt}
+                      <input type="number" min="0" step="0.01" max={Math.min(returnCalculation.totalReturnAmount, returnCalculation.unpaidBefore, Math.max(0, returnSupplier?.deferredDebt ?? returnSupplier?.balance ?? returnCalculation.unpaidBefore))} value={returnSettlement.supplierDebt}
                         onChange={e => updateReturnSettlement('supplierDebt', Number(e.target.value))}
                         className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-neutral-700 text-white font-mono text-sm" />
                     </label>
