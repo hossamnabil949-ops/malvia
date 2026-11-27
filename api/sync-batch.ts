@@ -120,7 +120,7 @@ export default async function handler(req: any, res: any) {
         for (const id of primaryOldById.keys()) if (!primaryNewById.has(id)) primaryAffectedIds.add(id);
       }
       const groupIds = new Set<string>([...explicitGroupIds, ...primaryAffectedIds]);
-      const linkKeys = ['batchId', 'referenceId', 'reference', 'invoiceNumber', 'treasuryTransactionId', 'relatedTransactionId', 'settlementId', 'txNumber', 'entityId', 'invoiceId', 'purchaseInvoiceId', 'supplierPaymentId', 'chequeId', 'sourceId'];
+      const linkKeys = ['batchId', 'referenceId', 'reference', 'invoiceNumber', 'treasuryTransactionId', 'relatedTransactionId', 'settlementId', 'txNumber', 'entityId', 'invoiceId', 'purchaseInvoiceId', 'supplierPaymentId', 'chequeId', 'sourceId', 'sourceKey', 'postingId'];
       for (const id of primaryAffectedIds) {
         const item: any = primaryNewById.get(id) || primaryOldById.get(id);
         for (const key of linkKeys) if (item?.[key] != null && String(item[key]).trim()) groupIds.add(String(item[key]).slice(0, 160));
@@ -128,7 +128,8 @@ export default async function handler(req: any, res: any) {
       const matchesGroup = (item: any) => {
         if (!item || typeof item !== 'object') return false;
         if (item.id != null && groupIds.has(String(item.id))) return true;
-        return linkKeys.some(key => item[key] != null && groupIds.has(String(item[key])));
+        return linkKeys.some(key => item[key] != null && groupIds.has(String(item[key])))
+          || Boolean(item.source?.id && groupIds.has(String(item.source.id)));
       };
       for (const name of resourceNames) {
         const op: any = operationMap.get(name);
@@ -467,7 +468,7 @@ export default async function handler(req: any, res: any) {
 
     phase = 'accounting_journal_validation';
     const journalOperation: any = operations.find((op: any) => op.resource === 'accountingJournalEntries');
-    if (journalOperation) {
+    if (journalOperation) journalValidation: {
       const previousRow = await getOne(tenant, 'accountingJournalEntries');
       const previous: any[] = Array.isArray(previousRow?.data) ? previousRow.data as any[] : [];
       const incoming: any[] = Array.isArray(journalOperation.data) ? journalOperation.data as any[] : [];
@@ -501,7 +502,14 @@ export default async function handler(req: any, res: any) {
           continue;
         }
         if (stableJson(next) !== previousById.get(oldId)) {
-          return failJournal('ACCOUNTING_JOURNAL_IMMUTABLE', 'لا يمكن تعديل قيد محاسبي مرحّل؛ استخدم قيد عكس مستقل.');
+          await rejectResourceGroup(
+            ['accountingJournalEntries', 'invoices', 'purchaseInvoices', 'purchaseReturns', 'salesReturns', 'expenses', 'treasury', 'bankLedgerEntries', 'supplierPayments', 'partners', 'partnerWithdrawals', 'partnerCurrentAccountTransactions', 'partnerSettlementPayments', 'partnerExitSettlements', 'cardSettlements'],
+            'ACCOUNTING_JOURNAL_IMMUTABLE',
+            'تم رفض تعديل قيد محاسبي مرحّل وعزل المستندات والحركات المالية المرتبطة به، مع استمرار مزامنة الموارد المستقلة.',
+            [oldId],
+            [String(oldEntry.source?.id || ''), String(oldEntry.sourceKey || ''), String(oldEntry.postingId || '')].filter(Boolean),
+          );
+          break journalValidation;
         }
       }
       if (journalReconciled) journalOperation.data = incoming;
@@ -631,22 +639,24 @@ export default async function handler(req: any, res: any) {
               'تم عزل المصروف والحركات المالية المرتبطة به لعدم اكتمال المجموعة.',
             );
           }
-          const previousExpenses = await loadArray('expenses');
-          const previousTreasury = await loadArray('treasury');
-          const expenseError = validateExpenseOnlySync({
-            previousExpenses,
-            incomingExpenses: expenseOperation.data,
-            previousTreasury,
-            incomingTreasury: treasuryOperation.data,
-            employee,
-          }, true);
-          if (expenseError) await rejectResourceGroup(
-            ['expenses', 'treasury', 'bankLedgerEntries'],
-            expenseError.code,
-            'تم عزل مجموعة المصروف والحركات المالية المرتبطة بها بسبب فشل التحقق.',
-            expenseError.recordIds,
-            expenseError.relatedGroupIds,
-          );
+          if (expenseOperation && treasuryOperation) {
+            const previousExpenses = await loadArray('expenses');
+            const previousTreasury = await loadArray('treasury');
+            const expenseError = validateExpenseOnlySync({
+              previousExpenses,
+              incomingExpenses: expenseOperation.data,
+              previousTreasury,
+              incomingTreasury: treasuryOperation.data,
+              employee,
+            }, true);
+            if (expenseError) await rejectResourceGroup(
+              ['expenses', 'treasury', 'bankLedgerEntries'],
+              expenseError.code,
+              'تم عزل مجموعة المصروف والحركات المالية المرتبطة بها بسبب فشل التحقق.',
+              expenseError.recordIds,
+              expenseError.relatedGroupIds,
+            );
+          }
         }
       }
       for (const resource of ['treasury', 'bankLedgerEntries']) {
@@ -668,8 +678,14 @@ export default async function handler(req: any, res: any) {
           incomingCheques,
           bankAccounts,
           employee,
-        });
-        if (error) return res.status(403).json({ code: error, resource, error: 'حركة الشيك البنكية غير مطابقة أو غير مسموح بها.' });
+        }, true);
+        if (error) await rejectResourceGroup(
+          [resource, 'cheques', 'treasury', 'bankLedgerEntries', 'auditLog'],
+          error.code,
+          'تم عزل مجموعة الشيك والحركة البنكية المرتبطة بها بسبب فشل التحقق.',
+          error.recordIds,
+          error.relatedGroupIds,
+        );
       }
     }
     phase = 'batch_size_and_hash';
@@ -692,11 +708,6 @@ export default async function handler(req: any, res: any) {
     }));
     const result = await commitSyncBatch(tenant, idempotencyKey, requestHash, acceptedOperations, durableRejections);
     if (result?.conflict) return res.status(409).json(result);
-    const reconciled: Record<string, any> = Object.fromEntries(
-      operations
-        .filter((op: any) => ['partnerCurrentAccountTransactions', 'treasury', 'bankLedgerEntries'].includes(op.resource))
-        .map((op: any) => [op.resource, op.data]),
-    );
     if (journalReconciled) {
       const journalOperation: any = operations.find((op: any) => op.resource === 'accountingJournalEntries');
       if (journalOperation) reconciled.accountingJournalEntries = journalOperation.data;
