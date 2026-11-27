@@ -112,6 +112,12 @@ export type PartnerCurrentAccountSyncError =
   | 'PARTNER_CURRENT_ACCOUNT_ORIGIN_INVALID'
   | 'PARTNER_CURRENT_ACCOUNT_OVERPAID';
 
+export interface PartnerCurrentAccountSyncFailure {
+  code: PartnerCurrentAccountSyncError;
+  recordIds: string[];
+  relatedGroupIds: string[];
+}
+
 const validDate = (value: unknown): boolean =>
   typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
   && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
@@ -121,7 +127,7 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 const optionalId = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() ? value.trim() : undefined;
 
-export function validatePartnerCurrentAccountSync(input: {
+type PartnerCurrentAccountSyncInput = {
   previous: PartnerCurrentAccountTransaction[];
   incoming: PartnerCurrentAccountTransaction[];
   partners: Partner[];
@@ -129,15 +135,23 @@ export function validatePartnerCurrentAccountSync(input: {
   treasury: TreasuryTransaction[];
   bankLedgerEntries: BankLedgerEntry[];
   openingBalances: OpeningBalanceRecord[];
-}): PartnerCurrentAccountSyncError | null {
+};
+export function validatePartnerCurrentAccountSync(input: PartnerCurrentAccountSyncInput): PartnerCurrentAccountSyncError | null;
+export function validatePartnerCurrentAccountSync(input: PartnerCurrentAccountSyncInput, detailed: true): PartnerCurrentAccountSyncFailure | null;
+export function validatePartnerCurrentAccountSync(input: PartnerCurrentAccountSyncInput, detailed = false): PartnerCurrentAccountSyncError | PartnerCurrentAccountSyncFailure | null {
   const { previous, incoming, partners, bankAccounts, treasury, bankLedgerEntries, openingBalances } = input;
-  if (!Array.isArray(previous) || !Array.isArray(incoming)) return 'PARTNER_CURRENT_ACCOUNT_NOT_ARRAY';
+  const fail = (code: PartnerCurrentAccountSyncError, items: any[] = []): PartnerCurrentAccountSyncError | PartnerCurrentAccountSyncFailure => detailed ? {
+    code,
+    recordIds: [...new Set(items.map(item => String(item?.id || '')).filter(Boolean))].slice(0, 100),
+    relatedGroupIds: [...new Set(items.flatMap(item => [item?.treasuryTransactionId, item?.relatedTransactionId, item?.settlementId, item?.batchId].filter(Boolean).map(String)))].slice(0, 100),
+  } : code;
+  if (!Array.isArray(previous) || !Array.isArray(incoming)) return fail('PARTNER_CURRENT_ACCOUNT_NOT_ARRAY');
   const previousById = new Map(previous.map(item => [item.id, item]));
   const incomingById = new Map(incoming.map(item => [item.id, item]));
-  if (incomingById.size !== incoming.length) return 'PARTNER_CURRENT_ACCOUNT_ENTRY_INVALID';
+  if (incomingById.size !== incoming.length) { const duplicates = incoming.filter((item, index) => incoming.findIndex(other => other.id === item.id) !== index); return fail('PARTNER_CURRENT_ACCOUNT_ENTRY_INVALID', duplicates); }
   for (const old of previous) {
     const current = incomingById.get(old.id);
-    if (!current || !same(current, old)) return 'PARTNER_CURRENT_ACCOUNT_HISTORY_MODIFIED';
+    if (!current || !same(current, old)) return fail('PARTNER_CURRENT_ACCOUNT_HISTORY_MODIFIED', [old]);
   }
 
   const activeBankIds = new Set(bankAccounts.filter(item => item.active).map(item => item.id));
@@ -146,16 +160,16 @@ export function validatePartnerCurrentAccountSync(input: {
   for (const item of added) {
     if (!validTypes.has(item.type) || !item.id || !item.partnerId || !item.partnerName?.trim() || !item.treasuryTransactionId
       || !Number.isFinite(item.amount) || item.amount <= 0 || !validDate(item.date)
-      || !item.recordedBy?.trim() || !validDate(item.createdAt?.slice(0, 10))) return 'PARTNER_CURRENT_ACCOUNT_ENTRY_INVALID';
-    if (!partners.some(partner => partner.id === item.partnerId)) return 'PARTNER_CURRENT_ACCOUNT_PARTNER_INVALID';
+      || !item.recordedBy?.trim() || !validDate(item.createdAt?.slice(0, 10))) return fail('PARTNER_CURRENT_ACCOUNT_ENTRY_INVALID', [item]);
+    if (!partners.some(partner => partner.id === item.partnerId)) return fail('PARTNER_CURRENT_ACCOUNT_PARTNER_INVALID', [item]);
 
     let account: string;
     try { account = paymentAccountOf(String(item.paymentMethod || '')); }
-    catch { return 'PARTNER_CURRENT_ACCOUNT_METHOD_INVALID'; }
-    if (!['cash', 'bank', 'wallet'].includes(account)) return 'PARTNER_CURRENT_ACCOUNT_METHOD_INVALID';
+    catch { return fail('PARTNER_CURRENT_ACCOUNT_METHOD_INVALID', [item]); }
+    if (!['cash', 'bank', 'wallet'].includes(account)) return fail('PARTNER_CURRENT_ACCOUNT_METHOD_INVALID', [item]);
     if (account === 'bank') {
-      if (!item.bankAccountId || !activeBankIds.has(item.bankAccountId)) return 'PARTNER_CURRENT_ACCOUNT_BANK_INVALID';
-    } else if (item.bankAccountId) return 'PARTNER_CURRENT_ACCOUNT_BANK_INVALID';
+      if (!item.bankAccountId || !activeBankIds.has(item.bankAccountId)) return fail('PARTNER_CURRENT_ACCOUNT_BANK_INVALID', [item]);
+    } else if (item.bankAccountId) return fail('PARTNER_CURRENT_ACCOUNT_BANK_INVALID', [item]);
 
     const expectedType = partnerCurrentAccountCashDirection(item.type) === 'in' ? 'قبض' : 'صرف';
     const expectedCategory = PARTNER_CURRENT_ACCOUNT_CATEGORIES[item.type];
@@ -163,18 +177,18 @@ export function validatePartnerCurrentAccountSync(input: {
     if (!cashTx || cashTx.referenceId !== item.id || cashTx.category !== expectedCategory
       || cashTx.type !== expectedType || Number(cashTx.amount) !== Number(item.amount)
       || cashTx.date !== item.date || cashTx.paymentMethod !== item.paymentMethod
-      || optionalId(cashTx.bankAccountId) !== optionalId(item.bankAccountId)) return 'PARTNER_CURRENT_ACCOUNT_TREASURY_MISMATCH';
+      || optionalId(cashTx.bankAccountId) !== optionalId(item.bankAccountId)) return fail('PARTNER_CURRENT_ACCOUNT_TREASURY_MISMATCH', [item]);
 
     const bankEntry = bankLedgerEntries.find(entry => entry.id === `partner-current-account:${item.id}`);
     if (account === 'bank') {
       if (!bankEntry || bankEntry.batchId !== item.id || bankEntry.accountKind !== 'bank'
         || bankEntry.bankAccountId !== item.bankAccountId
         || bankEntry.direction !== partnerCurrentAccountCashDirection(item.type)
-        || Number(bankEntry.amount) !== Number(item.amount) || bankEntry.date !== item.date) return 'PARTNER_CURRENT_ACCOUNT_BANK_MISMATCH';
-    } else if (bankEntry) return 'PARTNER_CURRENT_ACCOUNT_BANK_MISMATCH';
+        || Number(bankEntry.amount) !== Number(item.amount) || bankEntry.date !== item.date) return fail('PARTNER_CURRENT_ACCOUNT_BANK_MISMATCH', [item]);
+    } else if (bankEntry) return fail('PARTNER_CURRENT_ACCOUNT_BANK_MISMATCH', [item]);
 
-    if (isPartnerCurrentAccountSettlement(item.type) && !item.relatedTransactionId) return 'PARTNER_CURRENT_ACCOUNT_ORIGIN_INVALID';
-    if (!isPartnerCurrentAccountSettlement(item.type) && item.relatedTransactionId) return 'PARTNER_CURRENT_ACCOUNT_ORIGIN_INVALID';
+    if (isPartnerCurrentAccountSettlement(item.type) && !item.relatedTransactionId) return fail('PARTNER_CURRENT_ACCOUNT_ORIGIN_INVALID', [item]);
+    if (!isPartnerCurrentAccountSettlement(item.type) && item.relatedTransactionId) return fail('PARTNER_CURRENT_ACCOUNT_ORIGIN_INVALID', [item]);
   }
 
   for (const item of added.filter(candidate => isPartnerCurrentAccountSettlement(candidate.type))) {
@@ -184,27 +198,27 @@ export function validatePartnerCurrentAccountSync(input: {
     let originDate = '';
     if (item.relatedTransactionId === partnerCurrentAccountOpeningId(item.partnerId)) {
       const opening = openingPartnerCurrentAccountBalance(item.partnerId, openingBalances);
-      if ((isPartnerRepayment && opening >= 0) || (!isPartnerRepayment && opening <= 0)) return 'PARTNER_CURRENT_ACCOUNT_ORIGIN_INVALID';
+      if ((isPartnerRepayment && opening >= 0) || (!isPartnerRepayment && opening <= 0)) return fail('PARTNER_CURRENT_ACCOUNT_ORIGIN_INVALID', [item]);
       originAmount = Math.abs(opening);
       originDate = openingBalances.find(record => record.status === 'approved')?.cutoverDate || '';
     } else {
       const origin = incoming.find(candidate => candidate.id === item.relatedTransactionId);
-      if (!origin || origin.partnerId !== item.partnerId || origin.type !== expectedOriginType) return 'PARTNER_CURRENT_ACCOUNT_ORIGIN_INVALID';
+      if (!origin || origin.partnerId !== item.partnerId || origin.type !== expectedOriginType) return fail('PARTNER_CURRENT_ACCOUNT_ORIGIN_INVALID', [item]);
       originAmount = origin.amount;
       originDate = origin.date;
     }
-    if (originDate && item.date < originDate) return 'PARTNER_CURRENT_ACCOUNT_ORIGIN_INVALID';
+    if (originDate && item.date < originDate) return fail('PARTNER_CURRENT_ACCOUNT_ORIGIN_INVALID', [item]);
     const settled = incoming.filter(candidate => candidate.relatedTransactionId === item.relatedTransactionId)
       .reduce((sum, candidate) => sum + candidate.amount, 0);
-    if (settled > originAmount + 0.005) return 'PARTNER_CURRENT_ACCOUNT_OVERPAID';
+    if (settled > originAmount + 0.005) return fail('PARTNER_CURRENT_ACCOUNT_OVERPAID', [item]);
 
     const opening = openingPartnerCurrentAccountBalance(item.partnerId, openingBalances);
     const before = opening + incoming
       .filter(candidate => candidate.partnerId === item.partnerId && candidate.id !== item.id
         && (candidate.createdAt || '') <= item.createdAt)
       .reduce((sum, candidate) => sum + candidate.amount * partnerCurrentAccountBalanceEffect(candidate.type), 0);
-    if (isPartnerRepayment && (before >= -0.005 || item.amount > Math.abs(before) + 0.005)) return 'PARTNER_CURRENT_ACCOUNT_OVERPAID';
-    if (!isPartnerRepayment && (before <= 0.005 || item.amount > before + 0.005)) return 'PARTNER_CURRENT_ACCOUNT_OVERPAID';
+    if (isPartnerRepayment && (before >= -0.005 || item.amount > Math.abs(before) + 0.005)) return fail('PARTNER_CURRENT_ACCOUNT_OVERPAID', [item]);
+    if (!isPartnerRepayment && (before <= 0.005 || item.amount > before + 0.005)) return fail('PARTNER_CURRENT_ACCOUNT_OVERPAID', [item]);
   }
   return null;
 }
